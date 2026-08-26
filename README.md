@@ -2,7 +2,7 @@
 
 기업 내부 AI Agent가 조직, 팀, 사용자 범위의 기억과 RAG 문서를 안전하게 공유하도록 지원하는 설치형 플랫폼이다. 한 설치 안에서 권한이 허용한 기억만 검색하며 원문, 변경 이력, 유효기간, 출처를 함께 보존한다.
 
-Agent Memory는 독립적으로 사용할 수 있다. 필요하면 형제 프로젝트인 `../agent-studio`와 연동해 Agent 실행·운영 흐름에 장기 기억과 검색 Context를 제공할 수 있다.
+Agent Memory는 독립적으로 사용할 수 있다. 필요하면 형제 프로젝트인 Agent Studio와 연동해 Agent 실행·운영 흐름에 장기 기억과 검색 Context를 제공할 수 있다.
 
 ## 주요 기능
 
@@ -41,7 +41,7 @@ AUTH_PASSWORD=true AUTH_PASSWORD_SIGNUP=true pnpm dev
 
 애플리케이션은 `http://localhost:3100`, PostgreSQL은 `localhost:5433`에서 열린다. 이 설정은 로컬 가입과 password 로그인을 활성화한다. 외부 인증, 문서 worker, MinIO, 전체 Compose 실행 방법은 [운영 가이드](docs/operations.md)를 참고하라.
 
-`../agent-studio`의 PostgreSQL 17과 포트·볼륨을 공유하지 않으므로 두 프로젝트를 동시에 실행할 수 있다. 데이터 볼륨을 지우는 `docker compose down -v`는 필요한 데이터를 확인하지 않고 실행하지 마라.
+Agent Studio의 PostgreSQL 17과 포트·볼륨을 공유하지 않으므로 두 프로젝트를 동시에 실행할 수 있다. 데이터 볼륨을 지우는 `docker compose down -v`는 필요한 데이터를 확인하지 않고 실행하지 마라.
 
 ## 문서
 

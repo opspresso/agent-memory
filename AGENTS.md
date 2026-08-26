@@ -12,7 +12,7 @@ the applicable safety checks.
 
 ## 프로젝트 역할
 
-Agent Memory는 독립적으로 실행할 수 있으며 `../agent-studio`와 선택적으로 연동할 수 있는 형제 프로젝트다. Agent Studio의 실행 기능을 이 저장소로 옮기지 말고, 여러 Agent가 공유하는 장기 Memory, RAG 문서, Knowledge Graph, Context 검색에 집중하라.
+Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택적으로 연동할 수 있는 형제 프로젝트다. Agent Studio의 실행 기능을 이 저장소로 옮기지 말고, 여러 Agent가 공유하는 장기 Memory, RAG 문서, Knowledge Graph, Context 검색에 집중하라.
 
 작업 전에 목적에 맞는 문서를 읽어라.
 
