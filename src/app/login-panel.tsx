@@ -19,6 +19,8 @@ import {
 } from "@tabler/icons-react";
 import { useState, type FormEvent } from "react";
 
+import { useT } from "./_i18n/provider";
+
 interface LoginPanelProps {
   readonly googleEnabled: boolean;
   readonly oidcEnabled: boolean;
@@ -26,12 +28,15 @@ interface LoginPanelProps {
   readonly signUpEnabled: boolean;
 }
 
-async function responseMessage(response: Response): Promise<string> {
+async function responseMessage(
+  response: Response,
+  fallback: string
+): Promise<string> {
   const body = (await response.json().catch(() => null)) as {
     message?: string;
     error?: string;
   } | null;
-  return body?.message ?? body?.error ?? "로그인 요청에 실패했습니다.";
+  return body?.message ?? body?.error ?? fallback;
 }
 
 export function LoginPanel({
@@ -40,6 +45,7 @@ export function LoginPanel({
   passwordEnabled,
   signUpEnabled
 }: LoginPanelProps) {
+  const t = useT();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
   const [passwordMode, setPasswordMode] = useState<"sign-in" | "sign-up">(
@@ -56,16 +62,16 @@ export function LoginPanel({
         body: JSON.stringify({ provider, callbackURL: "/" })
       });
       if (!response.ok) {
-        throw new Error(await responseMessage(response));
+        throw new Error(await responseMessage(response, t("login.requestFailed")));
       }
       const result = (await response.json()) as { url?: string };
       if (!result.url) {
-        throw new Error("인증 제공자 URL을 받지 못했습니다.");
+        throw new Error(t("login.providerUrlMissing"));
       }
       window.location.assign(result.url);
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "로그인에 실패했습니다."
+        caught instanceof Error ? caught.message : t("login.failed")
       );
       setPending(false);
     }
@@ -92,12 +98,12 @@ export function LoginPanel({
         }
       );
       if (!response.ok) {
-        throw new Error(await responseMessage(response));
+        throw new Error(await responseMessage(response, t("login.requestFailed")));
       }
       window.location.reload();
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "로그인에 실패했습니다."
+        caught instanceof Error ? caught.message : t("login.failed")
       );
       setPending(false);
     }
@@ -110,13 +116,13 @@ export function LoginPanel({
       <Stack gap="lg">
         <Stack gap={4}>
           <Text c="indigo" fw={700} size="sm">
-            MEMORY WORKSPACE
+            {t("login.eyebrow")}
           </Text>
           <Title id="login-title" order={2}>
-            Agent Memory 시작하기
+            {t("login.title")}
           </Title>
           <Text c="dimmed" size="sm">
-            필요한 Memory와 Context를 한곳에서 만나보세요.
+            {t("login.lede")}
           </Text>
         </Stack>
 
@@ -133,7 +139,7 @@ export function LoginPanel({
             onClick={() => signInWithProvider("oidc")}
             size="md"
           >
-            Enterprise SSO로 로그인
+            {t("login.enterprise")}
           </Button>
         ) : null}
         {googleEnabled ? (
@@ -144,20 +150,20 @@ export function LoginPanel({
             size="md"
             variant="default"
           >
-            Google로 로그인
+            {t("login.google")}
           </Button>
         ) : null}
 
         {passwordEnabled ? (
           <>
-            {oidcEnabled || googleEnabled ? <Divider label="또는" /> : null}
+            {oidcEnabled || googleEnabled ? <Divider label={t("login.or")} /> : null}
             <form onSubmit={submitPassword}>
               <Stack gap="md">
                 {signUpEnabled ? (
                   <SegmentedControl
                     data={[
-                      { label: "로그인", value: "sign-in" },
-                      { label: "가입", value: "sign-up" }
+                      { label: t("login.signIn"), value: "sign-in" },
+                      { label: t("login.signUp"), value: "sign-up" }
                     ]}
                     onChange={(value) =>
                       setPasswordMode(value as "sign-in" | "sign-up")
@@ -168,14 +174,14 @@ export function LoginPanel({
                 {passwordMode === "sign-up" ? (
                   <TextInput
                     autoComplete="name"
-                    label="이름"
+                    label={t("login.name")}
                     name="name"
                     required
                   />
                 ) : null}
                 <TextInput
                   autoComplete="email"
-                  label="이메일"
+                  label={t("login.email")}
                   name="email"
                   placeholder="name@company.com"
                   required
@@ -183,12 +189,14 @@ export function LoginPanel({
                 />
                 <PasswordInput
                   autoComplete="current-password"
-                  label="비밀번호"
+                  label={t("login.password")}
                   name="password"
                   required
                 />
                 <Button loading={pending} type="submit" variant="light">
-                  {passwordMode === "sign-up" ? "계정 만들기" : "이메일로 로그인"}
+                  {passwordMode === "sign-up"
+                    ? t("login.createAccount")
+                    : t("login.emailSignIn")}
                 </Button>
               </Stack>
             </form>
@@ -197,8 +205,7 @@ export function LoginPanel({
 
         {!configured ? (
           <Alert color="yellow" icon={<IconAlertCircle size={18} />}>
-            인증 제공자가 설정되지 않았습니다. OIDC 또는 Google 환경 변수를
-            구성하세요.
+            {t("login.notConfigured")}
           </Alert>
         ) : null}
       </Stack>

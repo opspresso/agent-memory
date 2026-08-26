@@ -15,13 +15,13 @@ import type { ReactNode } from "react";
 import packageJson from "../../package.json";
 
 import { I18nProvider } from "./_i18n/provider";
-import { resolveLocale } from "./_i18n/server";
+import { getT, resolveLocale } from "./_i18n/server";
 import { theme } from "./theme";
 
-export const metadata: Metadata = {
-  title: "Agent Memory",
-  description: "AI Agent의 Memory, RAG, Knowledge Graph를 연결하는 Context 플랫폼"
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: "Agent Memory", description: t("meta.description") };
+}
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const locale = await resolveLocale();
