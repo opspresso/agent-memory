@@ -22,7 +22,8 @@ import {
   IconCloudUpload,
   IconLogout,
   IconPlugConnected,
-  IconSearch
+  IconSearch,
+  IconSettings
 } from "@tabler/icons-react";
 import { useMemo, useState, type FormEvent } from "react";
 
@@ -30,8 +31,22 @@ import type { OrganizationMembership } from "@/domain/identity/organization-acce
 import type { SessionUser } from "@/lib/session";
 
 import classes from "./page.module.css";
+import { OrganizationBootstrap } from "./organization-bootstrap";
+import {
+  OrganizationManagement,
+  type OrganizationMemberView,
+  type TeamView
+} from "./organization-management";
+
+interface OrganizationAdministrationView {
+  readonly members: readonly OrganizationMemberView[];
+  readonly teams: readonly TeamView[];
+}
 
 interface WorkspaceProps {
+  readonly administrationByOrganization: Readonly<
+    Record<string, OrganizationAdministrationView>
+  >;
   readonly organizations: readonly OrganizationMembership[];
   readonly user: SessionUser;
 }
@@ -80,7 +95,11 @@ function resultKey(hit: Record<string, unknown>): string {
   return `${String(source?.id ?? resultTitle(hit))}:${String(chunk?.id ?? "root")}`;
 }
 
-export function Workspace({ organizations, user }: WorkspaceProps) {
+export function Workspace({
+  administrationByOrganization,
+  organizations,
+  user
+}: WorkspaceProps) {
   const [organizationId, setOrganizationId] = useState(
     organizations[0]?.id ?? ""
   );
@@ -196,9 +215,13 @@ export function Workspace({ organizations, user }: WorkspaceProps) {
       </Group>
 
       {organizations.length === 0 ? (
-        <Alert color="yellow" icon={<IconAlertCircle size={18} />}>
-          접근 가능한 조직이 없습니다. 관리자에게 멤버십을 요청하세요.
-        </Alert>
+        <Stack gap="lg">
+          <Alert color="yellow" icon={<IconAlertCircle size={18} />}>
+            접근 가능한 조직이 없습니다. 첫 조직을 만들거나 관리자에게
+            멤버십을 요청하세요.
+          </Alert>
+          <OrganizationBootstrap />
+        </Stack>
       ) : (
         <Paper p="md" radius="lg" withBorder>
           <Group justify="space-between">
@@ -223,7 +246,8 @@ export function Workspace({ organizations, user }: WorkspaceProps) {
         </Paper>
       )}
 
-      <Tabs defaultValue="search" keepMounted={false} variant="pills">
+      {organizations.length > 0 ? (
+        <Tabs defaultValue="search" keepMounted={false} variant="pills">
         <Tabs.List>
           <Tabs.Tab leftSection={<IconSearch size={16} />} value="search">
             통합 검색
@@ -234,6 +258,12 @@ export function Workspace({ organizations, user }: WorkspaceProps) {
           <Tabs.Tab leftSection={<IconPlugConnected size={16} />} value="connect">
             Agent 연결
           </Tabs.Tab>
+          {selectedOrganization?.role === "admin" ||
+          selectedOrganization?.role === "owner" ? (
+            <Tabs.Tab leftSection={<IconSettings size={16} />} value="manage">
+              조직 관리
+            </Tabs.Tab>
+          ) : null}
         </Tabs.List>
 
         <Tabs.Panel pt="lg" value="search">
@@ -342,7 +372,24 @@ export function Workspace({ organizations, user }: WorkspaceProps) {
             </Stack>
           </Paper>
         </Tabs.Panel>
-      </Tabs>
+
+        {selectedOrganization?.role === "admin" ||
+        selectedOrganization?.role === "owner" ? (
+          <Tabs.Panel pt="lg" value="manage">
+            <OrganizationManagement
+              initialMembers={
+                administrationByOrganization[organizationId]?.members ?? []
+              }
+              initialTeams={
+                administrationByOrganization[organizationId]?.teams ?? []
+              }
+              key={organizationId}
+              organizationId={organizationId}
+            />
+          </Tabs.Panel>
+        ) : null}
+        </Tabs>
+      ) : null}
     </main>
   );
 }

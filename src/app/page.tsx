@@ -18,6 +18,10 @@ import {
 import { headers } from "next/headers";
 
 import { listOrganizationMemberships } from "@/lib/organization-service";
+import {
+  listOrganizationMemberRecords,
+  listTeamRecords
+} from "@/lib/organization-administration-service";
 import { getSessionUser } from "@/lib/session";
 
 import { LoginPanel } from "./login-panel";
@@ -55,6 +59,46 @@ export default async function Home() {
   const organizations = user
     ? await listOrganizationMemberships(user.id)
     : [];
+  const administrationEntries = user
+    ? await Promise.all(
+        organizations
+          .filter(
+            (organization) =>
+              organization.role === "admin" || organization.role === "owner"
+          )
+          .map(async (organization) => {
+            const access = {
+              organizationId: organization.id,
+              userId: user.id,
+              role: organization.role,
+              teams: []
+            } as const;
+            const [members, teams] = await Promise.all([
+              listOrganizationMemberRecords(access),
+              listTeamRecords(access)
+            ]);
+            return [
+              organization.id,
+              {
+                members: members.map((member) => ({
+                  userId: member.userId,
+                  email: member.email,
+                  name: member.name,
+                  role: member.role
+                })),
+                teams: teams.map((team) => ({
+                  id: team.id,
+                  slug: team.slug,
+                  name: team.name
+                }))
+              }
+            ] as const;
+          })
+      )
+    : [];
+  const administrationByOrganization = Object.fromEntries(
+    administrationEntries
+  );
 
   return (
     <Box className={classes.page}>
@@ -75,7 +119,11 @@ export default async function Home() {
         </Group>
 
         {user ? (
-          <Workspace organizations={organizations} user={user} />
+          <Workspace
+            administrationByOrganization={administrationByOrganization}
+            organizations={organizations}
+            user={user}
+          />
         ) : (
           <main className={classes.hero}>
             <Stack className={classes.intro} gap="xl">
@@ -118,6 +166,7 @@ export default async function Home() {
               googleEnabled={Boolean(process.env.GOOGLE_CLIENT_ID)}
               oidcEnabled={Boolean(process.env.OIDC_ISSUER)}
               passwordEnabled={process.env.AUTH_PASSWORD === "true"}
+              signUpEnabled={process.env.AUTH_PASSWORD_SIGNUP === "true"}
             />
           </main>
         )}

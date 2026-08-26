@@ -19,8 +19,8 @@ export default defineConfig({
   webServer: {
     command: "./node_modules/.bin/next dev --hostname 127.0.0.1 --port 3110",
     env: {
-      AUTH_PASSWORD: "false",
-      AUTH_PASSWORD_SIGNUP: "false",
+      AUTH_PASSWORD: "true",
+      AUTH_PASSWORD_SIGNUP: "true",
       BETTER_AUTH_SECRET: "agent-memory-playwright-secret-000000000000",
       BETTER_AUTH_URL: "http://127.0.0.1:3110",
       GOOGLE_CLIENT_ID: "",

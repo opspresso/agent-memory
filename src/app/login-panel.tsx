@@ -6,6 +6,7 @@ import {
   Divider,
   Paper,
   PasswordInput,
+  SegmentedControl,
   Stack,
   Text,
   TextInput,
@@ -22,6 +23,7 @@ interface LoginPanelProps {
   readonly googleEnabled: boolean;
   readonly oidcEnabled: boolean;
   readonly passwordEnabled: boolean;
+  readonly signUpEnabled: boolean;
 }
 
 async function responseMessage(response: Response): Promise<string> {
@@ -35,10 +37,14 @@ async function responseMessage(response: Response): Promise<string> {
 export function LoginPanel({
   googleEnabled,
   oidcEnabled,
-  passwordEnabled
+  passwordEnabled,
+  signUpEnabled
 }: LoginPanelProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
+  const [passwordMode, setPasswordMode] = useState<"sign-in" | "sign-up">(
+    "sign-in"
+  );
 
   async function signInWithProvider(provider: "google" | "oidc") {
     setPending(true);
@@ -65,21 +71,26 @@ export function LoginPanel({
     }
   }
 
-  async function signInWithPassword(event: FormEvent<HTMLFormElement>) {
+  async function submitPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     setError(undefined);
     const form = new FormData(event.currentTarget);
     try {
-      const response = await fetch("/api/auth/sign-in/email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: form.get("email"),
-          password: form.get("password"),
-          callbackURL: "/"
-        })
-      });
+      const signingUp = passwordMode === "sign-up";
+      const response = await fetch(
+        signingUp ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...(signingUp ? { name: form.get("name") } : {}),
+            email: form.get("email"),
+            password: form.get("password"),
+            callbackURL: "/"
+          })
+        }
+      );
       if (!response.ok) {
         throw new Error(await responseMessage(response));
       }
@@ -140,8 +151,28 @@ export function LoginPanel({
         {passwordEnabled ? (
           <>
             {oidcEnabled || googleEnabled ? <Divider label="또는" /> : null}
-            <form onSubmit={signInWithPassword}>
+            <form onSubmit={submitPassword}>
               <Stack gap="md">
+                {signUpEnabled ? (
+                  <SegmentedControl
+                    data={[
+                      { label: "로그인", value: "sign-in" },
+                      { label: "가입", value: "sign-up" }
+                    ]}
+                    onChange={(value) =>
+                      setPasswordMode(value as "sign-in" | "sign-up")
+                    }
+                    value={passwordMode}
+                  />
+                ) : null}
+                {passwordMode === "sign-up" ? (
+                  <TextInput
+                    autoComplete="name"
+                    label="이름"
+                    name="name"
+                    required
+                  />
+                ) : null}
                 <TextInput
                   autoComplete="email"
                   label="이메일"
@@ -157,7 +188,7 @@ export function LoginPanel({
                   required
                 />
                 <Button loading={pending} type="submit" variant="light">
-                  이메일로 로그인
+                  {passwordMode === "sign-up" ? "계정 만들기" : "이메일로 로그인"}
                 </Button>
               </Stack>
             </form>
