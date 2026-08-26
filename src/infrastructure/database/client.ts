@@ -6,6 +6,7 @@ import * as schema from "./schema";
 export function createDatabase(connectionString: string) {
   const pool = new Pool({
     connectionString,
+    connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 30_000,
     max: 10
   });

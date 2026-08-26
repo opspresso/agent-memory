@@ -5,6 +5,8 @@ import { buildCreateMemory } from "@/application/memory/create-memory";
 import { buildGetMemory } from "@/application/memory/get-memory";
 import { buildReviseMemory } from "@/application/memory/revise-memory";
 import { buildSearchMemories } from "@/application/memory/search-memories";
+import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import { observeRetrieval } from "@/infrastructure/observability/telemetry";
 
 import { memoryRepository, textEmbeddingService } from "./container";
 
@@ -30,8 +32,18 @@ export const archiveMemoryRecord = buildArchiveMemory({
   repository: memoryRepository
 });
 
-export const searchMemoryRecords = buildSearchMemories({
+const searchMemoryRecordsBase = buildSearchMemories({
   clock,
   repository: memoryRepository,
   ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
 });
+
+export async function searchMemoryRecords(
+  access: OrganizationAccess,
+  query: string,
+  limit = 10
+) {
+  return observeRetrieval("memory.search", access, limit, () =>
+    searchMemoryRecordsBase(access, query, limit)
+  );
+}

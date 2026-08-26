@@ -10,14 +10,30 @@ export function createTextEmbeddingService(model: string): TextEmbeddingService 
 
   return {
     async embed(text) {
-      const result = await embed({ model: modelId, value: text });
+      const result = await embed({
+        model: modelId,
+        value: text,
+        telemetry: {
+          functionId: "agent-memory.embed",
+          recordInputs: false,
+          recordOutputs: false
+        }
+      });
       return { model: modelId, values: result.embedding };
     },
     async embedMany(texts) {
       if (texts.length === 0) {
         return [];
       }
-      const result = await embedMany({ model: modelId, values: [...texts] });
+      const result = await embedMany({
+        model: modelId,
+        values: [...texts],
+        telemetry: {
+          functionId: "agent-memory.embed-many",
+          recordInputs: false,
+          recordOutputs: false
+        }
+      });
       return result.embeddings.map((values) => ({ model: modelId, values }));
     }
   };

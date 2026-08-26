@@ -5,6 +5,11 @@ export async function register() {
     return;
   }
 
+  const { initializeTelemetry } = await import(
+    "./infrastructure/observability/telemetry"
+  );
+  initializeTelemetry();
+
   if (process.env.MIGRATE_ON_START === "true") {
     const { migrateOnStart } = await import("./lib/migrate-on-start");
     await migrateOnStart();
