@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { buildArchiveMemory } from "@/application/memory/archive-memory";
+import { buildListMemoryVersions } from "@/application/memory/list-memory-versions";
 import { buildReviseMemory } from "@/application/memory/revise-memory";
 import { buildSearchMemories } from "@/application/memory/search-memories";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
@@ -47,6 +48,7 @@ function repository(overrides: Partial<MemoryRepository>): MemoryRepository {
   return {
     save: vi.fn(),
     findById: vi.fn(),
+    listVersions: vi.fn(),
     saveRevision: vi.fn(),
     search: vi.fn(),
     ...overrides
@@ -211,6 +213,55 @@ describe("memory lifecycle", () => {
       1,
       "user-1",
       "No longer valid"
+    );
+  });
+
+  it("restricts version history to memory managers", async () => {
+    const existing = memory({
+      scope: {
+        kind: "team",
+        organizationId: "organization-1",
+        teamId: "team-2"
+      },
+      accessGrants: [
+        { principalKind: "team", teamId: "team-1", permission: "write" }
+      ]
+    });
+    const listVersions = vi.fn().mockResolvedValue([]);
+    const list = buildListMemoryVersions(
+      repository({
+        findById: vi.fn().mockResolvedValue(existing),
+        listVersions
+      })
+    );
+
+    await expect(list(access, existing.id, 20)).rejects.toThrow(
+      "memory not found"
+    );
+
+    const managed = {
+      ...existing,
+      accessGrants: [
+        {
+          principalKind: "team" as const,
+          teamId: "team-1",
+          permission: "manage" as const
+        }
+      ]
+    };
+    const managedList = buildListMemoryVersions(
+      repository({
+        findById: vi.fn().mockResolvedValue(managed),
+        listVersions
+      })
+    );
+    await managedList(access, existing.id, 20, 3);
+
+    expect(listVersions).toHaveBeenCalledWith(
+      "organization-1",
+      existing.id,
+      20,
+      3
     );
   });
 

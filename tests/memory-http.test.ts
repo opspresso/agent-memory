@@ -5,6 +5,7 @@ import {
   parseIfMatch,
   publicMemory,
   publicMemoryForAccess,
+  publicMemoryVersion,
   readJsonBody,
   versionEtag
 } from "@/lib/memory-http";
@@ -81,5 +82,22 @@ describe("memory HTTP concurrency", () => {
         teams: []
       })
     ).toHaveProperty("accessGrants", memory.accessGrants);
+
+    const version = publicMemoryVersion({
+      memoryId: memory.id,
+      version: memory.version,
+      title: memory.title,
+      content: memory.content,
+      source: memory.source,
+      embedding: memory.embedding,
+      accessGrants: memory.accessGrants,
+      validFrom: memory.validFrom,
+      status: memory.status,
+      changedBy: memory.createdBy,
+      createdAt: memory.updatedAt
+    });
+    expect(version).toHaveProperty("accessGrants", memory.accessGrants);
+    expect(version).toHaveProperty("embeddingModel", "embedding-model");
+    expect(version).not.toHaveProperty("embedding");
   });
 });

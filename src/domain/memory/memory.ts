@@ -68,6 +68,22 @@ export interface MemoryRevision {
   readonly now: Date;
 }
 
+export interface MemoryVersionSnapshot {
+  readonly memoryId: string;
+  readonly version: number;
+  readonly title: string;
+  readonly content: string;
+  readonly source: Readonly<MemorySource>;
+  readonly embedding?: Readonly<MemoryEmbedding>;
+  readonly accessGrants: readonly MemoryAccessGrant[];
+  readonly validFrom: Date;
+  readonly expiresAt?: Date;
+  readonly status: MemoryStatus;
+  readonly changedBy: string;
+  readonly changeReason?: string;
+  readonly createdAt: Date;
+}
+
 export interface Memory {
   readonly id: string;
   readonly kind: MemoryKind;

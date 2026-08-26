@@ -4,6 +4,7 @@ import { MemoryVersionConflictError } from "@/application/memory/revise-memory";
 import { InvalidMemorySearchError } from "@/application/memory/search-memories";
 import { InvalidMemoryError } from "@/domain/memory/memory";
 import type { Memory } from "@/domain/memory/memory";
+import type { MemoryVersionSnapshot } from "@/domain/memory/memory";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { canAccessMemory } from "@/domain/memory/memory-access";
 
@@ -79,4 +80,26 @@ export function publicMemoryForAccess(
   return canAccessMemory(access, "manage", memory)
     ? { ...value, accessGrants: memory.accessGrants }
     : value;
+}
+
+export function publicMemoryVersion(version: MemoryVersionSnapshot) {
+  return {
+    memoryId: version.memoryId,
+    version: version.version,
+    title: version.title,
+    content: version.content,
+    source: version.source,
+    ...(version.embedding
+      ? { embeddingModel: version.embedding.model }
+      : {}),
+    accessGrants: version.accessGrants,
+    validFrom: version.validFrom,
+    ...(version.expiresAt ? { expiresAt: version.expiresAt } : {}),
+    status: version.status,
+    changedBy: version.changedBy,
+    ...(version.changeReason
+      ? { changeReason: version.changeReason }
+      : {}),
+    createdAt: version.createdAt
+  };
 }

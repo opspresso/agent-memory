@@ -426,6 +426,26 @@ describe("PostgreSQL schema", () => {
         { principalKind: "user", userId: otherUser, permission: "write" }
       ]
     });
+    await expect(repository.listVersions(organization, memoryId, 1)).resolves
+      .toMatchObject([
+        {
+          version: 2,
+          changeReason: "Approval policy changed",
+          accessGrants: [
+            { principalKind: "user", userId: otherUser, permission: "write" }
+          ]
+        }
+      ]);
+    await expect(
+      repository.listVersions(organization, memoryId, 10, 2)
+    ).resolves.toMatchObject([
+      {
+        version: 1,
+        accessGrants: [
+          { principalKind: "user", userId: otherUser, permission: "read" }
+        ]
+      }
+    ]);
 
     const versions = await pool.query<{
       accessGrants: unknown;

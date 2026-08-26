@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { buildArchiveMemory } from "@/application/memory/archive-memory";
 import { buildCreateMemory } from "@/application/memory/create-memory";
 import { buildGetMemory } from "@/application/memory/get-memory";
+import { buildListMemoryVersions } from "@/application/memory/list-memory-versions";
 import { buildReviseMemory } from "@/application/memory/revise-memory";
 import { buildSearchMemories } from "@/application/memory/search-memories";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
@@ -20,6 +21,8 @@ export const createMemoryRecord = buildCreateMemory({
 });
 
 export const getMemoryRecord = buildGetMemory(memoryRepository);
+export const listMemoryVersionRecords =
+  buildListMemoryVersions(memoryRepository);
 
 export const reviseMemoryRecord = buildReviseMemory({
   clock,

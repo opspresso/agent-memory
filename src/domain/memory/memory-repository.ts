@@ -1,4 +1,4 @@
-import type { Memory } from "./memory";
+import type { Memory, MemoryVersionSnapshot } from "./memory";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 
 export interface MemorySearchInput {
@@ -24,6 +24,12 @@ export type SaveMemoryRevisionResult = "saved" | "conflict" | "not_found";
 export interface MemoryRepository {
   save(memory: Memory): Promise<void>;
   findById(organizationId: string, memoryId: string): Promise<Memory | null>;
+  listVersions(
+    organizationId: string,
+    memoryId: string,
+    limit: number,
+    beforeVersion?: number
+  ): Promise<readonly MemoryVersionSnapshot[]>;
   saveRevision(
     memory: Memory,
     expectedVersion: number,

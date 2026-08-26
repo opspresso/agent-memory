@@ -19,6 +19,7 @@ function repositoryWithSave(
   return {
     save,
     findById: vi.fn(),
+    listVersions: vi.fn(),
     saveRevision: vi.fn(),
     search: vi.fn()
   };

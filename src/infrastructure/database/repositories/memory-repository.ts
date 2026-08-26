@@ -6,6 +6,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lt,
   lte,
   or,
   sql,
@@ -16,7 +17,8 @@ import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import type {
   Memory,
   MemoryAccessGrant,
-  MemoryScope
+  MemoryScope,
+  MemoryVersionSnapshot
 } from "@/domain/memory/memory";
 import type {
   MemoryRepository,
@@ -34,6 +36,7 @@ import {
 
 type MemoryRow = typeof memories.$inferSelect;
 type GrantRow = typeof memoryAccessGrants.$inferSelect;
+type VersionRow = typeof memoryVersions.$inferSelect;
 
 function scopeFromRow(row: MemoryRow): MemoryScope {
   if (row.scopeKind === "team" && row.teamId) {
@@ -100,6 +103,33 @@ function memoryFromRow(row: MemoryRow, grantRows: readonly GrantRow[]): Memory {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.currentVersion
+  };
+}
+
+function versionFromRow(row: VersionRow): MemoryVersionSnapshot {
+  return {
+    memoryId: row.memoryId,
+    version: row.version,
+    title: row.title,
+    content: row.content,
+    source: {
+      type: row.sourceType,
+      ...(row.sourceUri ? { uri: row.sourceUri } : {}),
+      ...(row.sourceAgentId ? { agentId: row.sourceAgentId } : {}),
+      ...(Object.keys(row.sourceMetadata).length > 0
+        ? { metadata: row.sourceMetadata }
+        : {})
+    },
+    ...(row.embedding && row.embeddingModel
+      ? { embedding: { model: row.embeddingModel, values: row.embedding } }
+      : {}),
+    accessGrants: row.accessGrants,
+    validFrom: row.validFrom,
+    ...(row.expiresAt ? { expiresAt: row.expiresAt } : {}),
+    status: row.status,
+    changedBy: row.changedBy,
+    ...(row.changeReason ? { changeReason: row.changeReason } : {}),
+    createdAt: row.createdAt
   };
 }
 
@@ -299,6 +329,24 @@ export function createMemoryRepository(
 
       const grants = await grantRowsByMemoryIds(db, organizationId, [memoryId]);
       return memoryFromRow(row, grants.get(memoryId) ?? []);
+    },
+
+    async listVersions(organizationId, memoryId, limit, beforeVersion) {
+      const rows = await db
+        .select()
+        .from(memoryVersions)
+        .where(
+          and(
+            eq(memoryVersions.organizationId, organizationId),
+            eq(memoryVersions.memoryId, memoryId),
+            beforeVersion === undefined
+              ? undefined
+              : lt(memoryVersions.version, beforeVersion)
+          )
+        )
+        .orderBy(desc(memoryVersions.version))
+        .limit(limit);
+      return rows.map(versionFromRow);
     },
 
     async saveRevision(

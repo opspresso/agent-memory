@@ -86,3 +86,8 @@ export const reviseMemorySchema = z
       input.expiresAt !== undefined,
     "at least one memory field must be revised"
   );
+
+export const memoryVersionQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  before: z.coerce.number().int().min(2).optional()
+});
