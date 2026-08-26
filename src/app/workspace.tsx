@@ -25,9 +25,11 @@ import {
   IconSearch,
   IconSettings
 } from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 
 import type { OrganizationMembership } from "@/domain/identity/organization-access-repository";
+import { signOut } from "@/lib/auth-client";
 import type { SessionUser } from "@/lib/session";
 
 import classes from "./page.module.css";
@@ -104,6 +106,7 @@ export function Workspace({
   organizations,
   user
 }: WorkspaceProps) {
+  const router = useRouter();
   const [organizationId, setOrganizationId] = useState(
     organizations[0]?.id ?? ""
   );
@@ -111,6 +114,8 @@ export function Workspace({
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string>();
   const [hits, setHits] = useState<readonly Record<string, unknown>[]>([]);
+  const [signOutError, setSignOutError] = useState<string>();
+  const [signingOut, setSigningOut] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string>();
 
@@ -183,9 +188,21 @@ export function Workspace({
     }
   }
 
-  async function signOut() {
-    await fetch("/api/auth/sign-out", { method: "POST" });
-    window.location.reload();
+  async function handleSignOut() {
+    setSigningOut(true);
+    setSignOutError(undefined);
+    try {
+      const result = await signOut();
+      if (result.error) {
+        throw new Error(result.error.message ?? "로그아웃에 실패했습니다.");
+      }
+      router.refresh();
+    } catch (caught) {
+      setSignOutError(
+        caught instanceof Error ? caught.message : "로그아웃에 실패했습니다."
+      );
+      setSigningOut(false);
+    }
   }
 
   return (
@@ -210,13 +227,19 @@ export function Workspace({
           <Button
             aria-label="로그아웃"
             leftSection={<IconLogout size={16} />}
-            onClick={signOut}
+            loading={signingOut}
+            onClick={() => void handleSignOut()}
             variant="subtle"
           >
             로그아웃
           </Button>
         </Group>
       </Group>
+      {signOutError ? (
+        <Alert color="red" icon={<IconAlertCircle size={18} />}>
+          {signOutError}
+        </Alert>
+      ) : null}
 
       {organizations.length === 0 ? (
         <Stack gap="lg">

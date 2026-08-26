@@ -169,6 +169,27 @@ describe("PostgreSQL schema", () => {
     );
     expect(persisted.rows[0]?.sessionCount).toBe("1");
 
+    const signOutResponse = await testAuth.handler(
+      new Request("http://localhost:3100/api/auth/sign-out", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie,
+          origin: "http://localhost:3100"
+        },
+        body: "{}"
+      })
+    );
+    expect(signOutResponse.status).toBe(200);
+    expect(signOutResponse.headers.getSetCookie()).not.toHaveLength(0);
+
+    const signedOutSessionResponse = await testAuth.handler(
+      new Request("http://localhost:3100/api/auth/get-session", {
+        headers: { cookie }
+      })
+    );
+    expect(await signedOutSessionResponse.json()).toBeNull();
+
     const blockedSignUpResponse = await testAuth.handler(
       new Request("http://localhost:3100/api/auth/sign-up/email", {
         method: "POST",
