@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# next.js
+.next/
+out/
+
+# production
+build/
+
+# env
+.env
+.env.local
+.env.local.*
+.env.*.local
+
+# misc
+.DS_Store
+*.pem
+*.tsbuildinfo
+next-env.d.ts
+
+# testing
+coverage/
+
+# logs
+npm-debug.log*
+pnpm-debug.log*
+
+# prompt files
+*.prompt.md
