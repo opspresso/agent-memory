@@ -2,6 +2,23 @@
 
 Agent Memory는 여러 Agent가 공유하는 장기 memory와 검색 Context를 조직 경계 안에서 제공하는 독립 플랫폼이다. 필요하면 Agent Studio를 비롯한 Agent 실행 환경과 연동할 수 있다.
 
+## System context
+
+```text
+사람 ──▶ 운영 콘솔 ──────────────┐
+                                 ▼
+AI Agent ──▶ HTTP API / MCP ──▶ Next.js application
+                                      │
+                  ┌───────────────────┼──────────────────┐
+                  ▼                   ▼                  ▼
+            PostgreSQL            pg-boss           S3-compatible
+       Memory·chunk·Graph       document jobs       document objects
+                  │
+                  └── Full-Text Search + pgvector(optional)
+```
+
+운영 콘솔, HTTP API, MCP는 별도 비즈니스 로직을 갖지 않고 같은 application use case를 호출한다. PostgreSQL은 transaction과 tenant constraint의 기준 저장소이며 pg-boss도 같은 Database를 사용한다. S3 호환 storage에는 문서 원본만 저장하고 권한·상태·chunk·provenance는 PostgreSQL에 둔다.
+
 ## 계층과 의존성
 
 ```text
@@ -75,6 +92,17 @@ Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenanc
 AI candidate는 graph와 분리된 검토 queue다. 거절은 graph를 변경하지 않으며, 승인된 candidate는 다시 거절할 수 없다. 승인·거절에는 reviewer와 선택형 사유를 남긴다.
 
 통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node를 각각 검색하고 score 순으로 하나의 결과를 만든다. API와 MCP는 동일한 application operation을 사용한다.
+
+운영 콘솔의 관계 지도는 search hit의 node ID로 제한된 neighborhood를 요청한다. Client는 반환된 node와 방향성 edge를 SVG에 배치하고 node 선택 상태와 inspector를 관리한다. 같은 node를 다시 선택하면 해당 node를 새 중심으로 neighborhood를 재조회한다. Layout은 표현 계층의 책임이며 접근 가능한 node·edge 결정은 server의 application·repository 계층에 남긴다.
+
+## 실패 격리와 복구 경계
+
+- 문서 원본 저장 후 queue 등록이 실패해도 document row와 ID를 유지하고 `failed` 상태에서 retry할 수 있다.
+- Document processing lease가 재발급되면 이전 worker의 complete·fail 갱신을 거부한다.
+- Knowledge enrichment 실패는 ready 문서와 문서 검색 가능 상태를 되돌리지 않는다.
+- AI candidate 승인만 node·edge와 reviewer audit을 하나의 transaction으로 저장한다.
+- Memory mutation은 `If-Match` version 충돌을 감지하고 덮어쓰기를 거부한다.
+- Source를 읽을 수 없게 되면 graph 검색과 neighborhood에서 해당 provenance를 다시 제외한다.
 
 ## 관측성과 민감정보
 
