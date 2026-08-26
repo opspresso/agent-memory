@@ -147,6 +147,16 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     .getByLabel("내용")
     .fill("Checkout rollback requires three approvers.");
   await lifecycle.getByLabel("변경 사유").fill("E2E revision verification");
+  await page.getByRole("button", { name: "언어 변경" }).click();
+  await page.getByRole("menuitem", { name: "English" }).click();
+  await expect(lifecycle.getByLabel("Content")).toHaveValue(
+    "Checkout rollback requires three approvers."
+  );
+  await expect(lifecycle.getByLabel("Change reason")).toHaveValue(
+    "E2E revision verification"
+  );
+  await page.getByRole("button", { name: "Change language" }).click();
+  await page.getByRole("menuitem", { name: "한국어" }).click();
   await lifecycle.getByRole("button", { name: "Revision 저장" }).click();
   await expect(lifecycle.getByText("새 revision을 저장했습니다.")).toBeVisible();
   await expect(lifecycle.getByText("v2 · 현재")).toBeVisible();

@@ -48,6 +48,7 @@ export const ko: Messages = {
     "인증 제공자가 설정되지 않았습니다. OIDC 또는 Google 환경 변수를 구성하세요.",
   "guide.metaDescription":
     "Agent Memory의 검색, Memory, 문서, Knowledge Graph와 MCP 사용 가이드",
+  "guide.metaTitle": "사용 가이드 · Agent Memory",
   "guide.console": "Console",
   "guide.eyebrow": "Product guide · 7 chapters",
   "guide.title": "기억을 넣는 법보다,",

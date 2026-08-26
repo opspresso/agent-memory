@@ -20,7 +20,7 @@ import {
   IconDeviceFloppy,
   IconRefresh
 } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { useLocale, useT } from "./_i18n/provider";
 import classes from "./memory-lifecycle.module.css";
@@ -138,6 +138,11 @@ export function MemoryLifecycle({
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const getLoadMessages = useEffectEvent(() => ({
+    requestFailed: t("memory.requestFailed"),
+    etagMissing: t("memory.etagMissing"),
+    loadFailed: t("memory.loadFailed")
+  }));
 
   function applyLoaded(next: LoadedMemory) {
     setLoaded(next);
@@ -168,11 +173,12 @@ export function MemoryLifecycle({
 
   useEffect(() => {
     let active = true;
+    const loadMessages = getLoadMessages();
     requestMemory(
       organizationId,
       memoryId,
-      t("memory.requestFailed"),
-      t("memory.etagMissing")
+      loadMessages.requestFailed,
+      loadMessages.etagMissing
     )
       .then((next) => {
         if (active) {
@@ -185,7 +191,7 @@ export function MemoryLifecycle({
           setError(
             caught instanceof Error
               ? caught.message
-              : t("memory.loadFailed")
+              : loadMessages.loadFailed
           );
           setLoading(false);
         }
@@ -193,7 +199,7 @@ export function MemoryLifecycle({
     return () => {
       active = false;
     };
-  }, [memoryId, organizationId, t]);
+  }, [memoryId, organizationId]);
 
   const changed = Boolean(
     loaded &&

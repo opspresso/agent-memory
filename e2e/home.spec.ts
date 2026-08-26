@@ -37,6 +37,7 @@ test("switches to Korean and keeps the preference across pages", async ({
   await expect(
     page.getByRole("heading", { name: "기억을 넣는 법보다, 다시 믿고 쓰는 법." })
   ).toBeVisible();
+  await expect(page).toHaveTitle("사용 가이드 · Agent Memory");
   await expect(page.locator("html")).toHaveAttribute("lang", "ko");
 });
 

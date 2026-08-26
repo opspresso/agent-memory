@@ -18,7 +18,7 @@ import {
   IconSparkles,
   IconX
 } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { useT } from "./_i18n/provider";
 import classes from "./knowledge-candidate-review.module.css";
@@ -85,6 +85,10 @@ export function KnowledgeCandidateReview({
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [reason, setReason] = useState("");
+  const getLoadMessages = useEffectEvent(() => ({
+    requestFailed: t("candidate.requestFailed"),
+    loadFailed: t("candidate.loadFailed")
+  }));
   const selected =
     candidates.find((candidate) => candidate.id === selectedId) ??
     candidates[0];
@@ -113,7 +117,8 @@ export function KnowledgeCandidateReview({
 
   useEffect(() => {
     let active = true;
-    requestCandidates(organizationId, t("candidate.requestFailed"))
+    const loadMessages = getLoadMessages();
+    requestCandidates(organizationId, loadMessages.requestFailed)
       .then((next) => {
         if (active) {
           setCandidates(next);
@@ -126,7 +131,7 @@ export function KnowledgeCandidateReview({
           setError(
             caught instanceof Error
               ? caught.message
-              : t("candidate.loadFailed")
+              : loadMessages.loadFailed
           );
           setLoading(false);
         }
@@ -134,7 +139,7 @@ export function KnowledgeCandidateReview({
     return () => {
       active = false;
     };
-  }, [organizationId, t]);
+  }, [organizationId]);
 
   async function review(action: "accept" | "reject") {
     if (!selected) {

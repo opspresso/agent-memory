@@ -46,6 +46,7 @@ export const en = {
     "No identity provider is configured. Configure OIDC or Google environment variables.",
   "guide.metaDescription":
     "A guide to Agent Memory search, memories, documents, knowledge graphs, and MCP",
+  "guide.metaTitle": "Guide · Agent Memory",
   "guide.console": "Console",
   "guide.eyebrow": "Product guide · 7 chapters",
   "guide.title": "More than storing memory,",

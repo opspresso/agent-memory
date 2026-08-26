@@ -35,7 +35,7 @@ import classes from "./guide.module.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
-  return { title: "Guide · Agent Memory", description: t("guide.metaDescription") };
+  return { title: t("guide.metaTitle"), description: t("guide.metaDescription") };
 }
 
 const chapters = [
