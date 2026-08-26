@@ -1,18 +1,20 @@
 import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   foreignKey,
   jsonb,
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid
 } from "drizzle-orm/pg-core";
 
-import { organizations } from "./identity";
+import { organizationMembers, organizations, teams } from "./identity";
 import { documentChunks } from "./documents";
-import { memories } from "./memories";
+import { memories, memoryScopeKind } from "./memories";
 import { tsvector, unconstrainedVector } from "./custom-types";
 
 export const knowledgeNodes = pgTable(
@@ -22,6 +24,9 @@ export const knowledgeNodes = pgTable(
     organizationId: uuid()
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    scopeKind: memoryScopeKind().notNull().default("organization"),
+    teamId: uuid(),
+    userId: uuid(),
     kind: text().notNull(),
     canonicalName: text().notNull(),
     summary: text(),
@@ -39,11 +44,37 @@ export const knowledgeNodes = pgTable(
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
-    uniqueIndex("knowledge_nodes_identity_unique").on(
+    check(
+      "knowledge_nodes_scope_owner_check",
+      sql`(${table.scopeKind} = 'organization' AND ${table.teamId} IS NULL AND ${table.userId} IS NULL)
+        OR (${table.scopeKind} = 'team' AND ${table.teamId} IS NOT NULL AND ${table.userId} IS NULL)
+        OR (${table.scopeKind} = 'user' AND ${table.teamId} IS NULL AND ${table.userId} IS NOT NULL)`
+    ),
+    check(
+      "knowledge_nodes_embedding_pair_check",
+      sql`(${table.embedding} IS NULL) = (${table.embeddingModel} IS NULL)`
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.teamId],
+      foreignColumns: [teams.organizationId, teams.id],
+      name: "knowledge_nodes_organization_team_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [
+        organizationMembers.organizationId,
+        organizationMembers.userId
+      ],
+      name: "knowledge_nodes_organization_user_fk"
+    }).onDelete("cascade"),
+    unique("knowledge_nodes_identity_unique").on(
       table.organizationId,
+      table.scopeKind,
+      table.teamId,
+      table.userId,
       table.kind,
       table.canonicalName
-    ),
+    ).nullsNotDistinct(),
     uniqueIndex("knowledge_nodes_organization_id_id_unique").on(
       table.organizationId,
       table.id
@@ -71,6 +102,9 @@ export const knowledgeEdges = pgTable(
     organizationId: uuid()
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    scopeKind: memoryScopeKind().notNull().default("organization"),
+    teamId: uuid(),
+    userId: uuid(),
     sourceNodeId: uuid().notNull(),
     targetNodeId: uuid().notNull(),
     predicate: text().notNull(),
@@ -80,12 +114,34 @@ export const knowledgeEdges = pgTable(
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
-    uniqueIndex("knowledge_edges_identity_unique").on(
+    check(
+      "knowledge_edges_scope_owner_check",
+      sql`(${table.scopeKind} = 'organization' AND ${table.teamId} IS NULL AND ${table.userId} IS NULL)
+        OR (${table.scopeKind} = 'team' AND ${table.teamId} IS NOT NULL AND ${table.userId} IS NULL)
+        OR (${table.scopeKind} = 'user' AND ${table.teamId} IS NULL AND ${table.userId} IS NOT NULL)`
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.teamId],
+      foreignColumns: [teams.organizationId, teams.id],
+      name: "knowledge_edges_organization_team_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [
+        organizationMembers.organizationId,
+        organizationMembers.userId
+      ],
+      name: "knowledge_edges_organization_user_fk"
+    }).onDelete("cascade"),
+    unique("knowledge_edges_identity_unique").on(
       table.organizationId,
+      table.scopeKind,
+      table.teamId,
+      table.userId,
       table.sourceNodeId,
       table.predicate,
       table.targetNodeId
-    ),
+    ).nullsNotDistinct(),
     foreignKey({
       columns: [table.organizationId, table.sourceNodeId],
       foreignColumns: [knowledgeNodes.organizationId, knowledgeNodes.id],

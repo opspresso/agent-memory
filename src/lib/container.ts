@@ -1,6 +1,7 @@
 import { createDatabase } from "@/infrastructure/database/client";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
+import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
 import { createPlainTextExtractor } from "@/infrastructure/document/plain-text-extractor";
@@ -23,6 +24,7 @@ export const organizationAccessRepository =
 
 export const memoryRepository = createMemoryRepository(database.db);
 export const documentRepository = createDocumentRepository(database.db);
+export const knowledgeGraphRepository = createKnowledgeGraphRepository(database.db);
 
 const embeddingModel = process.env.EMBEDDING_MODEL?.trim();
 export const textEmbeddingService = embeddingModel

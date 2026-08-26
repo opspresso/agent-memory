@@ -10,12 +10,17 @@ import {
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
+import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
 import { createAuth } from "@/lib/create-auth";
 import { createMemory, reviseMemory } from "@/domain/memory/memory";
 import {
   createDocument,
   createDocumentChunk
 } from "@/domain/document/document";
+import {
+  createKnowledgeEdge,
+  createKnowledgeNode
+} from "@/domain/knowledge/knowledge-graph";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import {
   createPgBossDocumentIngestionQueue,
@@ -480,6 +485,137 @@ describe("PostgreSQL schema", () => {
         now: createdAt
       })
     );
+  });
+
+  it("upserts, searches, and traverses only accessible knowledge", async () => {
+    const organization = "00000000-0000-0000-0000-000000000009";
+    const user = "10000000-0000-0000-0000-000000000009";
+    const otherUser = "10000000-0000-0000-0000-000000000010";
+    const team = "20000000-0000-0000-0000-000000000009";
+    const sourceNodeId = "60000000-0000-0000-0000-000000000009";
+    const targetNodeId = "60000000-0000-0000-0000-000000000010";
+    await pool.query(
+      `INSERT INTO organizations (id, slug, name)
+       VALUES ($1, 'organization-i', 'Organization I')`,
+      [organization]
+    );
+    await pool.query(
+      `INSERT INTO users (id, email, name)
+       VALUES ($1, 'user-i@example.com', 'User I'),
+              ($2, 'user-j@example.com', 'User J')`,
+      [user, otherUser]
+    );
+    await pool.query(
+      `INSERT INTO organization_members (organization_id, user_id)
+       VALUES ($1, $2), ($1, $3)`,
+      [organization, user, otherUser]
+    );
+    await pool.query(
+      `INSERT INTO teams (id, organization_id, slug, name)
+       VALUES ($1, $2, 'team-i', 'Team I')`,
+      [team, organization]
+    );
+    await pool.query(
+      `INSERT INTO team_members (organization_id, team_id, user_id)
+       VALUES ($1, $2, $3)`,
+      [organization, team, user]
+    );
+
+    const repository = createKnowledgeGraphRepository(db);
+    const createdAt = new Date("2026-08-26T00:00:00.000Z");
+    const scope = { kind: "team" as const, organizationId: organization, teamId: team };
+    const sourceNode = createKnowledgeNode({
+      id: sourceNodeId,
+      scope,
+      kind: "service",
+      canonicalName: "Checkout API",
+      summary: "Processes checkout requests",
+      embedding: { model: "test-embedding", values: [1, 0, 0] },
+      now: createdAt
+    });
+    const targetNode = createKnowledgeNode({
+      id: targetNodeId,
+      scope,
+      kind: "database",
+      canonicalName: "Orders Database",
+      summary: "Stores checkout orders",
+      now: createdAt
+    });
+    await repository.saveNode(sourceNode);
+    await repository.saveNode(targetNode);
+    const upserted = await repository.saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000099",
+        scope,
+        kind: "service",
+        canonicalName: "Checkout API",
+        summary: "Processes purchases and checkout requests",
+        now: new Date("2026-08-27T00:00:00.000Z")
+      })
+    );
+    expect(upserted).toMatchObject({
+      id: sourceNodeId,
+      summary: "Processes purchases and checkout requests"
+    });
+
+    const edge = createKnowledgeEdge({
+      id: "70000000-0000-0000-0000-000000000009",
+      organizationId: organization,
+      scope,
+      sourceNodeId,
+      targetNodeId,
+      predicate: "depends_on",
+      now: createdAt
+    });
+    await repository.saveEdge(edge);
+
+    const access: OrganizationAccess = {
+      organizationId: organization,
+      userId: user,
+      role: "member",
+      teams: [{ teamId: team, role: "member" }]
+    };
+    const hits = await repository.searchNodes({
+      access,
+      query: "checkout purchases",
+      limit: 10
+    });
+    expect(hits[0]).toMatchObject({
+      node: { id: sourceNodeId },
+      lexicalScore: expect.any(Number)
+    });
+    const hybridHits = await repository.searchNodes({
+      access,
+      query: "unrelated terms",
+      queryEmbedding: { model: "test-embedding", values: [1, 0, 0] },
+      limit: 10
+    });
+    expect(hybridHits[0]).toMatchObject({
+      node: { id: sourceNodeId },
+      vectorScore: expect.any(Number)
+    });
+    await expect(
+      repository.searchNodes({
+        access: {
+          organizationId: organization,
+          userId: otherUser,
+          role: "member",
+          teams: []
+        },
+        query: "checkout",
+        limit: 10
+      })
+    ).resolves.toEqual([]);
+
+    await expect(
+      repository.findNeighborhood(access, sourceNodeId, 2, 10)
+    ).resolves.toMatchObject({
+      nodes: expect.arrayContaining([
+        expect.objectContaining({ id: sourceNodeId }),
+        expect.objectContaining({ id: targetNodeId })
+      ]),
+      edges: [expect.objectContaining({ id: edge.id })]
+    });
   });
 
   it("rejects a memory that points to a team in another organization", async () => {
