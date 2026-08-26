@@ -1,40 +1,82 @@
-import { embed, embedMany } from "ai";
+import { z } from "zod";
 
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 
-export function createTextEmbeddingService(model: string): TextEmbeddingService {
-  const modelId = model.trim();
-  if (modelId.length === 0) {
-    throw new Error("embedding model must not be empty");
+interface TextEmbeddingServiceConfiguration {
+  readonly apiKey?: string;
+  readonly baseUrl: string;
+  readonly model: string;
+  readonly request?: typeof fetch;
+}
+
+const embeddingResponseSchema = z.object({
+  data: z.array(
+    z.object({
+      embedding: z.array(z.number()).min(1),
+      index: z.number().int().nonnegative()
+    })
+  )
+});
+
+function requiredSetting(value: string, name: string): string {
+  const setting = value.trim();
+  if (setting.length === 0) {
+    throw new Error(`${name} must not be empty`);
+  }
+  return setting;
+}
+
+export function createTextEmbeddingService(
+  configuration: TextEmbeddingServiceConfiguration
+): TextEmbeddingService {
+  const baseUrl = requiredSetting(
+    configuration.baseUrl,
+    "embedding base URL"
+  ).replace(/\/+$/, "");
+  const endpoint = new URL(`${baseUrl}/embeddings`).toString();
+  const model = requiredSetting(configuration.model, "embedding model");
+  const apiKey = configuration.apiKey?.trim();
+  const request = configuration.request ?? fetch;
+
+  async function embedTexts(texts: readonly string[]) {
+    const response = await request(endpoint, {
+      body: JSON.stringify({ input: [...texts], model }),
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+      },
+      method: "POST"
+    });
+    if (!response.ok) {
+      throw new Error(`embedding request failed with status ${response.status}`);
+    }
+
+    const parsed = embeddingResponseSchema.safeParse(await response.json());
+    if (!parsed.success) {
+      throw new Error("embedding response is invalid");
+    }
+    const ordered = parsed.data.data.toSorted((left, right) =>
+      left.index - right.index
+    );
+    if (
+      ordered.length !== texts.length ||
+      ordered.some((item, index) => item.index !== index)
+    ) {
+      throw new Error("embedding response count does not match inputs");
+    }
+    return ordered.map(({ embedding }) => ({ model, values: embedding }));
   }
 
   return {
     async embed(text) {
-      const result = await embed({
-        model: modelId,
-        value: text,
-        telemetry: {
-          functionId: "agent-memory.embed",
-          recordInputs: false,
-          recordOutputs: false
-        }
-      });
-      return { model: modelId, values: result.embedding };
+      const [embedding] = await embedTexts([text]);
+      if (!embedding) {
+        throw new Error("embedding response is empty");
+      }
+      return embedding;
     },
     async embedMany(texts) {
-      if (texts.length === 0) {
-        return [];
-      }
-      const result = await embedMany({
-        model: modelId,
-        values: [...texts],
-        telemetry: {
-          functionId: "agent-memory.embed-many",
-          recordInputs: false,
-          recordOutputs: false
-        }
-      });
-      return result.embeddings.map((values) => ({ model: modelId, values }));
+      return texts.length === 0 ? [] : embedTexts(texts);
     }
   };
 }

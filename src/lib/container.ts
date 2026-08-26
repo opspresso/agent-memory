@@ -30,9 +30,23 @@ export const documentRepository = createDocumentRepository(database.db);
 export const knowledgeGraphRepository = createKnowledgeGraphRepository(database.db);
 
 const embeddingModel = process.env.EMBEDDING_MODEL?.trim();
-export const textEmbeddingService = embeddingModel
-  ? createTextEmbeddingService(embeddingModel)
-  : undefined;
+const embeddingBaseUrl = process.env.EMBEDDING_BASE_URL?.trim();
+function createConfiguredTextEmbeddingService() {
+  if (!embeddingModel) {
+    return undefined;
+  }
+  if (!embeddingBaseUrl) {
+    throw new Error(
+      "EMBEDDING_BASE_URL must be set when EMBEDDING_MODEL is enabled"
+    );
+  }
+  return createTextEmbeddingService({
+    apiKey: process.env.EMBEDDING_API_KEY,
+    baseUrl: embeddingBaseUrl,
+    model: embeddingModel
+  });
+}
+export const textEmbeddingService = createConfiguredTextEmbeddingService();
 
 const s3Client = createS3Client({
   endpoint: process.env.S3_ENDPOINT ?? "http://localhost:9010",

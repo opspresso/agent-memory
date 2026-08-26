@@ -1,8 +1,6 @@
 import { LangfuseSpanProcessor } from "@langfuse/otel";
-import { LangfuseVercelAiSdkIntegration } from "@langfuse/vercel-ai-sdk";
 import { propagateAttributes, startActiveObservation } from "@langfuse/tracing";
 import { NodeSDK } from "@opentelemetry/sdk-node";
-import { registerTelemetry } from "ai";
 
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 
@@ -101,7 +99,6 @@ export function initializeTelemetry(): void {
   });
   sdk = new NodeSDK({ spanProcessors: [processor] });
   sdk.start();
-  registerTelemetry(new LangfuseVercelAiSdkIntegration());
   logger.info(
     { exportMode: configuration.exportMode },
     "Langfuse telemetry initialized"

@@ -12,6 +12,9 @@ services:
       BETTER_AUTH_URL: http://localhost:3100
       DATABASE_URL: postgresql://agent_memory:agent_memory@postgres:5432/agent_memory
       DOCUMENT_WORKER_ENABLED: "true"
+      EMBEDDING_API_KEY: "${EMBEDDING_API_KEY:-}"
+      EMBEDDING_BASE_URL: "${EMBEDDING_BASE_URL:-}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-}"
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
       MIGRATE_ON_START: "true"
