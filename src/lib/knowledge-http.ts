@@ -1,3 +1,4 @@
+import { KnowledgeSourceNotFoundError } from "@/application/knowledge/authorize-knowledge-source";
 import { KnowledgeNodeNotFoundError } from "@/application/knowledge/create-knowledge-edge";
 import { KnowledgeGraphAccessDeniedError } from "@/application/knowledge/create-knowledge-node";
 import { InvalidKnowledgeSearchError } from "@/application/knowledge/search-knowledge-nodes";
@@ -9,6 +10,12 @@ import {
 import type { KnowledgeNodeSearchHit } from "@/domain/knowledge/knowledge-graph-repository";
 
 export function knowledgeErrorResponse(error: unknown): Response | null {
+  if (error instanceof KnowledgeSourceNotFoundError) {
+    return Response.json(
+      { error: "Knowledge source not found" },
+      { status: 404 }
+    );
+  }
   if (error instanceof KnowledgeNodeNotFoundError) {
     return Response.json({ error: "Knowledge node not found" }, { status: 404 });
   }

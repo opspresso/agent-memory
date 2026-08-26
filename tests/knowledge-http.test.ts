@@ -24,6 +24,27 @@ describe("knowledge HTTP boundary", () => {
         predicate: "depends_on"
       }).success
     ).toBe(false);
+    expect(
+      createKnowledgeNodeSchema.safeParse({
+        scope: { kind: "organization" },
+        kind: "service",
+        canonicalName: "Checkout API",
+        source: {
+          memoryId: "30000000-0000-4000-8000-000000000001"
+        }
+      }).success
+    ).toBe(true);
+    expect(
+      createKnowledgeNodeSchema.safeParse({
+        scope: { kind: "organization" },
+        kind: "service",
+        canonicalName: "Checkout API",
+        source: {
+          memoryId: "30000000-0000-4000-8000-000000000001",
+          chunkId: "50000000-0000-4000-8000-000000000001"
+        }
+      }).success
+    ).toBe(false);
   });
 
   it("does not expose raw embedding vectors", () => {

@@ -13,6 +13,8 @@ import { buildSearchKnowledgeNodes } from "@/application/knowledge/search-knowle
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import {
   createKnowledgeNode,
+  InvalidKnowledgeGraphError,
+  type KnowledgeEdge,
   type KnowledgeNode
 } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
@@ -49,12 +51,26 @@ function repository(
 }
 
 describe("knowledge graph", () => {
+  it("requires exactly one source reference", () => {
+    expect(() =>
+      createKnowledgeNode({
+        id: "node-1",
+        scope: node("scope").scope,
+        kind: "service",
+        canonicalName: "Checkout API",
+        source: { memoryId: "memory-1", chunkId: "chunk-1" },
+        now
+      })
+    ).toThrow(InvalidKnowledgeGraphError);
+  });
+
   it("normalizes and embeds a node before persistence", async () => {
     const saveNode = vi.fn(async (value: KnowledgeNode) => value);
     const embed = vi
       .fn()
       .mockResolvedValue({ model: "embedding-model", values: [1, 0] });
     const createNode = buildCreateKnowledgeNode({
+      authorizeSource: vi.fn(),
       clock: () => now,
       embeddingService: { embed, embedMany: vi.fn() },
       generateId: () => "node-1",
@@ -84,6 +100,7 @@ describe("knowledge graph", () => {
 
   it("rejects a node outside the caller write scope", async () => {
     const createNode = buildCreateKnowledgeNode({
+      authorizeSource: vi.fn(),
       clock: () => now,
       generateId: () => "node-1",
       repository: repository()
@@ -98,10 +115,40 @@ describe("knowledge graph", () => {
     ).rejects.toBeInstanceOf(KnowledgeGraphAccessDeniedError);
   });
 
+  it("authorizes a node source before persistence", async () => {
+    const authorizeSource = vi.fn().mockResolvedValue(undefined);
+    const saveNode = vi.fn(async (value: KnowledgeNode) => value);
+    const createNode = buildCreateKnowledgeNode({
+      authorizeSource,
+      clock: () => now,
+      generateId: () => "node-1",
+      repository: repository({ saveNode })
+    });
+    const source = { memoryId: "memory-1" };
+
+    await createNode({
+      access,
+      scope: node("scope").scope,
+      kind: "service",
+      canonicalName: "Checkout API",
+      source
+    });
+
+    expect(authorizeSource).toHaveBeenCalledWith(
+      access,
+      source,
+      node("scope").scope
+    );
+    expect(saveNode).toHaveBeenCalledWith(
+      expect.objectContaining({ source })
+    );
+  });
+
   it("requires both edge endpoints to be visible", async () => {
     const source = node("node-1");
     const target = node("node-2", "team-2");
     const createEdge = buildCreateKnowledgeEdge({
+      authorizeSource: vi.fn(),
       clock: () => now,
       generateId: () => "edge-1",
       repository: repository({
@@ -121,6 +168,44 @@ describe("knowledge graph", () => {
         predicate: "depends_on"
       })
     ).rejects.toBeInstanceOf(KnowledgeNodeNotFoundError);
+  });
+
+  it("authorizes an edge source before persistence", async () => {
+    const sourceNode = node("node-1");
+    const targetNode = node("node-2");
+    const source = { chunkId: "chunk-1" };
+    const authorizeSource = vi.fn().mockResolvedValue(undefined);
+    const saveEdge = vi.fn(async (value: KnowledgeEdge) => value);
+    const createEdge = buildCreateKnowledgeEdge({
+      authorizeSource,
+      clock: () => now,
+      generateId: () => "edge-1",
+      repository: repository({
+        findNodeById: vi
+          .fn()
+          .mockResolvedValueOnce(sourceNode)
+          .mockResolvedValueOnce(targetNode),
+        saveEdge
+      })
+    });
+
+    await createEdge({
+      access,
+      scope: sourceNode.scope,
+      sourceNodeId: sourceNode.id,
+      targetNodeId: targetNode.id,
+      predicate: "depends_on",
+      source
+    });
+
+    expect(authorizeSource).toHaveBeenCalledWith(
+      access,
+      source,
+      sourceNode.scope
+    );
+    expect(saveEdge).toHaveBeenCalledWith(
+      expect.objectContaining({ source })
+    );
   });
 
   it("filters inaccessible nodes and dangling edges from a neighborhood", async () => {

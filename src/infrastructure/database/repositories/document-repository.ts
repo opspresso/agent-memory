@@ -18,6 +18,7 @@ import type {
   DocumentScope
 } from "@/domain/document/document";
 import type {
+  DocumentChunkRecord,
   DocumentRepository,
   DocumentSearchHit,
   DocumentSearchInput
@@ -179,6 +180,35 @@ export function createDocumentRepository(
         )
         .limit(1);
       return row ? documentFromRow(row) : null;
+    },
+
+    async findChunkById(organizationId, chunkId) {
+      const [row] = await db
+        .select({
+          document: getTableColumns(documents),
+          chunk: getTableColumns(documentChunks)
+        })
+        .from(documentChunks)
+        .innerJoin(
+          documents,
+          and(
+            eq(documents.organizationId, documentChunks.organizationId),
+            eq(documents.id, documentChunks.documentId)
+          )
+        )
+        .where(
+          and(
+            eq(documentChunks.organizationId, organizationId),
+            eq(documentChunks.id, chunkId)
+          )
+        )
+        .limit(1);
+      return row
+        ? ({
+            document: documentFromRow(row.document),
+            chunk: chunkFromRow(row.chunk)
+          } satisfies DocumentChunkRecord)
+        : null;
     },
 
     async claimForProcessing(organizationId, documentId, now) {

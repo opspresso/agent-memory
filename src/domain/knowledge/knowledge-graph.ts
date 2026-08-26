@@ -92,6 +92,16 @@ function validatedProperties(
 }
 
 function validatedSource(source: KnowledgeSource | undefined) {
+  if (!source) {
+    return Object.freeze({});
+  }
+  const referenceCount =
+    Number(source.memoryId !== undefined) + Number(source.chunkId !== undefined);
+  if (referenceCount !== 1) {
+    throw new InvalidKnowledgeGraphError(
+      "knowledge source must reference exactly one memory or document chunk"
+    );
+  }
   if (source?.memoryId !== undefined && source.memoryId.trim().length === 0) {
     throw new InvalidKnowledgeGraphError("source memory ID must not be empty");
   }

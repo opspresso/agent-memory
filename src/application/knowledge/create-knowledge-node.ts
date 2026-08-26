@@ -11,6 +11,8 @@ import {
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 
+import type { AuthorizeKnowledgeSource } from "./authorize-knowledge-source";
+
 export interface CreateKnowledgeNodeInput {
   readonly access: OrganizationAccess;
   readonly scope: ScopedResource;
@@ -22,6 +24,7 @@ export interface CreateKnowledgeNodeInput {
 }
 
 export interface CreateKnowledgeNodeDependencies {
+  readonly authorizeSource: AuthorizeKnowledgeSource;
   readonly clock: () => Date;
   readonly embeddingService?: TextEmbeddingService;
   readonly generateId: () => string;
@@ -43,6 +46,14 @@ export function buildCreateKnowledgeNode(
   ): Promise<KnowledgeNode> {
     if (!canAccessScopedResource(input.access, "write", input.scope)) {
       throw new KnowledgeGraphAccessDeniedError();
+    }
+
+    if (input.source) {
+      await dependencies.authorizeSource(
+        input.access,
+        input.source,
+        input.scope
+      );
     }
 
     const embedding = dependencies.embeddingService

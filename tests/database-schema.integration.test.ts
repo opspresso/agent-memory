@@ -552,6 +552,18 @@ describe("PostgreSQL schema", () => {
     });
     await repository.completeProcessing(claimed, [chunk], createdAt);
 
+    await expect(
+      repository.findChunkById(organization, chunk.id)
+    ).resolves.toMatchObject({
+      document: { id: documentId, status: "ready" },
+      chunk: { id: chunk.id, documentId }
+    });
+    await expect(
+      repository.findChunkById(
+        "00000000-0000-0000-0000-000000000099",
+        chunk.id
+      )
+    ).resolves.toBeNull();
     await expect(repository.findById(organization, documentId)).resolves.toMatchObject({
       status: "ready",
       processingAttempts: 1,

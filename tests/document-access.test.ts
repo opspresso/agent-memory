@@ -51,6 +51,7 @@ function repository(overrides: Partial<DocumentRepository>): DocumentRepository 
   return {
     save: vi.fn(),
     findById: vi.fn(),
+    findChunkById: vi.fn(),
     claimForProcessing: vi.fn(),
     completeProcessing: vi.fn(),
     failProcessing: vi.fn(),

@@ -10,6 +10,7 @@ import {
 } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
 
+import type { AuthorizeKnowledgeSource } from "./authorize-knowledge-source";
 import { KnowledgeGraphAccessDeniedError } from "./create-knowledge-node";
 
 export interface CreateKnowledgeEdgeInput {
@@ -23,6 +24,7 @@ export interface CreateKnowledgeEdgeInput {
 }
 
 export interface CreateKnowledgeEdgeDependencies {
+  readonly authorizeSource: AuthorizeKnowledgeSource;
   readonly clock: () => Date;
   readonly generateId: () => string;
   readonly repository: KnowledgeGraphRepository;
@@ -43,6 +45,14 @@ export function buildCreateKnowledgeEdge(
   ): Promise<KnowledgeEdge> {
     if (!canAccessScopedResource(input.access, "write", input.scope)) {
       throw new KnowledgeGraphAccessDeniedError();
+    }
+
+    if (input.source) {
+      await dependencies.authorizeSource(
+        input.access,
+        input.source,
+        input.scope
+      );
     }
 
     const [sourceNode, targetNode] = await Promise.all([

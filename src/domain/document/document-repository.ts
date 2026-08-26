@@ -20,9 +20,18 @@ export interface DocumentSearchHit {
   readonly score: number;
 }
 
+export interface DocumentChunkRecord {
+  readonly document: Document;
+  readonly chunk: DocumentChunk;
+}
+
 export interface DocumentRepository {
   save(document: Document): Promise<void>;
   findById(organizationId: string, documentId: string): Promise<Document | null>;
+  findChunkById(
+    organizationId: string,
+    chunkId: string
+  ): Promise<DocumentChunkRecord | null>;
   claimForProcessing(
     organizationId: string,
     documentId: string,

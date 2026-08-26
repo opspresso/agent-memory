@@ -9,6 +9,19 @@ const propertiesSchema = z
     "knowledge properties must not exceed 32 KiB"
   );
 
+const knowledgeSourceSchema = z
+  .object({
+    memoryId: z.uuid().optional(),
+    chunkId: z.uuid().optional()
+  })
+  .refine(
+    (source) =>
+      Number(source.memoryId !== undefined) +
+        Number(source.chunkId !== undefined) ===
+      1,
+    "knowledge source must reference exactly one memory or document chunk"
+  );
+
 export const knowledgeNodeIdSchema = z.uuid();
 
 export const createKnowledgeNodeSchema = z.object({
@@ -16,7 +29,8 @@ export const createKnowledgeNodeSchema = z.object({
   kind: z.string().trim().min(1).max(100),
   canonicalName: z.string().trim().min(1).max(500),
   summary: z.string().trim().min(1).max(10_000).optional(),
-  properties: propertiesSchema.optional()
+  properties: propertiesSchema.optional(),
+  source: knowledgeSourceSchema.optional()
 });
 
 export const createKnowledgeEdgeSchema = z.object({
@@ -24,5 +38,6 @@ export const createKnowledgeEdgeSchema = z.object({
   sourceNodeId: z.uuid(),
   targetNodeId: z.uuid(),
   predicate: z.string().trim().min(1).max(100),
-  properties: propertiesSchema.optional()
+  properties: propertiesSchema.optional(),
+  source: knowledgeSourceSchema.optional()
 });
