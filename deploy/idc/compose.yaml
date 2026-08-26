@@ -11,7 +11,7 @@ services:
     image: ${AGENT_MEMORY_IMAGE}
     env_file:
       - .env
-      - .env.secrets
+      - .env.runtime-secrets
       - .env.infrastructure
     environment:
       DOCUMENT_WORKER_ENABLED: "true"

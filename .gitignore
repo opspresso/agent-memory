@@ -16,8 +16,10 @@ build/
 .env.local.*
 .env.*.local
 deploy/**/.env
+deploy/**/.env.aws
 deploy/**/.env.secrets
 deploy/**/.env.infrastructure
+deploy/**/.env.runtime-secrets
 
 # misc
 .DS_Store
