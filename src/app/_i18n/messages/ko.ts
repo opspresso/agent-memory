@@ -42,5 +42,83 @@ export const ko: Messages = {
   "login.providerUrlMissing": "인증 제공자 URL을 받지 못했습니다.",
   "login.failed": "로그인에 실패했습니다.",
   "login.notConfigured":
-    "인증 제공자가 설정되지 않았습니다. OIDC 또는 Google 환경 변수를 구성하세요."
+    "인증 제공자가 설정되지 않았습니다. OIDC 또는 Google 환경 변수를 구성하세요.",
+  "guide.metaDescription":
+    "Agent Memory의 검색, Memory, 문서, Knowledge Graph와 MCP 사용 가이드",
+  "guide.console": "Console",
+  "guide.eyebrow": "Product guide · 7 chapters",
+  "guide.title": "기억을 넣는 법보다,",
+  "guide.titleSecond": "다시 믿고 쓰는 법.",
+  "guide.lede":
+    "Memory와 문서, Knowledge Graph를 출처와 함께 연결해 다음 Agent가 바로 활용할 수 있는 Context로 만듭니다.",
+  "guide.flowLabel": "Agent Memory Context 흐름",
+  "guide.flow.store": "근거와 scope를 함께 저장",
+  "guide.flow.discover": "필요한 Context를 정확하게 발견",
+  "guide.flow.use": "출처를 아는 답변과 행동",
+  "guide.contentsLabel": "Guide 목차",
+  "guide.onThisPage": "이 페이지의 내용",
+  "guide.chapter.start": "시작하기",
+  "guide.chapter.search": "Context 검색",
+  "guide.chapter.memory": "Memory 관리",
+  "guide.chapter.documents": "문서 수집",
+  "guide.chapter.graph": "Graph 탐색",
+  "guide.chapter.review": "AI 후보 검토",
+  "guide.chapter.connect": "Agent 연결",
+  "guide.start.title": "Scope를 먼저 선택합니다.",
+  "guide.start.body":
+    "모든 Memory, 문서, Knowledge node와 edge는 하나의 조직과 하나의 scope에 속합니다. 저장하기 전에 누가 이 Context를 함께 사용할지 결정하세요.",
+  "guide.scope.organizationAudience": "조직 멤버",
+  "guide.scope.teamAudience": "해당 팀 멤버",
+  "guide.scope.userAudience": "본인",
+  "guide.scope.teamManager": "manager 이상",
+  "guide.scope.userManager": "본인",
+  "guide.scope.read": "읽기 · {audience}",
+  "guide.scope.manage": "관리 · {manager}",
+  "guide.start.note":
+    "선택한 scope에 맞는 Context를 검색하고, 현재 활용할 수 있는 Source와 연결된 Graph를 함께 보여줍니다.",
+  "guide.search.title": "질문에 맞는 검색 면을 고릅니다.",
+  "guide.search.body":
+    "All Context는 Memory, 처리된 문서 chunk, Knowledge node를 한 순위로 합칩니다. 특정 출처만 살피려면 Memory, Documents, Graph를 선택하세요.",
+  "guide.search.input": "검색어 입력",
+  "guide.search.inputNote": "정책, 장애 대응, 시스템 관계",
+  "guide.search.relevance": "관련도 확인",
+  "guide.search.relevanceNote": "lexical과 선택형 vector score",
+  "guide.search.evidence": "근거 확인",
+  "guide.search.evidenceNote": "Memory 또는 document chunk provenance",
+  "guide.search.note":
+    "상대 관련도는 현재 결과 중 최고 score를 100%로 표시한 값입니다. 서로 다른 검색 요청의 품질을 절대값으로 비교하지 마세요.",
+  "guide.memory.title": "결정의 현재 상태와 변경 이유를 함께 남깁니다.",
+  "guide.memory.body":
+    "Memory는 rule, experience, decision, preference, fact 중 하나입니다. 검색 결과의 Lifecycle에서 내용을 수정하고 변경 사유를 기록할 수 있습니다.",
+  "guide.memory.initial": "최초 기록",
+  "guide.memory.current": "현재 상태",
+  "guide.memory.note":
+    "저장은 현재 version을 기준으로 충돌을 확인합니다. 다른 사용자가 먼저 수정했다면 최신 version을 다시 불러온 뒤 변경하세요. Archive는 삭제가 아니라 검색에서 제외되는 새 version입니다.",
+  "guide.documents.title": "원본은 보존하고, 검색은 chunk로 수행합니다.",
+  "guide.documents.body":
+    "UTF-8 text, Markdown, CSV, JSON, XML 파일을 최대 10 MiB까지 업로드할 수 있습니다. 원본은 S3 호환 storage에, 처리 상태와 chunk는 PostgreSQL에 저장됩니다.",
+  "guide.documents.note":
+    "failed 문서는 오류를 확인한 뒤 다시 처리할 수 있습니다. ready가 되기 전에는 검색 결과에 포함되지 않습니다.",
+  "guide.graph.title": "관계를 따라가되, 근거에서 멀어지지 않습니다.",
+  "guide.graph.body":
+    "Graph 검색 결과에서 관계 보기를 누르면 선택 node를 중심으로 방향성 edge와 predicate가 표시됩니다. Node를 선택하면 inspector가 바뀌고, 같은 node를 다시 선택하면 그 node가 새로운 중심이 됩니다.",
+  "guide.graph.note":
+    "각 node와 edge는 Memory 또는 document chunk 중 정확히 하나를 가리키는 provenance를 하나 이상 가집니다. 키보드에서는 Enter 또는 Space로 node를 선택할 수 있습니다.",
+  "guide.review.title": "AI의 제안을 검토해 지식을 완성합니다.",
+  "guide.review.body":
+    "AI Extractor가 문서에서 찾은 entity와 relationship은 검토 queue에 먼저 들어갑니다. Source, model, entity, 관계를 살펴보고 Graph에 반영할 내용을 선택하세요.",
+  "guide.review.accept": "Graph에 승인",
+  "guide.review.acceptNote":
+    "Canonical node·edge와 provenance를 transaction으로 저장",
+  "guide.review.reject": "이번에는 반영하지 않기",
+  "guide.review.rejectNote": "검토 기록을 남겨 다음 판단에 활용",
+  "guide.connect.title": "MCP로 Agent와 Context를 연결합니다.",
+  "guide.connect.body":
+    "Agent 연결 탭에서 현재 사이트 주소와 활성 조직 ID가 포함된 전체 Streamable HTTP MCP endpoint를 확인하고 복사합니다. Better Auth 로그인 응답의 set-auth-token 값을 Bearer token으로 전달하세요.",
+  "guide.connect.note":
+    "실제 연결 주소는 Console에서 활성 조직에 맞게 생성됩니다.",
+  "guide.next.title": "이제 실제 Context를 탐색하세요.",
+  "guide.next.body":
+    "운영 Console에서 검색을 시작하거나 Agent에 MCP endpoint를 연결합니다.",
+  "guide.next.action": "Console 열기"
 };

@@ -40,7 +40,85 @@ export const en = {
   "login.providerUrlMissing": "The identity provider URL was not returned.",
   "login.failed": "Sign-in failed.",
   "login.notConfigured":
-    "No identity provider is configured. Configure OIDC or Google environment variables."
+    "No identity provider is configured. Configure OIDC or Google environment variables.",
+  "guide.metaDescription":
+    "A guide to Agent Memory search, memories, documents, knowledge graphs, and MCP",
+  "guide.console": "Console",
+  "guide.eyebrow": "Product guide · 7 chapters",
+  "guide.title": "More than storing memory,",
+  "guide.titleSecond": "make it trustworthy and reusable.",
+  "guide.lede":
+    "Connect memories, documents, and knowledge graphs to their sources, creating context the next agent can use immediately.",
+  "guide.flowLabel": "Agent Memory context flow",
+  "guide.flow.store": "Store evidence and scope together",
+  "guide.flow.discover": "Find the right context precisely",
+  "guide.flow.use": "Answers and actions grounded in sources",
+  "guide.contentsLabel": "Guide contents",
+  "guide.onThisPage": "On this page",
+  "guide.chapter.start": "Get started",
+  "guide.chapter.search": "Context search",
+  "guide.chapter.memory": "Manage Memory",
+  "guide.chapter.documents": "Ingest documents",
+  "guide.chapter.graph": "Explore Graph",
+  "guide.chapter.review": "Review AI candidates",
+  "guide.chapter.connect": "Connect Agents",
+  "guide.start.title": "Choose a scope first.",
+  "guide.start.body":
+    "Every memory, document, knowledge node, and edge belongs to one organization and one scope. Decide who will use this context together before saving it.",
+  "guide.scope.organizationAudience": "organization members",
+  "guide.scope.teamAudience": "team members",
+  "guide.scope.userAudience": "you",
+  "guide.scope.teamManager": "manager or above",
+  "guide.scope.userManager": "you",
+  "guide.scope.read": "Read · {audience}",
+  "guide.scope.manage": "Manage · {manager}",
+  "guide.start.note":
+    "Search context within the selected scope and see the currently available sources together with their connected graph.",
+  "guide.search.title": "Choose the search surface that fits your question.",
+  "guide.search.body":
+    "All Context combines memories, processed document chunks, and knowledge nodes into one ranking. Select Memories, Documents, or Graph to inspect a specific source.",
+  "guide.search.input": "Enter a query",
+  "guide.search.inputNote": "policies, incident response, system relationships",
+  "guide.search.relevance": "Check relevance",
+  "guide.search.relevanceNote": "lexical and optional vector scores",
+  "guide.search.evidence": "Check evidence",
+  "guide.search.evidenceNote": "memory or document chunk provenance",
+  "guide.search.note":
+    "Relative relevance shows the top score in the current results as 100%. Do not compare it as an absolute measure across different searches.",
+  "guide.memory.title": "Keep the current decision and why it changed together.",
+  "guide.memory.body":
+    "A memory is a rule, experience, decision, preference, or fact. Use Lifecycle in a search result to update its content and record the reason for the change.",
+  "guide.memory.initial": "Initial record",
+  "guide.memory.current": "Current state",
+  "guide.memory.note":
+    "Saving checks for conflicts against the current version. If someone updated it first, reload the latest version before editing. Archive creates a new version excluded from search; it does not delete the memory.",
+  "guide.documents.title": "Preserve originals and search their chunks.",
+  "guide.documents.body":
+    "Upload UTF-8 text, Markdown, CSV, JSON, or XML files up to 10 MiB. Originals live in S3-compatible storage, while processing state and chunks live in PostgreSQL.",
+  "guide.documents.note":
+    "A failed document can be processed again after reviewing the error. It does not appear in search until it is ready.",
+  "guide.graph.title": "Follow relationships without losing the evidence.",
+  "guide.graph.body":
+    "Select View relationships in a Graph result to see directed edges and predicates around the chosen node. Selecting a node changes the inspector; selecting it again makes it the new center.",
+  "guide.graph.note":
+    "Every node and edge has at least one provenance pointing to exactly one memory or document chunk. Use Enter or Space to select a node with the keyboard.",
+  "guide.review.title": "Review AI proposals to complete the knowledge.",
+  "guide.review.body":
+    "Entities and relationships found by the AI Extractor enter a review queue first. Inspect the source, model, entities, and relationships, then choose what to add to the Graph.",
+  "guide.review.accept": "Accept into Graph",
+  "guide.review.acceptNote":
+    "Store canonical nodes, edges, and provenance in one transaction",
+  "guide.review.reject": "Do not apply this candidate",
+  "guide.review.rejectNote": "Keep the review record for future decisions",
+  "guide.connect.title": "Connect Agents to Context through MCP.",
+  "guide.connect.body":
+    "The Agent connection tab shows a copyable Streamable HTTP MCP endpoint containing the current site address and active organization ID. Send the set-auth-token value from the Better Auth sign-in response as a Bearer token.",
+  "guide.connect.note":
+    "The Console generates the connection URL for the active organization.",
+  "guide.next.title": "Explore real context now.",
+  "guide.next.body":
+    "Start a search in the Console or connect an Agent to the MCP endpoint.",
+  "guide.next.action": "Open Console"
 } as const;
 
 export type MessageKey = keyof typeof en;
