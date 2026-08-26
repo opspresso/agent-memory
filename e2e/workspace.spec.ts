@@ -2,6 +2,23 @@ import { expect, test, type Page } from "@playwright/test";
 
 const authenticatedE2e = process.env.E2E_AUTHENTICATED === "true";
 
+test("explains the product workflow in the public guide", async ({ page }) => {
+  await page.goto("/guide");
+
+  await expect(
+    page.getByRole("heading", { name: "기억을 넣는 법보다, 다시 믿고 쓰는 법." })
+  ).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Guide 목차" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "관계를 따라가되, 근거에서 멀어지지 않습니다." })
+  ).toBeVisible();
+  await expect(page.getByText("knowledge_neighborhood", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Console 열기" })).toHaveAttribute(
+    "href",
+    "/"
+  );
+});
+
 async function postJson<T>(
   page: Page,
   url: string,
@@ -48,6 +65,15 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     page.getByRole("heading", { name: "공유 Context를 한곳에서 관리합니다." })
   ).toBeVisible();
   const organizationId = organization.id;
+
+  await page.getByRole("tab", { name: "Agent 연결" }).click();
+  const mcpEndpoint = `${new URL(page.url()).origin}/api/organizations/${organizationId}/mcp`;
+  await expect(page.getByText(mcpEndpoint, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "MCP endpoint 복사" }).click();
+  await expect(page.getByRole("button", { name: "MCP endpoint 복사" })).toHaveText(
+    "복사됨"
+  );
+  await page.getByRole("tab", { name: "통합 검색" }).click();
 
   const memory = await postJson<{ id: string }>(
     page,

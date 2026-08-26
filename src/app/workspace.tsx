@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Code,
+  CopyButton,
   Group,
   Paper,
   SegmentedControl,
@@ -21,6 +22,8 @@ import {
   IconAlertCircle,
   IconBrain,
   IconCloudUpload,
+  IconCheck,
+  IconCopy,
   IconFileText,
   IconLogout,
   IconHistory,
@@ -65,6 +68,7 @@ interface WorkspaceProps {
   readonly administrationByOrganization: Readonly<
     Record<string, OrganizationAdministrationView>
   >;
+  readonly origin: string;
   readonly organizations: readonly OrganizationMembership[];
   readonly user: SessionUser;
 }
@@ -125,6 +129,7 @@ function resultKey(hit: Record<string, unknown>): string {
 
 export function Workspace({
   administrationByOrganization,
+  origin,
   organizations,
   user
 }: WorkspaceProps) {
@@ -170,8 +175,8 @@ export function Workspace({
       ),
     [hits]
   );
-  const mcpPath = organizationId
-    ? `/api/organizations/${organizationId}/mcp`
+  const mcpEndpoint = organizationId && origin
+    ? `${origin}/api/organizations/${organizationId}/mcp`
     : "조직을 선택하세요";
 
   useEffect(
@@ -672,7 +677,27 @@ export function Workspace({
                 Better Auth 로그인 응답의 <Code>set-auth-token</Code> 값을 Bearer
                 token으로 전달하세요.
               </Text>
-              <Code block>{mcpPath}</Code>
+              <Group align="stretch" gap="xs" wrap="nowrap">
+                <Code block style={{ flex: 1, overflowWrap: "anywhere" }}>
+                  {mcpEndpoint}
+                </Code>
+                <CopyButton value={mcpEndpoint}>
+                  {({ copied, copy }) => (
+                    <Button
+                      aria-label="MCP endpoint 복사"
+                      color={copied ? "teal" : "indigo"}
+                      disabled={!organizationId || !origin}
+                      leftSection={
+                        copied ? <IconCheck size={16} /> : <IconCopy size={16} />
+                      }
+                      onClick={copy}
+                      variant="light"
+                    >
+                      {copied ? "복사됨" : "복사"}
+                    </Button>
+                  )}
+                </CopyButton>
+              </Group>
               <Text c="dimmed" size="sm">
                 context_search · memory_search · memory_create · document_search ·
                 knowledge_search · knowledge_neighborhood

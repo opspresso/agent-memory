@@ -1,6 +1,7 @@
 import {
   Badge,
   Box,
+  Button,
   Container,
   Group,
   Image,
@@ -12,6 +13,7 @@ import {
 } from "@mantine/core";
 import {
   IconBinaryTree,
+  IconBook2,
   IconBrain,
   IconFileSearch,
   IconShieldLock
@@ -56,7 +58,13 @@ const capabilities = [
 ] as const;
 
 export default async function Home() {
-  const user = await getSessionUser(new Headers(await headers()));
+  const requestHeaders = await headers();
+  const user = await getSessionUser(new Headers(requestHeaders));
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? "http";
+  const origin =
+    process.env.BETTER_AUTH_URL?.replace(/\/$/, "") ??
+    (host ? `${protocol}://${host}` : "");
   const organizations = user
     ? await listOrganizationMemberships(user.id)
     : [];
@@ -118,12 +126,23 @@ export default async function Home() {
               Self-hosted
             </Badge>
           </Group>
-          <ThemeToggle />
+          <Group gap="xs">
+            <Button
+              component="a"
+              href="/guide"
+              leftSection={<IconBook2 size={16} />}
+              variant="subtle"
+            >
+              Guide
+            </Button>
+            <ThemeToggle />
+          </Group>
         </Group>
 
         {user ? (
           <Workspace
             administrationByOrganization={administrationByOrganization}
+            origin={origin}
             organizations={organizations}
             user={user}
           />

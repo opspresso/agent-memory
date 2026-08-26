@@ -46,6 +46,8 @@ pnpm dev
 
 `http://localhost:3100`에서 가입한 뒤 첫 조직을 생성한다. 가입 email은 `ALLOWED_EMAIL_DOMAINS`에 포함되고 첫 조직 생성자는 `ADMIN_EMAILS`에 포함되어야 한다.
 
+로그인 전후에 `http://localhost:3100/guide`에서 제품 사용 흐름과 기능별 설명을 확인할 수 있다.
+
 문서 업로드까지 사용하려면 MinIO bucket을 함께 시작하라.
 
 ```bash

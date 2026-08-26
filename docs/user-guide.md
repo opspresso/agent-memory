@@ -1,6 +1,6 @@
 # 사용자 가이드
 
-운영 콘솔은 조직의 Memory, RAG 문서, Knowledge Graph를 검색하고 관리하는 화면이다. 모든 화면은 로그인 사용자와 활성 조직의 멤버십·scope 권한을 적용한다.
+운영 콘솔은 조직의 Memory, RAG 문서, Knowledge Graph를 검색하고 관리하는 화면이다. 모든 화면은 로그인 사용자와 활성 조직의 멤버십·scope 권한을 적용한다. 같은 내용을 사이트에서 읽으려면 로그인 전후에 `/guide`를 열거나 상단의 `Guide`를 선택하라.
 
 ## 활성 조직과 권한
 
@@ -132,7 +132,7 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 
 ## Agent 연결
 
-`Agent 연결`에는 활성 조직의 Streamable HTTP MCP endpoint가 표시된다.
+`Agent 연결`에는 현재 사이트 주소와 활성 조직 ID가 포함된 전체 Streamable HTTP MCP endpoint가 표시된다. `복사`를 선택해 client 설정에 붙여 넣어라.
 
 ```text
 http://localhost:3100/api/organizations/<organizationId>/mcp
