@@ -7,9 +7,11 @@ import {
 } from "@mantine/core";
 import { IconMoon, IconSun } from "@tabler/icons-react";
 
+import { useT } from "./_i18n/provider";
 import classes from "./theme-toggle.module.css";
 
 export function ThemeToggle() {
+  const t = useT();
   const { setColorScheme } = useMantineColorScheme();
   const computedColorScheme = useComputedColorScheme("light", {
     getInitialValueInEffect: true
@@ -17,7 +19,7 @@ export function ThemeToggle() {
 
   return (
     <ActionIcon
-      aria-label="테마 전환"
+      aria-label={t("theme.toggle")}
       onClick={() =>
         setColorScheme(computedColorScheme === "light" ? "dark" : "light")
       }
