@@ -56,8 +56,8 @@ const capabilities = [
   },
   {
     icon: IconShieldLock,
-    title: "Scoped Access",
-    description: "조직, 팀, 사용자 경계를 모든 검색과 mutation에 적용한다."
+    title: "Flexible Sharing",
+    description: "조직, 팀, 개인에 맞춰 필요한 Context를 자연스럽게 공유한다."
   }
 ] as const;
 
@@ -142,7 +142,7 @@ export default async function Home() {
               Agent Memory
             </Text>
             <Badge color="teal" variant="light">
-              Self-hosted
+              Shared Context
             </Badge>
           </Group>
           <Group gap="xs">
@@ -175,12 +175,12 @@ export default async function Home() {
               <Stack gap="md">
                 <Title className={classes.title} order={1}>
                   에이전트가 기억하고,
-                  <br />조직은 통제합니다.
+                  <br />더 나은 답을 만듭니다.
                 </Title>
                 <Text className={classes.lead} c="dimmed" size="xl">
-                  AI Agent의 장기 기억, RAG, Knowledge Graph를 하나의 권한
-                  모델과 MCP endpoint로 독립 운영합니다. 필요하면 Agent
-                  Studio와 연동할 수 있습니다.
+                  AI Agent의 장기 기억, RAG, Knowledge Graph를 하나의
+                  Context로 연결합니다. MCP endpoint로 바로 활용하고, 필요하면
+                  Agent Studio와 함께 사용할 수 있습니다.
                 </Text>
               </Stack>
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">

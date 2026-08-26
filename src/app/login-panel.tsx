@@ -110,13 +110,13 @@ export function LoginPanel({
       <Stack gap="lg">
         <Stack gap={4}>
           <Text c="indigo" fw={700} size="sm">
-            SECURE CONSOLE
+            MEMORY WORKSPACE
           </Text>
           <Title id="login-title" order={2}>
-            조직 계정으로 시작
+            Agent Memory 시작하기
           </Title>
           <Text c="dimmed" size="sm">
-            허용된 조직, 팀, 개인 범위만 검색됩니다.
+            필요한 Memory와 Context를 한곳에서 만나보세요.
           </Text>
         </Stack>
 

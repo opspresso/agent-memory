@@ -107,9 +107,8 @@ export default function GuidePage() {
                 <br />다시 믿고 쓰는 법.
               </Title>
               <Text c="dimmed" className={classes.lead} size="xl">
-                Agent Memory는 정보를 저장하는 상자가 아닙니다. 누가 읽을 수 있는지,
-                언제까지 유효한지, 어떤 원문에서 왔는지 보존해 다음 Agent가 판단할 수
-                있는 Context로 만듭니다.
+                Memory와 문서, Knowledge Graph를 출처와 함께 연결해 다음 Agent가
+                바로 활용할 수 있는 Context로 만듭니다.
               </Text>
             </Stack>
 
@@ -123,7 +122,7 @@ export default function GuidePage() {
               <div className={classes.mapSource}>
                 <span>02</span>
                 <strong>Search · Graph</strong>
-                <small>현재 권한으로 다시 검증</small>
+                <small>필요한 Context를 정확하게 발견</small>
               </div>
               <div className={classes.mapTarget}>
                 <span>03</span>
@@ -166,8 +165,8 @@ export default function GuidePage() {
                     <IconShieldCheck size={19} />
                   </ThemeIcon>
                   <Text size="sm">
-                    검색할 때도 권한을 다시 확인합니다. Source가 archive·만료되거나 접근
-                    권한이 사라지면 연결된 Graph 결과도 함께 숨겨집니다.
+                    선택한 scope에 맞는 Context를 검색하고, 현재 활용할 수 있는 Source와
+                    연결된 Graph를 함께 보여줍니다.
                   </Text>
                 </Paper>
               </section>
@@ -260,10 +259,11 @@ export default function GuidePage() {
 
               <section className={classes.chapter} id="review">
                 <ChapterLabel>06 · AI 후보 검토</ChapterLabel>
-                <Title order={2}>AI는 제안하고, 관리자가 공유 여부를 결정합니다.</Title>
+                <Title order={2}>AI의 제안을 검토해 지식을 완성합니다.</Title>
                 <Text c="dimmed">
                   AI Extractor가 문서에서 찾은 entity와 relationship은 검토 queue에 먼저
-                  들어갑니다. Source, model, entity, 관계를 확인한 뒤 승인하거나 거절하세요.
+                  들어갑니다. Source, model, entity, 관계를 살펴보고 Graph에 반영할 내용을
+                  선택하세요.
                 </Text>
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                   <Paper className={classes.decisionCard} p="lg" radius="lg">
@@ -273,15 +273,15 @@ export default function GuidePage() {
                   </Paper>
                   <Paper className={classes.decisionCard} p="lg" radius="lg">
                     <IconShieldCheck size={22} />
-                    <Text fw={750}>거절</Text>
-                    <Text c="dimmed" size="sm">Graph는 바꾸지 않고 reviewer와 판단 사유만 보존</Text>
+                    <Text fw={750}>이번에는 반영하지 않기</Text>
+                    <Text c="dimmed" size="sm">검토 기록을 남겨 다음 판단에 활용</Text>
                   </Paper>
                 </SimpleGrid>
               </section>
 
               <section className={classes.chapter} id="connect">
                 <ChapterLabel>07 · Agent 연결</ChapterLabel>
-                <Title order={2}>같은 권한 모델을 MCP에서도 사용합니다.</Title>
+                <Title order={2}>MCP로 Agent와 Context를 연결합니다.</Title>
                 <Text c="dimmed">
                   `Agent 연결` 탭에서 현재 사이트 주소와 활성 조직 ID가 포함된 전체
                   Streamable HTTP MCP endpoint를 확인하고 복사합니다. Better Auth 로그인
