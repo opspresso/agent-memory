@@ -59,7 +59,11 @@ Memory 검색 결과에서 `Lifecycle`을 선택하면 전체 화면 관리 창�
 
 ## 문서 수집
 
-`문서 수집`에서 개인 scope 문서를 업로드한다.
+`문서 수집`에서 공유 범위를 선택하고 문서를 업로드한다.
+
+- user scope: 본인만 선택할 수 있다.
+- team scope: 해당 팀 멤버와 조직 `admin`·`owner`가 선택할 수 있다. 먼저 공유할 팀을 선택하라.
+- organization scope: 조직 `admin`·`owner`만 선택할 수 있다.
 
 - 지원 형식: UTF-8 text, Markdown, CSV, JSON, XML
 - 최대 원본 크기: 10 MiB

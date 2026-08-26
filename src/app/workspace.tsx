@@ -71,6 +71,9 @@ interface WorkspaceProps {
   readonly origin: string;
   readonly organizations: readonly OrganizationMembership[];
   readonly user: SessionUser;
+  readonly writableTeamsByOrganization: Readonly<
+    Record<string, readonly TeamView[]>
+  >;
 }
 
 type SearchKind =
@@ -131,7 +134,8 @@ export function Workspace({
   administrationByOrganization,
   origin,
   organizations,
-  user
+  user,
+  writableTeamsByOrganization
 }: WorkspaceProps) {
   const router = useRouter();
   const [organizationId, setOrganizationId] = useState(
@@ -156,6 +160,10 @@ export function Workspace({
   const [signingOut, setSigningOut] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string>();
+  const [documentScopeKind, setDocumentScopeKind] = useState<
+    "organization" | "team" | "user"
+  >("user");
+  const [documentTeamId, setDocumentTeamId] = useState<string | null>(null);
   const graphRequest = useRef<AbortController | undefined>(undefined);
   const searchRequest = useRef<AbortController | undefined>(undefined);
 
@@ -163,6 +171,7 @@ export function Workspace({
     () => organizations.find((organization) => organization.id === organizationId),
     [organizationId, organizations]
   );
+  const writableTeams = writableTeamsByOrganization[organizationId] ?? [];
   const peakScore = useMemo(
     () =>
       Math.max(
@@ -210,6 +219,8 @@ export function Workspace({
     setGraphNodes([]);
     setGraphEdges([]);
     setGraphError(undefined);
+    setDocumentScopeKind("user");
+    setDocumentTeamId(null);
   }
 
   function selectSearchKind(value: string) {
@@ -321,7 +332,10 @@ export function Workspace({
     setUploadMessage(undefined);
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    form.set("scopeKind", "user");
+    form.set("scopeKind", documentScopeKind);
+    if (documentScopeKind === "team" && documentTeamId) {
+      form.set("teamId", documentTeamId);
+    }
     try {
       const response = await fetch(
         `/api/organizations/${organizationId}/documents`,
@@ -638,11 +652,50 @@ export function Workspace({
             <form onSubmit={upload}>
               <Stack gap="md">
                 <Stack gap={2}>
-                  <Title order={3}>개인 범위 문서 수집</Title>
+                  <Title order={3}>문서 수집</Title>
                   <Text c="dimmed" size="sm">
                     UTF-8 text, Markdown, JSON, XML, CSV · 최대 10 MiB
                   </Text>
                 </Stack>
+                <Select
+                  allowDeselect={false}
+                  data={[
+                    { label: "개인 · 나만 사용", value: "user" },
+                    ...(writableTeams.length > 0
+                      ? [{ label: "팀 · 선택한 팀과 공유", value: "team" }]
+                      : []),
+                    ...(selectedOrganization?.role === "admin" ||
+                    selectedOrganization?.role === "owner"
+                      ? [{ label: "조직 · 모든 조직 멤버와 공유", value: "organization" }]
+                      : [])
+                  ]}
+                  label="공유 범위"
+                  onChange={(value) => {
+                    if (
+                      value === "organization" ||
+                      value === "team" ||
+                      value === "user"
+                    ) {
+                      setDocumentScopeKind(value);
+                      setDocumentTeamId(null);
+                    }
+                  }}
+                  value={documentScopeKind}
+                />
+                {documentScopeKind === "team" ? (
+                  <Select
+                    allowDeselect={false}
+                    data={writableTeams.map((team) => ({
+                      label: team.name,
+                      value: team.id
+                    }))}
+                    label="공유할 팀"
+                    onChange={setDocumentTeamId}
+                    placeholder="팀을 선택하세요"
+                    required
+                    value={documentTeamId}
+                  />
+                ) : null}
                 <TextInput
                   label="문서 제목"
                   name="title"
@@ -656,7 +709,10 @@ export function Workspace({
                   type="file"
                 />
                 <Button
-                  disabled={!organizationId}
+                  disabled={
+                    !organizationId ||
+                    (documentScopeKind === "team" && !documentTeamId)
+                  }
                   leftSection={<IconCloudUpload size={17} />}
                   loading={uploading}
                   type="submit"

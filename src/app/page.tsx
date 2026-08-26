@@ -20,7 +20,11 @@ import {
 } from "@tabler/icons-react";
 import { headers } from "next/headers";
 
-import { listOrganizationMemberships } from "@/lib/organization-service";
+import { canAccessScopedResource } from "@/domain/identity/organization-access";
+import {
+  getOrganizationAccess,
+  listOrganizationMemberships
+} from "@/lib/organization-service";
 import {
   listOrganizationMemberRecords,
   listTeamRecords
@@ -68,27 +72,24 @@ export default async function Home() {
   const organizations = user
     ? await listOrganizationMemberships(user.id)
     : [];
-  const administrationEntries = user
+  const organizationEntries = user
     ? await Promise.all(
-        organizations
-          .filter(
-            (organization) =>
-              organization.role === "admin" || organization.role === "owner"
-          )
-          .map(async (organization) => {
-            const access = {
-              organizationId: organization.id,
-              userId: user.id,
-              role: organization.role,
-              teams: []
-            } as const;
-            const [members, teams] = await Promise.all([
-              listOrganizationMemberRecords(access),
-              listTeamRecords(access)
-            ]);
-            return [
-              organization.id,
-              {
+        organizations.map(async (organization) => {
+          const access = await getOrganizationAccess(organization.id, user.id);
+          if (!access) {
+            throw new Error("organization membership disappeared during render");
+          }
+          const canManageOrganization =
+            access.role === "admin" || access.role === "owner";
+          const [members, teams] = await Promise.all([
+            canManageOrganization
+              ? listOrganizationMemberRecords(access)
+              : Promise.resolve([]),
+            listTeamRecords(access)
+          ]);
+          return {
+            administration: canManageOrganization
+              ? {
                 members: members.map((member) => ({
                   userId: member.userId,
                   email: member.email,
@@ -101,12 +102,30 @@ export default async function Home() {
                   name: team.name
                 }))
               }
-            ] as const;
-          })
+              : undefined,
+            organizationId: organization.id,
+            writableTeams: teams
+              .filter((team) =>
+                canAccessScopedResource(access, "write", {
+                  kind: "team",
+                  organizationId: organization.id,
+                  teamId: team.id
+                })
+              )
+              .map((team) => ({ id: team.id, name: team.name, slug: team.slug }))
+          };
+        })
       )
     : [];
   const administrationByOrganization = Object.fromEntries(
-    administrationEntries
+    organizationEntries.flatMap((entry) =>
+      entry.administration
+        ? [[entry.organizationId, entry.administration] as const]
+        : []
+    )
+  );
+  const writableTeamsByOrganization = Object.fromEntries(
+    organizationEntries.map((entry) => [entry.organizationId, entry.writableTeams])
   );
 
   return (
@@ -145,6 +164,7 @@ export default async function Home() {
             origin={origin}
             organizations={organizations}
             user={user}
+            writableTeamsByOrganization={writableTeamsByOrganization}
           />
         ) : (
           <main className={classes.hero}>

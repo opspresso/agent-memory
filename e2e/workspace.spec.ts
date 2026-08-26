@@ -60,11 +60,47 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     "/api/organizations",
     { name: "E2E Organization", slug: "e2e-organization" }
   );
+  const team = await postJson<{ id: string }>(
+    page,
+    `/api/organizations/${organization.id}/teams`,
+    { name: "E2E Team", slug: "e2e-team" }
+  );
   await page.reload();
   await expect(
     page.getByRole("heading", { name: "공유 Context를 한곳에서 관리합니다." })
   ).toBeVisible();
   const organizationId = organization.id;
+
+  await page.getByRole("tab", { name: "문서 수집" }).click();
+  await page.getByLabel("공유 범위").click();
+  await expect(
+    page.getByRole("option", { name: "조직 · 모든 조직 멤버와 공유" })
+  ).toBeVisible();
+  await page.getByRole("option", { name: "팀 · 선택한 팀과 공유" }).click();
+  await page.getByLabel("공유할 팀").click();
+  await page.getByRole("option", { name: "E2E Team" }).click();
+  await page.getByLabel("문서 파일").setInputFiles({
+    name: "team-guide.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("# Team guide")
+  });
+  await page.route(
+    `**/api/organizations/${organizationId}/documents`,
+    async (route) => {
+      const payload = route.request().postData() ?? "";
+      expect(payload).toContain('name="scopeKind"');
+      expect(payload).toContain("team");
+      expect(payload).toContain('name="teamId"');
+      expect(payload).toContain(team.id);
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ id: "e2e-document", status: "pending" }),
+        status: 202
+      });
+    }
+  );
+  await page.getByRole("button", { name: "수집 시작" }).click();
+  await expect(page.getByText("수집 대기열에 등록했습니다: e2e-document")).toBeVisible();
 
   await page.getByRole("tab", { name: "Agent 연결" }).click();
   const mcpEndpoint = `${new URL(page.url()).origin}/api/organizations/${organizationId}/mcp`;
