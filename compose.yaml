@@ -25,7 +25,7 @@ services:
       S3_BUCKET: agent-memory
       S3_ENDPOINT: http://minio:9000
       S3_FORCE_PATH_STYLE: "true"
-      S3_REGION: us-east-1
+      S3_REGION: ap-northeast-2
       S3_SECRET_ACCESS_KEY: agent_memory_dev
     ports:
       - "127.0.0.1:3100:3000"

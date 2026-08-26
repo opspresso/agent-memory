@@ -16,7 +16,7 @@ config:
   MIGRATE_ON_START: "true"
   LOG_LEVEL: info
   S3_BUCKET: agent-memory
-  S3_REGION: us-east-1
+  S3_REGION: ap-northeast-2
   S3_FORCE_PATH_STYLE: "true"
   EMBEDDING_BASE_URL: ""
   EMBEDDING_MODEL: ""

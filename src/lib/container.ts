@@ -75,7 +75,7 @@ export const knowledgeExtractionService =
 
 const s3Client = createS3Client({
   endpoint: process.env.S3_ENDPOINT ?? "http://localhost:9010",
-  region: process.env.S3_REGION ?? "us-east-1",
+  region: process.env.S3_REGION ?? "ap-northeast-2",
   accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "agent_memory",
   secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "agent_memory_dev",
   forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false"
