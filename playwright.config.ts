@@ -30,6 +30,7 @@ export default defineConfig({
       OIDC_ISSUER: ""
     },
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000
+    timeout: 120_000,
+    url: "http://127.0.0.1:3110"
   }
 });
