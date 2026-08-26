@@ -8,6 +8,7 @@ import {
   type AgentMemoryDatabase
 } from "@/infrastructure/database/client";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
+import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
@@ -22,6 +23,10 @@ import {
   createKnowledgeNode
 } from "@/domain/knowledge/knowledge-graph";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import {
+  createOrganization,
+  createTeam
+} from "@/domain/identity/organization-administration";
 import {
   createPgBossDocumentIngestionQueue,
   documentIngestionQueueName,
@@ -213,6 +218,81 @@ describe("PostgreSQL schema", () => {
     await expect(
       repository.findByUser(organizationB, user)
     ).resolves.toBeNull();
+  });
+
+  it("bootstraps organizations, members, and teams transactionally", async () => {
+    const organizationId = "00000000-0000-0000-0000-000000000011";
+    const ownerId = "10000000-0000-0000-0000-000000000011";
+    const memberId = "10000000-0000-0000-0000-000000000012";
+    const teamId = "20000000-0000-0000-0000-000000000011";
+    const createdAt = new Date("2026-08-26T00:00:00.000Z");
+    await pool.query(
+      `INSERT INTO users (id, email, name)
+       VALUES ($1, 'owner-k@example.com', 'Owner K'),
+              ($2, 'member-k@example.com', 'Member K')`,
+      [ownerId, memberId]
+    );
+    const administration = createOrganizationAdministrationRepository(db);
+    const organization = createOrganization({
+      id: organizationId,
+      slug: "organization-k",
+      name: "Organization K",
+      now: createdAt
+    });
+
+    await expect(
+      administration.createOrganization(organization, ownerId)
+    ).resolves.toMatchObject({ status: "created", organization });
+    await expect(
+      administration.createOrganization(organization, ownerId)
+    ).resolves.toEqual({ status: "slug_conflict" });
+    await expect(
+      administration.upsertOrganizationMember(
+        organizationId,
+        "member-k@example.com",
+        "member"
+      )
+    ).resolves.toMatchObject({ status: "saved", member: { userId: memberId } });
+    const team = createTeam({
+      id: teamId,
+      organizationId,
+      slug: "team-k",
+      name: "Team K",
+      now: createdAt
+    });
+    await expect(administration.createTeam(team)).resolves.toMatchObject({
+      status: "created",
+      team
+    });
+    await expect(
+      administration.upsertTeamMember(
+        organizationId,
+        teamId,
+        "member-k@example.com",
+        "manager"
+      )
+    ).resolves.toMatchObject({
+      status: "saved",
+      member: { userId: memberId, role: "manager" }
+    });
+
+    const accessRepository = createOrganizationAccessRepository(db);
+    await expect(
+      accessRepository.findByUser(organizationId, ownerId)
+    ).resolves.toMatchObject({ role: "owner" });
+    await expect(
+      accessRepository.findByUser(organizationId, memberId)
+    ).resolves.toMatchObject({
+      role: "member",
+      teams: [{ teamId, role: "manager" }]
+    });
+    await expect(
+      administration.upsertOrganizationMember(
+        organizationId,
+        "owner-k@example.com",
+        "member"
+      )
+    ).resolves.toEqual({ status: "owner_immutable" });
   });
 
   it("persists revisions and searches only accessible active memory", async () => {

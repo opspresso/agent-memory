@@ -1,5 +1,6 @@
 import { createDatabase } from "@/infrastructure/database/client";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
+import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
@@ -21,6 +22,8 @@ export const database = createDatabase(
 
 export const organizationAccessRepository =
   createOrganizationAccessRepository(database.db);
+export const organizationAdministrationRepository =
+  createOrganizationAdministrationRepository(database.db);
 
 export const memoryRepository = createMemoryRepository(database.db);
 export const documentRepository = createDocumentRepository(database.db);
