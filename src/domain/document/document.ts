@@ -9,6 +9,15 @@ export const documentStatuses = [
   "archived"
 ] as const;
 
+export const documentMimeTypes = [
+  "application/json",
+  "application/xml",
+  "text/csv",
+  "text/markdown",
+  "text/plain",
+  "text/xml"
+] as const;
+
 export type DocumentStatus = (typeof documentStatuses)[number];
 export type DocumentScope = ScopedResource;
 

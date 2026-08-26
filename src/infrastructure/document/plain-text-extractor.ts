@@ -1,13 +1,7 @@
 import type { DocumentTextExtractor } from "@/domain/document/document-services";
+import { documentMimeTypes } from "@/domain/document/document";
 
-const supportedMimeTypes = new Set([
-  "application/json",
-  "application/xml",
-  "text/csv",
-  "text/markdown",
-  "text/plain",
-  "text/xml"
-]);
+const supportedMimeTypes = new Set<string>(documentMimeTypes);
 
 export class UnsupportedDocumentTypeError extends Error {
   constructor(mimeType: string) {
