@@ -16,7 +16,14 @@ const proposedGraphSchema = z.object({
         key: z.string().trim().min(1).max(100),
         kind: z.string().trim().min(1).max(100),
         canonicalName: z.string().trim().min(1).max(500),
-        summary: z.string().trim().min(1).max(10_000).optional()
+        summary: z
+          .string()
+          .trim()
+          .min(1)
+          .max(10_000)
+          .nullable()
+          .optional()
+          .transform((summary) => summary ?? undefined)
       })
     )
     .max(100),
@@ -80,9 +87,9 @@ const responseJsonSchema = {
             key: { type: "string" },
             kind: { type: "string" },
             canonicalName: { type: "string" },
-            summary: { type: "string" }
+            summary: { type: ["string", "null"] }
           },
-          required: ["key", "kind", "canonicalName"]
+          required: ["key", "kind", "canonicalName", "summary"]
         }
       },
       relationships: {

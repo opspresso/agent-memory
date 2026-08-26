@@ -11,8 +11,18 @@ describe("knowledge extraction service", () => {
             message: {
               content: JSON.stringify({
                 entities: [
-                  { key: "api", kind: "service", canonicalName: "Memory API" },
-                  { key: "db", kind: "database", canonicalName: "PostgreSQL" }
+                  {
+                    key: "api",
+                    kind: "service",
+                    canonicalName: "Memory API",
+                    summary: null
+                  },
+                  {
+                    key: "db",
+                    kind: "database",
+                    canonicalName: "PostgreSQL",
+                    summary: "Stores Agent Memory data"
+                  }
                 ],
                 relationships: [
                   { sourceKey: "api", targetKey: "db", predicate: "stores_in" }
@@ -61,6 +71,19 @@ describe("knowledge extraction service", () => {
       response_format: { type: "json_schema" },
       temperature: 0
     });
+    expect(
+      (
+        body.response_format as {
+          json_schema: {
+            schema: {
+              properties: {
+                entities: { items: { required: string[] } };
+              };
+            };
+          };
+        }
+      ).json_schema.schema.properties.entities.items.required
+    ).toContain("summary");
   });
 
   it("rejects malformed model output without exposing source content or credentials", async () => {

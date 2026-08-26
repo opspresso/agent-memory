@@ -44,12 +44,17 @@ managed_secrets=(
   GOOGLE_CLIENT_ID=/k8s/common/agent-memory/google-client-id
   GOOGLE_CLIENT_SECRET=/k8s/common/agent-memory/google-client-secret
   EMBEDDING_API_KEY=/k8s/common/agent-memory/embedding-api-key
+  KNOWLEDGE_EXTRACTION_API_KEY=/k8s/common/agent-memory/knowledge-extraction-api-key
 )
 
 if [[ "$have_aws" == true ]]; then
   command -v aws >/dev/null || { echo "aws CLI is required when .env.aws exists" >&2; exit 1; }
+  parameter_paths=()
+  for pair in "${managed_secrets[@]}"; do
+    parameter_paths+=("${pair#*=}")
+  done
   parameter_json=$(aws ssm get-parameters \
-    --names "${managed_secrets[0]#*=}" "${managed_secrets[1]#*=}" "${managed_secrets[2]#*=}" \
+    --names "${parameter_paths[@]}" \
     --with-decryption \
     --output json)
   managed_lines=$(printf '%s' "$parameter_json" | python3 -c '
@@ -75,6 +80,7 @@ for variable, path in pairs.items():
       managed["GOOGLE_CLIENT_ID"] = 1
       managed["GOOGLE_CLIENT_SECRET"] = 1
       managed["EMBEDDING_API_KEY"] = 1
+      managed["KNOWLEDGE_EXTRACTION_API_KEY"] = 1
     }
     !($1 in managed) { print }
   ' .env.secrets > .env.runtime-secrets.tmp

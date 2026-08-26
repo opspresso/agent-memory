@@ -14,11 +14,12 @@ scripts/deploy.sh
 
 첫 실행은 `.env`, `.env.secrets`, `.env.infrastructure`를 생성한 뒤 중단한다. 값을 검토하고 `BETTER_AUTH_SECRET`을 `openssl rand -base64 32`로 설정하라. `.env.infrastructure`에는 공유 PostgreSQL의 `agent_memory` database URL과 공유 MinIO credential·endpoint를 넣는다.
 
-Agent Studio와 같은 AWS credential을 `.env.aws`에 두면 deploy script가 아래 SSM Parameter Store 값을 매번 읽어 `.env.runtime-secrets`를 생성한다. `.env.runtime-secrets`는 직접 편집하지 않는다. 세 parameter 중 하나라도 없으면 빈 값으로 배포하지 않고 즉시 실패한다.
+Agent Studio와 같은 AWS credential을 `.env.aws`에 두면 deploy script가 아래 SSM Parameter Store 값을 매번 읽어 `.env.runtime-secrets`를 생성한다. `.env.runtime-secrets`는 직접 편집하지 않는다. 네 parameter 중 하나라도 없으면 빈 값으로 배포하지 않고 즉시 실패한다.
 
 - `GOOGLE_CLIENT_ID`: `/k8s/common/agent-memory/google-client-id`
 - `GOOGLE_CLIENT_SECRET`: `/k8s/common/agent-memory/google-client-secret`
 - `EMBEDDING_API_KEY`: `/k8s/common/agent-memory/embedding-api-key`
+- `KNOWLEDGE_EXTRACTION_API_KEY`: `/k8s/common/agent-memory/knowledge-extraction-api-key`
 
 ```bash
 cp .env.aws.example .env.aws
