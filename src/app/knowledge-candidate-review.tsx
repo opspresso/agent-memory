@@ -20,6 +20,7 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 
+import { useT } from "./_i18n/provider";
 import classes from "./knowledge-candidate-review.module.css";
 
 interface ProposedEntityView {
@@ -51,19 +52,19 @@ interface KnowledgeCandidateReviewProps {
   readonly organizationId: string;
 }
 
-async function responseError(response: Response) {
+async function responseError(response: Response, fallback: string) {
   const body = (await response.json().catch(() => null)) as {
     error?: string;
   } | null;
-  return body?.error ?? "후보 검토 요청을 처리하지 못했습니다.";
+  return body?.error ?? fallback;
 }
 
-async function requestCandidates(organizationId: string) {
+async function requestCandidates(organizationId: string, fallback: string) {
   const response = await fetch(
     `/api/organizations/${organizationId}/knowledge/candidates?limit=100`
   );
   if (!response.ok) {
-    throw new Error(await responseError(response));
+    throw new Error(await responseError(response, fallback));
   }
   const body = (await response.json()) as {
     candidates?: readonly KnowledgeCandidateView[];
@@ -74,6 +75,7 @@ async function requestCandidates(organizationId: string) {
 export function KnowledgeCandidateReview({
   organizationId
 }: KnowledgeCandidateReviewProps) {
+  const t = useT();
   const [candidates, setCandidates] = useState<
     readonly KnowledgeCandidateView[]
   >([]);
@@ -91,7 +93,7 @@ export function KnowledgeCandidateReview({
     setLoading(true);
     setError(undefined);
     try {
-      const next = await requestCandidates(organizationId);
+      const next = await requestCandidates(organizationId, t("candidate.requestFailed"));
       setCandidates(next);
       setSelectedId((current) =>
         next.some((candidate) => candidate.id === current)
@@ -102,7 +104,7 @@ export function KnowledgeCandidateReview({
       setError(
         caught instanceof Error
           ? caught.message
-          : "Knowledge 후보를 불러오지 못했습니다."
+          : t("candidate.loadFailed")
       );
     } finally {
       setLoading(false);
@@ -111,7 +113,7 @@ export function KnowledgeCandidateReview({
 
   useEffect(() => {
     let active = true;
-    requestCandidates(organizationId)
+    requestCandidates(organizationId, t("candidate.requestFailed"))
       .then((next) => {
         if (active) {
           setCandidates(next);
@@ -124,7 +126,7 @@ export function KnowledgeCandidateReview({
           setError(
             caught instanceof Error
               ? caught.message
-              : "Knowledge 후보를 불러오지 못했습니다."
+              : t("candidate.loadFailed")
           );
           setLoading(false);
         }
@@ -132,7 +134,7 @@ export function KnowledgeCandidateReview({
     return () => {
       active = false;
     };
-  }, [organizationId]);
+  }, [organizationId, t]);
 
   async function review(action: "accept" | "reject") {
     if (!selected) {
@@ -153,12 +155,12 @@ export function KnowledgeCandidateReview({
         }
       );
       if (!response.ok) {
-        throw new Error(await responseError(response));
+        throw new Error(await responseError(response, t("candidate.requestFailed")));
       }
       setMessage(
         action === "accept"
-          ? "후보를 공유 Knowledge Graph에 반영했습니다."
-          : "후보를 거절했습니다."
+          ? t("candidate.accepted")
+          : t("candidate.rejected")
       );
       setReason("");
       await loadCandidates();
@@ -166,7 +168,7 @@ export function KnowledgeCandidateReview({
       setError(
         caught instanceof Error
           ? caught.message
-          : "후보 검토 요청을 처리하지 못했습니다."
+          : t("candidate.requestFailed")
       );
     } finally {
       setReviewing(false);
@@ -178,11 +180,11 @@ export function KnowledgeCandidateReview({
       <Group justify="space-between">
         <Stack gap={2}>
           <Text c="indigo" fw={750} size="xs" tt="uppercase">
-            Curation gate
+            {t("candidate.eyebrow")}
           </Text>
-          <Title order={2}>AI가 찾은 지식을 검토합니다.</Title>
+          <Title order={2}>{t("candidate.title")}</Title>
           <Text c="dimmed" size="sm">
-            원문에서 추출한 후보는 승인하기 전까지 공유 graph에 나타나지 않습니다.
+            {t("candidate.lede")}
           </Text>
         </Stack>
         <Button
@@ -191,7 +193,7 @@ export function KnowledgeCandidateReview({
           onClick={() => void loadCandidates()}
           variant="subtle"
         >
-          새로고침
+          {t("candidate.refresh")}
         </Button>
       </Group>
       {error ? <Alert color="red">{error}</Alert> : null}
@@ -200,9 +202,9 @@ export function KnowledgeCandidateReview({
       {!loading && !error && candidates.length === 0 ? (
         <Paper className={classes.empty} p="xl" radius="lg" withBorder>
           <IconSparkles size={28} />
-          <Title order={3}>검토할 후보가 없습니다.</Title>
+          <Title order={3}>{t("candidate.emptyTitle")}</Title>
           <Text c="dimmed" size="sm">
-            문서 수집과 AI 분석이 끝나면 source가 확인된 후보가 여기에 쌓입니다.
+            {t("candidate.emptyBody")}
           </Text>
         </Paper>
       ) : null}
@@ -221,11 +223,13 @@ export function KnowledgeCandidateReview({
                 >
                   <span>
                     {candidate.graph.entities[0]?.canonicalName ??
-                      "추출된 entity 없음"}
+                      t("candidate.noEntity")}
                   </span>
                   <small>
-                    {candidate.graph.entities.length} entities ·{" "}
-                    {candidate.graph.relationships.length} relations
+                    {t("candidate.counts", {
+                      entities: candidate.graph.entities.length,
+                      relations: candidate.graph.relationships.length
+                    })}
                   </small>
                 </button>
               ))}
@@ -237,11 +241,11 @@ export function KnowledgeCandidateReview({
               <Group align="flex-start" justify="space-between">
                 <Stack gap={4}>
                   <Badge color="violet" variant="light">
-                    AI proposal
+                    {t("candidate.proposal")}
                   </Badge>
                   <Title order={3}>
                     {selected.graph.entities[0]?.canonicalName ??
-                      "지식 없음 후보"}
+                      t("candidate.noKnowledge")}
                   </Title>
                 </Stack>
                 <Text c="dimmed" ff="monospace" size="xs">
@@ -254,7 +258,7 @@ export function KnowledgeCandidateReview({
                   <Text c="dimmed" fw={700} size="xs" tt="uppercase">
                     Source
                   </Text>
-                  <Text fw={650} size="sm">Document chunk</Text>
+                  <Text fw={650} size="sm">{t("candidate.documentChunk")}</Text>
                   <Text c="dimmed" ff="monospace" size="xs">
                     {selected.chunkId}
                   </Text>
@@ -294,7 +298,7 @@ export function KnowledgeCandidateReview({
                       </Text>
                     ))}
                     {selected.graph.relationships.length === 0 ? (
-                      <Text c="dimmed" size="sm">제안된 관계가 없습니다.</Text>
+                      <Text c="dimmed" size="sm">{t("candidate.noRelationships")}</Text>
                     ) : null}
                   </Stack>
                 </section>
@@ -303,11 +307,11 @@ export function KnowledgeCandidateReview({
               <Textarea
                 autosize
                 id="knowledge-review-reason"
-                label="검토 사유"
+                label={t("candidate.reason")}
                 maxLength={2_000}
                 minRows={2}
                 onChange={(event) => setReason(event.currentTarget.value)}
-                placeholder="승인 또는 거절 판단의 근거를 기록하세요"
+                placeholder={t("candidate.reasonPlaceholder")}
                 value={reason}
               />
               <Group justify="flex-end">
@@ -318,7 +322,7 @@ export function KnowledgeCandidateReview({
                   onClick={() => void review("reject")}
                   variant="subtle"
                 >
-                  거절
+                  {t("candidate.reject")}
                 </Button>
                 <Button
                   color="teal"
@@ -326,7 +330,7 @@ export function KnowledgeCandidateReview({
                   loading={reviewing}
                   onClick={() => void review("accept")}
                 >
-                  Graph에 승인
+                  {t("candidate.accept")}
                 </Button>
               </Group>
             </Stack>

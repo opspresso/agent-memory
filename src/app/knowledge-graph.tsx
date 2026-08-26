@@ -4,6 +4,7 @@ import { ActionIcon, Badge, Button, Group, Paper, Stack, Text, TextInput, Title,
 import { IconFocusCentered, IconMinus, IconPlus, IconRoute, IconSearch } from "@tabler/icons-react";
 import { useMemo, useState, type CSSProperties } from "react";
 
+import { useT } from "./_i18n/provider";
 import classes from "./knowledge-graph.module.css";
 
 export interface KnowledgeGraphNodeView {
@@ -74,6 +75,7 @@ function clippedLabel(value: string) {
 }
 
 export function KnowledgeGraph({ centerNodeId, edges, nodes, onExploreNode, onSelectNode, selectedNodeId }: KnowledgeGraphProps) {
+  const t = useT();
   const [hiddenKinds, setHiddenKinds] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState("");
   const [zoom, setZoom] = useState(1);
@@ -106,18 +108,18 @@ export function KnowledgeGraph({ centerNodeId, edges, nodes, onExploreNode, onSe
   }
 
   return (
-    <section aria-label="Knowledge Graph 관계 지도" className={classes.explorer}>
+    <section aria-label={t("graph.mapLabel")} className={classes.explorer}>
       <div className={classes.canvas}>
         <div className={classes.toolbar}>
-          <TextInput aria-label="Graph node 검색" className={classes.search} leftSection={<IconSearch size={15} />} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Node 찾기" size="xs" value={query} />
+          <TextInput aria-label={t("graph.searchLabel")} className={classes.search} leftSection={<IconSearch size={15} />} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("graph.searchPlaceholder")} size="xs" value={query} />
           <Group gap={4} wrap="nowrap">
-            <Tooltip label="축소"><ActionIcon aria-label="Graph 축소" disabled={zoom <= 0.75} onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))} variant="default"><IconMinus size={15} /></ActionIcon></Tooltip>
+            <Tooltip label={t("graph.zoomOut")}><ActionIcon aria-label={t("graph.zoomOut")} disabled={zoom <= 0.75} onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))} variant="default"><IconMinus size={15} /></ActionIcon></Tooltip>
             <Text className={classes.zoomValue} ff="monospace" size="xs">{Math.round(zoom * 100)}%</Text>
-            <Tooltip label="확대"><ActionIcon aria-label="Graph 확대" disabled={zoom >= 2} onClick={() => setZoom((value) => Math.min(2, value + 0.25))} variant="default"><IconPlus size={15} /></ActionIcon></Tooltip>
-            <Tooltip label="화면에 맞춤"><ActionIcon aria-label="Graph 화면에 맞춤" onClick={() => setZoom(1)} variant="default"><IconFocusCentered size={15} /></ActionIcon></Tooltip>
+            <Tooltip label={t("graph.zoomIn")}><ActionIcon aria-label={t("graph.zoomIn")} disabled={zoom >= 2} onClick={() => setZoom((value) => Math.min(2, value + 0.25))} variant="default"><IconPlus size={15} /></ActionIcon></Tooltip>
+            <Tooltip label={t("graph.fit")}><ActionIcon aria-label={t("graph.fit")} onClick={() => setZoom(1)} variant="default"><IconFocusCentered size={15} /></ActionIcon></Tooltip>
           </Group>
         </div>
-        <svg aria-label={`${visibleNodes.length}개 node와 ${visibleEdges.length}개 관계`} className={classes.graph} role="img" viewBox={`${viewOffset} ${viewOffset} ${viewSize} ${viewSize}`}>
+        <svg aria-label={t("graph.summary", { nodes: visibleNodes.length, edges: visibleEdges.length })} className={classes.graph} role="img" viewBox={`${viewOffset} ${viewOffset} ${viewSize} ${viewSize}`}>
           <defs><marker id="graph-arrow" markerHeight="5" markerWidth="5" orient="auto" refX="4" refY="2.5"><path className={classes.arrow} d="M 0 0 L 5 2.5 L 0 5 z" /></marker></defs>
           {visibleEdges.map((edge) => {
             const source = positions.get(edge.sourceNodeId);
@@ -143,22 +145,22 @@ export function KnowledgeGraph({ centerNodeId, edges, nodes, onExploreNode, onSe
             </g>;
           })}
         </svg>
-        <div aria-label="Node 종류 필터" className={classes.legend} role="group">
+        <div aria-label={t("graph.kindFilter")} className={classes.legend} role="group">
           {kinds.map((kind) => <button aria-pressed={!hiddenKinds.has(kind)} className={classes.kindChip} data-disabled={hiddenKinds.has(kind) || undefined} key={kind} onClick={() => toggleKind(kind)} style={{ "--node-accent": kindColor(kind) } as CSSProperties} type="button"><span />{kind}</button>)}
         </div>
       </div>
       <Paper className={classes.inspector} p="md" radius="lg">
         {selectedNode ? <Stack gap="md">
-          <Stack gap={4}><Group justify="space-between"><Badge color="gray" size="xs" variant="light">{selectedNode.kind}</Badge><Text c="dimmed" ff="monospace" size="xs">{degrees.get(selectedNode.id) ?? 0} relations</Text></Group><Title order={4}>{selectedNode.canonicalName}</Title></Stack>
-          <Text c="dimmed" size="sm">{selectedNode.summary ?? "이 node에는 아직 요약이 없습니다."}</Text>
-          <Stack gap="xs"><Text c="dimmed" fw={700} size="xs" tt="uppercase">Connected by</Text>
+          <Stack gap={4}><Group justify="space-between"><Badge color="gray" size="xs" variant="light">{selectedNode.kind}</Badge><Text c="dimmed" ff="monospace" size="xs">{t("graph.relations", { count: degrees.get(selectedNode.id) ?? 0 })}</Text></Group><Title order={4}>{selectedNode.canonicalName}</Title></Stack>
+          <Text c="dimmed" size="sm">{selectedNode.summary ?? t("graph.noSummary")}</Text>
+          <Stack gap="xs"><Text c="dimmed" fw={700} size="xs" tt="uppercase">{t("graph.connectedBy")}</Text>
             {selectedEdges.length > 0 ? selectedEdges.map((edge) => {
               const isOutgoing = edge.sourceNodeId === selectedNode.id;
               const related = positions.get(isOutgoing ? edge.targetNodeId : edge.sourceNodeId);
               return <button className={classes.relation} key={edge.id} onClick={() => related && onSelectNode(related.id)} type="button"><IconRoute aria-hidden size={14} /><span>{isOutgoing ? "→" : "←"} {edge.predicate}</span><strong>{related?.canonicalName}</strong></button>;
-            }) : <Text c="dimmed" size="sm">직접 연결된 관계가 없습니다.</Text>}
+            }) : <Text c="dimmed" size="sm">{t("graph.noRelations")}</Text>}
           </Stack>
-          {selectedNode.id !== centerNodeId ? <Button leftSection={<IconFocusCentered size={15} />} onClick={() => onExploreNode(selectedNode.id)} size="compact-sm" variant="light">이 node 중심으로 탐색</Button> : null}
+          {selectedNode.id !== centerNodeId ? <Button leftSection={<IconFocusCentered size={15} />} onClick={() => onExploreNode(selectedNode.id)} size="compact-sm" variant="light">{t("graph.exploreFromNode")}</Button> : null}
         </Stack> : null}
       </Paper>
     </section>

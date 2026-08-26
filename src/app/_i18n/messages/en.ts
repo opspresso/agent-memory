@@ -201,7 +201,42 @@ export const en = {
   "result.evidence.revision": " · revision v{version}",
   "result.evidence.memoryKnowledge": "Knowledge connected from a memory",
   "result.evidence.documentKnowledge": "Knowledge connected from document evidence",
-  "result.evidence.graph": "Knowledge Graph evidence"
+  "result.evidence.graph": "Knowledge Graph evidence",
+  "graph.mapLabel": "Knowledge Graph relationship map",
+  "graph.searchLabel": "Search Graph nodes",
+  "graph.searchPlaceholder": "Find a node",
+  "graph.zoomOut": "Zoom out",
+  "graph.zoomIn": "Zoom in",
+  "graph.fit": "Fit to view",
+  "graph.summary": "{nodes} nodes and {edges} relationships",
+  "graph.kindFilter": "Node kind filter",
+  "graph.relations": "{count} relations",
+  "graph.noSummary": "This node does not have a summary yet.",
+  "graph.connectedBy": "Connected by",
+  "graph.noRelations": "There are no directly connected relationships.",
+  "graph.exploreFromNode": "Explore from this node",
+  "candidate.requestFailed": "The candidate review request failed.",
+  "candidate.loadFailed": "Knowledge candidates could not be loaded.",
+  "candidate.accepted": "The candidate was added to the shared Knowledge Graph.",
+  "candidate.rejected": "The candidate was rejected.",
+  "candidate.eyebrow": "Curation gate",
+  "candidate.title": "Review knowledge found by AI.",
+  "candidate.lede":
+    "Candidates extracted from source text do not appear in the shared Graph until approved.",
+  "candidate.refresh": "Refresh",
+  "candidate.emptyTitle": "There are no candidates to review.",
+  "candidate.emptyBody":
+    "Candidates with verified sources appear here after document ingestion and AI analysis.",
+  "candidate.noEntity": "No extracted entities",
+  "candidate.counts": "{entities} entities · {relations} relations",
+  "candidate.proposal": "AI proposal",
+  "candidate.noKnowledge": "Candidate with no knowledge",
+  "candidate.documentChunk": "Document chunk",
+  "candidate.noRelationships": "There are no proposed relationships.",
+  "candidate.reason": "Review reason",
+  "candidate.reasonPlaceholder": "Record the basis for accepting or rejecting this candidate",
+  "candidate.reject": "Reject",
+  "candidate.accept": "Accept into Graph"
 } as const;
 
 export type MessageKey = keyof typeof en;
