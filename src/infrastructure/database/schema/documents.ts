@@ -16,14 +16,9 @@ import {
 import { organizationMembers, organizations, teams } from "./identity";
 import { memoryScopeKind } from "./memories";
 import { tsvector, unconstrainedVector } from "./custom-types";
+import { documentStatuses } from "@/domain/document/document";
 
-export const documentStatus = pgEnum("document_status", [
-  "pending",
-  "processing",
-  "ready",
-  "failed",
-  "archived"
-]);
+export const documentStatus = pgEnum("document_status", [...documentStatuses]);
 
 export const documents = pgTable(
   "documents",
@@ -40,7 +35,12 @@ export const documents = pgTable(
     objectKey: text().notNull(),
     checksum: text().notNull(),
     mimeType: text().notNull(),
+    sizeBytes: integer().notNull().default(0),
     status: documentStatus().notNull().default("pending"),
+    errorMessage: text(),
+    processingAttempts: integer().notNull().default(0),
+    processingStartedAt: timestamp({ withTimezone: true }),
+    processedAt: timestamp({ withTimezone: true }),
     metadata: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
     createdBy: uuid().notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -78,9 +78,14 @@ export const documents = pgTable(
       table.organizationId,
       table.id
     ),
-    uniqueIndex("documents_organization_checksum_unique").on(
+    index("documents_organization_checksum_idx").on(
       table.organizationId,
       table.checksum
+    ),
+    check("documents_nonnegative_size_check", sql`${table.sizeBytes} >= 0`),
+    check(
+      "documents_nonnegative_attempts_check",
+      sql`${table.processingAttempts} >= 0`
     ),
     index("documents_scope_idx").on(
       table.organizationId,
@@ -111,6 +116,10 @@ export const documentChunks = pgTable(
   },
   (table) => [
     check("document_chunks_nonnegative_ordinal_check", sql`${table.ordinal} >= 0`),
+    check(
+      "document_chunks_embedding_pair_check",
+      sql`(${table.embedding} IS NULL) = (${table.embeddingModel} IS NULL)`
+    ),
     foreignKey({
       columns: [table.organizationId, table.documentId],
       foreignColumns: [documents.organizationId, documents.id],

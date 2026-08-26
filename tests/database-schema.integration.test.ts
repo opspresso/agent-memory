@@ -9,8 +9,13 @@ import {
 } from "@/infrastructure/database/client";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
+import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createAuth } from "@/lib/create-auth";
 import { createMemory, reviseMemory } from "@/domain/memory/memory";
+import {
+  createDocument,
+  createDocumentChunk
+} from "@/domain/document/document";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 
 const organizationA = "00000000-0000-0000-0000-000000000001";
@@ -306,6 +311,144 @@ describe("PostgreSQL schema", () => {
       { version: 1, status: "active", changedBy: user },
       { version: 2, status: "active", changedBy: user }
     ]);
+  });
+
+  it("claims, indexes, and scope-filters RAG documents", async () => {
+    const organization = "00000000-0000-0000-0000-000000000006";
+    const user = "10000000-0000-0000-0000-000000000006";
+    const otherUser = "10000000-0000-0000-0000-000000000007";
+    const team = "20000000-0000-0000-0000-000000000006";
+    const documentId = "40000000-0000-0000-0000-000000000006";
+    await pool.query(
+      `INSERT INTO organizations (id, slug, name)
+       VALUES ($1, 'organization-f', 'Organization F')`,
+      [organization]
+    );
+    await pool.query(
+      `INSERT INTO users (id, email, name)
+       VALUES ($1, 'user-f@example.com', 'User F'),
+              ($2, 'user-g@example.com', 'User G')`,
+      [user, otherUser]
+    );
+    await pool.query(
+      `INSERT INTO organization_members (organization_id, user_id)
+       VALUES ($1, $2), ($1, $3)`,
+      [organization, user, otherUser]
+    );
+    await pool.query(
+      `INSERT INTO teams (id, organization_id, slug, name)
+       VALUES ($1, $2, 'team-f', 'Team F')`,
+      [team, organization]
+    );
+    await pool.query(
+      `INSERT INTO team_members (organization_id, team_id, user_id)
+       VALUES ($1, $2, $3)`,
+      [organization, team, user]
+    );
+
+    const repository = createDocumentRepository(db);
+    const createdAt = new Date("2026-08-26T00:00:00.000Z");
+    const document = createDocument({
+      id: documentId,
+      scope: { kind: "team", organizationId: organization, teamId: team },
+      title: "Incident response",
+      objectKey: `organizations/${organization}/documents/${documentId}/source`,
+      checksum: "b".repeat(64),
+      mimeType: "text/markdown",
+      sizeBytes: 128,
+      createdBy: user,
+      now: createdAt
+    });
+    await repository.save(document);
+
+    const claimed = await repository.claimForProcessing(
+      organization,
+      documentId,
+      createdAt
+    );
+    expect(claimed).toMatchObject({
+      status: "processing",
+      processingAttempts: 1
+    });
+    if (!claimed) {
+      throw new Error("document was not claimed");
+    }
+    const chunk = createDocumentChunk({
+      id: "50000000-0000-0000-0000-000000000006",
+      organizationId: organization,
+      documentId,
+      ordinal: 0,
+      content: "Rollback requires an incident commander and two approvers.",
+      embedding: { model: "test-embedding", values: [1, 0, 0] },
+      metadata: { start: 0, end: 59 },
+      now: createdAt
+    });
+    await repository.completeProcessing(claimed, [chunk], createdAt);
+
+    await expect(repository.findById(organization, documentId)).resolves.toMatchObject({
+      status: "ready",
+      processingAttempts: 1,
+      sizeBytes: 128
+    });
+    await expect(
+      repository.claimForProcessing(organization, documentId, createdAt)
+    ).resolves.toBeNull();
+
+    const access: OrganizationAccess = {
+      organizationId: organization,
+      userId: user,
+      role: "member",
+      teams: [{ teamId: team, role: "member" }]
+    };
+    const lexicalHits = await repository.search({
+      access,
+      query: "rollback approvers",
+      limit: 10
+    });
+    expect(lexicalHits[0]).toMatchObject({
+      document: { id: documentId },
+      chunk: { content: expect.stringContaining("incident commander") }
+    });
+    const hybridHits = await repository.search({
+      access,
+      query: "unrelated terms",
+      queryEmbedding: { model: "test-embedding", values: [1, 0, 0] },
+      limit: 10
+    });
+    expect(hybridHits[0]).toMatchObject({
+      document: { id: documentId },
+      vectorScore: expect.any(Number)
+    });
+    await expect(
+      repository.search({
+        access: {
+          organizationId: organization,
+          userId: otherUser,
+          role: "member",
+          teams: []
+        },
+        query: "rollback approvers",
+        limit: 10
+      })
+    ).resolves.toEqual([]);
+
+    await repository.save(
+      createDocument({
+        id: "40000000-0000-0000-0000-000000000007",
+        scope: {
+          kind: "user",
+          organizationId: organization,
+          userId: otherUser
+        },
+        title: "Personal copy",
+        objectKey: `organizations/${organization}/documents/personal/source`,
+        checksum: document.checksum,
+        mimeType: "text/markdown",
+        sizeBytes: 128,
+        createdBy: otherUser,
+        now: createdAt
+      })
+    );
   });
 
   it("rejects a memory that points to a team in another organization", async () => {
