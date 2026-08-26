@@ -118,7 +118,36 @@ export const en = {
   "guide.next.title": "Explore real context now.",
   "guide.next.body":
     "Start a search in the Console or connect an Agent to the MCP endpoint.",
-  "guide.next.action": "Open Console"
+  "guide.next.action": "Open Console",
+  "organization.requestFailed": "The request could not be completed.",
+  "organization.loadFailed": "Organization settings could not be loaded.",
+  "organization.memberSaved": "Organization member saved.",
+  "organization.teamCreated": "Team created.",
+  "organization.teamMemberSaved": "Team member saved.",
+  "organization.manageTitle": "Manage organization",
+  "organization.manageBody": "Assign registered accounts to organizations and teams.",
+  "organization.refresh": "Refresh",
+  "organization.members": "Organization members",
+  "organization.registeredEmail": "Registered user email",
+  "organization.role": "Organization role",
+  "organization.saveMember": "Save member",
+  "organization.createTeam": "Create team",
+  "organization.teamName": "Team name",
+  "organization.teamSlug": "Team slug",
+  "organization.teamMembers": "Team members",
+  "organization.team": "Team",
+  "organization.memberEmail": "Organization member email",
+  "organization.teamRole": "Team role",
+  "organization.saveTeamMember": "Save team member",
+  "organization.createFailed": "The organization could not be created.",
+  "organization.firstTitle": "Create your first organization",
+  "organization.firstBody":
+    "Your account becomes the owner and can then manage members and teams.",
+  "organization.name": "Organization name",
+  "organization.slug": "Organization slug",
+  "organization.slugDescription":
+    "Use lowercase letters, numbers, and hyphens only.",
+  "organization.create": "Create organization"
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -16,6 +16,8 @@ import {
 import { IconRefresh, IconUserPlus, IconUsersGroup } from "@tabler/icons-react";
 import { useState, type FormEvent } from "react";
 
+import { useT } from "./_i18n/provider";
+
 interface OrganizationManagementProps {
   readonly initialMembers: readonly OrganizationMemberView[];
   readonly initialTeams: readonly TeamView[];
@@ -35,17 +37,18 @@ export interface TeamView {
   readonly name: string;
 }
 
-async function responseMessage(response: Response): Promise<string> {
+async function responseMessage(response: Response, fallback: string): Promise<string> {
   const body = (await response.json().catch(() => null)) as {
     error?: string;
   } | null;
-  return body?.error ?? "요청을 처리하지 못했습니다.";
+  return body?.error ?? fallback;
 }
 
 async function sendJson(
   url: string,
   method: "POST" | "PUT",
-  value: Readonly<Record<string, FormDataEntryValue | null>>
+  value: Readonly<Record<string, FormDataEntryValue | null>>,
+  fallback: string
 ) {
   const response = await fetch(url, {
     method,
@@ -53,7 +56,7 @@ async function sendJson(
     body: JSON.stringify(value)
   });
   if (!response.ok) {
-    throw new Error(await responseMessage(response));
+    throw new Error(await responseMessage(response, fallback));
   }
 }
 
@@ -62,6 +65,7 @@ export function OrganizationManagement({
   initialTeams,
   organizationId
 }: OrganizationManagementProps) {
+  const t = useT();
   const [members, setMembers] = useState(initialMembers);
   const [teams, setTeams] = useState(initialTeams);
   const [loading, setLoading] = useState(false);
@@ -78,10 +82,10 @@ export function OrganizationManagement({
         fetch(`/api/organizations/${organizationId}/teams`)
       ]);
       if (!membersResponse.ok) {
-        throw new Error(await responseMessage(membersResponse));
+        throw new Error(await responseMessage(membersResponse, t("organization.requestFailed")));
       }
       if (!teamsResponse.ok) {
-        throw new Error(await responseMessage(teamsResponse));
+        throw new Error(await responseMessage(teamsResponse, t("organization.requestFailed")));
       }
       const [memberBody, teamBody] = await Promise.all([
         membersResponse.json() as Promise<{
@@ -93,7 +97,7 @@ export function OrganizationManagement({
       setTeams(teamBody.teams);
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "관리 정보를 불러오지 못했습니다."
+        caught instanceof Error ? caught.message : t("organization.loadFailed")
       );
     } finally {
       setLoading(false);
@@ -115,7 +119,7 @@ export function OrganizationManagement({
       await loadAdministration();
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "요청을 처리하지 못했습니다."
+        caught instanceof Error ? caught.message : t("organization.requestFailed")
       );
     } finally {
       setPending(false);
@@ -131,8 +135,8 @@ export function OrganizationManagement({
         sendJson(`/api/organizations/${organizationId}/members`, "PUT", {
           email: form.get("email"),
           role: form.get("role")
-        }),
-      "조직 멤버를 저장했습니다.",
+        }, t("organization.requestFailed")),
+      t("organization.memberSaved"),
       formElement
     );
   }
@@ -146,8 +150,8 @@ export function OrganizationManagement({
         sendJson(`/api/organizations/${organizationId}/teams`, "POST", {
           name: form.get("name"),
           slug: form.get("slug")
-        }),
-      "팀을 만들었습니다.",
+        }, t("organization.requestFailed")),
+      t("organization.teamCreated"),
       formElement
     );
   }
@@ -162,9 +166,10 @@ export function OrganizationManagement({
         sendJson(
           `/api/organizations/${organizationId}/teams/${teamId}/members`,
           "PUT",
-          { email: form.get("email"), role: form.get("role") }
+          { email: form.get("email"), role: form.get("role") },
+          t("organization.requestFailed")
         ),
-      "팀 멤버를 저장했습니다.",
+      t("organization.teamMemberSaved"),
       formElement
     );
   }
@@ -173,8 +178,8 @@ export function OrganizationManagement({
     <Stack gap="lg">
       <Group justify="space-between">
         <Stack gap={2}>
-          <Title order={2}>조직 관리</Title>
-          <Text c="dimmed">가입된 계정을 조직과 팀에 배정합니다.</Text>
+          <Title order={2}>{t("organization.manageTitle")}</Title>
+          <Text c="dimmed">{t("organization.manageBody")}</Text>
         </Stack>
         <Button
           leftSection={<IconRefresh size={16} />}
@@ -182,7 +187,7 @@ export function OrganizationManagement({
           onClick={loadAdministration}
           variant="subtle"
         >
-          새로고침
+          {t("organization.refresh")}
         </Button>
       </Group>
       {error ? <Alert color="red">{error}</Alert> : null}
@@ -192,8 +197,8 @@ export function OrganizationManagement({
         <Paper p="lg" radius="lg" withBorder>
           <form onSubmit={addOrganizationMember}>
             <Stack gap="md">
-              <Title order={3}>조직 멤버</Title>
-              <TextInput label="가입된 사용자 이메일" name="email" required type="email" />
+              <Title order={3}>{t("organization.members")}</Title>
+              <TextInput label={t("organization.registeredEmail")} name="email" required type="email" />
               <Select
                 data={[
                   { value: "member", label: "Member" },
@@ -201,7 +206,7 @@ export function OrganizationManagement({
                   { value: "owner", label: "Owner" }
                 ]}
                 defaultValue="member"
-                label="조직 역할"
+                label={t("organization.role")}
                 name="role"
                 required
               />
@@ -210,7 +215,7 @@ export function OrganizationManagement({
                 loading={pending}
                 type="submit"
               >
-                멤버 저장
+                {t("organization.saveMember")}
               </Button>
               <Stack gap="xs">
                 {members.map((member) => (
@@ -231,46 +236,46 @@ export function OrganizationManagement({
           <Stack gap="xl">
             <form onSubmit={createTeam}>
               <Stack gap="md">
-                <Title order={3}>팀 만들기</Title>
-                <TextInput label="팀 이름" name="name" required />
-                <TextInput label="팀 slug" name="slug" required />
+                <Title order={3}>{t("organization.createTeam")}</Title>
+                <TextInput label={t("organization.teamName")} name="name" required />
+                <TextInput label={t("organization.teamSlug")} name="slug" required />
                 <Button
                   leftSection={<IconUsersGroup size={17} />}
                   loading={pending}
                   type="submit"
                   variant="light"
                 >
-                  팀 만들기
+                  {t("organization.createTeam")}
                 </Button>
               </Stack>
             </form>
 
             <form onSubmit={addTeamMember}>
               <Stack gap="md">
-                <Title order={3}>팀 멤버</Title>
+                <Title order={3}>{t("organization.teamMembers")}</Title>
                 <Select
                   data={teams.map((team) => ({
                     value: team.id,
                     label: `${team.name} · ${team.slug}`
                   }))}
                   disabled={teams.length === 0}
-                  label="팀"
+                  label={t("organization.team")}
                   name="teamId"
                   required
                 />
-                <TextInput label="조직 멤버 이메일" name="email" required type="email" />
+                <TextInput label={t("organization.memberEmail")} name="email" required type="email" />
                 <Select
                   data={[
                     { value: "member", label: "Member" },
                     { value: "manager", label: "Manager" }
                   ]}
                   defaultValue="member"
-                  label="팀 역할"
+                  label={t("organization.teamRole")}
                   name="role"
                   required
                 />
                 <Button disabled={teams.length === 0} loading={pending} type="submit">
-                  팀 멤버 저장
+                  {t("organization.saveTeamMember")}
                 </Button>
               </Stack>
             </form>

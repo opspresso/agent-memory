@@ -120,5 +120,34 @@ export const ko: Messages = {
   "guide.next.title": "이제 실제 Context를 탐색하세요.",
   "guide.next.body":
     "운영 Console에서 검색을 시작하거나 Agent에 MCP endpoint를 연결합니다.",
-  "guide.next.action": "Console 열기"
+  "guide.next.action": "Console 열기",
+  "organization.requestFailed": "요청을 처리하지 못했습니다.",
+  "organization.loadFailed": "관리 정보를 불러오지 못했습니다.",
+  "organization.memberSaved": "조직 멤버를 저장했습니다.",
+  "organization.teamCreated": "팀을 만들었습니다.",
+  "organization.teamMemberSaved": "팀 멤버를 저장했습니다.",
+  "organization.manageTitle": "조직 관리",
+  "organization.manageBody": "가입된 계정을 조직과 팀에 배정합니다.",
+  "organization.refresh": "새로고침",
+  "organization.members": "조직 멤버",
+  "organization.registeredEmail": "가입된 사용자 이메일",
+  "organization.role": "조직 역할",
+  "organization.saveMember": "멤버 저장",
+  "organization.createTeam": "팀 만들기",
+  "organization.teamName": "팀 이름",
+  "organization.teamSlug": "팀 slug",
+  "organization.teamMembers": "팀 멤버",
+  "organization.team": "팀",
+  "organization.memberEmail": "조직 멤버 이메일",
+  "organization.teamRole": "팀 역할",
+  "organization.saveTeamMember": "팀 멤버 저장",
+  "organization.createFailed": "조직을 만들지 못했습니다.",
+  "organization.firstTitle": "첫 조직 만들기",
+  "organization.firstBody":
+    "현재 계정이 owner가 되며 이후 멤버와 팀을 관리할 수 있습니다.",
+  "organization.name": "조직 이름",
+  "organization.slug": "조직 slug",
+  "organization.slugDescription":
+    "소문자, 숫자, 하이픈만 사용할 수 있습니다.",
+  "organization.create": "조직 만들기"
 };
