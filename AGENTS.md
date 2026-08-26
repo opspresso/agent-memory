@@ -2,6 +2,14 @@
 
 이 저장소에서 coding agent가 지켜야 할 프로젝트별 규칙이다. `CLAUDE.md`는 이 파일을 가리키는 symlink다.
 
+## Development status and compatibility
+
+This project is under active development. Backward compatibility is not required unless the
+user explicitly requests it. Prefer the clean current-state design over compatibility shims;
+breaking changes to APIs, configuration, schemas, and stored data formats are allowed. Any
+operation that destroys existing data or git history still requires explicit user approval and
+the applicable safety checks.
+
 ## 프로젝트 역할
 
 Agent Memory는 `../agent-studio`와 형제 프로젝트다. Agent Studio의 실행 기능을 이 저장소로 옮기지 말고, 여러 Agent가 공유하는 장기 memory, RAG 문서, Knowledge Graph, Context 검색에 집중하라.
