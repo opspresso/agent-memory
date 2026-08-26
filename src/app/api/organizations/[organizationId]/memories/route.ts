@@ -1,7 +1,6 @@
 import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
 import {
   memoryErrorResponse,
-  publicMemory,
   publicMemoryForAccess,
   readJsonBody,
   versionEtag
@@ -118,7 +117,10 @@ export async function GET(request: Request, context: RouteContext) {
   try {
     const hits = await searchMemoryRecords(authorization.access, query, limit);
     return Response.json({
-      hits: hits.map((hit) => ({ ...hit, memory: publicMemory(hit.memory) })),
+      hits: hits.map((hit) => ({
+        ...hit,
+        memory: publicMemoryForAccess(hit.memory, authorization.access)
+      })),
       total: hits.length
     });
   } catch (error) {

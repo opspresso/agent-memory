@@ -39,6 +39,7 @@ export const documents = pgTable(
     status: documentStatus().notNull().default("pending"),
     errorMessage: text(),
     processingAttempts: integer().notNull().default(0),
+    processingLeaseId: uuid(),
     processingStartedAt: timestamp({ withTimezone: true }),
     processedAt: timestamp({ withTimezone: true }),
     metadata: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
@@ -127,6 +128,11 @@ export const documentChunks = pgTable(
     }).onDelete("cascade"),
     uniqueIndex("document_chunks_organization_id_id_unique").on(
       table.organizationId,
+      table.id
+    ),
+    uniqueIndex("document_chunks_organization_document_id_unique").on(
+      table.organizationId,
+      table.documentId,
       table.id
     ),
     uniqueIndex("document_chunks_document_ordinal_unique").on(

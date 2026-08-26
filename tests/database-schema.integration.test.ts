@@ -12,6 +12,7 @@ import { createOrganizationAdministrationRepository } from "@/infrastructure/dat
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
+import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
 import { createAuth } from "@/lib/create-auth";
 import { createMemory, reviseMemory } from "@/domain/memory/memory";
 import {
@@ -22,6 +23,7 @@ import {
   createKnowledgeEdge,
   createKnowledgeNode
 } from "@/domain/knowledge/knowledge-graph";
+import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import {
   createOrganization,
@@ -29,7 +31,9 @@ import {
 } from "@/domain/identity/organization-administration";
 import {
   createPgBossDocumentIngestionQueue,
+  documentKnowledgeEnrichmentQueueName,
   documentIngestionQueueName,
+  type DocumentKnowledgeEnrichmentJob,
   type DocumentIngestionJob
 } from "@/infrastructure/queue/document-ingestion-queue";
 
@@ -90,6 +94,8 @@ describe("PostgreSQL schema", () => {
       const documentId = "40000000-0000-0000-0000-000000000008";
       await queue.enqueue(organizationId, documentId);
       await queue.enqueue(organizationId, documentId);
+      await queue.enqueueKnowledgeEnrichment(organizationId, documentId);
+      await queue.enqueueKnowledgeEnrichment(organizationId, documentId);
 
       const jobs = await boss.findJobs<DocumentIngestionJob>(
         documentIngestionQueueName,
@@ -97,6 +103,12 @@ describe("PostgreSQL schema", () => {
       );
       expect(jobs).toHaveLength(1);
       expect(jobs[0]?.data).toEqual({ organizationId, documentId });
+      const enrichmentJobs =
+        await boss.findJobs<DocumentKnowledgeEnrichmentJob>(
+          documentKnowledgeEnrichmentQueueName,
+          { data: { organizationId, documentId } }
+        );
+      expect(enrichmentJobs).toHaveLength(1);
       expect(errors).toEqual([]);
     } finally {
       await queue.stop();
@@ -573,12 +585,35 @@ describe("PostgreSQL schema", () => {
       createdAt
     );
     expect(claimed).toMatchObject({
-      status: "processing",
-      processingAttempts: 1
+      document: {
+        status: "processing",
+        processingAttempts: 1
+      },
+      leaseId: expect.any(String)
     });
     if (!claimed) {
       throw new Error("document was not claimed");
     }
+    const reclaimedAt = new Date(createdAt.getTime() + 21 * 60 * 1_000);
+    const reclaimed = await repository.claimForProcessing(
+      organization,
+      documentId,
+      reclaimedAt
+    );
+    expect(reclaimed).toMatchObject({
+      document: { processingAttempts: 2 },
+      leaseId: expect.not.stringMatching(claimed.leaseId)
+    });
+    if (!reclaimed) {
+      throw new Error("stale document was not reclaimed");
+    }
+    await expect(
+      repository.failProcessing(
+        claimed,
+        "late failure from stale worker",
+        reclaimedAt
+      )
+    ).resolves.toBe(false);
     const chunk = createDocumentChunk({
       id: "50000000-0000-0000-0000-000000000006",
       organizationId: organization,
@@ -589,7 +624,10 @@ describe("PostgreSQL schema", () => {
       metadata: { start: 0, end: 59 },
       now: createdAt
     });
-    await repository.completeProcessing(claimed, [chunk], createdAt);
+    await expect(
+      repository.completeProcessing(claimed, [chunk], reclaimedAt)
+    ).rejects.toThrow("document processing claim was lost");
+    await repository.completeProcessing(reclaimed, [chunk], reclaimedAt);
 
     await expect(
       repository.findChunkById(organization, chunk.id)
@@ -605,7 +643,7 @@ describe("PostgreSQL schema", () => {
     ).resolves.toBeNull();
     await expect(repository.findById(organization, documentId)).resolves.toMatchObject({
       status: "ready",
-      processingAttempts: 1,
+      processingAttempts: 2,
       sizeBytes: 128
     });
     await expect(
@@ -650,6 +688,155 @@ describe("PostgreSQL schema", () => {
       })
     ).resolves.toEqual([]);
 
+    const candidateRepository = createKnowledgeCandidateRepository(db);
+    const candidate = createKnowledgeCandidate({
+      id: "80000000-0000-0000-0000-000000000006",
+      scope: document.scope,
+      documentId,
+      chunkId: chunk.id,
+      model: "test-extractor",
+      graph: {
+        entities: [
+          {
+            key: "commander",
+            kind: "role",
+            canonicalName: "Incident Commander"
+          },
+          {
+            key: "runbook",
+            kind: "document",
+            canonicalName: "Incident response"
+          }
+        ],
+        relationships: [
+          {
+            sourceKey: "commander",
+            targetKey: "runbook",
+            predicate: "follows"
+          }
+        ]
+      },
+      now: createdAt
+    });
+    await expect(candidateRepository.save(candidate)).resolves.toMatchObject({
+      id: candidate.id,
+      scope: document.scope,
+      status: "pending"
+    });
+    await expect(
+      candidateRepository.save({
+        ...candidate,
+        id: "80000000-0000-0000-0000-000000000007"
+      })
+    ).resolves.toMatchObject({ id: candidate.id });
+    await expect(
+      candidateRepository.findByChunkId(organization, chunk.id)
+    ).resolves.toMatchObject({ id: candidate.id, scope: document.scope });
+    await expect(
+      candidateRepository.findByChunkId(organizationB, chunk.id)
+    ).resolves.toBeNull();
+    await expect(
+      candidateRepository.listPending(
+        {
+          organizationId: organization,
+          userId: user,
+          role: "member",
+          teams: [{ teamId: team, role: "manager" }]
+        },
+        10
+      )
+    ).resolves.toMatchObject([{ id: candidate.id }]);
+    await expect(
+      candidateRepository.listPending(
+        {
+          organizationId: organization,
+          userId: otherUser,
+          role: "member",
+          teams: []
+        },
+        10
+      )
+    ).resolves.toEqual([]);
+    const graphSourceMemoryId = "30000000-0000-0000-0000-000000000061";
+    const memoryRepository = createMemoryRepository(db);
+    await memoryRepository.save(
+      createMemory({
+        id: graphSourceMemoryId,
+        kind: "fact",
+        scope: document.scope,
+        title: "Incident commander",
+        content: "The incident commander follows the response runbook.",
+        source: { type: "user" },
+        createdBy: user,
+        validFrom: createdAt,
+        now: createdAt
+      })
+    );
+    await createKnowledgeGraphRepository(db).saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000060",
+        scope: document.scope,
+        kind: "role",
+        canonicalName: "Incident Commander",
+        source: { memoryId: graphSourceMemoryId },
+        now: createdAt
+      })
+    );
+    const promotion = await candidateRepository.accept({
+      candidateId: candidate.id,
+      organizationId: organization,
+      entityPromotions: [
+        {
+          key: "commander",
+          id: "60000000-0000-0000-0000-000000000061"
+        },
+        {
+          key: "runbook",
+          id: "60000000-0000-0000-0000-000000000062"
+        }
+      ],
+      relationshipIds: ["70000000-0000-0000-0000-000000000061"],
+      reviewedAt: createdAt,
+      reviewedBy: user,
+      reason: "Verified against the source chunk"
+    });
+    expect(promotion).toMatchObject({
+      candidate: {
+        id: candidate.id,
+        status: "accepted",
+        reviewedBy: user,
+        reviewReason: "Verified against the source chunk"
+      },
+      nodes: [
+        {
+          sources: expect.arrayContaining([
+            { memoryId: graphSourceMemoryId },
+            { chunkId: chunk.id }
+          ])
+        },
+        { sources: [{ chunkId: chunk.id }] }
+      ],
+      edges: [{ sources: [{ chunkId: chunk.id }], predicate: "follows" }]
+    });
+    await expect(
+      candidateRepository.accept({
+        candidateId: candidate.id,
+        organizationId: organization,
+        entityPromotions: [],
+        relationshipIds: [],
+        reviewedAt: createdAt,
+        reviewedBy: user
+      })
+    ).resolves.toMatchObject({ candidate: { status: "accepted" } });
+    await expect(
+      candidateRepository.reject({
+        candidateId: candidate.id,
+        organizationId: organization,
+        reviewedAt: createdAt,
+        reviewedBy: user
+      })
+    ).resolves.toBeNull();
+
     await repository.save(
       createDocument({
         id: "40000000-0000-0000-0000-000000000007",
@@ -676,6 +863,8 @@ describe("PostgreSQL schema", () => {
     const team = "20000000-0000-0000-0000-000000000009";
     const sourceNodeId = "60000000-0000-0000-0000-000000000009";
     const targetNodeId = "60000000-0000-0000-0000-000000000010";
+    const sourceMemoryId = "30000000-0000-0000-0000-000000000091";
+    const corroboratingMemoryId = "30000000-0000-0000-0000-000000000092";
     await pool.query(
       `INSERT INTO organizations (id, slug, name)
        VALUES ($1, 'organization-i', 'Organization I')`,
@@ -704,8 +893,27 @@ describe("PostgreSQL schema", () => {
     );
 
     const repository = createKnowledgeGraphRepository(db);
+    const memoryRepository = createMemoryRepository(db);
     const createdAt = new Date("2026-08-26T00:00:00.000Z");
     const scope = { kind: "team" as const, organizationId: organization, teamId: team };
+    for (const [id, title] of [
+      [sourceMemoryId, "Checkout topology"],
+      [corroboratingMemoryId, "Orders topology"]
+    ] as const) {
+      await memoryRepository.save(
+        createMemory({
+          id,
+          kind: "fact",
+          scope,
+          title,
+          content: "Checkout API depends on the Orders Database.",
+          source: { type: "user" },
+          createdBy: user,
+          validFrom: createdAt,
+          now: createdAt
+        })
+      );
+    }
     const sourceNode = createKnowledgeNode({
       id: sourceNodeId,
       scope,
@@ -713,6 +921,7 @@ describe("PostgreSQL schema", () => {
       canonicalName: "Checkout API",
       summary: "Processes checkout requests",
       embedding: { model: "test-embedding", values: [1, 0, 0] },
+      source: { memoryId: sourceMemoryId },
       now: createdAt
     });
     const targetNode = createKnowledgeNode({
@@ -721,6 +930,7 @@ describe("PostgreSQL schema", () => {
       kind: "database",
       canonicalName: "Orders Database",
       summary: "Stores checkout orders",
+      source: { memoryId: sourceMemoryId },
       now: createdAt
     });
     await repository.saveNode(sourceNode);
@@ -732,12 +942,27 @@ describe("PostgreSQL schema", () => {
         kind: "service",
         canonicalName: "Checkout API",
         summary: "Processes purchases and checkout requests",
+        source: { memoryId: corroboratingMemoryId },
         now: new Date("2026-08-27T00:00:00.000Z")
       })
     );
     expect(upserted).toMatchObject({
       id: sourceNodeId,
-      summary: "Processes purchases and checkout requests"
+      summary: "Processes purchases and checkout requests",
+      sources: expect.arrayContaining([
+        { memoryId: sourceMemoryId },
+        { memoryId: corroboratingMemoryId }
+      ])
+    });
+    await expect(
+      pool.query(
+        `INSERT INTO knowledge_node_sources (organization_id, node_id)
+         VALUES ($1, $2)`,
+        [organization, sourceNodeId]
+      )
+    ).rejects.toMatchObject({
+      code: "23514",
+      constraint: "knowledge_node_sources_exactly_one_source_check"
     });
 
     const edge = createKnowledgeEdge({
@@ -747,6 +972,7 @@ describe("PostgreSQL schema", () => {
       sourceNodeId,
       targetNodeId,
       predicate: "depends_on",
+      source: { memoryId: corroboratingMemoryId },
       now: createdAt
     });
     await repository.saveEdge(edge);
@@ -798,6 +1024,18 @@ describe("PostgreSQL schema", () => {
       ]),
       edges: [expect.objectContaining({ id: edge.id })]
     });
+
+    await pool.query(
+      `UPDATE memories SET status = 'archived'
+       WHERE organization_id = $1 AND id IN ($2, $3)`,
+      [organization, sourceMemoryId, corroboratingMemoryId]
+    );
+    await expect(
+      repository.searchNodes({ access, query: "checkout", limit: 10 })
+    ).resolves.toEqual([]);
+    await expect(
+      repository.findNeighborhood(access, sourceNodeId, 2, 10)
+    ).resolves.toEqual({ nodes: [], edges: [] });
   });
 
   it("rejects a memory that points to a team in another organization", async () => {

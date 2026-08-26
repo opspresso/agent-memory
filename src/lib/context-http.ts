@@ -1,18 +1,22 @@
 import type { ContextSearchResult } from "@/application/context/search-context";
+import type { OrganizationAccess } from "@/domain/identity/organization-access";
 
 import { publicDocumentHit } from "./document-http";
 import { publicKnowledgeHit } from "./knowledge-http";
-import { publicMemory } from "./memory-http";
+import { publicMemory, publicMemoryForAccess } from "./memory-http";
 
 export function publicContextSearchResult(
   result: ContextSearchResult,
-  limit: number
+  limit: number,
+  access?: OrganizationAccess
 ) {
   const hits = [
     ...result.memories.map((hit) => ({
       ...hit,
       sourceType: "memory" as const,
-      memory: publicMemory(hit.memory)
+      memory: access
+        ? publicMemoryForAccess(hit.memory, access)
+        : publicMemory(hit.memory)
     })),
     ...result.documents.map((hit) => ({
       ...publicDocumentHit(hit),

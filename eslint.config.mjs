@@ -46,6 +46,7 @@ const eslintConfig = defineConfig([
   architectureBoundaries,
   globalIgnores([
     ".next/**",
+    ".next-e2e/**",
     "coverage/**",
     "drizzle/**",
     "out/**",

@@ -3,14 +3,22 @@ import { PgBoss } from "pg-boss";
 import type { DocumentIngestionQueue } from "@/domain/document/document-services";
 
 export const documentIngestionQueueName = "document-ingestion";
+export const documentKnowledgeEnrichmentQueueName =
+  "document-knowledge-enrichment";
 
 export interface DocumentIngestionJob {
   readonly organizationId: string;
   readonly documentId: string;
 }
 
+export type DocumentKnowledgeEnrichmentJob = DocumentIngestionJob;
+
 export interface PgBossDocumentIngestionQueue
   extends DocumentIngestionQueue {
+  enqueueKnowledgeEnrichment(
+    organizationId: string,
+    documentId: string
+  ): Promise<void>;
   start(): Promise<PgBoss>;
   stop(): Promise<void>;
 }
@@ -37,6 +45,13 @@ export function createPgBossDocumentIngestionQueue(
         expireInSeconds: 900,
         deleteAfterSeconds: 604_800
       });
+      await boss.createQueue(documentKnowledgeEnrichmentQueueName, {
+        retryLimit: 5,
+        retryDelay: 15,
+        retryBackoff: true,
+        expireInSeconds: 900,
+        deleteAfterSeconds: 604_800
+      });
       return boss;
     })();
     try {
@@ -54,6 +69,14 @@ export function createPgBossDocumentIngestionQueue(
       await instance.send(
         documentIngestionQueueName,
         { organizationId, documentId } satisfies DocumentIngestionJob,
+        { singletonKey: documentId, singletonSeconds: 60 }
+      );
+    },
+    async enqueueKnowledgeEnrichment(organizationId, documentId) {
+      const instance = await start();
+      await instance.send(
+        documentKnowledgeEnrichmentQueueName,
+        { organizationId, documentId } satisfies DocumentKnowledgeEnrichmentJob,
         { singletonKey: documentId, singletonSeconds: 60 }
       );
     },

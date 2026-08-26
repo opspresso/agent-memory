@@ -41,9 +41,9 @@ describe("access control configuration", () => {
     expect(isAllowedEmailDomain("user@example.com", [])).toBe(true);
   });
 
-  it("matches admins case-insensitively and keeps empty-list compatibility", () => {
+  it("matches admins case-insensitively and fails closed for an empty list", () => {
     expect(isAdminEmail("ME@NALBAM.COM", ["me@nalbam.com"])).toBe(true);
     expect(isAdminEmail("user@nalbam.com", ["me@nalbam.com"])).toBe(false);
-    expect(isAdminEmail("user@example.com", [])).toBe(true);
+    expect(isAdminEmail("user@example.com", [])).toBe(false);
   });
 });

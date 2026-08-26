@@ -19,20 +19,36 @@ import {
 } from "@mantine/core";
 import {
   IconAlertCircle,
+  IconBrain,
   IconCloudUpload,
+  IconFileText,
   IconLogout,
+  IconHistory,
   IconPlugConnected,
   IconSearch,
-  IconSettings
+  IconShieldCheck,
+  IconSettings,
+  IconTopologyStar3
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import type { OrganizationMembership } from "@/domain/identity/organization-access-repository";
 import { signOut } from "@/lib/auth-client";
 import type { SessionUser } from "@/lib/session";
 
+import {
+  contextResultPresentation,
+  relativeRelevance
+} from "./context-result-presentation";
 import classes from "./page.module.css";
+import {
+  KnowledgeGraph,
+  type KnowledgeGraphEdgeView,
+  type KnowledgeGraphNodeView
+} from "./knowledge-graph";
+import { KnowledgeCandidateReview } from "./knowledge-candidate-review";
+import { MemoryLifecycle } from "./memory-lifecycle";
 import { OrganizationBootstrap } from "./organization-bootstrap";
 import {
   OrganizationManagement,
@@ -61,6 +77,12 @@ type SearchKind =
 
 interface SearchResponse {
   readonly hits?: readonly Record<string, unknown>[];
+  readonly error?: string;
+}
+
+interface NeighborhoodResponse {
+  readonly nodes?: readonly KnowledgeGraphNodeView[];
+  readonly edges?: readonly KnowledgeGraphEdgeView[];
   readonly error?: string;
 }
 
@@ -114,18 +136,88 @@ export function Workspace({
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string>();
   const [hits, setHits] = useState<readonly Record<string, unknown>[]>([]);
+  const [selectedMemoryId, setSelectedMemoryId] = useState<string>();
+  const [graphCenterNodeId, setGraphCenterNodeId] = useState<string>();
+  const [graphSelectedNodeId, setGraphSelectedNodeId] = useState<string>();
+  const [graphNodes, setGraphNodes] = useState<
+    readonly KnowledgeGraphNodeView[]
+  >([]);
+  const [graphEdges, setGraphEdges] = useState<
+    readonly KnowledgeGraphEdgeView[]
+  >([]);
+  const [graphError, setGraphError] = useState<string>();
+  const [loadingGraph, setLoadingGraph] = useState(false);
   const [signOutError, setSignOutError] = useState<string>();
   const [signingOut, setSigningOut] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string>();
+  const graphRequest = useRef<AbortController | undefined>(undefined);
+  const searchRequest = useRef<AbortController | undefined>(undefined);
 
   const selectedOrganization = useMemo(
     () => organizations.find((organization) => organization.id === organizationId),
     [organizationId, organizations]
   );
+  const peakScore = useMemo(
+    () =>
+      Math.max(
+        0,
+        ...hits.map((hit) =>
+          typeof hit.score === "number" && Number.isFinite(hit.score)
+            ? hit.score
+            : 0
+        )
+      ),
+    [hits]
+  );
   const mcpPath = organizationId
     ? `/api/organizations/${organizationId}/mcp`
     : "조직을 선택하세요";
+
+  useEffect(
+    () => () => {
+      graphRequest.current?.abort();
+      searchRequest.current?.abort();
+    },
+    []
+  );
+
+  function cancelSearchRequests() {
+    graphRequest.current?.abort();
+    graphRequest.current = undefined;
+    searchRequest.current?.abort();
+    searchRequest.current = undefined;
+    setSearching(false);
+    setLoadingGraph(false);
+  }
+
+  function selectOrganization(value: string | null) {
+    if (!value) {
+      return;
+    }
+    cancelSearchRequests();
+    setOrganizationId(value);
+    setHits([]);
+    setSelectedMemoryId(undefined);
+    setSearchError(undefined);
+    setGraphCenterNodeId(undefined);
+    setGraphSelectedNodeId(undefined);
+    setGraphNodes([]);
+    setGraphEdges([]);
+    setGraphError(undefined);
+  }
+
+  function selectSearchKind(value: string) {
+    cancelSearchRequests();
+    setSearchKind(value as SearchKind);
+    setHits([]);
+    setSearchError(undefined);
+    setGraphCenterNodeId(undefined);
+    setGraphSelectedNodeId(undefined);
+    setGraphNodes([]);
+    setGraphEdges([]);
+    setGraphError(undefined);
+  }
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -137,11 +229,15 @@ export function Workspace({
     if (!query) {
       return;
     }
+    searchRequest.current?.abort();
+    const controller = new AbortController();
+    searchRequest.current = controller;
     setSearching(true);
     setSearchError(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationId}/${searchKind}?q=${encodeURIComponent(query)}`
+        `/api/organizations/${organizationId}/${searchKind}?q=${encodeURIComponent(query)}`,
+        { signal: controller.signal }
       );
       const body = (await response.json()) as SearchResponse;
       if (!response.ok) {
@@ -149,13 +245,66 @@ export function Workspace({
       }
       setHits(body.hits ?? []);
     } catch (caught) {
+      if (controller.signal.aborted) {
+        return;
+      }
       setSearchError(
         caught instanceof Error ? caught.message : "검색에 실패했습니다."
       );
       setHits([]);
     } finally {
-      setSearching(false);
+      if (searchRequest.current === controller) {
+        searchRequest.current = undefined;
+        setSearching(false);
+      }
     }
+  }
+
+  async function exploreKnowledgeNode(nodeId: string) {
+    if (!organizationId) {
+      return;
+    }
+    graphRequest.current?.abort();
+    const controller = new AbortController();
+    graphRequest.current = controller;
+    setLoadingGraph(true);
+    setGraphError(undefined);
+    try {
+      const response = await fetch(
+        `/api/organizations/${organizationId}/knowledge/nodes/${nodeId}/neighborhood?depth=2&limit=100`,
+        { signal: controller.signal }
+      );
+      const body = (await response.json()) as NeighborhoodResponse;
+      if (!response.ok) {
+        throw new Error(body.error ?? "관계 지도를 불러오지 못했습니다.");
+      }
+      setGraphCenterNodeId(nodeId);
+      setGraphSelectedNodeId(nodeId);
+      setGraphNodes(body.nodes ?? []);
+      setGraphEdges(body.edges ?? []);
+    } catch (caught) {
+      if (controller.signal.aborted) {
+        return;
+      }
+      setGraphError(
+        caught instanceof Error
+          ? caught.message
+          : "관계 지도를 불러오지 못했습니다."
+      );
+    } finally {
+      if (graphRequest.current === controller) {
+        graphRequest.current = undefined;
+        setLoadingGraph(false);
+      }
+    }
+  }
+
+  function selectKnowledgeNode(nodeId: string) {
+    if (nodeId === graphSelectedNodeId) {
+      void exploreKnowledgeNode(nodeId);
+      return;
+    }
+    setGraphSelectedNodeId(nodeId);
   }
 
   async function upload(event: FormEvent<HTMLFormElement>) {
@@ -173,11 +322,19 @@ export function Workspace({
         `/api/organizations/${organizationId}/documents`,
         { method: "POST", body: form }
       );
-      const body = (await response.json()) as { id?: string; error?: string };
+      const body = (await response.json()) as {
+        id?: string;
+        error?: string;
+        status?: string;
+      };
       if (!response.ok) {
         throw new Error(body.error ?? "업로드에 실패했습니다.");
       }
-      setUploadMessage(`수집 대기열에 등록했습니다: ${body.id}`);
+      setUploadMessage(
+        body.status === "failed"
+          ? `문서는 저장했지만 처리 대기열 등록에 실패했습니다. API에서 retry하세요: ${body.id}`
+          : `수집 대기열에 등록했습니다: ${body.id}`
+      );
       formElement.reset();
     } catch (caught) {
       setUploadMessage(
@@ -259,7 +416,7 @@ export function Workspace({
                 label: organization.name
               }))}
               label="활성 조직"
-              onChange={(value) => value && setOrganizationId(value)}
+              onChange={selectOrganization}
               value={organizationId}
             />
             {selectedOrganization ? (
@@ -286,6 +443,9 @@ export function Workspace({
           <Tabs.Tab leftSection={<IconPlugConnected size={16} />} value="connect">
             Agent 연결
           </Tabs.Tab>
+          <Tabs.Tab leftSection={<IconShieldCheck size={16} />} value="review">
+            AI 후보 검토
+          </Tabs.Tab>
           {selectedOrganization?.role === "admin" ||
           selectedOrganization?.role === "owner" ? (
             <Tabs.Tab leftSection={<IconSettings size={16} />} value="manage">
@@ -304,7 +464,7 @@ export function Workspace({
                   { label: "Documents", value: "documents" },
                   { label: "Graph", value: "knowledge/nodes" }
                 ]}
-                onChange={(value) => setSearchKind(value as SearchKind)}
+                onChange={selectSearchKind}
                 value={searchKind}
               />
               <form onSubmit={search}>
@@ -324,26 +484,145 @@ export function Workspace({
               </form>
               {searchError ? <Alert color="red">{searchError}</Alert> : null}
               <SimpleGrid cols={{ base: 1, md: 2 }}>
-                {hits.map((hit) => (
-                  <Paper key={resultKey(hit)} p="md" withBorder>
-                    <Stack gap="xs">
+                {hits.map((hit) => {
+                  const node = nestedRecord(hit, "node");
+                  const memory = nestedRecord(hit, "memory");
+                  const presentation = contextResultPresentation(hit);
+                  const relevance = relativeRelevance(
+                    presentation.score,
+                    peakScore
+                  );
+                  const capabilities = memory?.capabilities;
+                  const canManageMemory =
+                    capabilities && typeof capabilities === "object"
+                      ? Boolean(
+                          (capabilities as Record<string, unknown>).write ||
+                            (capabilities as Record<string, unknown>).manage
+                        )
+                      : false;
+                  return (
+                    <Paper
+                      className={classes.resultCard}
+                      data-source={presentation.sourceType}
+                      key={resultKey(hit)}
+                      p="md"
+                      withBorder
+                    >
+                      <Stack gap="xs">
                       <Group justify="space-between">
-                        <Text fw={650}>{resultTitle(hit)}</Text>
-                        {typeof hit.score === "number" ? (
-                          <Badge variant="light">{hit.score.toFixed(3)}</Badge>
+                        <Group gap="xs">
+                          {presentation.sourceType === "memory" ? (
+                            <IconBrain aria-hidden size={17} />
+                          ) : presentation.sourceType === "document" ? (
+                            <IconFileText aria-hidden size={17} />
+                          ) : (
+                            <IconTopologyStar3 aria-hidden size={17} />
+                          )}
+                          <Badge color="gray" variant="light">
+                            {presentation.sourceLabel}
+                          </Badge>
+                          <Badge color="gray" variant="outline">
+                            {presentation.scopeLabel}
+                          </Badge>
+                        </Group>
+                        {presentation.score !== undefined ? (
+                          <Text c="dimmed" ff="monospace" size="xs">
+                            {presentation.score.toFixed(3)}
+                          </Text>
                         ) : null}
                       </Group>
+                      <Text fw={650}>{resultTitle(hit)}</Text>
                       <Text c="dimmed" lineClamp={4} size="sm">
                         {resultSummary(hit)}
                       </Text>
-                    </Stack>
-                  </Paper>
-                ))}
+                      <div className={classes.evidenceRail}>
+                        <Group justify="space-between" wrap="nowrap">
+                          <Text c="dimmed" lineClamp={1} size="xs">
+                            {presentation.evidenceLabel}
+                          </Text>
+                          <Text fw={700} size="xs">
+                            상대 관련도 {relevance}%
+                          </Text>
+                        </Group>
+                        <div
+                          aria-label={`상대 관련도 ${relevance}%`}
+                          aria-valuemax={100}
+                          aria-valuemin={0}
+                          aria-valuenow={relevance}
+                          className={classes.relevanceTrack}
+                          role="meter"
+                        >
+                          <span style={{ width: `${relevance}%` }} />
+                        </div>
+                        <Group gap="lg">
+                          {presentation.lexicalScore !== undefined ? (
+                            <Text c="dimmed" ff="monospace" size="xs">
+                              lexical {presentation.lexicalScore.toFixed(3)}
+                            </Text>
+                          ) : null}
+                          {presentation.vectorScore !== undefined ? (
+                            <Text c="dimmed" ff="monospace" size="xs">
+                              vector {presentation.vectorScore.toFixed(3)}
+                            </Text>
+                          ) : null}
+                        </Group>
+                      </div>
+                      {searchKind === "knowledge/nodes" &&
+                      typeof node?.id === "string" ? (
+                        <Button
+                          leftSection={<IconTopologyStar3 size={16} />}
+                          loading={loadingGraph}
+                          onClick={() =>
+                            void exploreKnowledgeNode(node.id as string)
+                          }
+                          size="compact-sm"
+                          variant="light"
+                        >
+                          관계 보기
+                        </Button>
+                      ) : null}
+                      {typeof memory?.id === "string" && canManageMemory ? (
+                        <Button
+                          leftSection={<IconHistory size={16} />}
+                          onClick={() => setSelectedMemoryId(memory.id as string)}
+                          size="compact-sm"
+                          variant="light"
+                        >
+                          Lifecycle
+                        </Button>
+                      ) : null}
+                      </Stack>
+                    </Paper>
+                  );
+                })}
               </SimpleGrid>
               {!searching && hits.length === 0 && !searchError ? (
                 <Text c="dimmed" ta="center">
                   검색어를 입력하면 권한 범위 안의 Context가 표시됩니다.
                 </Text>
+              ) : null}
+              {graphError ? <Alert color="red">{graphError}</Alert> : null}
+              {graphCenterNodeId && graphNodes.length > 0 ? (
+                <Stack gap="sm">
+                  <Group justify="space-between">
+                    <Stack gap={2}>
+                      <Text c="indigo" fw={750} size="xs" tt="uppercase">
+                        Knowledge map
+                      </Text>
+                      <Title order={2}>연결된 지식을 탐색합니다.</Title>
+                    </Stack>
+                    <Badge variant="light">
+                      {graphNodes.length} nodes · {graphEdges.length} edges
+                    </Badge>
+                  </Group>
+                  <KnowledgeGraph
+                    centerNodeId={graphCenterNodeId}
+                    edges={graphEdges}
+                    nodes={graphNodes}
+                    onSelectNode={selectKnowledgeNode}
+                    selectedNodeId={graphSelectedNodeId ?? graphCenterNodeId}
+                  />
+                </Stack>
               ) : null}
             </Stack>
           </Paper>
@@ -402,6 +681,13 @@ export function Workspace({
           </Paper>
         </Tabs.Panel>
 
+        <Tabs.Panel pt="lg" value="review">
+          <KnowledgeCandidateReview
+            key={organizationId}
+            organizationId={organizationId}
+          />
+        </Tabs.Panel>
+
         {selectedOrganization?.role === "admin" ||
         selectedOrganization?.role === "owner" ? (
           <Tabs.Panel pt="lg" value="manage">
@@ -418,6 +704,13 @@ export function Workspace({
           </Tabs.Panel>
         ) : null}
         </Tabs>
+      ) : null}
+      {selectedMemoryId ? (
+        <MemoryLifecycle
+          memoryId={selectedMemoryId}
+          onClose={() => setSelectedMemoryId(undefined)}
+          organizationId={organizationId}
+        />
       ) : null}
     </main>
   );

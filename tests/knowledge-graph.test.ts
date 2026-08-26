@@ -33,6 +33,7 @@ function node(id: string, teamId = "team-1"): KnowledgeNode {
     scope: { kind: "team", organizationId: "organization-1", teamId },
     kind: "Service",
     canonicalName: ` ${id} `,
+    source: { memoryId: `${id}-memory` },
     now
   });
 }
@@ -140,7 +141,7 @@ describe("knowledge graph", () => {
       node("scope").scope
     );
     expect(saveNode).toHaveBeenCalledWith(
-      expect.objectContaining({ source })
+      expect.objectContaining({ sources: [source] })
     );
   });
 
@@ -204,7 +205,7 @@ describe("knowledge graph", () => {
       sourceNode.scope
     );
     expect(saveEdge).toHaveBeenCalledWith(
-      expect.objectContaining({ source })
+      expect.objectContaining({ sources: [source] })
     );
   });
 
@@ -226,7 +227,7 @@ describe("knowledge graph", () => {
               targetNodeId: visible.id,
               predicate: "depends_on",
               properties: {},
-              source: {},
+              sources: [],
               createdAt: now
             },
             {
@@ -237,7 +238,7 @@ describe("knowledge graph", () => {
               targetNodeId: hidden.id,
               predicate: "depends_on",
               properties: {},
-              source: {},
+              sources: [],
               createdAt: now
             }
           ]

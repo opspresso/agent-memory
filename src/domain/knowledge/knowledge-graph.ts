@@ -18,7 +18,7 @@ export interface KnowledgeNode {
   readonly summary?: string;
   readonly embedding?: KnowledgeEmbedding;
   readonly properties: Readonly<Record<string, unknown>>;
-  readonly source: KnowledgeSource;
+  readonly sources: readonly KnowledgeSource[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -31,7 +31,7 @@ export interface KnowledgeEdge {
   readonly targetNodeId: string;
   readonly predicate: string;
   readonly properties: Readonly<Record<string, unknown>>;
-  readonly source: KnowledgeSource;
+  readonly sources: readonly KnowledgeSource[];
   readonly createdAt: Date;
 }
 
@@ -93,7 +93,7 @@ function validatedProperties(
 
 function validatedSource(source: KnowledgeSource | undefined) {
   if (!source) {
-    return Object.freeze({});
+    return undefined;
   }
   const referenceCount =
     Number(source.memoryId !== undefined) + Number(source.chunkId !== undefined);
@@ -130,6 +130,7 @@ function validatedEmbedding(embedding: KnowledgeEmbedding | undefined) {
 
 export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNode {
   const embedding = validatedEmbedding(input.embedding);
+  const source = validatedSource(input.source);
   const summary = input.summary?.trim();
   if (summary && summary.length > 10_000) {
     throw new InvalidKnowledgeGraphError(
@@ -149,13 +150,14 @@ export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNode {
     ...(summary ? { summary } : {}),
     ...(embedding ? { embedding } : {}),
     properties: validatedProperties(input.properties),
-    source: validatedSource(input.source),
+    sources: Object.freeze(source ? [source] : []),
     createdAt: new Date(input.now),
     updatedAt: new Date(input.now)
   });
 }
 
 export function createKnowledgeEdge(input: NewKnowledgeEdge): KnowledgeEdge {
+  const source = validatedSource(input.source);
   if (input.scope.organizationId !== input.organizationId) {
     throw new InvalidKnowledgeGraphError(
       "knowledge edge scope must belong to its organization"
@@ -182,7 +184,7 @@ export function createKnowledgeEdge(input: NewKnowledgeEdge): KnowledgeEdge {
       100
     ).toLowerCase(),
     properties: validatedProperties(input.properties),
-    source: validatedSource(input.source),
+    sources: Object.freeze(source ? [source] : []),
     createdAt: new Date(input.now)
   });
 }

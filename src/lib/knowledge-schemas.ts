@@ -23,6 +23,11 @@ const knowledgeSourceSchema = z
   );
 
 export const knowledgeNodeIdSchema = z.uuid();
+export const knowledgeCandidateIdSchema = z.uuid();
+
+export const reviewKnowledgeCandidateSchema = z.object({
+  reason: z.string().trim().min(1).max(2_000).optional()
+});
 
 export const createKnowledgeNodeSchema = z.object({
   scope: memoryScopeSchema,
@@ -30,7 +35,7 @@ export const createKnowledgeNodeSchema = z.object({
   canonicalName: z.string().trim().min(1).max(500),
   summary: z.string().trim().min(1).max(10_000).optional(),
   properties: propertiesSchema.optional(),
-  source: knowledgeSourceSchema.optional()
+  source: knowledgeSourceSchema
 });
 
 export const createKnowledgeEdgeSchema = z.object({
@@ -39,5 +44,5 @@ export const createKnowledgeEdgeSchema = z.object({
   targetNodeId: z.uuid(),
   predicate: z.string().trim().min(1).max(100),
   properties: propertiesSchema.optional(),
-  source: knowledgeSourceSchema.optional()
+  source: knowledgeSourceSchema
 });

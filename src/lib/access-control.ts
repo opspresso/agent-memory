@@ -56,7 +56,5 @@ export function isAdminEmail(
   email: string,
   adminEmails: readonly string[] = getAdminEmails()
 ): boolean {
-  return (
-    adminEmails.length === 0 || adminEmails.includes(email.trim().toLowerCase())
-  );
+  return adminEmails.includes(email.trim().toLowerCase());
 }

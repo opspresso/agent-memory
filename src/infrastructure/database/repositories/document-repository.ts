@@ -4,7 +4,6 @@ import {
   eq,
   getTableColumns,
   inArray,
-  isNotNull,
   isNull,
   lt,
   or,
@@ -19,6 +18,7 @@ import type {
 } from "@/domain/document/document";
 import type {
   DocumentChunkRecord,
+  DocumentProcessingClaim,
   DocumentRepository,
   DocumentSearchHit,
   DocumentSearchInput
@@ -26,6 +26,7 @@ import type {
 
 import type { AgentMemoryDatabase } from "../client";
 import { documentChunks, documents } from "../schema";
+import { hybridSearchExpressions } from "./hybrid-search";
 
 type DocumentRow = typeof documents.$inferSelect;
 type ChunkRow = typeof documentChunks.$inferSelect;
@@ -108,39 +109,13 @@ function accessPredicate(access: OrganizationAccess) {
 }
 
 function scoreExpressions(input: DocumentSearchInput) {
-  const rawLexicalScore = sql<number>`ts_rank_cd(
-    ${documentChunks.search},
-    websearch_to_tsquery('simple', ${input.query})
-  )`;
-  const lexicalScore = sql<number>`${rawLexicalScore} / (1 + ${rawLexicalScore})`;
-  if (!input.queryEmbedding) {
-    return {
-      lexicalScore,
-      vectorScore: sql<number>`0::double precision`,
-      score: lexicalScore,
-      matches: sql`${documentChunks.search} @@ websearch_to_tsquery('simple', ${input.query})`
-    };
-  }
-
-  const vectorLiteral = `[${input.queryEmbedding.values.join(",")}]`;
-  const vectorScore = sql<number>`CASE
-    WHEN ${documentChunks.embedding} IS NOT NULL
-      AND ${documentChunks.embeddingModel} = ${input.queryEmbedding.model}
-    THEN GREATEST(0, LEAST(1, 1 - ((${documentChunks.embedding} <=> ${vectorLiteral}::vector) / 2)))
-    ELSE 0
-  END`;
-  return {
-    lexicalScore,
-    vectorScore,
-    score: sql<number>`(0.4 * ${lexicalScore}) + (0.6 * ${vectorScore})`,
-    matches: or(
-      sql`${documentChunks.search} @@ websearch_to_tsquery('simple', ${input.query})`,
-      and(
-        isNotNull(documentChunks.embedding),
-        eq(documentChunks.embeddingModel, input.queryEmbedding.model)
-      )
-    )
-  };
+  return hybridSearchExpressions({
+    search: documentChunks.search,
+    embedding: documentChunks.embedding,
+    embeddingModel: documentChunks.embeddingModel,
+    query: input.query,
+    ...(input.queryEmbedding ? { queryEmbedding: input.queryEmbedding } : {})
+  });
 }
 
 export function createDocumentRepository(
@@ -211,6 +186,28 @@ export function createDocumentRepository(
         : null;
     },
 
+    async listChunksByDocument(organizationId, documentId) {
+      const rows = await db
+        .select({ chunk: getTableColumns(documentChunks) })
+        .from(documentChunks)
+        .innerJoin(
+          documents,
+          and(
+            eq(documents.organizationId, documentChunks.organizationId),
+            eq(documents.id, documentChunks.documentId)
+          )
+        )
+        .where(
+          and(
+            eq(documentChunks.organizationId, organizationId),
+            eq(documentChunks.documentId, documentId),
+            eq(documents.status, "ready")
+          )
+        )
+        .orderBy(documentChunks.ordinal);
+      return rows.map((row) => chunkFromRow(row.chunk));
+    },
+
     async claimForProcessing(organizationId, documentId, now) {
       const staleBefore = new Date(now.getTime() - 20 * 60 * 1_000);
       const [row] = await db
@@ -219,6 +216,7 @@ export function createDocumentRepository(
           status: "processing",
           errorMessage: null,
           processingAttempts: sql`${documents.processingAttempts} + 1`,
+          processingLeaseId: sql`uuidv7()`,
           processingStartedAt: now,
           updatedAt: now
         })
@@ -239,10 +237,16 @@ export function createDocumentRepository(
           )
         )
         .returning();
-      return row ? documentFromRow(row) : null;
+      return row?.processingLeaseId
+        ? ({
+            document: documentFromRow(row),
+            leaseId: row.processingLeaseId
+          } satisfies DocumentProcessingClaim)
+        : null;
     },
 
-    async completeProcessing(document, chunks, now) {
+    async completeProcessing(claim, chunks, now) {
+      const { document, leaseId } = claim;
       await db.transaction(async (transaction) => {
         await transaction
           .delete(documentChunks)
@@ -272,6 +276,7 @@ export function createDocumentRepository(
           .set({
             status: "ready",
             errorMessage: null,
+            processingLeaseId: null,
             processedAt: now,
             updatedAt: now
           })
@@ -279,7 +284,8 @@ export function createDocumentRepository(
             and(
               eq(documents.organizationId, document.scope.organizationId),
               eq(documents.id, document.id),
-              eq(documents.status, "processing")
+              eq(documents.status, "processing"),
+              eq(documents.processingLeaseId, leaseId)
             )
           )
           .returning({ id: documents.id });
@@ -289,7 +295,28 @@ export function createDocumentRepository(
       });
     },
 
-    async failProcessing(organizationId, documentId, errorMessage, now) {
+    async failProcessing(claim, errorMessage, now) {
+      const [updated] = await db
+        .update(documents)
+        .set({
+          status: "failed",
+          errorMessage: errorMessage.slice(0, 2_000),
+          processingLeaseId: null,
+          updatedAt: now
+        })
+        .where(
+          and(
+            eq(documents.organizationId, claim.document.scope.organizationId),
+            eq(documents.id, claim.document.id),
+            eq(documents.status, "processing"),
+            eq(documents.processingLeaseId, claim.leaseId)
+          )
+        )
+        .returning({ id: documents.id });
+      return updated !== undefined;
+    },
+
+    async markEnqueueFailure(organizationId, documentId, errorMessage, now) {
       await db
         .update(documents)
         .set({
@@ -300,7 +327,8 @@ export function createDocumentRepository(
         .where(
           and(
             eq(documents.organizationId, organizationId),
-            eq(documents.id, documentId)
+            eq(documents.id, documentId),
+            eq(documents.status, "pending")
           )
         );
     },

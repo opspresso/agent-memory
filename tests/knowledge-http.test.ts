@@ -11,6 +11,13 @@ describe("knowledge HTTP boundary", () => {
   it("validates scoped node and edge input", () => {
     expect(
       createKnowledgeNodeSchema.safeParse({
+        scope: { kind: "organization" },
+        kind: "service",
+        canonicalName: "Checkout API"
+      }).success
+    ).toBe(false);
+    expect(
+      createKnowledgeNodeSchema.safeParse({
         scope: { kind: "team" },
         kind: "service",
         canonicalName: "Checkout API"

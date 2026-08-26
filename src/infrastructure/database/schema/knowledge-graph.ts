@@ -142,6 +142,10 @@ export const knowledgeEdges = pgTable(
       table.predicate,
       table.targetNodeId
     ).nullsNotDistinct(),
+    uniqueIndex("knowledge_edges_organization_id_id_unique").on(
+      table.organizationId,
+      table.id
+    ),
     foreignKey({
       columns: [table.organizationId, table.sourceNodeId],
       foreignColumns: [knowledgeNodes.organizationId, knowledgeNodes.id],
@@ -168,5 +172,93 @@ export const knowledgeEdges = pgTable(
     ),
     index("knowledge_edges_source_memory_idx").on(table.sourceMemoryId),
     index("knowledge_edges_source_chunk_idx").on(table.sourceChunkId)
+  ]
+);
+
+export const knowledgeNodeSources = pgTable(
+  "knowledge_node_sources",
+  {
+    id: uuid().primaryKey().default(sql`uuidv7()`),
+    organizationId: uuid()
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    nodeId: uuid().notNull(),
+    memoryId: uuid(),
+    chunkId: uuid(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    check(
+      "knowledge_node_sources_exactly_one_source_check",
+      sql`(${table.memoryId} IS NOT NULL) <> (${table.chunkId} IS NOT NULL)`
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.nodeId],
+      foreignColumns: [knowledgeNodes.organizationId, knowledgeNodes.id],
+      name: "knowledge_node_sources_organization_node_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.memoryId],
+      foreignColumns: [memories.organizationId, memories.id],
+      name: "knowledge_node_sources_organization_memory_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.organizationId, table.chunkId],
+      foreignColumns: [documentChunks.organizationId, documentChunks.id],
+      name: "knowledge_node_sources_organization_chunk_fk"
+    }).onDelete("restrict"),
+    unique("knowledge_node_sources_identity_unique")
+      .on(table.organizationId, table.nodeId, table.memoryId, table.chunkId)
+      .nullsNotDistinct(),
+    index("knowledge_node_sources_node_idx").on(
+      table.organizationId,
+      table.nodeId
+    ),
+    index("knowledge_node_sources_memory_idx").on(table.memoryId),
+    index("knowledge_node_sources_chunk_idx").on(table.chunkId)
+  ]
+);
+
+export const knowledgeEdgeSources = pgTable(
+  "knowledge_edge_sources",
+  {
+    id: uuid().primaryKey().default(sql`uuidv7()`),
+    organizationId: uuid()
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    edgeId: uuid().notNull(),
+    memoryId: uuid(),
+    chunkId: uuid(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    check(
+      "knowledge_edge_sources_exactly_one_source_check",
+      sql`(${table.memoryId} IS NOT NULL) <> (${table.chunkId} IS NOT NULL)`
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.edgeId],
+      foreignColumns: [knowledgeEdges.organizationId, knowledgeEdges.id],
+      name: "knowledge_edge_sources_organization_edge_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.memoryId],
+      foreignColumns: [memories.organizationId, memories.id],
+      name: "knowledge_edge_sources_organization_memory_fk"
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.organizationId, table.chunkId],
+      foreignColumns: [documentChunks.organizationId, documentChunks.id],
+      name: "knowledge_edge_sources_organization_chunk_fk"
+    }).onDelete("restrict"),
+    unique("knowledge_edge_sources_identity_unique")
+      .on(table.organizationId, table.edgeId, table.memoryId, table.chunkId)
+      .nullsNotDistinct(),
+    index("knowledge_edge_sources_edge_idx").on(
+      table.organizationId,
+      table.edgeId
+    ),
+    index("knowledge_edge_sources_memory_idx").on(table.memoryId),
+    index("knowledge_edge_sources_chunk_idx").on(table.chunkId)
   ]
 );

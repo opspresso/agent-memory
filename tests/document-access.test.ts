@@ -52,9 +52,11 @@ function repository(overrides: Partial<DocumentRepository>): DocumentRepository 
     save: vi.fn(),
     findById: vi.fn(),
     findChunkById: vi.fn(),
+    listChunksByDocument: vi.fn(),
     claimForProcessing: vi.fn(),
     completeProcessing: vi.fn(),
     failProcessing: vi.fn(),
+    markEnqueueFailure: vi.fn(),
     search: vi.fn(),
     ...overrides
   };

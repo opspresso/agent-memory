@@ -77,9 +77,15 @@ export function publicMemoryForAccess(
   access: OrganizationAccess
 ) {
   const value = publicMemory(memory);
-  return canAccessMemory(access, "manage", memory)
-    ? { ...value, accessGrants: memory.accessGrants }
-    : value;
+  const manage = canAccessMemory(access, "manage", memory);
+  return {
+    ...value,
+    capabilities: {
+      write: canAccessMemory(access, "write", memory),
+      manage
+    },
+    ...(manage ? { accessGrants: memory.accessGrants } : {})
+  };
 }
 
 export function publicMemoryVersion(version: MemoryVersionSnapshot) {

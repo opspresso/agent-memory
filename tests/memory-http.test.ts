@@ -81,7 +81,20 @@ describe("memory HTTP concurrency", () => {
         role: "owner",
         teams: []
       })
-    ).toHaveProperty("accessGrants", memory.accessGrants);
+    ).toMatchObject({
+      accessGrants: memory.accessGrants,
+      capabilities: { write: true, manage: true }
+    });
+    expect(
+      publicMemoryForAccess(memory, {
+        organizationId: "organization-1",
+        userId: "user-2",
+        role: "member",
+        teams: []
+      })
+    ).toMatchObject({
+      capabilities: { write: false, manage: false }
+    });
 
     const version = publicMemoryVersion({
       memoryId: memory.id,

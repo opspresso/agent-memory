@@ -1,8 +1,9 @@
 import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
 import {
+  boundedFormData,
+  DocumentUploadTooLargeError,
   documentErrorResponse,
   maxDocumentBytes,
-  maxDocumentRequestBytes,
   parseMetadata,
   publicDocument,
   publicDocumentHit
@@ -38,15 +39,16 @@ export async function POST(request: Request, context: RouteContext) {
     return authorization.response;
   }
 
-  const contentLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > maxDocumentRequestBytes) {
-    return Response.json({ error: "Document upload is too large" }, { status: 413 });
-  }
-
   let formData: FormData;
   try {
-    formData = await request.formData();
-  } catch {
+    formData = await boundedFormData(request);
+  } catch (error) {
+    if (error instanceof DocumentUploadTooLargeError) {
+      return Response.json(
+        { error: "Document upload is too large" },
+        { status: 413 }
+      );
+    }
     return Response.json(
       { error: "Invalid multipart form data" },
       { status: 400 }

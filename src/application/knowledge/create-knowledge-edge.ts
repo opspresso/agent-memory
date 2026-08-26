@@ -6,11 +6,15 @@ import {
 import {
   createKnowledgeEdge,
   type KnowledgeEdge,
+  type KnowledgeNode,
   type KnowledgeSource
 } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
 
-import type { AuthorizeKnowledgeSource } from "./authorize-knowledge-source";
+import {
+  KnowledgeSourceNotFoundError,
+  type AuthorizeKnowledgeSource
+} from "./authorize-knowledge-source";
 import { KnowledgeGraphAccessDeniedError } from "./create-knowledge-node";
 
 export interface CreateKnowledgeEdgeInput {
@@ -35,6 +39,25 @@ export class KnowledgeNodeNotFoundError extends Error {
     super("knowledge node not found");
     this.name = "KnowledgeNodeNotFoundError";
   }
+}
+
+async function hasReadableSource(
+  authorizeSource: AuthorizeKnowledgeSource,
+  access: OrganizationAccess,
+  node: KnowledgeNode
+): Promise<boolean> {
+  for (const source of node.sources) {
+    try {
+      await authorizeSource(access, source, node.scope);
+      return true;
+    } catch (error) {
+      if (error instanceof KnowledgeSourceNotFoundError) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  return false;
 }
 
 export function buildCreateKnowledgeEdge(
@@ -71,6 +94,21 @@ export function buildCreateKnowledgeEdge(
       !canAccessScopedResource(input.access, "read", sourceNode.scope) ||
       !canAccessScopedResource(input.access, "read", targetNode.scope)
     ) {
+      throw new KnowledgeNodeNotFoundError();
+    }
+    const [canReadSourceNode, canReadTargetNode] = await Promise.all([
+      hasReadableSource(
+        dependencies.authorizeSource,
+        input.access,
+        sourceNode
+      ),
+      hasReadableSource(
+        dependencies.authorizeSource,
+        input.access,
+        targetNode
+      )
+    ]);
+    if (!canReadSourceNode || !canReadTargetNode) {
       throw new KnowledgeNodeNotFoundError();
     }
 

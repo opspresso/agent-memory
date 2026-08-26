@@ -28,9 +28,11 @@ function repository(overrides: Partial<DocumentRepository> = {}): DocumentReposi
     save: vi.fn(),
     findById: vi.fn(),
     findChunkById: vi.fn(),
+    listChunksByDocument: vi.fn(),
     claimForProcessing: vi.fn(),
     completeProcessing: vi.fn(),
     failProcessing: vi.fn(),
+    markEnqueueFailure: vi.fn(),
     search: vi.fn(),
     ...overrides
   };
@@ -111,6 +113,38 @@ describe("document processing", () => {
     expect(save).toHaveBeenCalledBefore(queue.enqueue as ReturnType<typeof vi.fn>);
   });
 
+  it("returns a retryable document identity when enqueue fails", async () => {
+    const markEnqueueFailure = vi.fn<
+      DocumentRepository["markEnqueueFailure"]
+    >();
+    const upload = buildUploadDocument({
+      checksum: () => "a".repeat(64),
+      clock: () => now,
+      generateId: () => "document-1",
+      objectStorage: objectStorage(),
+      queue: {
+        enqueue: vi.fn().mockRejectedValue(new Error("queue unavailable"))
+      },
+      repository: repository({ markEnqueueFailure })
+    });
+
+    await expect(
+      upload({
+        access,
+        scope: { kind: "user", organizationId: "organization-1", userId: "user-1" },
+        title: "Runbook",
+        mimeType: "text/plain",
+        content: new TextEncoder().encode("Rollback safely")
+      })
+    ).resolves.toMatchObject({ id: "document-1", status: "failed" });
+    expect(markEnqueueFailure).toHaveBeenCalledWith(
+      "organization-1",
+      "document-1",
+      "failed to enqueue document ingestion",
+      now
+    );
+  });
+
   it("extracts, chunks, embeds, and completes a claimed document", async () => {
     const document = createDocument({
       id: "document-1",
@@ -135,7 +169,10 @@ describe("document processing", () => {
         get: vi.fn().mockResolvedValue(new TextEncoder().encode("Rollback safely"))
       }),
       repository: repository({
-        claimForProcessing: vi.fn().mockResolvedValue(document),
+        claimForProcessing: vi.fn().mockResolvedValue({
+          document,
+          leaseId: "lease-1"
+        }),
         completeProcessing
       }),
       textExtractor: {
@@ -152,7 +189,7 @@ describe("document processing", () => {
     await process("organization-1", "document-1");
 
     expect(completeProcessing).toHaveBeenCalledWith(
-      document,
+      { document, leaseId: "lease-1" },
       [
         expect.objectContaining({
           id: "chunk-1",
@@ -184,7 +221,10 @@ describe("document processing", () => {
         get: vi.fn().mockResolvedValue(new TextEncoder().encode("content"))
       }),
       repository: repository({
-        claimForProcessing: vi.fn().mockResolvedValue(document),
+        claimForProcessing: vi.fn().mockResolvedValue({
+          document,
+          leaseId: "lease-1"
+        }),
         failProcessing
       }),
       textExtractor: {
@@ -196,9 +236,8 @@ describe("document processing", () => {
       "extractor failed"
     );
     expect(failProcessing).toHaveBeenCalledWith(
-      "organization-1",
-      "document-1",
-      "extractor failed",
+      { document, leaseId: "lease-1" },
+      "document processing failed",
       now
     );
   });

@@ -99,16 +99,22 @@ describe("unified context search", () => {
           { node, lexicalScore: 0.8, vectorScore: 0, score: 0.8 }
         ]
       },
-      2
+      3,
+      access
     );
 
     expect(result.hits.map((hit) => hit.sourceType)).toEqual([
       "document",
-      "knowledge"
+      "knowledge",
+      "memory"
     ]);
     expect(result).toMatchObject({
-      total: 2,
+      total: 3,
       totals: { memories: 1, documents: 1, knowledge: 1 }
+    });
+    expect(result.hits[2]).toMatchObject({
+      sourceType: "memory",
+      memory: { capabilities: { write: true, manage: true } }
     });
   });
 });

@@ -22,9 +22,9 @@ export interface ProcessDocumentDependencies {
 }
 
 function safeErrorMessage(error: unknown): string {
-  return error instanceof Error
+  return error instanceof InvalidDocumentError
     ? error.message.slice(0, 2_000)
-    : "unknown document processing error";
+    : "document processing failed";
 }
 
 export function buildProcessDocument(dependencies: ProcessDocumentDependencies) {
@@ -33,14 +33,15 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
     documentId: string
   ): Promise<void> {
     const startedAt = dependencies.clock();
-    const document = await dependencies.repository.claimForProcessing(
+    const claim = await dependencies.repository.claimForProcessing(
       organizationId,
       documentId,
       startedAt
     );
-    if (!document) {
+    if (!claim) {
       return;
     }
+    const { document } = claim;
 
     try {
       const content = await dependencies.objectStorage.get(document.objectKey);
@@ -79,15 +80,14 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
         })
       );
       await dependencies.repository.completeProcessing(
-        document,
+        claim,
         chunks,
         completedAt
       );
     } catch (error) {
       try {
         await dependencies.repository.failProcessing(
-          organizationId,
-          documentId,
+          claim,
           safeErrorMessage(error),
           dependencies.clock()
         );

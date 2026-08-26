@@ -4,7 +4,6 @@ import {
   eq,
   getTableColumns,
   inArray,
-  isNotNull,
   isNull,
   lt,
   lte,
@@ -33,6 +32,7 @@ import {
   memoryAccessGrants,
   memoryVersions
 } from "../schema";
+import { hybridSearchExpressions } from "./hybrid-search";
 
 type MemoryRow = typeof memories.$inferSelect;
 type GrantRow = typeof memoryAccessGrants.$inferSelect;
@@ -251,39 +251,13 @@ async function grantRowsByMemoryIds(
 }
 
 function scoreExpressions(input: MemorySearchInput) {
-  const rawLexicalScore = sql<number>`ts_rank_cd(
-    ${memories.search},
-    websearch_to_tsquery('simple', ${input.query})
-  )`;
-  const lexicalScore = sql<number>`${rawLexicalScore} / (1 + ${rawLexicalScore})`;
-  if (!input.queryEmbedding) {
-    return {
-      lexicalScore,
-      vectorScore: sql<number>`0::double precision`,
-      score: lexicalScore,
-      matches: sql`${memories.search} @@ websearch_to_tsquery('simple', ${input.query})`
-    };
-  }
-
-  const vectorLiteral = `[${input.queryEmbedding.values.join(",")}]`;
-  const vectorScore = sql<number>`CASE
-    WHEN ${memories.embedding} IS NOT NULL
-      AND ${memories.embeddingModel} = ${input.queryEmbedding.model}
-    THEN GREATEST(0, LEAST(1, 1 - ((${memories.embedding} <=> ${vectorLiteral}::vector) / 2)))
-    ELSE 0
-  END`;
-  return {
-    lexicalScore,
-    vectorScore,
-    score: sql<number>`(0.4 * ${lexicalScore}) + (0.6 * ${vectorScore})`,
-    matches: or(
-      sql`${memories.search} @@ websearch_to_tsquery('simple', ${input.query})`,
-      and(
-        isNotNull(memories.embedding),
-        eq(memories.embeddingModel, input.queryEmbedding.model)
-      )
-    )
-  };
+  return hybridSearchExpressions({
+    search: memories.search,
+    embedding: memories.embedding,
+    embeddingModel: memories.embeddingModel,
+    query: input.query,
+    ...(input.queryEmbedding ? { queryEmbedding: input.queryEmbedding } : {})
+  });
 }
 
 export function createMemoryRepository(

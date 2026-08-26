@@ -88,7 +88,7 @@ export function buildUploadDocument(dependencies: UploadDocumentDependencies) {
       );
     } catch (error) {
       try {
-        await dependencies.repository.failProcessing(
+        await dependencies.repository.markEnqueueFailure(
           input.access.organizationId,
           document.id,
           "failed to enqueue document ingestion",
@@ -100,7 +100,12 @@ export function buildUploadDocument(dependencies: UploadDocumentDependencies) {
           "document enqueue and failure status update both failed"
         );
       }
-      throw error;
+      return Object.freeze({
+        ...document,
+        status: "failed" as const,
+        errorMessage: "document ingestion could not be queued",
+        updatedAt: new Date(now)
+      });
     }
 
     return document;

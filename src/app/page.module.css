@@ -63,6 +63,48 @@
   padding-top: clamp(3rem, 7vw, 6rem);
 }
 
+.resultCard {
+  --result-accent: var(--mantine-color-indigo-5);
+  position: relative;
+  overflow: hidden;
+  border-left: 3px solid var(--result-accent);
+  background: light-dark(rgba(255, 255, 255, 0.82), rgba(28, 29, 32, 0.86));
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.resultCard[data-source="document"] {
+  --result-accent: var(--mantine-color-teal-5);
+}
+
+.resultCard[data-source="knowledge"] {
+  --result-accent: var(--mantine-color-violet-5);
+}
+
+.resultCard:hover {
+  transform: translateY(-2px);
+}
+
+.evidenceRail {
+  display: grid;
+  gap: 0.4rem;
+  padding-top: var(--mantine-spacing-xs);
+  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+}
+
+.relevanceTrack {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+}
+
+.relevanceTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--result-accent);
+}
+
 @media (max-width: 62em) {
   .hero {
     grid-template-columns: 1fr;
@@ -81,5 +123,11 @@
 
   .title {
     font-size: 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resultCard {
+    transition: none;
   }
 }

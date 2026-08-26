@@ -11,19 +11,20 @@ Agent Memory는 독립적으로 사용할 수 있다. 필요하면 형제 프로
 - RAG 문서를 S3 호환 스토리지에 저장하고 비동기로 chunk와 선택형 embedding을 생성한다.
 - PostgreSQL Full-Text Search와 pgvector로 memory, 문서 chunk, knowledge node를 검색한다.
 - memory 또는 문서 chunk를 출처로 갖는 Knowledge Graph를 제공한다.
+- 선택형 AI enrichment가 문서 chunk에서 graph 후보를 만들며, 조직 관리자의 검토 후에만 공유 Knowledge Graph로 승격한다.
 - 접근 가능한 memory, RAG 문서, Knowledge Graph 결과를 하나의 Context로 검색한다.
 - Streamable HTTP MCP로 Agent 검색과 memory 생성을 제공한다.
 - Better Auth session·Bearer 인증과 선택형 OIDC·Google·password provider를 지원한다.
 - 허용 email domain과 조직 bootstrap admin을 설치 단위로 제한한다.
 - Pino 구조화 로그와 선택형 OpenTelemetry·Langfuse 추적을 제공한다.
 
-운영 콘솔에서는 로그인·가입, 첫 조직 생성, 조직 멤버·팀 관리, 통합 검색, 개인 문서 수집, MCP 연결 정보를 제공한다.
+운영 콘솔에서는 로그인·가입, 첫 조직 생성, 조직 멤버·팀 관리, 통합 검색, Memory revision·archive·version 이력 관리, 개인 문서 수집, Knowledge Graph 관계 지도와 AI 후보 검토, MCP 연결 정보를 제공한다.
 
 ## Stack
 
 - Node.js 24, pnpm 11, Next.js 16 App Router, React 19, TypeScript strict, Mantine 9
 - Better Auth, Drizzle ORM, PostgreSQL 18, pgvector, PostgreSQL Full-Text Search, pg-boss
-- OpenAI-compatible embedding API, MCP TypeScript SDK, S3·MinIO, OpenTelemetry, Pino, Langfuse
+- OpenAI-compatible embedding·structured extraction API, MCP TypeScript SDK, S3·MinIO, OpenTelemetry, Pino, Langfuse
 - Vitest, Testcontainers, Playwright, dependency-cruiser, ESLint, Docker Compose
 
 ## 빠른 시작

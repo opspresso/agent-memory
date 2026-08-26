@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { createDocument } from "@/domain/document/document";
-import { parseMetadata, publicDocument } from "@/lib/document-http";
+import {
+  boundedFormData,
+  DocumentUploadTooLargeError,
+  parseMetadata,
+  publicDocument
+} from "@/lib/document-http";
 import { documentUploadFieldsSchema } from "@/lib/document-schemas";
 
 describe("document HTTP boundary", () => {
@@ -38,6 +43,33 @@ describe("document HTTP boundary", () => {
     });
     expect(parseMetadata("[]")).toEqual({ valid: false });
     expect(parseMetadata("invalid")).toEqual({ valid: false });
+  });
+
+  it("bounds the actual multipart stream without trusting Content-Length", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(6));
+        controller.enqueue(new Uint8Array(6));
+      },
+      cancel() {
+        cancelled = true;
+      }
+    });
+    const request = new Request("http://localhost/documents", {
+      method: "POST",
+      headers: {
+        "Content-Length": "1",
+        "Content-Type": "multipart/form-data; boundary=test"
+      },
+      body,
+      duplex: "half"
+    } as RequestInit & { duplex: "half" });
+
+    await expect(boundedFormData(request, 10)).rejects.toBeInstanceOf(
+      DocumentUploadTooLargeError
+    );
+    expect(cancelled).toBe(true);
   });
 
   it("omits the object key and error from non-failed public documents", () => {

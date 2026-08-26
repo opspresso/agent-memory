@@ -38,6 +38,10 @@ export async function GET(request: Request, context: RouteContext) {
     parsedQuery.data.limit
   );
   return Response.json(
-    publicContextSearchResult(result, parsedQuery.data.limit)
+    publicContextSearchResult(
+      result,
+      parsedQuery.data.limit,
+      authorization.access
+    )
   );
 }

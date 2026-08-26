@@ -42,7 +42,7 @@ export function publicKnowledgeNode(node: KnowledgeNode) {
     canonicalName: node.canonicalName,
     ...(node.summary ? { summary: node.summary } : {}),
     properties: node.properties,
-    source: node.source,
+    sources: node.sources,
     createdAt: node.createdAt,
     updatedAt: node.updatedAt,
     ...(node.embedding ? { embeddingModel: node.embedding.model } : {})
@@ -57,7 +57,7 @@ export function publicKnowledgeEdge(edge: KnowledgeEdge) {
     targetNodeId: edge.targetNodeId,
     predicate: edge.predicate,
     properties: edge.properties,
-    source: edge.source,
+    sources: edge.sources,
     createdAt: edge.createdAt
   };
 }
