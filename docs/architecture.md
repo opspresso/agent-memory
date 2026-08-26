@@ -1,6 +1,6 @@
 # Architecture
 
-Agent Memory는 여러 Agent가 공유하는 장기 memory와 검색 Context를 조직 경계 안에서 제공한다. `../agent-studio`가 Agent 실행과 운영을 담당하고, 이 프로젝트는 memory, RAG 문서, Knowledge Graph, 통합 검색을 담당한다.
+Agent Memory는 여러 Agent가 공유하는 장기 memory와 검색 Context를 조직 경계 안에서 제공하는 독립 플랫폼이다. 필요하면 `../agent-studio`를 비롯한 Agent 실행 환경과 연동할 수 있다.
 
 ## 계층과 의존성
 

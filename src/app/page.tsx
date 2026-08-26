@@ -139,8 +139,9 @@ export default async function Home() {
                   <br />조직은 통제합니다.
                 </Title>
                 <Text className={classes.lead} c="dimmed" size="xl">
-                  Agent Studio와 연결되는 장기 기억, RAG, Knowledge Graph를
-                  하나의 권한 모델과 MCP endpoint로 운영합니다.
+                  AI Agent의 장기 기억, RAG, Knowledge Graph를 하나의 권한
+                  모델과 MCP endpoint로 독립 운영합니다. 필요하면 Agent
+                  Studio와 연동할 수 있습니다.
                 </Text>
               </Stack>
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
