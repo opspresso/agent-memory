@@ -43,12 +43,10 @@ test("switches to Korean and keeps the preference across pages", async ({
 test("allows changing the color scheme", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("button", { name: "Toggle theme" }).click();
+  await page.getByRole("button", { name: "Theme: System" }).click();
+  await page.getByRole("menuitem", { name: "Dark" }).click();
 
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-mantine-color-scheme",
-    /light|dark/
-  );
+  await expect(page.locator("html")).toHaveAttribute("data-mantine-color-scheme", "dark");
 });
 
 test("shows the local self-signup form when enabled", async ({ page }) => {

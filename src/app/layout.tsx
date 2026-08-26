@@ -10,6 +10,7 @@ import {
   mantineHtmlProps
 } from "@mantine/core";
 import type { Metadata } from "next";
+import { Chakra_Petch, Figtree, JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 
 import packageJson from "../../package.json";
@@ -17,6 +18,25 @@ import packageJson from "../../package.json";
 import { I18nProvider } from "./_i18n/provider";
 import { getT, resolveLocale } from "./_i18n/server";
 import { theme } from "./theme";
+
+import "./globals.css";
+
+const sans = Figtree({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap"
+});
+const display = Chakra_Petch({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-display",
+  display: "swap"
+});
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap"
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -27,7 +47,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const locale = await resolveLocale();
 
   return (
-    <html lang={locale} {...mantineHtmlProps}>
+    <html
+      className={`${sans.variable} ${display.variable} ${mono.variable}`}
+      lang={locale}
+      {...mantineHtmlProps}
+    >
       <head>
         <ColorSchemeScript defaultColorScheme="auto" />
       </head>

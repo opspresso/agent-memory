@@ -179,7 +179,7 @@ export function KnowledgeCandidateReview({
     <Stack gap="lg">
       <Group justify="space-between">
         <Stack gap={2}>
-          <Text c="indigo" fw={750} size="xs" tt="uppercase">
+          <Text c="brand" fw={750} size="xs" tt="uppercase">
             {t("candidate.eyebrow")}
           </Text>
           <Title order={2}>{t("candidate.title")}</Title>

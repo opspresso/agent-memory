@@ -115,7 +115,7 @@ export function LoginPanel({
     <Paper aria-labelledby="login-title" p="xl" radius="lg" shadow="xl" withBorder>
       <Stack gap="lg">
         <Stack gap={4}>
-          <Text c="indigo" fw={700} size="sm">
+          <Text c="brand" fw={700} size="sm">
             {t("login.eyebrow")}
           </Text>
           <Title id="login-title" order={2}>

@@ -1,7 +1,10 @@
 export const en = {
   "locale.label": "Language",
   "locale.change": "Change language",
-  "theme.toggle": "Toggle theme",
+  "theme.current": "Theme: {name}",
+  "theme.system": "System",
+  "theme.light": "Light",
+  "theme.dark": "Dark",
   "meta.description":
     "A context platform connecting memory, RAG, and knowledge graphs for AI agents",
   "nav.guide": "Guide",

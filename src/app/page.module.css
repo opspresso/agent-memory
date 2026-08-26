@@ -1,9 +1,6 @@
 .page {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 8% 12%, light-dark(rgba(91, 99, 255, 0.12), rgba(91, 99, 255, 0.16)), transparent 34%),
-    radial-gradient(circle at 88% 8%, light-dark(rgba(18, 184, 134, 0.1), rgba(18, 184, 134, 0.12)), transparent 28%),
-    light-dark(#f8f9fc, #101113);
+  background: transparent;
 }
 
 .shell {
@@ -51,9 +48,10 @@
 
 .capability {
   padding: var(--mantine-spacing-md);
-  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border: 1px solid var(--memory-border);
   border-radius: var(--mantine-radius-lg);
-  background: light-dark(rgba(255, 255, 255, 0.62), rgba(28, 29, 32, 0.62));
+  background: color-mix(in oklab, var(--memory-surface) 78%, transparent);
+  box-shadow: var(--memory-shadow);
   backdrop-filter: blur(12px);
 }
 
@@ -64,11 +62,12 @@
 }
 
 .resultCard {
-  --result-accent: var(--mantine-color-indigo-5);
+  --result-accent: var(--mantine-color-brand-5);
   position: relative;
   overflow: hidden;
   border-left: 3px solid var(--result-accent);
-  background: light-dark(rgba(255, 255, 255, 0.82), rgba(28, 29, 32, 0.86));
+  background: var(--memory-surface);
+  box-shadow: var(--memory-shadow);
   transition: border-color 160ms ease, transform 160ms ease;
 }
 

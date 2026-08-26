@@ -450,14 +450,14 @@ export function MemoryLifecycle({
             {loaded.memory.capabilities.manage ? (
               <section>
                 <Stack gap="xs" mb="lg">
-                  <Text c="indigo" fw={750} size="xs" tt="uppercase">
+                  <Text c="brand" fw={750} size="xs" tt="uppercase">
                     {t("memory.versionSpine")}
                   </Text>
                   <Title order={2}>{t("memory.historyTitle")}</Title>
                 </Stack>
                 <div className={classes.timeline}>
                   <article className={classes.version} data-current>
-                    <Badge color="indigo">v{loaded.memory.version} · {t("memory.current")}</Badge>
+                    <Badge color="brand">v{loaded.memory.version} · {t("memory.current")}</Badge>
                     <Text fw={700}>{loaded.memory.title}</Text>
                     <Text c="dimmed" lineClamp={3} size="sm">
                       {loaded.memory.content}

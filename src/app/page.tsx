@@ -198,7 +198,7 @@ export default async function Home() {
                     key={capability.title}
                     wrap="nowrap"
                   >
-                    <ThemeIcon color="indigo" variant="light">
+                    <ThemeIcon color="brand" variant="light">
                       <capability.icon size={18} stroke={1.7} />
                     </ThemeIcon>
                     <Stack gap={2}>

@@ -389,7 +389,7 @@ export function Workspace({
           <Title order={1}>{t("workspace.title")}</Title>
         </Stack>
         <Group>
-          <Avatar color="indigo" name={user.name} radius="xl" />
+          <Avatar color="brand" name={user.name} radius="xl" />
           <Stack gap={0} visibleFrom="sm">
             <Text fw={600} size="sm">
               {user.name}
@@ -623,7 +623,7 @@ export function Workspace({
                 <Stack gap="sm">
                   <Group justify="space-between">
                     <Stack gap={2}>
-                      <Text c="indigo" fw={750} size="xs" tt="uppercase">
+                      <Text c="brand" fw={750} size="xs" tt="uppercase">
                         {t("workspace.mapEyebrow")}
                       </Text>
                       <Title order={2}>{t("workspace.mapTitle")}</Title>
@@ -742,7 +742,7 @@ export function Workspace({
                   {({ copied, copy }) => (
                     <Button
                       aria-label={t("workspace.copyEndpoint")}
-                      color={copied ? "teal" : "indigo"}
+                      color={copied ? "teal" : "brand"}
                       disabled={!organizationId || !origin}
                       leftSection={
                         copied ? <IconCheck size={16} /> : <IconCopy size={16} />

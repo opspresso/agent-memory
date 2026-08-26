@@ -3,7 +3,10 @@ import type { Messages } from "./en";
 export const ko: Messages = {
   "locale.label": "언어",
   "locale.change": "언어 변경",
-  "theme.toggle": "테마 전환",
+  "theme.current": "테마: {name}",
+  "theme.system": "시스템",
+  "theme.light": "라이트",
+  "theme.dark": "다크",
   "meta.description":
     "AI Agent의 Memory, RAG, Knowledge Graph를 연결하는 Context 플랫폼",
   "nav.guide": "가이드",

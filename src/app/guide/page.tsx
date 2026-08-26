@@ -53,7 +53,7 @@ const scopes = [
     name: "Organization",
     audience: "guide.scope.organizationAudience",
     manager: "admin · owner",
-    color: "indigo"
+    color: "brand"
   },
   {
     name: "Team",
@@ -109,7 +109,7 @@ export default async function GuidePage() {
         <main>
           <section className={classes.hero}>
             <Stack className={classes.heroCopy} gap="lg">
-              <Badge className={classes.eyebrow} color="indigo" variant="light">
+              <Badge className={classes.eyebrow} color="brand" variant="light">
                 {t("guide.eyebrow")}
               </Badge>
               <Title className={classes.title} order={1}>
@@ -167,7 +167,7 @@ export default async function GuidePage() {
                   ))}
                 </SimpleGrid>
                 <Paper className={classes.note} p="lg" radius="lg">
-                  <ThemeIcon color="indigo" radius="xl" variant="light">
+                  <ThemeIcon color="brand" radius="xl" variant="light">
                     <IconShieldCheck size={19} />
                   </ThemeIcon>
                   <Text size="sm">{t("guide.start.note")}</Text>
