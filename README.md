@@ -62,8 +62,8 @@ docker compose --profile objects up -d minio minio-init
 
 - Memory·문서·Knowledge Graph 통합 검색과 검색 근거 확인
 - Memory revision 생성, version 이력 확인, archive
-- 개인 범위 문서 업로드와 실패한 처리 재시도
-- 방향성과 predicate를 표시하는 Knowledge Graph 관계 지도 탐색
+- 개인·팀·조직 범위 문서 업로드와 실패한 처리 재시도
+- 검색·종류 필터·관계 집중을 제공하는 Knowledge Graph 관계 지도 탐색
 - AI graph 후보의 source·entity·relationship 검토와 승인·거절
 - 조직 멤버·팀 역할 관리와 MCP 연결 정보 확인
 

@@ -188,4 +188,11 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await expect(
     page.getByRole("button", { name: "DATABASE Orders Database" })
   ).toBeVisible();
+  await expect(page.getByLabel("Graph node 검색")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Graph 확대" })).toBeVisible();
+  await page.getByRole("button", { name: "DATABASE Orders Database" }).click();
+  await expect(page.getByText("← depends_on")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "이 node 중심으로 탐색" })
+  ).toBeVisible();
 });

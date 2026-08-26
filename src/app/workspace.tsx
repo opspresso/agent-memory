@@ -316,10 +316,6 @@ export function Workspace({
   }
 
   function selectKnowledgeNode(nodeId: string) {
-    if (nodeId === graphSelectedNodeId) {
-      void exploreKnowledgeNode(nodeId);
-      return;
-    }
     setGraphSelectedNodeId(nodeId);
   }
 
@@ -638,6 +634,7 @@ export function Workspace({
                     centerNodeId={graphCenterNodeId}
                     edges={graphEdges}
                     nodes={graphNodes}
+                    onExploreNode={(nodeId) => void exploreKnowledgeNode(nodeId)}
                     onSelectNode={selectKnowledgeNode}
                     selectedNodeId={graphSelectedNodeId ?? graphCenterNodeId}
                   />

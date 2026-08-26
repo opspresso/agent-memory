@@ -87,14 +87,14 @@ upload → pending → processing → ready
 
 관계 지도는 다음 요소를 사용한다.
 
-- 강조된 중앙 node
-- kind와 canonical name을 표시하는 연결 node
+- 종류별 색상과 연결 수에 따른 크기로 구분한 node
 - 관계 방향을 표시하는 화살표
 - edge의 predicate label
-- node와 edge 개수
-- 선택 node의 kind, 이름, summary를 보여주는 inspector
+- node 이름·kind 검색과 종류별 표시 필터
+- 확대·축소와 화면 맞춤 제어
+- 선택 node의 kind, 이름, summary, 연결 관계를 보여주는 inspector
 
-Node를 한 번 선택하면 inspector가 바뀐다. 이미 선택한 node를 다시 선택하면 해당 node를 중심으로 neighborhood를 다시 조회한다. 키보드에서는 node에 focus한 뒤 `Enter` 또는 `Space`로 같은 동작을 실행할 수 있다.
+Node를 선택하면 해당 node와 직접 연결된 관계가 강조되고 inspector가 바뀐다. inspector의 `이 node 중심으로 탐색`을 선택하면 해당 node를 중심으로 neighborhood를 다시 조회한다. 키보드에서는 node에 focus한 뒤 `Enter` 또는 `Space`로 선택할 수 있다.
 
 Neighborhood가 바뀌면서 node 수가 늘거나 줄 수 있다. 서버는 새 중심에서 접근 가능한 source를 다시 검사하고 제한된 depth·limit 안에서 관계를 반환한다.
 

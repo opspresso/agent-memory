@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  knowledgeNodeDegrees,
   layoutKnowledgeGraph,
   type KnowledgeGraphNodeView
 } from "@/app/knowledge-graph";
@@ -25,5 +26,14 @@ describe("knowledge graph layout", () => {
     expect(layoutKnowledgeGraph(nodes, "center")).toEqual(
       layoutKnowledgeGraph(nodes, "center")
     );
+  });
+
+  it("counts only edges whose endpoints are present", () => {
+    expect(
+      knowledgeNodeDegrees(nodes, [
+        { id: "edge-1", sourceNodeId: "center", targetNodeId: "document", predicate: "uses" },
+        { id: "edge-2", sourceNodeId: "center", targetNodeId: "missing", predicate: "uses" }
+      ])
+    ).toEqual(new Map([["center", 1], ["document", 1], ["agent", 0]]));
   });
 });
