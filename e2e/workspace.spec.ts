@@ -6,14 +6,16 @@ test("explains the product workflow in the public guide", async ({ page }) => {
   await page.goto("/guide");
 
   await expect(
-    page.getByRole("heading", { name: "기억을 넣는 법보다, 다시 믿고 쓰는 법." })
+    page.getByRole("heading", {
+      name: "More than storing memory, make it trustworthy and reusable."
+    })
   ).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Guide 목차" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Guide contents" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "관계를 따라가되, 근거에서 멀어지지 않습니다." })
+    page.getByRole("heading", { name: "Follow relationships without losing the evidence." })
   ).toBeVisible();
   await expect(page.getByText("knowledge_neighborhood", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Console 열기" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Open Console" })).toHaveAttribute(
     "href",
     "/"
   );
@@ -47,6 +49,14 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   test.skip(!authenticatedE2e, "requires a disposable migrated PostgreSQL database");
   test.setTimeout(60_000);
 
+  await page.context().addCookies([
+    {
+      name: "agent-memory-locale",
+      value: "ko",
+      domain: "127.0.0.1",
+      path: "/"
+    }
+  ]);
   await page.goto("/");
   await page.getByText("가입", { exact: true }).click();
   await page.getByLabel("이름").fill("E2E Operator");
@@ -132,14 +142,14 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByRole("button", { name: "Lifecycle" }).click();
 
   const lifecycle = page.getByRole("dialog", { name: "Memory lifecycle" });
-  await expect(lifecycle.getByText("Version spine")).toBeVisible();
+  await expect(lifecycle.getByText("Version 이력")).toBeVisible();
   await lifecycle
     .getByLabel("내용")
     .fill("Checkout rollback requires three approvers.");
   await lifecycle.getByLabel("변경 사유").fill("E2E revision verification");
   await lifecycle.getByRole("button", { name: "Revision 저장" }).click();
   await expect(lifecycle.getByText("새 revision을 저장했습니다.")).toBeVisible();
-  await expect(lifecycle.getByText("v2 · current")).toBeVisible();
+  await expect(lifecycle.getByText("v2 · 현재")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(lifecycle).not.toBeVisible();
 
@@ -189,7 +199,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     page.getByRole("button", { name: "DATABASE Orders Database" })
   ).toBeVisible();
   await expect(page.getByLabel("Graph node 검색")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Graph 확대" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "확대" })).toBeVisible();
   await page.getByRole("button", { name: "DATABASE Orders Database" }).click();
   await expect(page.getByText("← depends_on")).toBeVisible();
   await expect(
