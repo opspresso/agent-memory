@@ -105,6 +105,7 @@ describe("PostgreSQL schema", () => {
 
   it("creates a Better Auth session backed by UUID tables", async () => {
     const testAuth = createAuth({
+      allowedEmailDomains: ["example.com"],
       baseURL: "http://localhost:3100",
       database: db,
       secret: "agent-memory-integration-secret-00000000",
@@ -167,6 +168,23 @@ describe("PostgreSQL schema", () => {
       [email]
     );
     expect(persisted.rows[0]?.sessionCount).toBe("1");
+
+    const blockedSignUpResponse = await testAuth.handler(
+      new Request("http://localhost:3100/api/auth/sign-up/email", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://localhost:3100"
+        },
+        body: JSON.stringify({
+          email: "blocked-auth-user@outside.test",
+          name: "Blocked Auth User",
+          password: "correct-horse-battery-staple"
+        })
+      })
+    );
+
+    expect(blockedSignUpResponse.status).toBe(403);
   });
 
   it("loads organization and team membership through the repository", async () => {

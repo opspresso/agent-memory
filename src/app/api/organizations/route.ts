@@ -24,6 +24,12 @@ export async function POST(request: Request) {
   if (!authentication.authenticated) {
     return authentication.response;
   }
+  if (!authentication.user.isAdmin) {
+    return Response.json(
+      { error: "Only configured admins can create organizations" },
+      { status: 403 }
+    );
+  }
   const body = await readOrganizationJsonBody(request);
   if (!body.valid) {
     return body.response;

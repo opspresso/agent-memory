@@ -221,10 +221,11 @@ export function Workspace({
       {organizations.length === 0 ? (
         <Stack gap="lg">
           <Alert color="yellow" icon={<IconAlertCircle size={18} />}>
-            접근 가능한 조직이 없습니다. 첫 조직을 만들거나 관리자에게
-            멤버십을 요청하세요.
+            접근 가능한 조직이 없습니다. {user.isAdmin
+              ? "첫 조직을 만들어 시작하세요."
+              : "관리자에게 멤버십을 요청하세요."}
           </Alert>
-          <OrganizationBootstrap />
+          {user.isAdmin ? <OrganizationBootstrap /> : null}
         </Stack>
       ) : (
         <Paper p="md" radius="lg" withBorder>

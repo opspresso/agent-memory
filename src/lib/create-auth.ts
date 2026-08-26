@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { bearer, genericOAuth } from "better-auth/plugins";
 
@@ -10,6 +11,8 @@ import {
   authVerifications,
   users
 } from "@/infrastructure/database/schema";
+
+import { isAllowedEmailDomain } from "./access-control";
 
 interface OAuthClient {
   readonly clientId: string;
@@ -22,6 +25,7 @@ interface OidcClient extends OAuthClient {
 }
 
 export interface CreateAuthOptions {
+  readonly allowedEmailDomains?: readonly string[];
   readonly baseURL: string;
   readonly database: AgentMemoryDatabase;
   readonly secret: string;
@@ -35,6 +39,16 @@ export interface CreateAuthOptions {
 
 export function createAuth(options: CreateAuthOptions) {
   const oidc = options.oidc;
+  const allowedEmailDomains = options.allowedEmailDomains ?? [];
+
+  function assertAllowedEmailDomain(email: string): void {
+    if (!isAllowedEmailDomain(email, allowedEmailDomains)) {
+      throw new APIError("FORBIDDEN", {
+        code: "EMAIL_DOMAIN_NOT_ALLOWED",
+        message: "Email domain is not allowed"
+      });
+    }
+  }
 
   return betterAuth({
     baseURL: options.baseURL,
@@ -53,6 +67,29 @@ export function createAuth(options: CreateAuthOptions) {
     advanced: {
       database: {
         generateId: "uuid"
+      }
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => {
+            assertAllowedEmailDomain(user.email);
+            return { data: user };
+          }
+        }
+      },
+      session: {
+        create: {
+          before: async (session, context) => {
+            const user = await context?.context.internalAdapter.findUserById(
+              session.userId
+            );
+            if (user) {
+              assertAllowedEmailDomain(user.email);
+            }
+            return { data: session };
+          }
+        }
       }
     },
     ...(options.emailAndPassword

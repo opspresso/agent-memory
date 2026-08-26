@@ -1,10 +1,12 @@
+import { isAdminEmail } from "./access-control";
 import { auth } from "./auth";
 import { hasTrustedMutationOrigin } from "./request-security";
 
 export interface SessionUser {
-  readonly id: string;
   readonly email: string;
+  readonly id: string;
   readonly image: string | null;
+  readonly isAdmin: boolean;
   readonly name: string;
 }
 
@@ -20,9 +22,10 @@ export async function getSessionUser(
     return null;
   }
   return {
-    id: session.user.id,
     email: session.user.email,
+    id: session.user.id,
     image: session.user.image ?? null,
+    isAdmin: isAdminEmail(session.user.email),
     name: session.user.name
   };
 }

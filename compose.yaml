@@ -6,10 +6,14 @@ services:
     environment:
       AUTH_PASSWORD: "true"
       AUTH_PASSWORD_SIGNUP: "true"
+      ADMIN_EMAILS: "${ADMIN_EMAILS:-me@nalbam.com}"
+      ALLOWED_EMAIL_DOMAINS: "${ALLOWED_EMAIL_DOMAINS:-nalbam.com}"
       BETTER_AUTH_SECRET: agent-memory-local-auth-secret-change-me
       BETTER_AUTH_URL: http://localhost:3100
       DATABASE_URL: postgresql://agent_memory:agent_memory@postgres:5432/agent_memory
       DOCUMENT_WORKER_ENABLED: "true"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
       MIGRATE_ON_START: "true"
       S3_ACCESS_KEY_ID: agent_memory
       S3_BUCKET: agent-memory
