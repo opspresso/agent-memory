@@ -23,7 +23,7 @@ Agent Memory는 독립적으로 사용할 수 있다. 필요하면 형제 프로
 
 - Node.js 24, pnpm 11, Next.js 16 App Router, React 19, TypeScript strict, Mantine 9
 - Better Auth, Drizzle ORM, PostgreSQL 18, pgvector, PostgreSQL Full-Text Search, pg-boss
-- Vercel AI SDK, MCP TypeScript SDK, S3·MinIO, OpenTelemetry, Pino, Langfuse
+- OpenAI-compatible embedding API, MCP TypeScript SDK, S3·MinIO, OpenTelemetry, Pino, Langfuse
 - Vitest, Testcontainers, Playwright, dependency-cruiser, ESLint, Docker Compose
 
 ## 빠른 시작

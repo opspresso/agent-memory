@@ -56,7 +56,8 @@ Agent Studio의 PostgreSQL 17과 포트·volume을 공유하지 않는다. `dock
 | Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google provider. 두 값을 함께 설정 |
 | OIDC | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Generic OIDC provider. 세 값을 함께 설정 |
 | OIDC | `OIDC_SCOPES` | 공백으로 구분한 scope. 기본값 `openid email profile` |
-| Embedding | `AI_GATEWAY_API_KEY` | Vercel AI Gateway 인증 |
+| Embedding | `EMBEDDING_BASE_URL` | OpenAI-compatible API base URL. OpenRouter는 `https://openrouter.ai/api/v1` 사용 |
+| Embedding | `EMBEDDING_API_KEY` | Embedding provider의 Bearer credential. 인증 없는 local endpoint에서는 생략 가능 |
 | Embedding | `EMBEDDING_MODEL` | 설정 시 memory와 document semantic search 활성화 |
 | Object storage | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | S3 호환 endpoint와 bucket |
 | Object storage | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3 credential |
@@ -94,6 +95,16 @@ pnpm db:studio
 - 시작 전에 bucket이 존재하는지 확인하라. Compose에서는 `minio-init`이 `agent-memory` bucket을 만든다.
 - 실패한 문서는 API나 console에서 retry할 수 있다. 반복 실패는 document의 `processingError`와 application log를 확인하라.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
+
+OpenRouter를 사용하려면 `.env.local`에 다음 값을 설정하라.
+
+```dotenv
+EMBEDDING_BASE_URL=https://openrouter.ai/api/v1
+EMBEDDING_API_KEY=replace-with-openrouter-key
+EMBEDDING_MODEL=openai/text-embedding-3-small
+```
+
+OpenAI-compatible local endpoint를 사용하려면 `EMBEDDING_BASE_URL`을 해당 server의 `/v1` base URL로 바꾸고 provider가 요구하는 model ID를 지정하라. 인증이 필요하지 않으면 `EMBEDDING_API_KEY`를 비워 둬도 된다.
 
 ## 상태 확인과 관측성
 
