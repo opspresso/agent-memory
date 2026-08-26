@@ -14,19 +14,19 @@ pnpm install
 cp .env.example .env.local
 docker compose up -d postgres
 pnpm db:migrate
-AUTH_PASSWORD=true AUTH_PASSWORD_SIGNUP=true pnpm dev
+pnpm dev
 ```
 
-Application은 `http://localhost:3100`, PostgreSQL은 `localhost:5433`에서 열린다. 명령의 두 인증 변수는 로컬 가입과 password 로그인을 켠다. 기업 환경에서는 아래 인증 설정으로 대체하라.
+Application은 `http://localhost:3100`, PostgreSQL은 `localhost:5433`에서 열린다. `.env.local`의 Google 또는 OIDC 설정을 사용하며, password 로그인이 필요하면 `AUTH_PASSWORD`와 `AUTH_PASSWORD_SIGNUP`을 `true`로 설정하라.
 
 문서 수집을 개발하려면 MinIO와 bucket 초기화를 실행하고 worker를 켜라.
 
 ```bash
 docker compose --profile objects up -d minio minio-init
-AUTH_PASSWORD=true AUTH_PASSWORD_SIGNUP=true DOCUMENT_WORKER_ENABLED=true pnpm dev
+pnpm dev
 ```
 
-MinIO API는 `localhost:9010`, console은 `localhost:9011`에서 열린다.
+MinIO API는 `localhost:9010`, console은 `localhost:9011`에서 열린다. `.env.example`은 document worker를 기본 활성화하므로 이를 복사한 `.env.local`에서는 별도 실행 변수가 필요하지 않다.
 
 ### 전체 Compose
 

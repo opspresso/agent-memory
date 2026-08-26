@@ -36,10 +36,10 @@ pnpm install
 cp .env.example .env.local
 docker compose up -d postgres
 pnpm db:migrate
-AUTH_PASSWORD=true AUTH_PASSWORD_SIGNUP=true pnpm dev
+pnpm dev
 ```
 
-애플리케이션은 `http://localhost:3100`, PostgreSQL은 `localhost:5433`에서 열린다. 이 설정은 로컬 가입과 password 로그인을 활성화한다. 외부 인증, 문서 worker, MinIO, 전체 Compose 실행 방법은 [운영 가이드](docs/operations.md)를 참고하라.
+애플리케이션은 `http://localhost:3100`, PostgreSQL은 `localhost:5433`에서 열린다. 인증 provider와 접근 정책은 `.env.local`에서 설정한다. 문서 수집용 MinIO와 전체 Compose 실행 방법은 [운영 가이드](docs/operations.md)를 참고하라.
 
 Agent Studio의 PostgreSQL 17과 포트·볼륨을 공유하지 않으므로 두 프로젝트를 동시에 실행할 수 있다. 데이터 볼륨을 지우는 `docker compose down -v`는 필요한 데이터를 확인하지 않고 실행하지 마라.
 
