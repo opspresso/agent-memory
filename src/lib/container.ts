@@ -1,7 +1,7 @@
 import { createDatabase } from "@/infrastructure/database/client";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
-import { createMemoryEmbeddingService } from "@/infrastructure/ai/memory-embedding-service";
+import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
 
 const defaultDatabaseUrl =
   "postgresql://agent_memory:agent_memory@localhost:5433/agent_memory";
@@ -16,6 +16,6 @@ export const organizationAccessRepository =
 export const memoryRepository = createMemoryRepository(database.db);
 
 const embeddingModel = process.env.EMBEDDING_MODEL?.trim();
-export const memoryEmbeddingService = embeddingModel
-  ? createMemoryEmbeddingService(embeddingModel)
+export const textEmbeddingService = embeddingModel
+  ? createTextEmbeddingService(embeddingModel)
   : undefined;

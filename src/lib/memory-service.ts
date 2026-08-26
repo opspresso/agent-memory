@@ -6,7 +6,7 @@ import { buildGetMemory } from "@/application/memory/get-memory";
 import { buildReviseMemory } from "@/application/memory/revise-memory";
 import { buildSearchMemories } from "@/application/memory/search-memories";
 
-import { memoryEmbeddingService, memoryRepository } from "./container";
+import { memoryRepository, textEmbeddingService } from "./container";
 
 const clock = () => new Date();
 
@@ -14,7 +14,7 @@ export const createMemoryRecord = buildCreateMemory({
   clock,
   generateId: randomUUID,
   repository: memoryRepository,
-  ...(memoryEmbeddingService ? { embeddingService: memoryEmbeddingService } : {})
+  ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
 });
 
 export const getMemoryRecord = buildGetMemory(memoryRepository);
@@ -22,7 +22,7 @@ export const getMemoryRecord = buildGetMemory(memoryRepository);
 export const reviseMemoryRecord = buildReviseMemory({
   clock,
   repository: memoryRepository,
-  ...(memoryEmbeddingService ? { embeddingService: memoryEmbeddingService } : {})
+  ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
 });
 
 export const archiveMemoryRecord = buildArchiveMemory({
@@ -33,5 +33,5 @@ export const archiveMemoryRecord = buildArchiveMemory({
 export const searchMemoryRecords = buildSearchMemories({
   clock,
   repository: memoryRepository,
-  ...(memoryEmbeddingService ? { embeddingService: memoryEmbeddingService } : {})
+  ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
 });

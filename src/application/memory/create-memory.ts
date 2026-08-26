@@ -8,7 +8,7 @@ import {
 import type { MemoryRepository } from "@/domain/memory/memory-repository";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
-import type { MemoryEmbeddingService } from "@/domain/memory/memory-embedding-service";
+import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 
 export interface CreateMemoryInput {
   readonly access: OrganizationAccess;
@@ -24,7 +24,7 @@ export interface CreateMemoryInput {
 export interface CreateMemoryDependencies {
   readonly clock: () => Date;
   readonly generateId: () => string;
-  readonly embeddingService?: MemoryEmbeddingService;
+  readonly embeddingService?: TextEmbeddingService;
   readonly repository: MemoryRepository;
 }
 

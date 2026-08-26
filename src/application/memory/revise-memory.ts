@@ -1,6 +1,6 @@
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { canAccessMemory } from "@/domain/memory/memory-access";
-import type { MemoryEmbeddingService } from "@/domain/memory/memory-embedding-service";
+import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 import {
   reviseMemory,
   type Memory,
@@ -26,7 +26,7 @@ export interface ReviseMemoryInput {
 
 export interface ReviseMemoryDependencies {
   readonly clock: () => Date;
-  readonly embeddingService?: MemoryEmbeddingService;
+  readonly embeddingService?: TextEmbeddingService;
   readonly repository: MemoryRepository;
 }
 
