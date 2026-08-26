@@ -201,4 +201,22 @@ describe("document processing", () => {
       now
     );
   });
+
+  it("treats an already processed job as an idempotent success", async () => {
+    const storage = objectStorage();
+    const process = buildProcessDocument({
+      clock: () => now,
+      generateId: () => "chunk-1",
+      objectStorage: storage,
+      repository: repository({
+        claimForProcessing: vi.fn().mockResolvedValue(null)
+      }),
+      textExtractor: { extract: vi.fn() }
+    });
+
+    await expect(
+      process("organization-1", "document-1")
+    ).resolves.toBeUndefined();
+    expect(storage.get).not.toHaveBeenCalled();
+  });
 });

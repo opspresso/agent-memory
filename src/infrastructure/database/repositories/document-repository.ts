@@ -5,6 +5,8 @@ import {
   getTableColumns,
   inArray,
   isNotNull,
+  isNull,
+  lt,
   or,
   sql
 } from "drizzle-orm";
@@ -180,6 +182,7 @@ export function createDocumentRepository(
     },
 
     async claimForProcessing(organizationId, documentId, now) {
+      const staleBefore = new Date(now.getTime() - 20 * 60 * 1_000);
       const [row] = await db
         .update(documents)
         .set({
@@ -193,7 +196,16 @@ export function createDocumentRepository(
           and(
             eq(documents.organizationId, organizationId),
             eq(documents.id, documentId),
-            inArray(documents.status, ["pending", "failed"])
+            or(
+              inArray(documents.status, ["pending", "failed"]),
+              and(
+                eq(documents.status, "processing"),
+                or(
+                  isNull(documents.processingStartedAt),
+                  lt(documents.processingStartedAt, staleBefore)
+                )
+              )
+            )
           )
         )
         .returning();

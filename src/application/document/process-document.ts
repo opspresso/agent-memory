@@ -21,13 +21,6 @@ export interface ProcessDocumentDependencies {
   readonly textExtractor: DocumentTextExtractor;
 }
 
-export class DocumentNotProcessableError extends Error {
-  constructor() {
-    super("document is not pending or failed");
-    this.name = "DocumentNotProcessableError";
-  }
-}
-
 function safeErrorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message.slice(0, 2_000)
@@ -46,7 +39,7 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
       startedAt
     );
     if (!document) {
-      throw new DocumentNotProcessableError();
+      return;
     }
 
     try {
