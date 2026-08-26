@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import { genericOAuth } from "better-auth/plugins";
+import { bearer, genericOAuth } from "better-auth/plugins";
 
 import type { AgentMemoryDatabase } from "@/infrastructure/database/client";
 import {
@@ -67,6 +67,7 @@ export function createAuth(options: CreateAuthOptions) {
       ? { socialProviders: { google: options.google } }
       : {}),
     plugins: [
+      bearer(),
       ...(options.includeNextCookies === false ? [] : [nextCookies()]),
       ...(oidc
         ? [

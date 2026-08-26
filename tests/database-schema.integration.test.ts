@@ -127,6 +127,8 @@ describe("PostgreSQL schema", () => {
       .getSetCookie()
       .map((value) => value.split(";", 1)[0])
       .join("; ");
+    const bearerToken = signUpResponse.headers.get("set-auth-token");
+    expect(bearerToken).toBeTruthy();
     const sessionResponse = await testAuth.handler(
       new Request("http://localhost:3100/api/auth/get-session", {
         headers: { cookie }
@@ -141,6 +143,16 @@ describe("PostgreSQL schema", () => {
     expect(session.user?.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
+
+    const bearerSessionResponse = await testAuth.handler(
+      new Request("http://localhost:3100/api/auth/get-session", {
+        headers: { authorization: `Bearer ${bearerToken}` }
+      })
+    );
+    const bearerSession = (await bearerSessionResponse.json()) as {
+      user?: { email?: string };
+    };
+    expect(bearerSession.user?.email).toBe(email);
 
     const persisted = await pool.query<{ sessionCount: string }>(
       `SELECT count(*) AS "sessionCount"

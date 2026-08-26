@@ -41,4 +41,13 @@ describe("request origin policy", () => {
     expect(hasTrustedMutationOrigin(missingOrigin, baseURL)).toBe(false);
     expect(hasTrustedMutationOrigin(foreignOrigin, baseURL)).toBe(false);
   });
+
+  it("allows bearer-authenticated mutations without an Origin header", () => {
+    const request = new Request(`${baseURL}/api/mcp`, {
+      method: "POST",
+      headers: { authorization: "Bearer session-token" }
+    });
+
+    expect(hasTrustedMutationOrigin(request, baseURL)).toBe(true);
+  });
 });

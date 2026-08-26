@@ -8,6 +8,10 @@ export function hasTrustedMutationOrigin(
     return true;
   }
 
+  if (/^Bearer\s+\S+$/i.test(request.headers.get("authorization") ?? "")) {
+    return true;
+  }
+
   const origin = request.headers.get("origin");
   if (!origin) {
     return false;
