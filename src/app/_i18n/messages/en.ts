@@ -236,7 +236,40 @@ export const en = {
   "candidate.reason": "Review reason",
   "candidate.reasonPlaceholder": "Record the basis for accepting or rejecting this candidate",
   "candidate.reject": "Reject",
-  "candidate.accept": "Accept into Graph"
+  "candidate.accept": "Accept into Graph",
+  "memory.requestFailed": "The Memory request failed.",
+  "memory.etagMissing": "The Memory version header is missing.",
+  "memory.loadFailed": "The Memory could not be loaded.",
+  "memory.conflict": "Someone updated this Memory first. Reload the latest version.",
+  "memory.revisionSaved": "The new revision was saved.",
+  "memory.revisionFailed": "The revision could not be saved.",
+  "memory.archived": "The Memory was archived.",
+  "memory.archiveFailed": "The Memory could not be archived.",
+  "memory.lifecycle": "Memory lifecycle",
+  "memory.stateFailed": "The current state could not be shown.",
+  "memory.reload": "Reload",
+  "memory.source": "source {source}",
+  "memory.currentSnapshot": "Current snapshot",
+  "memory.validFrom": "Valid from",
+  "memory.expires": "Expires",
+  "memory.noExpiration": "No expiration",
+  "memory.newRevision": "New revision",
+  "memory.revisionHint": "Saving checks for conflicts against the current version.",
+  "memory.title": "Title",
+  "memory.content": "Content",
+  "memory.changeReason": "Reason for change",
+  "memory.changeReasonPlaceholder":
+    "Record enough context for the next person to understand the change",
+  "memory.saveRevision": "Save revision",
+  "memory.archiveWarning": "Exclude this Memory from search.",
+  "memory.archiveBody":
+    "Archive records a new version and removes this Memory from current search results.",
+  "memory.cancel": "Cancel",
+  "memory.confirmArchive": "Confirm archive",
+  "memory.versionSpine": "Version history",
+  "memory.historyTitle": "Trace the context of changes over time.",
+  "memory.current": "current",
+  "memory.updated": "updated {date}"
 } as const;
 
 export type MessageKey = keyof typeof en;
