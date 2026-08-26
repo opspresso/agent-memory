@@ -40,6 +40,7 @@ import type { OrganizationMembership } from "@/domain/identity/organization-acce
 import { signOut } from "@/lib/auth-client";
 import type { SessionUser } from "@/lib/session";
 
+import { useT } from "./_i18n/provider";
 import {
   contextResultPresentation,
   relativeRelevance
@@ -103,12 +104,12 @@ function nestedRecord(
     : undefined;
 }
 
-function resultTitle(hit: Record<string, unknown>): string {
+function resultTitle(hit: Record<string, unknown>, fallback: string): string {
   const memory = nestedRecord(hit, "memory");
   const document = nestedRecord(hit, "document");
   const node = nestedRecord(hit, "node");
   return String(
-    memory?.title ?? document?.title ?? node?.canonicalName ?? "검색 결과"
+    memory?.title ?? document?.title ?? node?.canonicalName ?? fallback
   );
 }
 
@@ -127,7 +128,7 @@ function resultKey(hit: Record<string, unknown>): string {
     nestedRecord(hit, "document") ??
     nestedRecord(hit, "node");
   const chunk = nestedRecord(hit, "chunk");
-  return `${String(source?.id ?? resultTitle(hit))}:${String(chunk?.id ?? "root")}`;
+  return `${String(source?.id ?? "result")}:${String(chunk?.id ?? "root")}`;
 }
 
 export function Workspace({
@@ -137,6 +138,7 @@ export function Workspace({
   user,
   writableTeamsByOrganization
 }: WorkspaceProps) {
+  const t = useT();
   const router = useRouter();
   const [organizationId, setOrganizationId] = useState(
     organizations[0]?.id ?? ""
@@ -186,7 +188,7 @@ export function Workspace({
   );
   const mcpEndpoint = organizationId && origin
     ? `${origin}/api/organizations/${organizationId}/mcp`
-    : "조직을 선택하세요";
+    : t("workspace.selectOrganization");
 
   useEffect(
     () => () => {
@@ -257,7 +259,7 @@ export function Workspace({
       );
       const body = (await response.json()) as SearchResponse;
       if (!response.ok) {
-        throw new Error(body.error ?? "검색에 실패했습니다.");
+        throw new Error(body.error ?? t("workspace.searchFailed"));
       }
       setHits(body.hits ?? []);
     } catch (caught) {
@@ -265,7 +267,7 @@ export function Workspace({
         return;
       }
       setSearchError(
-        caught instanceof Error ? caught.message : "검색에 실패했습니다."
+        caught instanceof Error ? caught.message : t("workspace.searchFailed")
       );
       setHits([]);
     } finally {
@@ -292,7 +294,7 @@ export function Workspace({
       );
       const body = (await response.json()) as NeighborhoodResponse;
       if (!response.ok) {
-        throw new Error(body.error ?? "관계 지도를 불러오지 못했습니다.");
+        throw new Error(body.error ?? t("workspace.graphFailed"));
       }
       setGraphCenterNodeId(nodeId);
       setGraphSelectedNodeId(nodeId);
@@ -305,7 +307,7 @@ export function Workspace({
       setGraphError(
         caught instanceof Error
           ? caught.message
-          : "관계 지도를 불러오지 못했습니다."
+          : t("workspace.graphFailed")
       );
     } finally {
       if (graphRequest.current === controller) {
@@ -343,17 +345,17 @@ export function Workspace({
         status?: string;
       };
       if (!response.ok) {
-        throw new Error(body.error ?? "업로드에 실패했습니다.");
+        throw new Error(body.error ?? t("workspace.uploadFailed"));
       }
       setUploadMessage(
         body.status === "failed"
-          ? `문서는 저장했지만 처리 대기열 등록에 실패했습니다. API에서 retry하세요: ${body.id}`
-          : `수집 대기열에 등록했습니다: ${body.id}`
+          ? t("workspace.uploadQueueFailed", { id: body.id ?? "" })
+          : t("workspace.uploadQueued", { id: body.id ?? "" })
       );
       formElement.reset();
     } catch (caught) {
       setUploadMessage(
-        caught instanceof Error ? caught.message : "업로드에 실패했습니다."
+        caught instanceof Error ? caught.message : t("workspace.uploadFailed")
       );
     } finally {
       setUploading(false);
@@ -366,12 +368,12 @@ export function Workspace({
     try {
       const result = await signOut();
       if (result.error) {
-        throw new Error(result.error.message ?? "로그아웃에 실패했습니다.");
+        throw new Error(result.error.message ?? t("workspace.signOutFailed"));
       }
       router.refresh();
     } catch (caught) {
       setSignOutError(
-        caught instanceof Error ? caught.message : "로그아웃에 실패했습니다."
+        caught instanceof Error ? caught.message : t("workspace.signOutFailed")
       );
       setSigningOut(false);
     }
@@ -382,12 +384,12 @@ export function Workspace({
       <Group align="flex-end" justify="space-between">
         <Stack gap={4}>
           <Text c="dimmed" size="sm">
-            운영 콘솔
+            {t("workspace.eyebrow")}
           </Text>
-          <Title order={1}>공유 Context를 한곳에서 관리합니다.</Title>
+          <Title order={1}>{t("workspace.title")}</Title>
         </Stack>
         <Group>
-          <Avatar color="indigo" name={user.name} radius="xl" />
+          <Avatar color="brand" name={user.name} radius="xl" />
           <Stack gap={0} visibleFrom="sm">
             <Text fw={600} size="sm">
               {user.name}
@@ -397,13 +399,13 @@ export function Workspace({
             </Text>
           </Stack>
           <Button
-            aria-label="로그아웃"
+            aria-label={t("workspace.signOut")}
             leftSection={<IconLogout size={16} />}
             loading={signingOut}
             onClick={() => void handleSignOut()}
             variant="subtle"
           >
-            로그아웃
+            {t("workspace.signOut")}
           </Button>
         </Group>
       </Group>
@@ -416,9 +418,9 @@ export function Workspace({
       {organizations.length === 0 ? (
         <Stack gap="lg">
           <Alert color="yellow" icon={<IconAlertCircle size={18} />}>
-            접근 가능한 조직이 없습니다. {user.isAdmin
-              ? "첫 조직을 만들어 시작하세요."
-              : "관리자에게 멤버십을 요청하세요."}
+            {t("workspace.noOrganization")} {user.isAdmin
+              ? t("workspace.createFirst")
+              : t("workspace.requestMembership")}
           </Alert>
           {user.isAdmin ? <OrganizationBootstrap /> : null}
         </Stack>
@@ -430,7 +432,7 @@ export function Workspace({
                 value: organization.id,
                 label: organization.name
               }))}
-              label="활성 조직"
+              label={t("workspace.activeOrganization")}
               onChange={selectOrganization}
               value={organizationId}
             />
@@ -450,21 +452,21 @@ export function Workspace({
         <Tabs defaultValue="search" keepMounted={false} variant="pills">
         <Tabs.List>
           <Tabs.Tab leftSection={<IconSearch size={16} />} value="search">
-            통합 검색
+            {t("workspace.tab.search")}
           </Tabs.Tab>
           <Tabs.Tab leftSection={<IconCloudUpload size={16} />} value="upload">
-            문서 수집
+            {t("workspace.tab.upload")}
           </Tabs.Tab>
           <Tabs.Tab leftSection={<IconPlugConnected size={16} />} value="connect">
-            Agent 연결
+            {t("workspace.tab.connect")}
           </Tabs.Tab>
           <Tabs.Tab leftSection={<IconShieldCheck size={16} />} value="review">
-            AI 후보 검토
+            {t("workspace.tab.review")}
           </Tabs.Tab>
           {selectedOrganization?.role === "admin" ||
           selectedOrganization?.role === "owner" ? (
             <Tabs.Tab leftSection={<IconSettings size={16} />} value="manage">
-              조직 관리
+              {t("workspace.tab.manage")}
             </Tabs.Tab>
           ) : null}
         </Tabs.List>
@@ -487,10 +489,10 @@ export function Workspace({
                   disabled={!organizationId}
                   leftSection={<IconSearch size={17} />}
                   name="query"
-                  placeholder="정책, 장애 대응, 시스템 관계를 검색하세요"
+                  placeholder={t("workspace.searchPlaceholder")}
                   rightSection={
                     <Button loading={searching} size="compact-sm" type="submit">
-                      검색
+                      {t("workspace.search")}
                     </Button>
                   }
                   rightSectionWidth={76}
@@ -502,7 +504,7 @@ export function Workspace({
                 {hits.map((hit) => {
                   const node = nestedRecord(hit, "node");
                   const memory = nestedRecord(hit, "memory");
-                  const presentation = contextResultPresentation(hit);
+                  const presentation = contextResultPresentation(hit, t);
                   const relevance = relativeRelevance(
                     presentation.score,
                     peakScore
@@ -546,7 +548,7 @@ export function Workspace({
                           </Text>
                         ) : null}
                       </Group>
-                      <Text fw={650}>{resultTitle(hit)}</Text>
+                      <Text fw={650}>{resultTitle(hit, t("workspace.resultFallback"))}</Text>
                       <Text c="dimmed" lineClamp={4} size="sm">
                         {resultSummary(hit)}
                       </Text>
@@ -556,11 +558,11 @@ export function Workspace({
                             {presentation.evidenceLabel}
                           </Text>
                           <Text fw={700} size="xs">
-                            상대 관련도 {relevance}%
+                            {t("workspace.relativeRelevance", { value: relevance })}
                           </Text>
                         </Group>
                         <div
-                          aria-label={`상대 관련도 ${relevance}%`}
+                          aria-label={t("workspace.relativeRelevance", { value: relevance })}
                           aria-valuemax={100}
                           aria-valuemin={0}
                           aria-valuenow={relevance}
@@ -593,7 +595,7 @@ export function Workspace({
                           size="compact-sm"
                           variant="light"
                         >
-                          관계 보기
+                          {t("workspace.viewRelationships")}
                         </Button>
                       ) : null}
                       {typeof memory?.id === "string" && canManageMemory ? (
@@ -613,7 +615,7 @@ export function Workspace({
               </SimpleGrid>
               {!searching && hits.length === 0 && !searchError ? (
                 <Text c="dimmed" ta="center">
-                  검색어를 입력하면 권한 범위 안의 Context가 표시됩니다.
+                  {t("workspace.searchEmpty")}
                 </Text>
               ) : null}
               {graphError ? <Alert color="red">{graphError}</Alert> : null}
@@ -621,13 +623,16 @@ export function Workspace({
                 <Stack gap="sm">
                   <Group justify="space-between">
                     <Stack gap={2}>
-                      <Text c="indigo" fw={750} size="xs" tt="uppercase">
-                        Knowledge map
+                      <Text c="brand" fw={750} size="xs" tt="uppercase">
+                        {t("workspace.mapEyebrow")}
                       </Text>
-                      <Title order={2}>연결된 지식을 탐색합니다.</Title>
+                      <Title order={2}>{t("workspace.mapTitle")}</Title>
                     </Stack>
                     <Badge variant="light">
-                      {graphNodes.length} nodes · {graphEdges.length} edges
+                      {t("workspace.mapCount", {
+                        nodes: graphNodes.length,
+                        edges: graphEdges.length
+                      })}
                     </Badge>
                   </Group>
                   <KnowledgeGraph
@@ -649,24 +654,24 @@ export function Workspace({
             <form onSubmit={upload}>
               <Stack gap="md">
                 <Stack gap={2}>
-                  <Title order={3}>문서 수집</Title>
+                  <Title order={3}>{t("workspace.uploadTitle")}</Title>
                   <Text c="dimmed" size="sm">
-                    UTF-8 text, Markdown, JSON, XML, CSV · 최대 10 MiB
+                    {t("workspace.uploadFormats")}
                   </Text>
                 </Stack>
                 <Select
                   allowDeselect={false}
                   data={[
-                    { label: "개인 · 나만 사용", value: "user" },
+                    { label: t("workspace.scope.user"), value: "user" },
                     ...(writableTeams.length > 0
-                      ? [{ label: "팀 · 선택한 팀과 공유", value: "team" }]
+                      ? [{ label: t("workspace.scope.team"), value: "team" }]
                       : []),
                     ...(selectedOrganization?.role === "admin" ||
                     selectedOrganization?.role === "owner"
-                      ? [{ label: "조직 · 모든 조직 멤버와 공유", value: "organization" }]
+                      ? [{ label: t("workspace.scope.organization"), value: "organization" }]
                       : [])
                   ]}
-                  label="공유 범위"
+                  label={t("workspace.scopeLabel")}
                   onChange={(value) => {
                     if (
                       value === "organization" ||
@@ -686,21 +691,21 @@ export function Workspace({
                       label: team.name,
                       value: team.id
                     }))}
-                    label="공유할 팀"
+                    label={t("workspace.shareTeam")}
                     onChange={setDocumentTeamId}
-                    placeholder="팀을 선택하세요"
+                    placeholder={t("workspace.selectTeam")}
                     required
                     value={documentTeamId}
                   />
                 ) : null}
                 <TextInput
-                  label="문서 제목"
+                  label={t("workspace.documentTitle")}
                   name="title"
-                  placeholder="파일명을 기본값으로 사용"
+                  placeholder={t("workspace.documentTitlePlaceholder")}
                 />
                 <input
                   accept=".txt,.md,.json,.xml,.csv,text/plain,text/markdown,application/json"
-                  aria-label="문서 파일"
+                  aria-label={t("workspace.documentFile")}
                   name="file"
                   required
                   type="file"
@@ -714,7 +719,7 @@ export function Workspace({
                   loading={uploading}
                   type="submit"
                 >
-                  수집 시작
+                  {t("workspace.startIngestion")}
                 </Button>
                 {uploadMessage ? <Alert>{uploadMessage}</Alert> : null}
               </Stack>
@@ -727,8 +732,7 @@ export function Workspace({
             <Stack gap="md">
               <Title order={3}>Streamable HTTP MCP</Title>
               <Text c="dimmed">
-                Better Auth 로그인 응답의 <Code>set-auth-token</Code> 값을 Bearer
-                token으로 전달하세요.
+                {t("workspace.mcpBody")}
               </Text>
               <Group align="stretch" gap="xs" wrap="nowrap">
                 <Code block style={{ flex: 1, overflowWrap: "anywhere" }}>
@@ -737,8 +741,8 @@ export function Workspace({
                 <CopyButton value={mcpEndpoint}>
                   {({ copied, copy }) => (
                     <Button
-                      aria-label="MCP endpoint 복사"
-                      color={copied ? "teal" : "indigo"}
+                      aria-label={t("workspace.copyEndpoint")}
+                      color={copied ? "teal" : "brand"}
                       disabled={!organizationId || !origin}
                       leftSection={
                         copied ? <IconCheck size={16} /> : <IconCopy size={16} />
@@ -746,7 +750,7 @@ export function Workspace({
                       onClick={copy}
                       variant="light"
                     >
-                      {copied ? "복사됨" : "복사"}
+                      {copied ? t("workspace.copied") : t("workspace.copy")}
                     </Button>
                   )}
                 </CopyButton>

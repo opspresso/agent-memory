@@ -32,6 +32,9 @@ import {
 import { getSessionUser } from "@/lib/session";
 
 import { LoginPanel } from "./login-panel";
+import { getT } from "./_i18n/server";
+import type { MessageKey } from "./_i18n/messages/en";
+import { LocaleToggle } from "./locale-toggle";
 import classes from "./page.module.css";
 import { ThemeToggle } from "./theme-toggle";
 import { Workspace } from "./workspace";
@@ -41,27 +44,32 @@ export const dynamic = "force-dynamic";
 const capabilities = [
   {
     icon: IconBrain,
-    title: "Long-term Memory",
-    description: "규칙, 결정, 경험을 revision과 유효기간까지 보존한다."
+    title: "home.capability.memory",
+    description: "home.capability.memoryBody"
   },
   {
     icon: IconFileSearch,
-    title: "Hybrid RAG",
-    description: "문서를 수집하고 Full-Text Search와 vector ranking을 결합한다."
+    title: "home.capability.rag",
+    description: "home.capability.ragBody"
   },
   {
     icon: IconBinaryTree,
-    title: "Knowledge Graph",
-    description: "엔터티 관계를 탐색하고 원본 memory와 chunk를 역참조한다."
+    title: "home.capability.graph",
+    description: "home.capability.graphBody"
   },
   {
     icon: IconShieldLock,
-    title: "Flexible Sharing",
-    description: "조직, 팀, 개인에 맞춰 필요한 Context를 자연스럽게 공유한다."
+    title: "home.capability.sharing",
+    description: "home.capability.sharingBody"
   }
-] as const;
+] as const satisfies readonly {
+  readonly icon: typeof IconBrain;
+  readonly title: MessageKey;
+  readonly description: MessageKey;
+}[];
 
 export default async function Home() {
+  const t = await getT();
   const requestHeaders = await headers();
   const user = await getSessionUser(new Headers(requestHeaders));
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
@@ -142,7 +150,7 @@ export default async function Home() {
               Agent Memory
             </Text>
             <Badge color="teal" variant="light">
-              Shared Context
+              {t("home.badge")}
             </Badge>
           </Group>
           <Group gap="xs">
@@ -152,8 +160,9 @@ export default async function Home() {
               leftSection={<IconBook2 size={16} />}
               variant="subtle"
             >
-              Guide
+              {t("nav.guide")}
             </Button>
+            <LocaleToggle />
             <ThemeToggle />
           </Group>
         </Group>
@@ -170,17 +179,15 @@ export default async function Home() {
           <main className={classes.hero}>
             <Stack className={classes.intro} gap="xl">
               <Badge className={classes.eyebrow} size="lg" variant="light">
-                Shared context infrastructure for AI agents
+                {t("home.eyebrow")}
               </Badge>
               <Stack gap="md">
                 <Title className={classes.title} order={1}>
-                  에이전트가 기억하고,
-                  <br />더 나은 답을 만듭니다.
+                  {t("home.title")}
+                  <br />{t("home.titleSecond")}
                 </Title>
                 <Text className={classes.lead} c="dimmed" size="xl">
-                  AI Agent의 장기 기억, RAG, Knowledge Graph를 하나의
-                  Context로 연결합니다. MCP endpoint로 바로 활용하고, 필요하면
-                  Agent Studio와 함께 사용할 수 있습니다.
+                  {t("home.lede")}
                 </Text>
               </Stack>
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
@@ -191,13 +198,13 @@ export default async function Home() {
                     key={capability.title}
                     wrap="nowrap"
                   >
-                    <ThemeIcon color="indigo" variant="light">
+                    <ThemeIcon color="brand" variant="light">
                       <capability.icon size={18} stroke={1.7} />
                     </ThemeIcon>
                     <Stack gap={2}>
-                      <Text fw={650}>{capability.title}</Text>
+                      <Text fw={650}>{t(capability.title)}</Text>
                       <Text c="dimmed" size="sm">
-                        {capability.description}
+                        {t(capability.description)}
                       </Text>
                     </Stack>
                   </Group>

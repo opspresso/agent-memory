@@ -34,7 +34,8 @@ function sourceType(hit: Record<string, unknown>): ContextSourceType {
 }
 
 export function contextResultPresentation(
-  hit: Record<string, unknown>
+  hit: Record<string, unknown>,
+  t: Translate
 ): ContextResultPresentation {
   const type = sourceType(hit);
   const resource =
@@ -44,21 +45,26 @@ export function contextResultPresentation(
   const source = record(sources[0]) ?? record(resource.source);
   const chunk = record(hit.chunk);
 
-  let evidenceLabel = "직접 등록된 Memory";
+  let evidenceLabel = t("result.evidence.directMemory");
   if (type === "memory") {
     const sourceName = typeof source?.type === "string" ? source.type : "unknown";
     const version = finiteNumber(resource.version);
-    evidenceLabel = `${sourceName} 출처${version ? ` · revision v${version}` : ""}`;
+    evidenceLabel = t("result.evidence.memorySource", {
+      source: sourceName,
+      revision: version
+        ? t("result.evidence.revision", { version })
+        : ""
+    });
   } else if (type === "document") {
     const ordinal = finiteNumber(chunk?.ordinal);
     const mimeType = typeof resource.mimeType === "string" ? resource.mimeType : "document";
     evidenceLabel = `${mimeType}${ordinal === undefined ? "" : ` · chunk ${ordinal + 1}`}`;
   } else if (source?.memoryId) {
-    evidenceLabel = "Memory에서 연결된 지식";
+    evidenceLabel = t("result.evidence.memoryKnowledge");
   } else if (source?.chunkId) {
-    evidenceLabel = "문서 근거에서 연결된 지식";
+    evidenceLabel = t("result.evidence.documentKnowledge");
   } else {
-    evidenceLabel = "Knowledge Graph 근거";
+    evidenceLabel = t("result.evidence.graph");
   }
 
   return {
@@ -79,3 +85,4 @@ export function relativeRelevance(score: number | undefined, peak: number): numb
   }
   return Math.round(Math.min(Math.max(score / peak, 0), 1) * 100);
 }
+import type { Translate } from "./_i18n/translate";

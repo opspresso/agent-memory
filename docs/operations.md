@@ -70,6 +70,18 @@ Compose의 `app` service는 `.env.local`의 Google credential과 접근 정책�
 
 Agent Studio의 PostgreSQL 17과 포트·volume을 공유하지 않는다. `docker compose down -v`는 PostgreSQL과 MinIO 데이터를 제거하므로 필요한 데이터와 대상 project를 확인하기 전에는 실행하지 마라.
 
+## 화면 언어
+
+화면은 English(`en`)와 한국어(`ko`)를 지원한다. URL에는 locale segment를 넣지 않는다. Header의 언어 메뉴에서 선택하면 `agent-memory-locale` cookie에 1년간 저장하고 현재 route를 다시 rendering한다.
+
+첫 요청은 다음 우선순위로 언어를 결정한다.
+
+1. 유효한 `agent-memory-locale` cookie
+2. `Accept-Language`에서 quality value가 가장 높은 지원 언어
+3. English
+
+English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다. 사용자 화면 문구를 추가하면 같은 key를 `src/app/_i18n/messages/ko.ts`에도 추가하라. Korean catalogue는 English key type을 따르므로 누락된 번역은 `pnpm typecheck`에서 실패한다. API와 domain error, resource 이름, model·status 같은 protocol 값은 번역하지 않는다.
+
 ## 환경 변수
 
 `.env.example`을 기준으로 환경별 값을 설정하라.

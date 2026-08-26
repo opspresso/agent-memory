@@ -4,14 +4,17 @@ import { Alert, Button, Paper, Stack, Text, TextInput, Title } from "@mantine/co
 import { IconBuildingPlus } from "@tabler/icons-react";
 import { useState, type FormEvent } from "react";
 
-async function responseMessage(response: Response): Promise<string> {
+import { useT } from "./_i18n/provider";
+
+async function responseMessage(response: Response, fallback: string): Promise<string> {
   const body = (await response.json().catch(() => null)) as {
     error?: string;
   } | null;
-  return body?.error ?? "조직을 만들지 못했습니다.";
+  return body?.error ?? fallback;
 }
 
 export function OrganizationBootstrap() {
+  const t = useT();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -30,12 +33,12 @@ export function OrganizationBootstrap() {
         })
       });
       if (!response.ok) {
-        throw new Error(await responseMessage(response));
+        throw new Error(await responseMessage(response, t("organization.createFailed")));
       }
       window.location.reload();
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "조직을 만들지 못했습니다."
+        caught instanceof Error ? caught.message : t("organization.createFailed")
       );
       setPending(false);
     }
@@ -46,16 +49,16 @@ export function OrganizationBootstrap() {
       <form onSubmit={createOrganization}>
         <Stack gap="md">
           <Stack gap={2}>
-            <Title order={2}>첫 조직 만들기</Title>
+            <Title order={2}>{t("organization.firstTitle")}</Title>
             <Text c="dimmed">
-              현재 계정이 owner가 되며 이후 멤버와 팀을 관리할 수 있습니다.
+              {t("organization.firstBody")}
             </Text>
           </Stack>
           {error ? <Alert color="red">{error}</Alert> : null}
-          <TextInput label="조직 이름" name="name" required />
+          <TextInput label={t("organization.name")} name="name" required />
           <TextInput
-            description="소문자, 숫자, 하이픈만 사용할 수 있습니다."
-            label="조직 slug"
+            description={t("organization.slugDescription")}
+            label={t("organization.slug")}
             name="slug"
             pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
             required
@@ -65,7 +68,7 @@ export function OrganizationBootstrap() {
             loading={pending}
             type="submit"
           >
-            조직 만들기
+            {t("organization.create")}
           </Button>
         </Stack>
       </form>

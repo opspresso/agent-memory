@@ -1,9 +1,7 @@
 .shell {
   min-height: calc(100vh - 60px);
   padding: clamp(1.25rem, 4vw, 4rem);
-  background:
-    radial-gradient(circle at 86% 4%, light-dark(rgba(250, 176, 5, 0.08), rgba(250, 176, 5, 0.06)), transparent 28%),
-    light-dark(#f7f8fc, #111318);
+  background: transparent;
 }
 
 .loading {
@@ -29,9 +27,8 @@
 
 .snapshot {
   color: var(--mantine-color-gray-0);
-  background:
-    linear-gradient(145deg, rgba(91, 99, 255, 0.94), rgba(47, 52, 132, 0.98));
-  box-shadow: 0 24px 64px rgba(47, 52, 132, 0.2);
+  background: var(--memory-gradient);
+  box-shadow: var(--memory-shadow-lifted);
 }
 
 .snapshot :global(.mantine-Text-root[data-dimmed]) {
@@ -49,7 +46,7 @@
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: var(--mantine-spacing-md);
   padding-top: var(--mantine-spacing-lg);
-  border-top: 1px solid light-dark(var(--mantine-color-indigo-2), var(--mantine-color-indigo-8));
+  border-top: 1px solid light-dark(var(--mantine-color-brand-2), var(--mantine-color-brand-8));
 }
 
 .version {
@@ -61,7 +58,8 @@
   padding: var(--mantine-spacing-lg);
   border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
   border-radius: var(--mantine-radius-lg);
-  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  background: var(--memory-surface);
+  box-shadow: var(--memory-shadow);
 }
 
 .version::before {
@@ -70,19 +68,19 @@
   left: 1.5rem;
   width: 0.7rem;
   height: 0.7rem;
-  border: 2px solid light-dark(#f7f8fc, #111318);
+  border: 2px solid var(--mantine-color-body);
   border-radius: 50%;
   background: var(--mantine-color-gray-5);
   content: "";
 }
 
 .version[data-current] {
-  border-color: var(--mantine-color-indigo-5);
-  background: light-dark(var(--mantine-color-indigo-0), rgba(91, 99, 255, 0.12));
+  border-color: var(--mantine-color-brand-5);
+  background: var(--memory-highlight);
 }
 
 .version[data-current]::before {
-  background: var(--mantine-color-indigo-5);
+  background: var(--mantine-color-brand-5);
 }
 
 .reason {

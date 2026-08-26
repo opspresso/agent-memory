@@ -20,8 +20,9 @@ import {
   IconDeviceFloppy,
   IconRefresh
 } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
+import { useLocale, useT } from "./_i18n/provider";
 import classes from "./memory-lifecycle.module.css";
 
 interface MemoryCapabilitiesView {
@@ -75,27 +76,29 @@ interface LoadedMemory {
   readonly versions: readonly MemoryVersionView[];
 }
 
-async function responseError(response: Response) {
+async function responseError(response: Response, fallback: string) {
   const body = (await response.json().catch(() => null)) as {
     error?: string;
   } | null;
-  return body?.error ?? "Memory 요청을 처리하지 못했습니다.";
+  return body?.error ?? fallback;
 }
 
 async function requestMemory(
   organizationId: string,
-  memoryId: string
+  memoryId: string,
+  fallback: string,
+  etagMissing: string
 ): Promise<LoadedMemory> {
   const response = await fetch(
     `/api/organizations/${organizationId}/memories/${memoryId}`
   );
   if (!response.ok) {
-    throw new Error(await responseError(response));
+    throw new Error(await responseError(response, fallback));
   }
   const memory = (await response.json()) as MemoryDetailView;
   const etag = response.headers.get("etag");
   if (!etag) {
-    throw new Error("Memory version header가 없습니다.");
+    throw new Error(etagMissing);
   }
   if (!memory.capabilities.manage) {
     return { memory, etag, versions: [] };
@@ -104,7 +107,7 @@ async function requestMemory(
     `/api/organizations/${organizationId}/memories/${memoryId}/versions?limit=100`
   );
   if (!versionsResponse.ok) {
-    throw new Error(await responseError(versionsResponse));
+    throw new Error(await responseError(versionsResponse, fallback));
   }
   const versionsBody = (await versionsResponse.json()) as {
     versions?: readonly MemoryVersionView[];
@@ -112,8 +115,8 @@ async function requestMemory(
   return { memory, etag, versions: versionsBody.versions ?? [] };
 }
 
-function formattedDate(value: string) {
-  return new Intl.DateTimeFormat("ko-KR", {
+function formattedDate(value: string, locale: "en" | "ko") {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(value));
@@ -124,6 +127,8 @@ export function MemoryLifecycle({
   onClose,
   organizationId
 }: MemoryLifecycleProps) {
+  const locale = useLocale();
+  const t = useT();
   const [loaded, setLoaded] = useState<LoadedMemory>();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -133,6 +138,11 @@ export function MemoryLifecycle({
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const getLoadMessages = useEffectEvent(() => ({
+    requestFailed: t("memory.requestFailed"),
+    etagMissing: t("memory.etagMissing"),
+    loadFailed: t("memory.loadFailed")
+  }));
 
   function applyLoaded(next: LoadedMemory) {
     setLoaded(next);
@@ -146,10 +156,15 @@ export function MemoryLifecycle({
     setLoading(true);
     setError(undefined);
     try {
-      applyLoaded(await requestMemory(organizationId, memoryId));
+      applyLoaded(await requestMemory(
+        organizationId,
+        memoryId,
+        t("memory.requestFailed"),
+        t("memory.etagMissing")
+      ));
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Memory를 불러오지 못했습니다."
+        caught instanceof Error ? caught.message : t("memory.loadFailed")
       );
     } finally {
       setLoading(false);
@@ -158,7 +173,13 @@ export function MemoryLifecycle({
 
   useEffect(() => {
     let active = true;
-    requestMemory(organizationId, memoryId)
+    const loadMessages = getLoadMessages();
+    requestMemory(
+      organizationId,
+      memoryId,
+      loadMessages.requestFailed,
+      loadMessages.etagMissing
+    )
       .then((next) => {
         if (active) {
           applyLoaded(next);
@@ -170,7 +191,7 @@ export function MemoryLifecycle({
           setError(
             caught instanceof Error
               ? caught.message
-              : "Memory를 불러오지 못했습니다."
+              : loadMessages.loadFailed
           );
           setLoading(false);
         }
@@ -215,17 +236,17 @@ export function MemoryLifecycle({
       );
       if (response.status === 409) {
         throw new Error(
-          "다른 사용자가 먼저 수정했습니다. 최신 version을 다시 불러오세요."
+          t("memory.conflict")
         );
       }
       if (!response.ok) {
-        throw new Error(await responseError(response));
+        throw new Error(await responseError(response, t("memory.requestFailed")));
       }
-      setMessage("새 revision을 저장했습니다.");
+      setMessage(t("memory.revisionSaved"));
       await loadMemory();
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Revision을 저장하지 못했습니다."
+        caught instanceof Error ? caught.message : t("memory.revisionFailed")
       );
     } finally {
       setSaving(false);
@@ -249,18 +270,18 @@ export function MemoryLifecycle({
       );
       if (response.status === 409) {
         throw new Error(
-          "다른 사용자가 먼저 수정했습니다. 최신 version을 다시 불러오세요."
+          t("memory.conflict")
         );
       }
       if (!response.ok) {
-        throw new Error(await responseError(response));
+        throw new Error(await responseError(response, t("memory.requestFailed")));
       }
-      setMessage("Memory를 archive했습니다.");
+      setMessage(t("memory.archived"));
       setConfirmArchive(false);
       onClose();
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Memory를 archive하지 못했습니다."
+        caught instanceof Error ? caught.message : t("memory.archiveFailed")
       );
     } finally {
       setSaving(false);
@@ -273,7 +294,7 @@ export function MemoryLifecycle({
       onClose={onClose}
       opened
       padding={0}
-      title={<Text fw={750}>Memory lifecycle</Text>}
+      title={<Text fw={750}>{t("memory.lifecycle")}</Text>}
     >
       <div className={classes.shell}>
         {loading ? (
@@ -282,7 +303,7 @@ export function MemoryLifecycle({
         {error ? (
           <Alert
             color="red"
-            title="현재 상태를 반영하지 못했습니다."
+            title={t("memory.stateFailed")}
             withCloseButton
             onClose={() => setError(undefined)}
           >
@@ -294,7 +315,7 @@ export function MemoryLifecycle({
                 size="compact-sm"
                 variant="light"
               >
-                다시 불러오기
+                {t("memory.reload")}
               </Button>
             </Group>
           </Alert>
@@ -316,7 +337,7 @@ export function MemoryLifecycle({
                 </Group>
                 <Title order={1}>{loaded.memory.title}</Title>
                 <Text c="dimmed" size="sm">
-                  {formattedDate(loaded.memory.updatedAt)} · source {loaded.memory.source.type}
+                  {formattedDate(loaded.memory.updatedAt, locale)} · {t("memory.source", { source: loaded.memory.source.type })}
                 </Text>
               </Stack>
               <Text c="dimmed" ff="monospace" size="xs">
@@ -328,21 +349,21 @@ export function MemoryLifecycle({
               <Paper className={classes.snapshot} p="xl" radius="lg">
                 <Stack gap="lg">
                   <Text c="dimmed" fw={750} size="xs" tt="uppercase">
-                    Current snapshot
+                    {t("memory.currentSnapshot")}
                   </Text>
                   <Text className={classes.content}>{loaded.memory.content}</Text>
                   <Divider />
                   <Group grow>
                     <Stack gap={2}>
-                      <Text c="dimmed" size="xs">유효 시작</Text>
-                      <Text size="sm">{formattedDate(loaded.memory.validFrom)}</Text>
+                      <Text c="dimmed" size="xs">{t("memory.validFrom")}</Text>
+                      <Text size="sm">{formattedDate(loaded.memory.validFrom, locale)}</Text>
                     </Stack>
                     <Stack gap={2}>
-                      <Text c="dimmed" size="xs">만료</Text>
+                      <Text c="dimmed" size="xs">{t("memory.expires")}</Text>
                       <Text size="sm">
                         {loaded.memory.expiresAt
-                          ? formattedDate(loaded.memory.expiresAt)
-                          : "기한 없음"}
+                          ? formattedDate(loaded.memory.expiresAt, locale)
+                          : t("memory.noExpiration")}
                       </Text>
                     </Stack>
                   </Group>
@@ -352,14 +373,14 @@ export function MemoryLifecycle({
               <Paper p="xl" radius="lg" withBorder>
                 <Stack gap="md">
                   <Stack gap={2}>
-                    <Title order={3}>새 revision</Title>
+                    <Title order={3}>{t("memory.newRevision")}</Title>
                     <Text c="dimmed" size="sm">
-                      저장 시 현재 version을 기준으로 충돌을 확인합니다.
+                      {t("memory.revisionHint")}
                     </Text>
                   </Stack>
                   <TextInput
                     disabled={!loaded.memory.capabilities.write}
-                    label="제목"
+                    label={t("memory.title")}
                     maxLength={500}
                     onChange={(event) => setTitle(event.currentTarget.value)}
                     value={title}
@@ -367,7 +388,7 @@ export function MemoryLifecycle({
                   <Textarea
                     autosize
                     disabled={!loaded.memory.capabilities.write}
-                    label="내용"
+                    label={t("memory.content")}
                     maxLength={100_000}
                     minRows={7}
                     onChange={(event) => setContent(event.currentTarget.value)}
@@ -375,11 +396,11 @@ export function MemoryLifecycle({
                   />
                   <Textarea
                     autosize
-                    label="변경 사유"
+                    label={t("memory.changeReason")}
                     maxLength={1_000}
                     minRows={2}
                     onChange={(event) => setReason(event.currentTarget.value)}
-                    placeholder="다음 사용자가 변경 맥락을 이해할 수 있게 기록하세요"
+                    placeholder={t("memory.changeReasonPlaceholder")}
                     value={reason}
                   />
                   <Group justify="space-between">
@@ -399,14 +420,14 @@ export function MemoryLifecycle({
                       loading={saving}
                       onClick={() => void saveRevision()}
                     >
-                      Revision 저장
+                      {t("memory.saveRevision")}
                     </Button>
                   </Group>
                   {confirmArchive ? (
-                    <Alert color="red" title="검색에서 Memory를 제외합니다.">
+                    <Alert color="red" title={t("memory.archiveWarning")}>
                       <Stack gap="sm">
                         <Text size="sm">
-                          Archive는 새 version으로 기록되며 현재 검색 결과에서 사라집니다.
+                          {t("memory.archiveBody")}
                         </Text>
                         <Group justify="flex-end">
                           <Button
@@ -414,7 +435,7 @@ export function MemoryLifecycle({
                             size="compact-sm"
                             variant="default"
                           >
-                            취소
+                            {t("memory.cancel")}
                           </Button>
                           <Button
                             color="red"
@@ -422,7 +443,7 @@ export function MemoryLifecycle({
                             onClick={() => void archive()}
                             size="compact-sm"
                           >
-                            Archive 확인
+                            {t("memory.confirmArchive")}
                           </Button>
                         </Group>
                       </Stack>
@@ -435,20 +456,20 @@ export function MemoryLifecycle({
             {loaded.memory.capabilities.manage ? (
               <section>
                 <Stack gap="xs" mb="lg">
-                  <Text c="indigo" fw={750} size="xs" tt="uppercase">
-                    Version spine
+                  <Text c="brand" fw={750} size="xs" tt="uppercase">
+                    {t("memory.versionSpine")}
                   </Text>
-                  <Title order={2}>변경 맥락을 시간순으로 추적합니다.</Title>
+                  <Title order={2}>{t("memory.historyTitle")}</Title>
                 </Stack>
                 <div className={classes.timeline}>
                   <article className={classes.version} data-current>
-                    <Badge color="indigo">v{loaded.memory.version} · current</Badge>
+                    <Badge color="brand">v{loaded.memory.version} · {t("memory.current")}</Badge>
                     <Text fw={700}>{loaded.memory.title}</Text>
                     <Text c="dimmed" lineClamp={3} size="sm">
                       {loaded.memory.content}
                     </Text>
                     <Text c="dimmed" ff="monospace" size="xs">
-                      updated {formattedDate(loaded.memory.updatedAt)}
+                      {t("memory.updated", { date: formattedDate(loaded.memory.updatedAt, locale) })}
                     </Text>
                   </article>
                   {loaded.versions.map((version) => (
@@ -467,7 +488,7 @@ export function MemoryLifecycle({
                         </Text>
                       ) : null}
                       <Text c="dimmed" ff="monospace" size="xs">
-                        {version.changedBy} · {formattedDate(version.createdAt)}
+                        {version.changedBy} · {formattedDate(version.createdAt, locale)}
                       </Text>
                     </article>
                   ))}

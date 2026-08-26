@@ -2,29 +2,55 @@
 
 import {
   ActionIcon,
-  useComputedColorScheme,
-  useMantineColorScheme
+  Menu,
+  useMantineColorScheme,
+  type MantineColorScheme
 } from "@mantine/core";
-import { IconMoon, IconSun } from "@tabler/icons-react";
+import { IconDeviceDesktop, IconMoon, IconSun } from "@tabler/icons-react";
 
-import classes from "./theme-toggle.module.css";
+import type { MessageKey } from "./_i18n/messages/en";
+import { useT } from "./_i18n/provider";
+
+const options = [
+  { value: "auto", label: "theme.system", Icon: IconDeviceDesktop },
+  { value: "light", label: "theme.light", Icon: IconSun },
+  { value: "dark", label: "theme.dark", Icon: IconMoon }
+] as const satisfies ReadonlyArray<{
+  readonly value: MantineColorScheme;
+  readonly label: MessageKey;
+  readonly Icon: typeof IconSun;
+}>;
 
 export function ThemeToggle() {
-  const { setColorScheme } = useMantineColorScheme();
-  const computedColorScheme = useComputedColorScheme("light", {
-    getInitialValueInEffect: true
-  });
+  const t = useT();
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const current = options.find((option) => option.value === colorScheme) ?? options[0];
+  const CurrentIcon = current.Icon;
 
   return (
-    <ActionIcon
-      aria-label="테마 전환"
-      onClick={() =>
-        setColorScheme(computedColorScheme === "light" ? "dark" : "light")
-      }
-      variant="default"
-    >
-      <IconSun className={classes.light} size={18} stroke={1.5} />
-      <IconMoon className={classes.dark} size={18} stroke={1.5} />
-    </ActionIcon>
+    <Menu position="bottom-end" width={140} withinPortal>
+      <Menu.Target>
+        <ActionIcon
+          aria-label={t("theme.current", { name: t(current.label) })}
+          size="lg"
+          title={t(current.label)}
+          variant="default"
+        >
+          <CurrentIcon size={18} stroke={1.8} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        {options.map(({ value, label, Icon }) => (
+          <Menu.Item
+            data-active={colorScheme === value || undefined}
+            key={value}
+            leftSection={<Icon size={16} stroke={1.8} />}
+            onClick={() => setColorScheme(value)}
+          >
+            {t(label)}
+          </Menu.Item>
+        ))}
+      </Menu.Dropdown>
+    </Menu>
   );
 }

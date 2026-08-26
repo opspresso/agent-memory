@@ -4,6 +4,9 @@ import {
   contextResultPresentation,
   relativeRelevance
 } from "@/app/context-result-presentation";
+import { translator } from "@/app/_i18n/translate";
+
+const t = translator("ko");
 
 describe("context result presentation", () => {
   it("describes document chunk provenance", () => {
@@ -18,7 +21,7 @@ describe("context result presentation", () => {
         lexicalScore: 0.6,
         vectorScore: 0.3,
         score: 0.9
-      })
+      }, t)
     ).toEqual({
       sourceType: "document",
       sourceLabel: "Document",
@@ -37,17 +40,17 @@ describe("context result presentation", () => {
           scope: { kind: "organization" },
           sources: [{ chunkId: "chunk-id" }]
         }
-      }).evidenceLabel
+      }, t).evidenceLabel
     ).toBe("문서 근거에서 연결된 지식");
   });
 
   it("infers the source type for dedicated search endpoints", () => {
     expect(
-      contextResultPresentation({ document: { scope: { kind: "user" } } })
+      contextResultPresentation({ document: { scope: { kind: "user" } } }, t)
         .sourceType
     ).toBe("document");
     expect(
-      contextResultPresentation({ node: { scope: { kind: "team" } } })
+      contextResultPresentation({ node: { scope: { kind: "team" } } }, t)
         .sourceType
     ).toBe("knowledge");
   });
