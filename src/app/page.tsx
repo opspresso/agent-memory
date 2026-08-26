@@ -3,6 +3,7 @@ import {
   Box,
   Container,
   Group,
+  Image,
   SimpleGrid,
   Stack,
   Text,
@@ -105,9 +106,11 @@ export default async function Home() {
       <Container className={classes.shell} size="xl">
         <Group className={classes.header} justify="space-between">
           <Group gap="sm">
-            <ThemeIcon radius="md" size="lg" variant="gradient">
-              <IconBrain size={20} stroke={1.7} />
-            </ThemeIcon>
+            <Image
+              alt="Agent Memory logo"
+              className={classes.brandLogo}
+              src="/logo.png"
+            />
             <Text fw={700} size="lg">
               Agent Memory
             </Text>

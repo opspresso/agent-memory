@@ -11,6 +11,9 @@ test("renders the anonymous memory platform landing page", async ({ page }) => {
   await expect(page.getByText("Hybrid RAG")).toBeVisible();
   await expect(page.getByText("Knowledge Graph", { exact: true })).toBeVisible();
   await expect(page.getByText("Scoped Access")).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "Agent Memory logo" })
+  ).toBeVisible();
   await expect(page.getByLabel("이메일")).toBeVisible();
   await expect(page.getByLabel("비밀번호")).toBeVisible();
 });
