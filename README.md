@@ -14,6 +14,7 @@
 - 접근 가능한 memory, RAG 문서, Knowledge Graph 결과를 하나의 Context로 검색한다.
 - Streamable HTTP MCP로 Agent 검색과 memory 생성을 제공한다.
 - Better Auth session·Bearer 인증과 선택형 OIDC·Google·password provider를 지원한다.
+- 허용 email domain과 조직 bootstrap admin을 설치 단위로 제한한다.
 - Pino 구조화 로그와 선택형 OpenTelemetry·Langfuse 추적을 제공한다.
 
 운영 콘솔에서는 로그인·가입, 첫 조직 생성, 조직 멤버·팀 관리, 통합 검색, 개인 문서 수집, MCP 연결 정보를 제공한다.

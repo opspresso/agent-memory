@@ -30,6 +30,8 @@ src/app  ──▶ src/lib ──▶ src/application ──▶ src/domain
 
 브라우저의 unsafe method는 요청 origin이 실제 또는 설정된 application origin과 같아야 한다. Bearer 요청은 Agent 호출로 취급한다.
 
+Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 전역 admin email은 조직 bootstrap만 허용하며, 생성된 조직 안에서는 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
+
 ## Scope와 권한
 
 모든 memory, document, knowledge node와 edge는 하나의 organization에 속하며 다음 scope 중 하나를 갖는다.

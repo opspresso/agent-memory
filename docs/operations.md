@@ -31,10 +31,10 @@ MinIO API는 `localhost:9010`, console은 `localhost:9011`에서 열린다.
 ### 전체 Compose
 
 ```bash
-docker compose --profile objects up -d
+docker compose --env-file .env.local --profile objects up -d --build
 ```
 
-Compose의 app service는 local signup, migration, document worker를 활성화하고 `http://localhost:3100`에 노출된다. Object profile 없이 app을 실행하면 document upload에 필요한 S3 endpoint를 별도로 제공해야 한다.
+Compose의 app service는 `.env.local`의 Google credential과 접근 정책을 전달하고 local signup, migration, document worker를 활성화하며 `http://localhost:3100`에 노출된다. Google OAuth application의 승인된 redirect URI에는 `http://localhost:3100/api/auth/callback/google`을 등록하라. Object profile 없이 app을 실행하면 document upload에 필요한 S3 endpoint를 별도로 제공해야 한다.
 
 `../agent-studio`의 PostgreSQL 17과 포트·volume을 공유하지 않는다. `docker compose down -v`는 PostgreSQL과 MinIO 데이터를 제거하므로 필요한 데이터와 대상 project를 확인하기 전에는 실행하지 마라.
 
@@ -51,6 +51,8 @@ Compose의 app service는 local signup, migration, document worker를 활성화�
 | Auth | `BETTER_AUTH_URL` | Application base URL과 trusted origin |
 | Auth | `AUTH_PASSWORD` | Email/password 로그인 활성화 |
 | Auth | `AUTH_PASSWORD_SIGNUP` | Self-signup 활성화. `AUTH_PASSWORD=true`가 함께 필요 |
+| Auth | `ALLOWED_EMAIL_DOMAINS` | 로그인 허용 email domain의 comma-separated 목록. 기본값 `nalbam.com` |
+| Auth | `ADMIN_EMAILS` | 첫 조직을 만들 수 있는 email의 comma-separated 목록. 기본값 `me@nalbam.com` |
 | Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google provider. 두 값을 함께 설정 |
 | OIDC | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Generic OIDC provider. 세 값을 함께 설정 |
 | OIDC | `OIDC_SCOPES` | 공백으로 구분한 scope. 기본값 `openid email profile` |
@@ -64,6 +66,8 @@ Compose의 app service는 local signup, migration, document worker를 활성화�
 | Telemetry | `LANGFUSE_BASE_URL` | Self-hosted 또는 cloud endpoint |
 | Telemetry | `LANGFUSE_EXPORT_MODE` | `batched` 또는 `immediate` |
 | Telemetry | `LANGFUSE_TRACING_ENVIRONMENT` | Trace 환경 이름 |
+
+`ALLOWED_EMAIL_DOMAINS`는 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. 명시적으로 빈 값으로 설정하면 모든 domain을 허용한다. `ADMIN_EMAILS`는 조직 bootstrap 권한만 제어하고 기존 조직의 tenant role을 우회하지 않는다. 명시적으로 빈 값으로 설정하면 기존 호환 동작대로 인증 사용자 모두가 첫 조직을 만들 수 있다.
 
 운영에서는 `.env.example`과 Compose의 개발용 credential을 사용하지 말고 secret manager에서 주입하라. Password provider가 필요하지 않으면 비활성화하고 OIDC 또는 Google만 구성하라.
 

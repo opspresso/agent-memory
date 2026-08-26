@@ -10,6 +10,8 @@ Authorization: Bearer <token>
 
 조직 endpoint는 URL의 `organizationId`에 대한 멤버십을 추가로 확인한다. 브라우저 mutation은 trusted same-origin 요청만 허용하며 Bearer 요청에는 origin 검사를 적용하지 않는다.
 
+인증은 `ALLOWED_EMAIL_DOMAINS`에 설정한 email domain으로 제한한다. `POST /api/organizations`는 `ADMIN_EMAILS`에 설정한 사용자만 호출할 수 있으며, 생성자는 새 조직의 owner가 된다. 이 전역 bootstrap 권한은 기존 조직의 멤버십이나 role을 대체하지 않는다.
+
 모든 JSON validation error는 `400`, 인증 실패는 `401`, 권한 부족은 `403`을 반환한다. 존재하지 않거나 읽을 수 없는 resource는 정보 노출을 막기 위해 `404`가 될 수 있다.
 
 ## Endpoint
@@ -18,7 +20,7 @@ Authorization: Bearer <token>
 | --- | --- | --- |
 | `GET` | `/api/health` | Database readiness 확인 |
 | `GET`, `POST` | `/api/auth/*` | Better Auth 인증 endpoint |
-| `GET`, `POST` | `/api/organizations` | 접근 가능한 조직 조회, 조직 생성 |
+| `GET`, `POST` | `/api/organizations` | 접근 가능한 조직 조회, 전역 admin의 조직 생성 |
 | `GET` | `/api/organizations/:organizationId/me` | 현재 멤버십과 팀 역할 조회 |
 | `GET`, `PUT` | `/api/organizations/:organizationId/members` | 조직 멤버 조회·추가·역할 변경 |
 | `GET`, `POST` | `/api/organizations/:organizationId/teams` | 팀 조회·생성 |
