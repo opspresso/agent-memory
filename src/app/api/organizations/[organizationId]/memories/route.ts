@@ -2,6 +2,7 @@ import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
 import {
   memoryErrorResponse,
   publicMemory,
+  publicMemoryForAccess,
   readJsonBody,
   versionEtag
 } from "@/lib/memory-http";
@@ -68,6 +69,9 @@ export async function POST(request: Request, context: RouteContext) {
       title: parsed.data.title,
       content: parsed.data.content,
       source: parsed.data.source,
+      ...(parsed.data.accessGrants !== undefined
+        ? { accessGrants: parsed.data.accessGrants }
+        : {}),
       ...(parsed.data.validFrom
         ? { validFrom: new Date(parsed.data.validFrom) }
         : {}),
@@ -76,7 +80,7 @@ export async function POST(request: Request, context: RouteContext) {
         : {})
     });
 
-    return Response.json(publicMemory(memory), {
+    return Response.json(publicMemoryForAccess(memory, authorization.access), {
       status: 201,
       headers: {
         ETag: versionEtag(memory.version),

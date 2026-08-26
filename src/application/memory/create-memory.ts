@@ -1,6 +1,7 @@
 import {
   createMemory,
   type Memory,
+  type MemoryAccessGrant,
   type MemoryKind,
   type MemoryScope,
   type MemorySource
@@ -17,6 +18,7 @@ export interface CreateMemoryInput {
   readonly title: string;
   readonly content: string;
   readonly source: MemorySource;
+  readonly accessGrants?: readonly MemoryAccessGrant[];
   readonly validFrom?: Date;
   readonly expiresAt?: Date;
 }
@@ -38,7 +40,8 @@ export class MemoryAccessDeniedError extends Error {
 export function buildCreateMemory(dependencies: CreateMemoryDependencies) {
   return async function execute(input: CreateMemoryInput): Promise<Memory> {
     const now = dependencies.clock();
-    if (!canAccessScopedResource(input.access, "write", input.scope)) {
+    const action = input.accessGrants === undefined ? "write" : "manage";
+    if (!canAccessScopedResource(input.access, action, input.scope)) {
       throw new MemoryAccessDeniedError();
     }
 
@@ -49,6 +52,7 @@ export function buildCreateMemory(dependencies: CreateMemoryDependencies) {
       title: input.title,
       content: input.content,
       source: input.source,
+      ...(input.accessGrants ? { accessGrants: input.accessGrants } : {}),
       createdBy: input.access.userId,
       validFrom: input.validFrom ?? now,
       ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
@@ -67,6 +71,7 @@ export function buildCreateMemory(dependencies: CreateMemoryDependencies) {
           title: memoryWithoutEmbedding.title,
           content: memoryWithoutEmbedding.content,
           source: memoryWithoutEmbedding.source,
+          accessGrants: memoryWithoutEmbedding.accessGrants,
           createdBy: memoryWithoutEmbedding.createdBy,
           validFrom: memoryWithoutEmbedding.validFrom,
           ...(memoryWithoutEmbedding.expiresAt

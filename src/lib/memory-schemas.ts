@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { memoryKinds, memorySourceTypes } from "@/domain/memory/memory";
+import {
+  memoryKinds,
+  memoryPermissions,
+  memorySourceTypes
+} from "@/domain/memory/memory";
 
 const metadataSchema = z
   .record(z.string(), z.unknown())
@@ -25,12 +29,41 @@ export const memoryScopeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("user"), userId: z.uuid().optional() })
 ]);
 
+export const memoryAccessGrantsSchema = z
+  .array(
+    z.discriminatedUnion("principalKind", [
+      z.object({
+        principalKind: z.literal("team"),
+        teamId: z.uuid(),
+        permission: z.enum(memoryPermissions)
+      }),
+      z.object({
+        principalKind: z.literal("user"),
+        userId: z.uuid(),
+        permission: z.enum(memoryPermissions)
+      })
+    ])
+  )
+  .max(100)
+  .refine(
+    (grants) =>
+      new Set(
+        grants.map((grant) =>
+          grant.principalKind === "team"
+            ? `team:${grant.teamId}`
+            : `user:${grant.userId}`
+        )
+      ).size === grants.length,
+    "memory access grants must contain unique principals"
+  );
+
 export const createMemorySchema = z.object({
   kind: z.enum(memoryKinds),
   scope: memoryScopeSchema,
   title: z.string().trim().min(1).max(500),
   content: z.string().trim().min(1).max(100_000),
   source: memorySourceSchema,
+  accessGrants: memoryAccessGrantsSchema.optional(),
   validFrom: z.iso.datetime({ offset: true }).optional(),
   expiresAt: z.iso.datetime({ offset: true }).optional()
 });
@@ -40,6 +73,7 @@ export const reviseMemorySchema = z
     title: z.string().trim().min(1).max(500).optional(),
     content: z.string().trim().min(1).max(100_000).optional(),
     source: memorySourceSchema.optional(),
+    accessGrants: memoryAccessGrantsSchema.optional(),
     expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
     changeReason: z.string().trim().min(1).max(1_000).optional()
   })
@@ -48,6 +82,7 @@ export const reviseMemorySchema = z
       input.title !== undefined ||
       input.content !== undefined ||
       input.source !== undefined ||
+      input.accessGrants !== undefined ||
       input.expiresAt !== undefined,
     "at least one memory field must be revised"
   );

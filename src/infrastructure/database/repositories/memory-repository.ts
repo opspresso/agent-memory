@@ -146,6 +146,7 @@ function versionValues(
     sourceMetadata: memory.source.metadata ?? {},
     embedding: memory.embedding?.values ?? null,
     embeddingModel: memory.embedding?.model ?? null,
+    accessGrants: memory.accessGrants,
     validFrom: memory.validFrom,
     expiresAt: memory.expiresAt ?? null,
     status: memory.status,
@@ -348,6 +349,27 @@ export function createMemoryRepository(
         await transaction
           .insert(memoryVersions)
           .values(versionValues(memory, changedBy, changeReason));
+        await transaction
+          .delete(memoryAccessGrants)
+          .where(
+            and(
+              eq(memoryAccessGrants.organizationId, memory.scope.organizationId),
+              eq(memoryAccessGrants.memoryId, memory.id)
+            )
+          );
+        if (memory.accessGrants.length > 0) {
+          await transaction.insert(memoryAccessGrants).values(
+            memory.accessGrants.map((grant) => ({
+              organizationId: memory.scope.organizationId,
+              memoryId: memory.id,
+              principalKind: grant.principalKind,
+              teamId: grant.principalKind === "team" ? grant.teamId : null,
+              userId: grant.principalKind === "user" ? grant.userId : null,
+              permission: grant.permission,
+              grantedBy: changedBy
+            }))
+          );
+        }
         return "saved";
       });
     },

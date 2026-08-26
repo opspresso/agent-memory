@@ -63,6 +63,7 @@ export interface MemoryRevision {
   readonly content?: string;
   readonly source?: MemorySource;
   readonly embedding?: MemoryEmbedding | null;
+  readonly accessGrants?: readonly MemoryAccessGrant[];
   readonly expiresAt?: Date | null;
   readonly now: Date;
 }
@@ -136,7 +137,26 @@ function normalizeEmbedding(
 function normalizeAccessGrants(
   grants: readonly MemoryAccessGrant[]
 ): readonly MemoryAccessGrant[] {
-  return Object.freeze(grants.map((grant) => Object.freeze({ ...grant })));
+  const principals = new Set<string>();
+  return Object.freeze(
+    grants.map((grant) => {
+      const principalId =
+        grant.principalKind === "team" ? grant.teamId : grant.userId;
+      if (principalId.trim().length === 0) {
+        throw new InvalidMemoryError(
+          "memory access grant principal must not be empty"
+        );
+      }
+      const principal = `${grant.principalKind}:${principalId}`;
+      if (principals.has(principal)) {
+        throw new InvalidMemoryError(
+          "memory access grants must contain unique principals"
+        );
+      }
+      principals.add(principal);
+      return Object.freeze({ ...grant });
+    })
+  );
 }
 
 export function createMemory(input: NewMemory): Memory {
@@ -207,6 +227,10 @@ export function reviseMemory(
       : revision.embedding
         ? normalizeEmbedding(revision.embedding)
         : undefined;
+  const accessGrants =
+    revision.accessGrants === undefined
+      ? memory.accessGrants
+      : normalizeAccessGrants(revision.accessGrants);
 
   return Object.freeze({
     ...memory,
@@ -216,6 +240,7 @@ export function reviseMemory(
       ? normalizeSource(revision.source)
       : memory.source,
     ...(embedding ? { embedding } : { embedding: undefined }),
+    accessGrants,
     ...(expiresAt ? { expiresAt: new Date(expiresAt) } : { expiresAt: undefined }),
     updatedAt: new Date(revision.now),
     version: memory.version + 1

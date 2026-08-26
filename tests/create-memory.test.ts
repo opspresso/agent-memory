@@ -109,4 +109,57 @@ describe("create memory", () => {
     ).rejects.toThrow("memory access denied");
     expect(save).not.toHaveBeenCalled();
   });
+
+  it("requires manage permission when assigning access grants", async () => {
+    const save = vi.fn<MemoryRepository["save"]>();
+    const create = buildCreateMemory({
+      clock: () => now,
+      generateId: () => "memory-1",
+      repository: repositoryWithSave(save)
+    });
+
+    await expect(
+      create({
+        access,
+        kind: "decision",
+        scope: {
+          kind: "team",
+          organizationId: "organization-1",
+          teamId: "team-1"
+        },
+        title: "Shared decision",
+        content: "Only team managers can assign ACL grants.",
+        source: { type: "user" },
+        accessGrants: [
+          { principalKind: "user", userId: "user-2", permission: "read" }
+        ]
+      })
+    ).rejects.toThrow("memory access denied");
+    expect(save).not.toHaveBeenCalled();
+
+    await expect(
+      create({
+        access: {
+          ...access,
+          teams: [{ teamId: "team-1", role: "manager" }]
+        },
+        kind: "decision",
+        scope: {
+          kind: "team",
+          organizationId: "organization-1",
+          teamId: "team-1"
+        },
+        title: "Shared decision",
+        content: "Managers can assign ACL grants.",
+        source: { type: "user" },
+        accessGrants: [
+          { principalKind: "user", userId: "user-2", permission: "read" }
+        ]
+      })
+    ).resolves.toMatchObject({
+      accessGrants: [
+        { principalKind: "user", userId: "user-2", permission: "read" }
+      ]
+    });
+  });
 });

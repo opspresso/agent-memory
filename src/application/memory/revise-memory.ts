@@ -4,6 +4,7 @@ import type { TextEmbeddingService } from "@/domain/shared/text-embedding-servic
 import {
   reviseMemory,
   type Memory,
+  type MemoryAccessGrant,
   type MemorySource
 } from "@/domain/memory/memory";
 import type { MemoryRepository } from "@/domain/memory/memory-repository";
@@ -20,6 +21,7 @@ export interface ReviseMemoryInput {
   readonly title?: string;
   readonly content?: string;
   readonly source?: MemorySource;
+  readonly accessGrants?: readonly MemoryAccessGrant[];
   readonly expiresAt?: Date | null;
   readonly changeReason?: string;
 }
@@ -46,7 +48,8 @@ export function buildReviseMemory(dependencies: ReviseMemoryDependencies) {
     if (!existing || existing.status !== "active") {
       throw new MemoryNotFoundError();
     }
-    if (!canAccessMemory(input.access, "write", existing)) {
+    const action = input.accessGrants === undefined ? "write" : "manage";
+    if (!canAccessMemory(input.access, action, existing)) {
       throw new MemoryAccessDeniedError();
     }
     if (existing.version !== input.expectedVersion) {
@@ -65,6 +68,9 @@ export function buildReviseMemory(dependencies: ReviseMemoryDependencies) {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.content !== undefined ? { content: input.content } : {}),
       ...(input.source ? { source: input.source } : {}),
+      ...(input.accessGrants !== undefined
+        ? { accessGrants: input.accessGrants }
+        : {}),
       ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
       ...(embedding !== undefined ? { embedding } : {}),
       now: dependencies.clock()

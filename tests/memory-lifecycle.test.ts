@@ -121,6 +121,78 @@ describe("memory lifecycle", () => {
     );
   });
 
+  it("requires manage permission and versions access grant changes", async () => {
+    const existing = memory({
+      scope: {
+        kind: "team",
+        organizationId: "organization-1",
+        teamId: "team-2"
+      },
+      accessGrants: [
+        { principalKind: "team", teamId: "team-1", permission: "write" }
+      ]
+    });
+    const saveRevision = vi
+      .fn<MemoryRepository["saveRevision"]>()
+      .mockResolvedValue("saved");
+    const revise = buildReviseMemory({
+      clock: () => later,
+      repository: repository({
+        findById: vi.fn().mockResolvedValue(existing),
+        saveRevision
+      })
+    });
+
+    await expect(
+      revise({
+        access,
+        memoryId: existing.id,
+        expectedVersion: 1,
+        accessGrants: []
+      })
+    ).rejects.toThrow("memory access denied");
+
+    const managed = {
+      ...existing,
+      accessGrants: [
+        {
+          principalKind: "team" as const,
+          teamId: "team-1",
+          permission: "manage" as const
+        }
+      ]
+    };
+    const managedRevise = buildReviseMemory({
+      clock: () => later,
+      repository: repository({
+        findById: vi.fn().mockResolvedValue(managed),
+        saveRevision
+      })
+    });
+    const revised = await managedRevise({
+      access,
+      memoryId: existing.id,
+      expectedVersion: 1,
+      accessGrants: [
+        { principalKind: "user", userId: "user-2", permission: "read" }
+      ],
+      changeReason: "Share with incident lead"
+    });
+
+    expect(revised).toMatchObject({
+      version: 2,
+      accessGrants: [
+        { principalKind: "user", userId: "user-2", permission: "read" }
+      ]
+    });
+    expect(saveRevision).toHaveBeenLastCalledWith(
+      revised,
+      1,
+      "user-1",
+      "Share with incident lead"
+    );
+  });
+
   it("requires manage permission to archive", async () => {
     const existing = memory();
     const saveRevision = vi.fn<MemoryRepository["saveRevision"]>().mockResolvedValue("saved");

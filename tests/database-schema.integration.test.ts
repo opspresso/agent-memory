@@ -268,6 +268,9 @@ describe("PostgreSQL schema", () => {
         metadata: { conversationId: "conversation-42" }
       },
       embedding: { model: "test-embedding", values: [1, 0, 0] },
+      accessGrants: [
+        { principalKind: "user", userId: otherUser, permission: "read" }
+      ],
       createdBy: user,
       validFrom: createdAt,
       now: createdAt
@@ -282,6 +285,9 @@ describe("PostgreSQL schema", () => {
         metadata: { conversationId: "conversation-42" }
       },
       embedding: { model: "test-embedding", values: [1, 0, 0] },
+      accessGrants: [
+        { principalKind: "user", userId: otherUser, permission: "read" }
+      ],
       version: 1
     });
 
@@ -293,25 +299,6 @@ describe("PostgreSQL schema", () => {
     });
     expect(lexicalHits.map((hit) => hit.memory.id)).toContain(memoryId);
 
-    const inaccessibleHits = await repository.search({
-      access: {
-        organizationId: organization,
-        userId: otherUser,
-        role: "member",
-        teams: []
-      },
-      query: "rollback commander",
-      now: createdAt,
-      limit: 10
-    });
-    expect(inaccessibleHits).toEqual([]);
-
-    await pool.query(
-      `INSERT INTO memory_access_grants (
-         organization_id, memory_id, principal_kind, user_id, permission, granted_by
-       ) VALUES ($1, $2, 'user', $3, 'read', $4)`,
-      [organization, memoryId, otherUser, user]
-    );
     const explicitlyGrantedHits = await repository.search({
       access: {
         organizationId: organization,
@@ -330,6 +317,9 @@ describe("PostgreSQL schema", () => {
     const revised = reviseMemory(original, {
       content: "Production rollback requires two approvers.",
       embedding: { model: "test-embedding", values: [0.9, 0.1, 0] },
+      accessGrants: [
+        { principalKind: "user", userId: otherUser, permission: "write" }
+      ],
       now: new Date("2026-08-27T00:00:00.000Z")
     });
     await expect(
@@ -351,21 +341,42 @@ describe("PostgreSQL schema", () => {
       vectorScore: expect.any(Number),
       score: expect.any(Number)
     });
+    await expect(repository.findById(organization, memoryId)).resolves.toMatchObject({
+      accessGrants: [
+        { principalKind: "user", userId: otherUser, permission: "write" }
+      ]
+    });
 
     const versions = await pool.query<{
+      accessGrants: unknown;
       changedBy: string;
       version: number;
       status: string;
     }>(
-      `SELECT version, status, changed_by AS "changedBy"
+      `SELECT version, status, access_grants AS "accessGrants",
+              changed_by AS "changedBy"
        FROM memory_versions
        WHERE memory_id = $1
        ORDER BY version`,
       [memoryId]
     );
     expect(versions.rows).toEqual([
-      { version: 1, status: "active", changedBy: user },
-      { version: 2, status: "active", changedBy: user }
+      {
+        version: 1,
+        status: "active",
+        changedBy: user,
+        accessGrants: [
+          { principalKind: "user", userId: otherUser, permission: "read" }
+        ]
+      },
+      {
+        version: 2,
+        status: "active",
+        changedBy: user,
+        accessGrants: [
+          { principalKind: "user", userId: otherUser, permission: "write" }
+        ]
+      }
     ]);
   });
 

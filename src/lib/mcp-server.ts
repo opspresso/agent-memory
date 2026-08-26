@@ -123,6 +123,9 @@ export function createAgentMemoryMcpServer(
         title: input.title,
         content: input.content,
         source: input.source,
+        ...(input.accessGrants !== undefined
+          ? { accessGrants: input.accessGrants }
+          : {}),
         ...(input.validFrom ? { validFrom: new Date(input.validFrom) } : {}),
         ...(input.expiresAt ? { expiresAt: new Date(input.expiresAt) } : {})
       });

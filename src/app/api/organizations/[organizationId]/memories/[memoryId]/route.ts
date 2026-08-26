@@ -2,7 +2,7 @@ import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
 import {
   memoryErrorResponse,
   parseIfMatch,
-  publicMemory,
+  publicMemoryForAccess,
   readJsonBody,
   versionEtag
 } from "@/lib/memory-http";
@@ -55,7 +55,7 @@ export async function GET(request: Request, context: RouteContext) {
 
   try {
     const memory = await getMemoryRecord(route.access, route.memoryId);
-    return Response.json(publicMemory(memory), {
+    return Response.json(publicMemoryForAccess(memory, route.access), {
       headers: { ETag: versionEtag(memory.version) }
     });
   } catch (error) {
@@ -102,6 +102,9 @@ export async function PATCH(request: Request, context: RouteContext) {
         ? { content: parsed.data.content }
         : {}),
       ...(parsed.data.source ? { source: parsed.data.source } : {}),
+      ...(parsed.data.accessGrants !== undefined
+        ? { accessGrants: parsed.data.accessGrants }
+        : {}),
       ...(parsed.data.expiresAt !== undefined
         ? {
             expiresAt: parsed.data.expiresAt
@@ -113,7 +116,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         ? { changeReason: parsed.data.changeReason }
         : {})
     });
-    return Response.json(publicMemory(memory), {
+    return Response.json(publicMemoryForAccess(memory, route.access), {
       headers: { ETag: versionEtag(memory.version) }
     });
   } catch (error) {

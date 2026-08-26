@@ -4,6 +4,8 @@ import { MemoryVersionConflictError } from "@/application/memory/revise-memory";
 import { InvalidMemorySearchError } from "@/application/memory/search-memories";
 import { InvalidMemoryError } from "@/domain/memory/memory";
 import type { Memory } from "@/domain/memory/memory";
+import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import { canAccessMemory } from "@/domain/memory/memory-access";
 
 export function memoryErrorResponse(error: unknown): Response | null {
   if (error instanceof MemoryNotFoundError) {
@@ -67,4 +69,14 @@ export function publicMemory(memory: Memory) {
     version: memory.version,
     ...(memory.embedding ? { embeddingModel: memory.embedding.model } : {})
   };
+}
+
+export function publicMemoryForAccess(
+  memory: Memory,
+  access: OrganizationAccess
+) {
+  const value = publicMemory(memory);
+  return canAccessMemory(access, "manage", memory)
+    ? { ...value, accessGrants: memory.accessGrants }
+    : value;
 }

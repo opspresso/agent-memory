@@ -4,6 +4,7 @@ import { createMemory } from "@/domain/memory/memory";
 import {
   parseIfMatch,
   publicMemory,
+  publicMemoryForAccess,
   readJsonBody,
   versionEtag
 } from "@/lib/memory-http";
@@ -72,5 +73,13 @@ describe("memory HTTP concurrency", () => {
     });
     expect(publicMemory(memory)).not.toHaveProperty("embedding");
     expect(publicMemory(memory)).not.toHaveProperty("accessGrants");
+    expect(
+      publicMemoryForAccess(memory, {
+        organizationId: "organization-1",
+        userId: "user-1",
+        role: "owner",
+        teams: []
+      })
+    ).toHaveProperty("accessGrants", memory.accessGrants);
   });
 });

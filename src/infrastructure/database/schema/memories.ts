@@ -18,7 +18,8 @@ import {
   memoryKinds,
   memoryPermissions,
   memoryStatuses,
-  memorySourceTypes
+  memorySourceTypes,
+  type MemoryAccessGrant
 } from "@/domain/memory/memory";
 
 import {
@@ -150,6 +151,10 @@ export const memoryVersions = pgTable(
     sourceMetadata: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
     embedding: unconstrainedVector(),
     embeddingModel: text(),
+    accessGrants: jsonb()
+      .$type<readonly MemoryAccessGrant[]>()
+      .notNull()
+      .default([]),
     validFrom: timestamp({ withTimezone: true }).notNull(),
     expiresAt: timestamp({ withTimezone: true }),
     status: memoryStatus().notNull(),
@@ -232,10 +237,10 @@ export const memoryAccessGrants = pgTable(
       name: "memory_access_grants_organization_granter_fk"
     }).onDelete("restrict"),
     uniqueIndex("memory_access_grants_team_unique")
-      .on(table.memoryId, table.teamId, table.permission)
+      .on(table.memoryId, table.teamId)
       .where(sql`${table.teamId} IS NOT NULL`),
     uniqueIndex("memory_access_grants_user_unique")
-      .on(table.memoryId, table.userId, table.permission)
+      .on(table.memoryId, table.userId)
       .where(sql`${table.userId} IS NOT NULL`)
   ]
 );
