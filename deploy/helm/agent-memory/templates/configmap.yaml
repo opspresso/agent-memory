@@ -1,0 +1,19 @@
+{{- $data := dict }}
+{{- range $key, $value := omit .Values.config "extra" }}
+{{- if ne (toString $value) "" }}
+{{- $_ := set $data $key (toString $value) }}
+{{- end }}
+{{- end }}
+{{- range $key, $value := .Values.config.extra }}
+{{- $_ := set $data $key (toString $value) }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-memory.fullname" . }}
+  labels:
+    {{- include "agent-memory.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := $data }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

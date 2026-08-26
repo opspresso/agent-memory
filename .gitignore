@@ -15,6 +15,9 @@ build/
 .env.local
 .env.local.*
 .env.*.local
+deploy/**/.env
+deploy/**/.env.secrets
+deploy/**/.env.infrastructure
 
 # misc
 .DS_Store

@@ -1,0 +1,9 @@
+Agent Memory {{ .Chart.AppVersion }} is installing as release "{{ .Release.Name }}".
+
+App: https://{{ .Values.ingress.host }}/
+Database: {{ if .Values.postgres.enabled }}bundled PostgreSQL{{ else }}external DATABASE_URL{{ end }}
+Object storage: {{ if .Values.minio.enabled }}bundled MinIO{{ else }}external S3-compatible storage{{ end }}
+
+Verify:
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "agent-memory.fullname" . }}
+  curl -fsS https://{{ .Values.ingress.host }}/api/health

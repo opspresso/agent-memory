@@ -15,6 +15,23 @@ app: Next.js + migration + worker ──▶ PostgreSQL
                   └─────────────────▶ MinIO/S3
 ```
 
+## 배포 형태
+
+배포 환경마다 application image는 같고 infrastructure 연결 방식만 다르다.
+
+| 환경 | Application | PostgreSQL·Object storage | 진입점 |
+| --- | --- | --- | --- |
+| Local 개발 | host `pnpm dev` | 루트 Compose | `http://localhost:3100` |
+| Local container | `deploy/local` Compose | 전용 PostgreSQL·MinIO | `http://localhost:3100` |
+| IDC | `deploy/idc` Compose | Agent Studio와 instance 공유, database·bucket 격리 | 공유 Caddy의 `https://memory.opspresso.com` |
+| EKS | `deploy/helm/agent-memory` | 기존 PostgreSQL·S3가 기본, bundled service는 선택 | ALB/nginx ingress |
+
+Local container 검증은 [local 배포 문서](../deploy/local/README.md), IDC 설치·백업은 [IDC 배포 문서](../deploy/idc/README.md), EKS 값과 설치는 [Helm chart 문서](../deploy/helm/agent-memory/README.md)를 따른다.
+
+IDC와 EKS에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
+
+`v*` tag를 push하면 release workflow가 `pnpm verify`를 통과한 source에서 `ghcr.io/opspresso/agent-memory:<tag>`와 `latest` image를 생성한다. 운영 배포는 `latest` 대신 immutable tag를 사용하라.
+
 ### 로컬 개발
 
 Node.js 24, pnpm 11, Docker가 필요하다.

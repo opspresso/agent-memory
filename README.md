@@ -29,6 +29,8 @@ pnpm install
 cp .env.example .env.local
 ```
 
+배포 환경별 절차는 [운영 가이드](docs/operations.md#배포-형태)를 따른다. Production image 기반 local stack, 공유 PostgreSQL·MinIO를 사용하는 IDC Compose, EKS Helm chart를 제공한다.
+
 로컬에서 로그인하려면 `.env.local`에서 password provider와 signup을 활성화하라.
 
 ```dotenv

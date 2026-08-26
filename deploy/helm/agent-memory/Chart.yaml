@@ -1,0 +1,9 @@
+apiVersion: v2
+name: agent-memory
+description: Agent Memory with optional PostgreSQL (pgvector) and MinIO
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/opspresso/agent-memory
+sources:
+  - https://github.com/opspresso/agent-memory

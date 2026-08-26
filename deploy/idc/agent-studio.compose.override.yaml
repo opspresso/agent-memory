@@ -1,0 +1,9 @@
+services:
+  caddy:
+    networks:
+      default:
+      opspresso-edge:
+
+networks:
+  opspresso-edge:
+    external: true
