@@ -51,7 +51,11 @@ interface WorkspaceProps {
   readonly user: SessionUser;
 }
 
-type SearchKind = "documents" | "knowledge/nodes" | "memories";
+type SearchKind =
+  | "context/search"
+  | "documents"
+  | "knowledge/nodes"
+  | "memories";
 
 interface SearchResponse {
   readonly hits?: readonly Record<string, unknown>[];
@@ -103,7 +107,7 @@ export function Workspace({
   const [organizationId, setOrganizationId] = useState(
     organizations[0]?.id ?? ""
   );
-  const [searchKind, setSearchKind] = useState<SearchKind>("memories");
+  const [searchKind, setSearchKind] = useState<SearchKind>("context/search");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string>();
   const [hits, setHits] = useState<readonly Record<string, unknown>[]>([]);
@@ -271,6 +275,7 @@ export function Workspace({
             <Stack gap="lg">
               <SegmentedControl
                 data={[
+                  { label: "All Context", value: "context/search" },
                   { label: "Memory", value: "memories" },
                   { label: "Documents", value: "documents" },
                   { label: "Graph", value: "knowledge/nodes" }
@@ -366,8 +371,8 @@ export function Workspace({
               </Text>
               <Code block>{mcpPath}</Code>
               <Text c="dimmed" size="sm">
-                memory_search · memory_create · document_search · knowledge_search ·
-                knowledge_neighborhood
+                context_search · memory_search · memory_create · document_search ·
+                knowledge_search · knowledge_neighborhood
               </Text>
             </Stack>
           </Paper>

@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import type { CreateMemoryInput } from "@/application/memory/create-memory";
+import type { ContextSearchResult } from "@/application/context/search-context";
 import type {
   OrganizationAccess,
   ScopedResource
@@ -15,6 +16,7 @@ import type { Memory } from "@/domain/memory/memory";
 import type { MemorySearchHit } from "@/domain/memory/memory-repository";
 
 import { publicDocumentHit } from "./document-http";
+import { publicContextSearchResult } from "./context-http";
 import {
   publicKnowledgeEdge,
   publicKnowledgeHit,
@@ -24,6 +26,11 @@ import { publicMemory } from "./memory-http";
 import { createMemorySchema } from "./memory-schemas";
 
 export interface AgentMemoryMcpOperations {
+  searchContext(
+    access: OrganizationAccess,
+    query: string,
+    limit: number
+  ): Promise<ContextSearchResult>;
   createMemory(input: CreateMemoryInput): Promise<Memory>;
   searchMemories(
     access: OrganizationAccess,
@@ -89,6 +96,21 @@ export function createAgentMemoryMcpServer(
   operations: AgentMemoryMcpOperations
 ) {
   const server = new McpServer({ name: "agent-memory", version: "1.0.0" });
+
+  server.registerTool(
+    "context_search",
+    {
+      title: "Search unified agent context",
+      description:
+        "Search accessible memories, RAG documents, and knowledge graph nodes in one ranked result.",
+      inputSchema: searchInputSchema,
+      annotations: { readOnlyHint: true, idempotentHint: true }
+    },
+    async ({ query, limit }) => {
+      const result = await operations.searchContext(access, query, limit ?? 10);
+      return jsonResult(publicContextSearchResult(result, limit ?? 10));
+    }
+  );
 
   server.registerTool(
     "memory_search",

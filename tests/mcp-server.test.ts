@@ -27,6 +27,9 @@ function operations(
   overrides: Partial<AgentMemoryMcpOperations> = {}
 ): AgentMemoryMcpOperations {
   return {
+    searchContext: vi
+      .fn()
+      .mockResolvedValue({ memories: [], documents: [], knowledge: [] }),
     createMemory: vi.fn(),
     searchMemories: vi.fn().mockResolvedValue([]),
     searchDocuments: vi.fn().mockResolvedValue([]),
@@ -55,6 +58,7 @@ describe("agent memory MCP server", () => {
 
     const tools = await client.listTools();
     expect(tools.tools.map((tool) => tool.name)).toEqual([
+      "context_search",
       "memory_search",
       "memory_create",
       "document_search",
@@ -74,5 +78,24 @@ describe("agent memory MCP server", () => {
 
     expect(searchMemories).toHaveBeenCalledWith(access, "rollback", 5);
     expect(result.structuredContent).toEqual({ hits: [] });
+  });
+
+  it("executes unified context search", async () => {
+    const searchContext = vi
+      .fn()
+      .mockResolvedValue({ memories: [], documents: [], knowledge: [] });
+    const client = await connectedClient(operations({ searchContext }));
+
+    const result = await client.callTool({
+      name: "context_search",
+      arguments: { query: "incident", limit: 7 }
+    });
+
+    expect(searchContext).toHaveBeenCalledWith(access, "incident", 7);
+    expect(result.structuredContent).toEqual({
+      hits: [],
+      total: 0,
+      totals: { memories: 0, documents: 0, knowledge: 0 }
+    });
   });
 });
