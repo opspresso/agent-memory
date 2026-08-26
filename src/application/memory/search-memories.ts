@@ -29,6 +29,11 @@ export function buildSearchMemories(dependencies: SearchMemoriesDependencies) {
     if (normalizedQuery.length === 0) {
       throw new InvalidMemorySearchError("memory search query must not be empty");
     }
+    if (normalizedQuery.length > 10_000) {
+      throw new InvalidMemorySearchError(
+        "memory search query must not exceed 10000 characters"
+      );
+    }
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new InvalidMemorySearchError("memory search limit must be between 1 and 100");
     }
