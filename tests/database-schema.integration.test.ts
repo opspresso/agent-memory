@@ -8,7 +8,10 @@ import {
   type AgentMemoryDatabase
 } from "@/infrastructure/database/client";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
+import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createAuth } from "@/lib/create-auth";
+import { createMemory, reviseMemory } from "@/domain/memory/memory";
+import type { OrganizationAccess } from "@/domain/identity/organization-access";
 
 const organizationA = "00000000-0000-0000-0000-000000000001";
 const organizationB = "00000000-0000-0000-0000-000000000002";
@@ -149,6 +152,160 @@ describe("PostgreSQL schema", () => {
     await expect(
       repository.findByUser(organizationB, user)
     ).resolves.toBeNull();
+  });
+
+  it("persists revisions and searches only accessible active memory", async () => {
+    const organization = "00000000-0000-0000-0000-000000000004";
+    const user = "10000000-0000-0000-0000-000000000004";
+    const otherUser = "10000000-0000-0000-0000-000000000005";
+    const team = "20000000-0000-0000-0000-000000000004";
+    const memoryId = "30000000-0000-0000-0000-000000000004";
+    await pool.query(
+      `INSERT INTO organizations (id, slug, name)
+       VALUES ($1, 'organization-d', 'Organization D')`,
+      [organization]
+    );
+    await pool.query(
+      `INSERT INTO users (id, email, name)
+       VALUES ($1, 'user-d@example.com', 'User D'),
+              ($2, 'user-e@example.com', 'User E')`,
+      [user, otherUser]
+    );
+    await pool.query(
+      `INSERT INTO organization_members (organization_id, user_id)
+       VALUES ($1, $2), ($1, $3)`,
+      [organization, user, otherUser]
+    );
+    await pool.query(
+      `INSERT INTO teams (id, organization_id, slug, name)
+       VALUES ($1, $2, 'team-d', 'Team D')`,
+      [team, organization]
+    );
+    await pool.query(
+      `INSERT INTO team_members (organization_id, team_id, user_id, role)
+       VALUES ($1, $2, $3, 'manager')`,
+      [organization, team, user]
+    );
+
+    const repository = createMemoryRepository(db);
+    const access: OrganizationAccess = {
+      organizationId: organization,
+      userId: user,
+      role: "member",
+      teams: [{ teamId: team, role: "manager" }]
+    };
+    const createdAt = new Date("2026-08-26T00:00:00.000Z");
+    const original = createMemory({
+      id: memoryId,
+      kind: "decision",
+      scope: { kind: "team", organizationId: organization, teamId: team },
+      title: "Rollback policy",
+      content: "Production rollback requires an incident commander.",
+      source: {
+        type: "agent",
+        agentId: "incident-agent",
+        metadata: { conversationId: "conversation-42" }
+      },
+      embedding: { model: "test-embedding", values: [1, 0, 0] },
+      createdBy: user,
+      validFrom: createdAt,
+      now: createdAt
+    });
+
+    await repository.save(original);
+    await expect(repository.findById(organization, memoryId)).resolves.toMatchObject({
+      id: memoryId,
+      source: {
+        type: "agent",
+        agentId: "incident-agent",
+        metadata: { conversationId: "conversation-42" }
+      },
+      embedding: { model: "test-embedding", values: [1, 0, 0] },
+      version: 1
+    });
+
+    const lexicalHits = await repository.search({
+      access,
+      query: "rollback commander",
+      now: createdAt,
+      limit: 10
+    });
+    expect(lexicalHits.map((hit) => hit.memory.id)).toContain(memoryId);
+
+    const inaccessibleHits = await repository.search({
+      access: {
+        organizationId: organization,
+        userId: otherUser,
+        role: "member",
+        teams: []
+      },
+      query: "rollback commander",
+      now: createdAt,
+      limit: 10
+    });
+    expect(inaccessibleHits).toEqual([]);
+
+    await pool.query(
+      `INSERT INTO memory_access_grants (
+         organization_id, memory_id, principal_kind, user_id, permission, granted_by
+       ) VALUES ($1, $2, 'user', $3, 'read', $4)`,
+      [organization, memoryId, otherUser, user]
+    );
+    const explicitlyGrantedHits = await repository.search({
+      access: {
+        organizationId: organization,
+        userId: otherUser,
+        role: "member",
+        teams: []
+      },
+      query: "rollback commander",
+      now: createdAt,
+      limit: 10
+    });
+    expect(explicitlyGrantedHits.map((hit) => hit.memory.id)).toEqual([
+      memoryId
+    ]);
+
+    const revised = reviseMemory(original, {
+      content: "Production rollback requires two approvers.",
+      embedding: { model: "test-embedding", values: [0.9, 0.1, 0] },
+      now: new Date("2026-08-27T00:00:00.000Z")
+    });
+    await expect(
+      repository.saveRevision(revised, 1, user, "Approval policy changed")
+    ).resolves.toBe("saved");
+    await expect(
+      repository.saveRevision(revised, 1, user, "Stale update")
+    ).resolves.toBe("conflict");
+
+    const hybridHits = await repository.search({
+      access,
+      query: "unrelated lexical query",
+      queryEmbedding: { model: "test-embedding", values: [1, 0, 0] },
+      now: new Date("2026-08-27T00:00:00.000Z"),
+      limit: 10
+    });
+    expect(hybridHits[0]).toMatchObject({
+      memory: { id: memoryId, version: 2 },
+      vectorScore: expect.any(Number),
+      score: expect.any(Number)
+    });
+
+    const versions = await pool.query<{
+      changedBy: string;
+      version: number;
+      status: string;
+    }>(
+      `SELECT version, status, changed_by AS "changedBy"
+       FROM memory_versions
+       WHERE memory_id = $1
+       ORDER BY version`,
+      [memoryId]
+    );
+    expect(versions.rows).toEqual([
+      { version: 1, status: "active", changedBy: user },
+      { version: 2, status: "active", changedBy: user }
+    ]);
   });
 
   it("rejects a memory that points to a team in another organization", async () => {

@@ -37,6 +37,7 @@ export function buildArchiveMemory(dependencies: ArchiveMemoryDependencies) {
     const result = await dependencies.repository.saveRevision(
       archived,
       expectedVersion,
+      access.userId,
       changeReason
     );
     if (result === "not_found") {

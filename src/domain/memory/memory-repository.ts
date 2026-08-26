@@ -27,6 +27,7 @@ export interface MemoryRepository {
   saveRevision(
     memory: Memory,
     expectedVersion: number,
+    changedBy: string,
     changeReason?: string
   ): Promise<SaveMemoryRevisionResult>;
   search(input: MemorySearchInput): Promise<readonly MemorySearchHit[]>;

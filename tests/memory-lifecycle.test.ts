@@ -116,6 +116,7 @@ describe("memory lifecycle", () => {
     expect(saveRevision).toHaveBeenCalledWith(
       revised,
       1,
+      "user-1",
       "Decision changed"
     );
   });
@@ -136,6 +137,7 @@ describe("memory lifecycle", () => {
     expect(saveRevision).toHaveBeenCalledWith(
       expect.objectContaining({ status: "archived", version: 2 }),
       1,
+      "user-1",
       "No longer valid"
     );
   });

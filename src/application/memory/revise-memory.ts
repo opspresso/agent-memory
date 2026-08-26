@@ -72,6 +72,7 @@ export function buildReviseMemory(dependencies: ReviseMemoryDependencies) {
     const result = await dependencies.repository.saveRevision(
       revised,
       input.expectedVersion,
+      input.access.userId,
       input.changeReason
     );
     if (result === "not_found") {

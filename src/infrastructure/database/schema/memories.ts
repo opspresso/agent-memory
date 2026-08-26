@@ -16,6 +16,8 @@ import {
 
 import {
   memoryKinds,
+  memoryPermissions,
+  memoryStatuses,
   memorySourceTypes
 } from "@/domain/memory/memory";
 
@@ -24,7 +26,7 @@ import {
   organizations,
   teams
 } from "./identity";
-import { tsvector } from "./custom-types";
+import { tsvector, unconstrainedVector } from "./custom-types";
 
 export const memoryKind = pgEnum("memory_kind", [...memoryKinds]);
 export const memoryScopeKind = pgEnum("memory_scope_kind", [
@@ -35,11 +37,9 @@ export const memoryScopeKind = pgEnum("memory_scope_kind", [
 export const memorySourceType = pgEnum("memory_source_type", [
   ...memorySourceTypes
 ]);
-export const memoryStatus = pgEnum("memory_status", ["active", "archived"]);
+export const memoryStatus = pgEnum("memory_status", [...memoryStatuses]);
 export const memoryPermission = pgEnum("memory_permission", [
-  "read",
-  "write",
-  "manage"
+  ...memoryPermissions
 ]);
 export const memoryPrincipalKind = pgEnum("memory_principal_kind", [
   "team",
@@ -68,6 +68,8 @@ export const memories = pgTable(
     sourceUri: text(),
     sourceAgentId: text(),
     sourceMetadata: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
+    embedding: unconstrainedVector(),
+    embeddingModel: text(),
     createdBy: uuid().notNull(),
     validFrom: timestamp({ withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp({ withTimezone: true }),
@@ -112,6 +114,10 @@ export const memories = pgTable(
       "memories_expiry_check",
       sql`${table.expiresAt} IS NULL OR ${table.expiresAt} > ${table.validFrom}`
     ),
+    check(
+      "memories_embedding_pair_check",
+      sql`(${table.embedding} IS NULL) = (${table.embeddingModel} IS NULL)`
+    ),
     index("memories_scope_idx").on(
       table.organizationId,
       table.scopeKind,
@@ -140,7 +146,13 @@ export const memoryVersions = pgTable(
     content: text().notNull(),
     sourceType: memorySourceType().notNull(),
     sourceUri: text(),
+    sourceAgentId: text(),
     sourceMetadata: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
+    embedding: unconstrainedVector(),
+    embeddingModel: text(),
+    validFrom: timestamp({ withTimezone: true }).notNull(),
+    expiresAt: timestamp({ withTimezone: true }),
+    status: memoryStatus().notNull(),
     changedBy: uuid().notNull(),
     changeReason: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
@@ -160,7 +172,15 @@ export const memoryVersions = pgTable(
       ],
       name: "memory_versions_organization_changer_fk"
     }).onDelete("restrict"),
-    check("memory_versions_positive_version_check", sql`${table.version} > 0`)
+    check("memory_versions_positive_version_check", sql`${table.version} > 0`),
+    check(
+      "memory_versions_expiry_check",
+      sql`${table.expiresAt} IS NULL OR ${table.expiresAt} > ${table.validFrom}`
+    ),
+    check(
+      "memory_versions_embedding_pair_check",
+      sql`(${table.embedding} IS NULL) = (${table.embeddingModel} IS NULL)`
+    )
   ]
 );
 

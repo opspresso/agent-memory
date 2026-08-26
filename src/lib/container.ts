@@ -1,5 +1,6 @@
 import { createDatabase } from "@/infrastructure/database/client";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
+import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 
 const defaultDatabaseUrl =
   "postgresql://agent_memory:agent_memory@localhost:5433/agent_memory";
@@ -10,3 +11,5 @@ export const database = createDatabase(
 
 export const organizationAccessRepository =
   createOrganizationAccessRepository(database.db);
+
+export const memoryRepository = createMemoryRepository(database.db);
