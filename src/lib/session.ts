@@ -12,6 +12,21 @@ export type AuthenticationResult =
   | Readonly<{ authenticated: true; user: SessionUser }>
   | Readonly<{ authenticated: false; response: Response }>;
 
+export async function getSessionUser(
+  headers: Headers
+): Promise<SessionUser | null> {
+  const session = await auth.api.getSession({ headers });
+  if (!session) {
+    return null;
+  }
+  return {
+    id: session.user.id,
+    email: session.user.email,
+    image: session.user.image ?? null,
+    name: session.user.name
+  };
+}
+
 export async function authenticateRequest(
   request: Request
 ): Promise<AuthenticationResult> {
@@ -23,8 +38,8 @@ export async function authenticateRequest(
     };
   }
 
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) {
+  const user = await getSessionUser(request.headers);
+  if (!user) {
     return {
       authenticated: false,
       response: Response.json({ error: "Authentication required" }, { status: 401 })
@@ -33,11 +48,6 @@ export async function authenticateRequest(
 
   return {
     authenticated: true,
-    user: {
-      id: session.user.id,
-      email: session.user.email,
-      image: session.user.image ?? null,
-      name: session.user.name
-    }
+    user
   };
 }

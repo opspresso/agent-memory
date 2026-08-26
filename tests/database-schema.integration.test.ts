@@ -196,6 +196,14 @@ describe("PostgreSQL schema", () => {
 
     const repository = createOrganizationAccessRepository(db);
 
+    await expect(repository.listByUser(user)).resolves.toEqual([
+      {
+        id: organization,
+        slug: "organization-c",
+        name: "Organization C",
+        role: "admin"
+      }
+    ]);
     await expect(repository.findByUser(organization, user)).resolves.toEqual({
       organizationId: organization,
       userId: user,

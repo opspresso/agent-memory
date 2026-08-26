@@ -1,14 +1,31 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import type { OrganizationAccessRepository } from "@/domain/identity/organization-access-repository";
 
 import type { AgentMemoryDatabase } from "../client";
-import { organizationMembers, teamMembers } from "../schema";
+import { organizationMembers, organizations, teamMembers } from "../schema";
 
 export function createOrganizationAccessRepository(
   db: AgentMemoryDatabase
 ): OrganizationAccessRepository {
   return {
+    async listByUser(userId) {
+      return db
+        .select({
+          id: organizations.id,
+          slug: organizations.slug,
+          name: organizations.name,
+          role: organizationMembers.role
+        })
+        .from(organizationMembers)
+        .innerJoin(
+          organizations,
+          eq(organizations.id, organizationMembers.organizationId)
+        )
+        .where(eq(organizationMembers.userId, userId))
+        .orderBy(asc(organizations.name), asc(organizations.id));
+    },
+
     async findByUser(organizationId, userId) {
       const rows = await db
         .select({
