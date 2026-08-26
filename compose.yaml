@@ -1,0 +1,88 @@
+name: agent-memory-local
+
+services:
+  app:
+    build: .
+    environment:
+      AUTH_PASSWORD: "true"
+      AUTH_PASSWORD_SIGNUP: "true"
+      ADMIN_EMAILS: "${ADMIN_EMAILS:-me@nalbam.com}"
+      ALLOWED_EMAIL_DOMAINS: "${ALLOWED_EMAIL_DOMAINS:-nalbam.com}"
+      BETTER_AUTH_SECRET: agent-memory-local-auth-secret-change-me
+      BETTER_AUTH_URL: http://localhost:3100
+      DATABASE_URL: postgresql://agent_memory:agent_memory@postgres:5432/agent_memory
+      DOCUMENT_WORKER_ENABLED: "true"
+      EMBEDDING_API_KEY: "${EMBEDDING_API_KEY:-}"
+      EMBEDDING_BASE_URL: "${EMBEDDING_BASE_URL:-}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      KNOWLEDGE_EXTRACTION_API_KEY: "${KNOWLEDGE_EXTRACTION_API_KEY:-}"
+      KNOWLEDGE_EXTRACTION_BASE_URL: "${KNOWLEDGE_EXTRACTION_BASE_URL:-}"
+      KNOWLEDGE_EXTRACTION_MODEL: "${KNOWLEDGE_EXTRACTION_MODEL:-}"
+      MIGRATE_ON_START: "true"
+      S3_ACCESS_KEY_ID: agent_memory
+      S3_BUCKET: agent-memory
+      S3_ENDPOINT: http://minio:9000
+      S3_FORCE_PATH_STYLE: "true"
+      S3_REGION: us-east-1
+      S3_SECRET_ACCESS_KEY: agent_memory_dev
+    ports:
+      - "127.0.0.1:3100:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg18-trixie
+    environment:
+      POSTGRES_DB: agent_memory
+      POSTGRES_USER: agent_memory
+      POSTGRES_PASSWORD: agent_memory
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent_memory -d agent_memory"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    profiles: ["objects"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: agent_memory
+      MINIO_ROOT_PASSWORD: agent_memory_dev
+    ports:
+      - "127.0.0.1:9010:9000"
+      - "127.0.0.1:9011:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    profiles: ["objects"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 agent_memory agent_memory_dev &&
+        mc mb --ignore-existing local/agent-memory
+    restart: "no"
+
+volumes:
+  postgres-data:
+  minio-data:

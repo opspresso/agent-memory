@@ -1,0 +1,82 @@
+import { z } from "zod";
+
+import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
+
+interface TextEmbeddingServiceConfiguration {
+  readonly apiKey?: string;
+  readonly baseUrl: string;
+  readonly model: string;
+  readonly request?: typeof fetch;
+}
+
+const embeddingResponseSchema = z.object({
+  data: z.array(
+    z.object({
+      embedding: z.array(z.number()).min(1),
+      index: z.number().int().nonnegative()
+    })
+  )
+});
+
+function requiredSetting(value: string, name: string): string {
+  const setting = value.trim();
+  if (setting.length === 0) {
+    throw new Error(`${name} must not be empty`);
+  }
+  return setting;
+}
+
+export function createTextEmbeddingService(
+  configuration: TextEmbeddingServiceConfiguration
+): TextEmbeddingService {
+  const baseUrl = requiredSetting(
+    configuration.baseUrl,
+    "embedding base URL"
+  ).replace(/\/+$/, "");
+  const endpoint = new URL(`${baseUrl}/embeddings`).toString();
+  const model = requiredSetting(configuration.model, "embedding model");
+  const apiKey = configuration.apiKey?.trim();
+  const request = configuration.request ?? fetch;
+
+  async function embedTexts(texts: readonly string[]) {
+    const response = await request(endpoint, {
+      body: JSON.stringify({ input: [...texts], model }),
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+      },
+      method: "POST"
+    });
+    if (!response.ok) {
+      throw new Error(`embedding request failed with status ${response.status}`);
+    }
+
+    const parsed = embeddingResponseSchema.safeParse(await response.json());
+    if (!parsed.success) {
+      throw new Error("embedding response is invalid");
+    }
+    const ordered = parsed.data.data.toSorted((left, right) =>
+      left.index - right.index
+    );
+    if (
+      ordered.length !== texts.length ||
+      ordered.some((item, index) => item.index !== index)
+    ) {
+      throw new Error("embedding response count does not match inputs");
+    }
+    return ordered.map(({ embedding }) => ({ model, values: embedding }));
+  }
+
+  return {
+    async embed(text) {
+      const [embedding] = await embedTexts([text]);
+      if (!embedding) {
+        throw new Error("embedding response is empty");
+      }
+      return embedding;
+    },
+    async embedMany(texts) {
+      return texts.length === 0 ? [] : embedTexts(texts);
+    }
+  };
+}
