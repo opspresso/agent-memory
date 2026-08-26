@@ -55,3 +55,26 @@ jobs:
             ghcr.io/${{ github.repository }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  github-release:
+    needs: verify-and-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          prev="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
+          if [ -n "$prev" ]; then
+            notes="$(git log --no-merges --pretty='- %s' "${prev}..${tag}" | grep -v '^- chore: release' || true)"
+          else
+            notes="$(git log --no-merges --pretty='- %s' "$tag" | grep -v '^- chore: release' || true)"
+          fi
+          gh release create "$tag" --title "$tag" --notes "$notes"
