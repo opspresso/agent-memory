@@ -17,6 +17,11 @@ import {
   createDocumentChunk
 } from "@/domain/document/document";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import {
+  createPgBossDocumentIngestionQueue,
+  documentIngestionQueueName,
+  type DocumentIngestionJob
+} from "@/infrastructure/queue/document-ingestion-queue";
 
 const organizationA = "00000000-0000-0000-0000-000000000001";
 const organizationB = "00000000-0000-0000-0000-000000000002";
@@ -60,6 +65,32 @@ describe("PostgreSQL schema", () => {
 
     expect(result.rows[0]?.postgresVersion).toMatch(/^18\./);
     expect(result.rows[0]?.vectorVersion).toBe("0.8.6");
+  });
+
+  it("deduplicates document ingestion jobs in pg-boss", async () => {
+    const errors: Error[] = [];
+    const queue = createPgBossDocumentIngestionQueue(
+      container.getConnectionUri(),
+      (error) => errors.push(error)
+    );
+
+    try {
+      const boss = await queue.start();
+      const organizationId = "00000000-0000-0000-0000-000000000008";
+      const documentId = "40000000-0000-0000-0000-000000000008";
+      await queue.enqueue(organizationId, documentId);
+      await queue.enqueue(organizationId, documentId);
+
+      const jobs = await boss.findJobs<DocumentIngestionJob>(
+        documentIngestionQueueName,
+        { data: { organizationId, documentId } }
+      );
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0]?.data).toEqual({ organizationId, documentId });
+      expect(errors).toEqual([]);
+    } finally {
+      await queue.stop();
+    }
   });
 
   it("creates a Better Auth session backed by UUID tables", async () => {

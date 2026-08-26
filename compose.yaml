@@ -9,6 +9,12 @@ services:
       BETTER_AUTH_SECRET: agent-memory-local-auth-secret-change-me
       BETTER_AUTH_URL: http://localhost:3100
       DATABASE_URL: postgresql://agent_memory:agent_memory@postgres:5432/agent_memory
+      S3_ACCESS_KEY_ID: agent_memory
+      S3_BUCKET: agent-memory
+      S3_ENDPOINT: http://minio:9000
+      S3_FORCE_PATH_STYLE: "true"
+      S3_REGION: us-east-1
+      S3_SECRET_ACCESS_KEY: agent_memory_dev
     ports:
       - "127.0.0.1:3100:3000"
     depends_on:
@@ -51,6 +57,19 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    profiles: ["objects"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 agent_memory agent_memory_dev &&
+        mc mb --ignore-existing local/agent-memory
+    restart: "no"
 
 volumes:
   postgres-data:

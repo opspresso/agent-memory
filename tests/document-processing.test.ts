@@ -10,6 +10,10 @@ import type {
   DocumentIngestionQueue,
   DocumentObjectStorage
 } from "@/domain/document/document-services";
+import {
+  createPlainTextExtractor,
+  UnsupportedDocumentTypeError
+} from "@/infrastructure/document/plain-text-extractor";
 
 const now = new Date("2026-08-26T00:00:00.000Z");
 const access: OrganizationAccess = {
@@ -43,6 +47,20 @@ function objectStorage(
 }
 
 describe("document processing", () => {
+  it("extracts supported UTF-8 text and normalizes JSON", async () => {
+    const extractor = createPlainTextExtractor();
+
+    await expect(
+      extractor.extract(
+        new TextEncoder().encode('{"rollback":true}'),
+        "application/json; charset=utf-8"
+      )
+    ).resolves.toBe('{\n  "rollback": true\n}');
+    await expect(
+      extractor.extract(new Uint8Array([0, 1, 2]), "application/pdf")
+    ).rejects.toBeInstanceOf(UnsupportedDocumentTypeError);
+  });
+
   it("chunks normalized text deterministically with bounded overlap", () => {
     const text = `${"alpha ".repeat(30)}\r\n\r\n${"beta ".repeat(30)}`;
     const chunks = chunkText(text, {

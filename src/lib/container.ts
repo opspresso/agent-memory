@@ -3,6 +3,13 @@ import { createOrganizationAccessRepository } from "@/infrastructure/database/re
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
+import { createPlainTextExtractor } from "@/infrastructure/document/plain-text-extractor";
+import {
+  createS3Client,
+  createS3DocumentObjectStorage
+} from "@/infrastructure/object-storage/s3-document-object-storage";
+import { logger } from "@/infrastructure/observability/logger";
+import { createPgBossDocumentIngestionQueue } from "@/infrastructure/queue/document-ingestion-queue";
 
 const defaultDatabaseUrl =
   "postgresql://agent_memory:agent_memory@localhost:5433/agent_memory";
@@ -21,3 +28,21 @@ const embeddingModel = process.env.EMBEDDING_MODEL?.trim();
 export const textEmbeddingService = embeddingModel
   ? createTextEmbeddingService(embeddingModel)
   : undefined;
+
+const s3Client = createS3Client({
+  endpoint: process.env.S3_ENDPOINT ?? "http://localhost:9010",
+  region: process.env.S3_REGION ?? "us-east-1",
+  accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "agent_memory",
+  secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "agent_memory_dev",
+  forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false"
+});
+
+export const documentObjectStorage = createS3DocumentObjectStorage({
+  bucket: process.env.S3_BUCKET ?? "agent-memory",
+  client: s3Client
+});
+export const documentTextExtractor = createPlainTextExtractor();
+export const documentIngestionQueue = createPgBossDocumentIngestionQueue(
+  process.env.DATABASE_URL ?? defaultDatabaseUrl,
+  (error) => logger.error({ err: error }, "pg-boss error")
+);
