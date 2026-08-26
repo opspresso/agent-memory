@@ -1,0 +1,61 @@
+{
+  "name": "agent-memory",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3100",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
+    "test:watch": "vitest",
+    "architecture": "depcruise src --config dependency-cruiser.config.cjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "verify": "pnpm lint && pnpm typecheck && pnpm architecture && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1118.0",
+    "@mantine/core": "^9.5.2",
+    "@mantine/hooks": "^9.5.2",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@tabler/icons-react": "^3.46.0",
+    "ai": "^7.0.79",
+    "better-auth": "^1.7.1",
+    "drizzle-orm": "^0.45.2",
+    "langfuse": "^3.38.20",
+    "pg": "^8.23.0",
+    "pg-boss": "^12.28.0",
+    "pino": "^10.3.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@testcontainers/postgresql": "^12.1.0",
+    "@types/node": "^24.13.3",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "dependency-cruiser": "^18.2.0",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.3.3",
+    "next": "16.3.3",
+    "postcss": "^8.5.26",
+    "postcss-preset-mantine": "^1.18.0",
+    "postcss-simple-vars": "^7.0.1",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=11 <12"
+  },
+  "packageManager": "pnpm@11.22.0+sha512.1ff870c4c6133dfd88fb2afc46dd13d47f09c9794b438c6fdb47ca98caf3bc16381ee0be93a091b8e3824cf01f889f46d7d9e20910fb0be1ab0fb5baa80dd621"
+}
