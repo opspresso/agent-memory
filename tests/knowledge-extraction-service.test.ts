@@ -43,6 +43,7 @@ describe("knowledge extraction service", () => {
     await expect(
       service.extract({
         documentTitle: "Architecture",
+        mimeType: "text/plain",
         content: "Memory API stores data in PostgreSQL."
       })
     ).resolves.toMatchObject({
@@ -68,6 +69,16 @@ describe("knowledge extraction service", () => {
     ) as Record<string, unknown>;
     expect(body).toMatchObject({
       model: "test/model",
+      messages: [
+        { content: expect.stringContaining("Markdown: treat a heading") },
+        {
+          content: JSON.stringify({
+            documentTitle: "Architecture",
+            documentType: "text/plain",
+            content: "Memory API stores data in PostgreSQL."
+          })
+        }
+      ],
       response_format: { type: "json_schema" },
       temperature: 0
     });
@@ -100,6 +111,7 @@ describe("knowledge extraction service", () => {
     });
     const result = service.extract({
       documentTitle: "Private",
+      mimeType: "text/plain",
       content: "private document content"
     });
 
@@ -133,7 +145,52 @@ describe("knowledge extraction service", () => {
     });
 
     await expect(
-      service.extract({ documentTitle: "Invalid", content: "content" })
+      service.extract({
+        documentTitle: "Invalid",
+        mimeType: "application/json",
+        content: "content"
+      })
     ).rejects.toThrow("knowledge extraction graph is invalid");
+  });
+
+  it("normalizes a Markdown URL entity to its visible product name", async () => {
+    const service = createKnowledgeExtractionService({
+      baseUrl: "http://localhost:11434/v1",
+      model: "local-model",
+      request: vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  entities: [
+                    {
+                      key: "studio",
+                      kind: "product",
+                      canonicalName: "studio.opspresso.com",
+                      summary: "A production AI agent platform"
+                    }
+                  ],
+                  relationships: []
+                })
+              }
+            }
+          ]
+        })
+      )
+    });
+
+    await expect(
+      service.extract({
+        documentTitle: "Portfolio",
+        mimeType: "text/markdown",
+        content:
+          "### Agent Studio\n\n[studio.opspresso.com](https://studio.opspresso.com)"
+      })
+    ).resolves.toMatchObject({
+      graph: {
+        entities: [{ canonicalName: "Agent Studio" }]
+      }
+    });
   });
 });

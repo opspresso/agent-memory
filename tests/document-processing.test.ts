@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { chunkText } from "@/application/document/chunk-text";
+import {
+  chunkDocumentText,
+  chunkText
+} from "@/application/document/chunk-text";
 import { buildProcessDocument } from "@/application/document/process-document";
 import { buildUploadDocument } from "@/application/document/upload-document";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
@@ -76,6 +79,59 @@ describe("document processing", () => {
     expect(chunks.map((chunk) => chunk.start)).toEqual(
       [...chunks.map((chunk) => chunk.start)].sort((left, right) => left - right)
     );
+  });
+
+  it("preserves Markdown heading context across chunks", () => {
+    const chunks = chunkDocumentText(
+      `### Agent Studio\n\n${"production AI agent platform ".repeat(100)}`,
+      "text/markdown"
+    );
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.content.startsWith("### Agent Studio")))
+      .toBe(true);
+    expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+  });
+
+  it("preserves CSV headers across record-aligned chunks", () => {
+    const chunks = chunkDocumentText(
+      ["name,url,description", ...Array.from({ length: 100 }, (_, index) =>
+        `Agent ${index},https://example.test/${index},${"platform ".repeat(5)}`
+      )].join("\n"),
+      "text/csv"
+    );
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.content.startsWith("name,url,description\n")))
+      .toBe(true);
+    expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+  });
+
+  it("preserves JSON paths as extraction context", () => {
+    const chunks = chunkDocumentText(
+      JSON.stringify({ products: [{ name: "Agent Studio", url: "https://studio.opspresso.com" }] }),
+      "application/json"
+    );
+
+    expect(chunks).toEqual([
+      expect.objectContaining({
+        content: [
+          '$.products[0].name = "Agent Studio"',
+          '$.products[0].url = "https://studio.opspresso.com"'
+        ].join("\n")
+      })
+    ]);
+  });
+
+  it("preserves XML ancestor paths across chunks", () => {
+    const chunks = chunkDocumentText(
+      `<portfolio><product><name>Agent Studio</name><description>${"AI platform ".repeat(220)}</description></product></portfolio>`,
+      "application/xml"
+    );
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks[1]?.content).toContain("XML context: /portfolio/product/description");
+    expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
   });
 
   it("stores source bytes before persisting and enqueuing metadata", async () => {

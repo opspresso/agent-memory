@@ -38,7 +38,8 @@ export function buildGenerateKnowledgeCandidate(
     }
     const extraction = await dependencies.extractionService.extract({
       content: source.chunk.content,
-      documentTitle: source.document.title
+      documentTitle: source.document.title,
+      mimeType: source.document.mimeType
     });
     const candidate = createKnowledgeCandidate({
       id: dependencies.generateId(),

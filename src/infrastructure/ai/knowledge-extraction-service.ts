@@ -70,6 +70,71 @@ const completionResponseSchema = z.object({
     .min(1)
 });
 
+const extractionInstructions = `Extract a reviewable knowledge graph from the supplied document chunk.
+
+General rules:
+- Extract named real-world or software entities such as products, services, projects, organizations, people, systems, technologies, and locations.
+- Use the human-readable name stated in the document as canonicalName.
+- Do not use a URL, domain, email address, date, duration, JSON property name, XML tag, or CSV header as an entity when it only describes or locates another named entity.
+- Extract only entities and directed relationships supported by the supplied text. Do not invent missing facts.
+- Prefer a smaller set of well-supported entities over speculative or structural tokens.
+- Use stable local keys, concise lowercase kinds, and lowercase snake_case predicates.
+- Return empty arrays when no reliable knowledge is present.
+
+Format rules:
+- Plain text: follow explicit subjects and paragraph context.
+- Markdown: treat a heading as the subject of the content beneath it. For a Markdown link that identifies the heading subject, use the visible label as the entity name and treat the URL as supporting information.
+- JSON: use object paths and property names only as context for scalar values; do not extract keys as entities by themselves.
+- XML: use element paths and attributes only as context for text and attribute values; do not extract tag or attribute names by themselves.
+- CSV: interpret every cell using its header and the other cells in the same record; do not extract headers as entities.
+
+Example:
+Input Markdown contains heading "Agent Studio", link label "studio.opspresso.com", and text stating that it is a platform for building and operating production AI agents. Extract "Agent Studio" as a product or platform entity. Do not extract "studio.opspresso.com" as an entity.`;
+
+function markdownLinkNames(content: string): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+  for (const match of content.matchAll(/\[([^\]]+)]\((https?:\/\/[^\s)]+)\)/g)) {
+    const label = match[1]?.trim();
+    const rawUrl = match[2];
+    if (!label || !rawUrl) {
+      continue;
+    }
+    try {
+      const url = new URL(rawUrl);
+      const precedingContent = content.slice(0, match.index);
+      const heading = [...precedingContent.matchAll(/^#{1,6}\s+(.+)$/gm)]
+        .at(-1)?.[1]
+        ?.trim();
+      const entityName =
+        label.toLowerCase() === url.hostname.toLowerCase()
+          ? heading ?? label
+          : label;
+      names.set(rawUrl.toLowerCase(), entityName);
+      names.set(url.hostname.toLowerCase(), entityName);
+    } catch {
+      // The structured response remains authoritative for malformed source links.
+    }
+  }
+  return names;
+}
+
+function normalizeLinkedEntityNames(
+  content: string,
+  graph: z.infer<typeof proposedGraphSchema>
+): z.infer<typeof proposedGraphSchema> {
+  const linkNames = markdownLinkNames(content);
+  if (linkNames.size === 0) {
+    return graph;
+  }
+  return {
+    ...graph,
+    entities: graph.entities.map((entity) => {
+      const replacement = linkNames.get(entity.canonicalName.toLowerCase());
+      return replacement ? { ...entity, canonicalName: replacement } : entity;
+    })
+  };
+}
+
 const responseJsonSchema = {
   name: "knowledge_candidate",
   strict: true,
@@ -142,13 +207,13 @@ export function createKnowledgeExtractionService(
           messages: [
             {
               role: "system",
-              content:
-                "Extract only explicit entities and directed relationships from the supplied document chunk. Do not infer facts that are not stated. Use stable local keys, concise lowercase kinds, and lowercase snake_case predicates. Return empty arrays when no reliable knowledge is present."
+              content: extractionInstructions
             },
             {
               role: "user",
               content: JSON.stringify({
                 documentTitle: input.documentTitle,
+                documentType: input.mimeType,
                 content: input.content
               })
             }
@@ -187,7 +252,10 @@ export function createKnowledgeExtractionService(
       if (!graph.success) {
         throw new Error("knowledge extraction graph is invalid");
       }
-      return { model, graph: graph.data };
+      return {
+        model,
+        graph: normalizeLinkedEntityNames(input.content, graph.data)
+      };
     }
   };
 }

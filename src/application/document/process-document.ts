@@ -10,7 +10,7 @@ import type {
 } from "@/domain/document/document-services";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 
-import { chunkText } from "./chunk-text";
+import { chunkDocumentText } from "./chunk-text";
 
 export interface ProcessDocumentDependencies {
   readonly clock: () => Date;
@@ -49,7 +49,7 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
         content,
         document.mimeType
       );
-      const parts = chunkText(text);
+      const parts = chunkDocumentText(text, document.mimeType);
       if (parts.length === 0) {
         throw new InvalidDocumentError("document contains no extractable text");
       }

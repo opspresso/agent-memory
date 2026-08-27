@@ -153,7 +153,8 @@ describe("knowledge candidate", () => {
     });
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
-      documentTitle: document.title
+      documentTitle: document.title,
+      mimeType: document.mimeType
     });
     expect(candidates.save).toHaveBeenCalledOnce();
   });
