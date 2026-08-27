@@ -415,6 +415,19 @@ export function createKnowledgeGraphRepository(
       );
     },
 
+    async deleteNode(organizationId, nodeId) {
+      const [deleted] = await db
+        .delete(knowledgeNodes)
+        .where(
+          and(
+            eq(knowledgeNodes.organizationId, organizationId),
+            eq(knowledgeNodes.id, nodeId)
+          )
+        )
+        .returning({ id: knowledgeNodes.id });
+      return deleted !== undefined;
+    },
+
     async saveEdge(edge) {
       const values = edgeValues(edge);
       return db.transaction(async (transaction) => {
@@ -467,6 +480,48 @@ export function createKnowledgeGraphRepository(
             : legacySources(row)
         );
       });
+    },
+
+    async findEdgeById(organizationId, edgeId) {
+      const [row] = await db
+        .select()
+        .from(knowledgeEdges)
+        .where(
+          and(
+            eq(knowledgeEdges.organizationId, organizationId),
+            eq(knowledgeEdges.id, edgeId)
+          )
+        )
+        .limit(1);
+      if (!row) {
+        return null;
+      }
+      const sourceRows = await db
+        .select()
+        .from(knowledgeEdgeSources)
+        .where(
+          and(
+            eq(knowledgeEdgeSources.organizationId, organizationId),
+            eq(knowledgeEdgeSources.edgeId, row.id)
+          )
+        );
+      return edgeFromRow(
+        row,
+        sourceRows.length > 0 ? sourceRows.map(sourceFromRow) : legacySources(row)
+      );
+    },
+
+    async deleteEdge(organizationId, edgeId) {
+      const [deleted] = await db
+        .delete(knowledgeEdges)
+        .where(
+          and(
+            eq(knowledgeEdges.organizationId, organizationId),
+            eq(knowledgeEdges.id, edgeId)
+          )
+        )
+        .returning({ id: knowledgeEdges.id });
+      return deleted !== undefined;
     },
 
     async searchNodes(input) {

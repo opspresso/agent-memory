@@ -23,6 +23,7 @@ const knowledgeSourceSchema = z
   );
 
 export const knowledgeNodeIdSchema = z.uuid();
+export const knowledgeEdgeIdSchema = z.uuid();
 export const knowledgeCandidateIdSchema = z.uuid();
 
 export const reviewKnowledgeCandidateSchema = z.object({

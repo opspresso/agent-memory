@@ -36,6 +36,7 @@ function repository(overrides: Partial<DocumentRepository> = {}): DocumentReposi
     completeProcessing: vi.fn(),
     failProcessing: vi.fn(),
     markEnqueueFailure: vi.fn(),
+    archive: vi.fn(),
     search: vi.fn(),
     ...overrides
   };

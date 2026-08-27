@@ -31,7 +31,13 @@ export interface KnowledgeGraphRepository {
     organizationId: string,
     nodeId: string
   ): Promise<KnowledgeNode | null>;
+  deleteNode(organizationId: string, nodeId: string): Promise<boolean>;
   saveEdge(edge: KnowledgeEdge): Promise<KnowledgeEdge>;
+  findEdgeById(
+    organizationId: string,
+    edgeId: string
+  ): Promise<KnowledgeEdge | null>;
+  deleteEdge(organizationId: string, edgeId: string): Promise<boolean>;
   searchNodes(
     input: KnowledgeNodeSearchInput
   ): Promise<readonly KnowledgeNodeSearchHit[]>;

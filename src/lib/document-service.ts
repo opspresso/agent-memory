@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import { buildArchiveDocument } from "@/application/document/archive-document";
 import { buildGetDocument } from "@/application/document/get-document";
 import { buildRetryDocument } from "@/application/document/retry-document";
 import { buildSearchDocuments } from "@/application/document/search-documents";
@@ -24,6 +25,11 @@ export const uploadDocumentRecord = buildUploadDocument({
 });
 
 export const getDocumentRecord = buildGetDocument(documentRepository);
+
+export const archiveDocumentRecord = buildArchiveDocument({
+  clock: () => new Date(),
+  repository: documentRepository
+});
 
 const searchDocumentRecordsBase = buildSearchDocuments({
   repository: documentRepository,

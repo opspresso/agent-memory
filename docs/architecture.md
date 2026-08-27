@@ -81,13 +81,15 @@ multipart upload → S3-compatible storage → document row(pending)
                                                                          └──▶ candidate → scope review → graph
 ```
 
-원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Worker는 처리 claim마다 lease ID를 발급하므로 stale worker가 재claim 이후의 chunk나 상태를 덮어쓸 수 없다. 지원 MIME type의 text를 정규화하고 chunk를 생성하며, 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다.
+원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Worker는 처리 claim마다 lease ID를 발급하므로 stale worker가 재claim 이후의 chunk나 상태를 덮어쓸 수 없다. 지원 MIME type의 text를 정규화하고 chunk를 생성하며, 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다. Document 삭제는 provenance를 보존하는 archive이며 원본과 chunk를 유지하되 검색, retry, AI 후보 조회·승인에서 제외한다.
 
 Knowledge extraction model을 설정하면 별도 pg-boss queue가 ready 문서의 chunk에서 entity와 relationship 후보를 생성한다. 이 실패는 문서의 ready 상태나 검색 가능성을 되돌리지 않는다. 후보는 source chunk, scope, model을 보존하며 chunk별로 중복 생성하지 않는다. AI 생성 결과는 graph에 직접 쓰지 않고 해당 scope의 `manage` 권한을 가진 사용자가 검토한 뒤 승격한다. 승인 transaction은 candidate를 잠그고 node·edge upsert와 reviewer audit을 함께 저장한다.
 
 ## Knowledge Graph와 통합 검색
 
 Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenance 행은 DB constraint로 정확히 하나의 memory 또는 document chunk를 참조한다. Canonical resource가 여러 근거에서 발견되면 resource를 중복 생성하지 않고 provenance를 누적한다. 생성 시 호출자가 source를 읽을 수 있어야 하고 graph scope는 source scope보다 넓을 수 없다. 검색·Neighborhood·edge 생성은 source의 현재 권한과 active·유효·ready 상태를 다시 확인한다.
+
+Graph resource 삭제는 해당 scope의 `manage` 권한을 요구한다. Edge 삭제는 edge와 provenance row만 제거하고, node 삭제는 연결 edge와 각 provenance row를 함께 제거한다. 어느 경우에도 source Memory나 document를 삭제하지 않는다.
 
 AI candidate는 graph와 분리된 검토 queue다. 거절은 graph를 변경하지 않으며, 승인된 candidate는 다시 거절할 수 없다. 승인·거절에는 reviewer와 선택형 사유를 남긴다.
 

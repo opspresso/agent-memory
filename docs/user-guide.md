@@ -78,6 +78,8 @@ upload → pending → processing → ready
 
 문서가 `pending`에 머물면 document worker가 실행 중인지 확인한다. `failed`이면 공개 처리 오류를 확인하고 `다시 처리`를 실행한다. 원본은 S3 호환 storage에 있고 검색용 chunk와 상태는 PostgreSQL에 저장된다.
 
+문서 삭제는 원본과 provenance를 보존하는 archive다. Archive된 문서는 검색, 상태 조회, retry, AI 후보 검토에서 제외되며 해당 scope의 `manage` 권한이 필요하다.
+
 ## Knowledge Graph 탐색
 
 1. 통합 검색에서 `Graph`를 선택한다.
@@ -97,6 +99,8 @@ upload → pending → processing → ready
 Node를 선택하면 해당 node와 직접 연결된 관계가 강조되고 inspector가 바뀐다. inspector의 `이 node 중심으로 탐색`을 선택하면 해당 node를 중심으로 neighborhood를 다시 조회한다. 키보드에서는 node에 focus한 뒤 `Enter` 또는 `Space`로 선택할 수 있다.
 
 Neighborhood가 바뀌면서 node 수가 늘거나 줄 수 있다. 서버는 새 중심에서 접근 가능한 source를 다시 검사하고 제한된 depth·limit 안에서 관계를 반환한다.
+
+Graph node와 edge 삭제에는 해당 scope의 `manage` 권한이 필요하다. Edge를 삭제해도 연결 node와 source는 유지된다. Node를 삭제하면 연결 edge도 함께 삭제되지만 근거인 Memory나 document는 유지된다.
 
 ## AI 후보 검토
 

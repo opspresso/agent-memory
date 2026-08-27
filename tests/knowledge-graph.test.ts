@@ -9,6 +9,11 @@ import {
   KnowledgeGraphAccessDeniedError
 } from "@/application/knowledge/create-knowledge-node";
 import { buildGetKnowledgeNeighborhood } from "@/application/knowledge/get-knowledge-neighborhood";
+import {
+  buildDeleteKnowledgeEdge,
+  buildDeleteKnowledgeNode,
+  KnowledgeEdgeNotFoundError
+} from "@/application/knowledge/delete-knowledge-resource";
 import { buildSearchKnowledgeNodes } from "@/application/knowledge/search-knowledge-nodes";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import {
@@ -44,7 +49,10 @@ function repository(
   return {
     saveNode: vi.fn(),
     findNodeById: vi.fn(),
+    deleteNode: vi.fn(),
     saveEdge: vi.fn(),
+    findEdgeById: vi.fn(),
+    deleteEdge: vi.fn(),
     searchNodes: vi.fn(),
     findNeighborhood: vi.fn(),
     ...overrides
@@ -52,6 +60,77 @@ function repository(
 }
 
 describe("knowledge graph", () => {
+  it("deletes a manageable node", async () => {
+    const existing = node("node-1");
+    const deleteNode = vi.fn().mockResolvedValue(true);
+    const remove = buildDeleteKnowledgeNode(
+      repository({
+        findNodeById: vi.fn().mockResolvedValue(existing),
+        deleteNode
+      })
+    );
+    const managerAccess = {
+      ...access,
+      teams: [{ teamId: "team-1", role: "manager" as const }]
+    };
+
+    await expect(remove(managerAccess, existing.id)).resolves.toBeUndefined();
+    expect(deleteNode).toHaveBeenCalledWith("organization-1", existing.id);
+  });
+
+  it("requires manage permission to delete a graph node", async () => {
+    const deleteNode = vi.fn();
+    const remove = buildDeleteKnowledgeNode(
+      repository({
+        findNodeById: vi.fn().mockResolvedValue(node("node-1")),
+        deleteNode
+      })
+    );
+
+    await expect(remove(access, "node-1")).rejects.toBeInstanceOf(
+      KnowledgeGraphAccessDeniedError
+    );
+    expect(deleteNode).not.toHaveBeenCalled();
+  });
+
+  it("returns not found when deleting a missing edge", async () => {
+    const remove = buildDeleteKnowledgeEdge(
+      repository({ findEdgeById: vi.fn().mockResolvedValue(null) })
+    );
+
+    await expect(remove(access, "edge-1")).rejects.toBeInstanceOf(
+      KnowledgeEdgeNotFoundError
+    );
+  });
+
+  it("deletes a manageable edge", async () => {
+    const existing = {
+      id: "edge-1",
+      organizationId: "organization-1",
+      scope: node("node-1").scope,
+      sourceNodeId: "node-1",
+      targetNodeId: "node-2",
+      predicate: "depends_on",
+      properties: {},
+      sources: [{ memoryId: "memory-1" }],
+      createdAt: now
+    } satisfies KnowledgeEdge;
+    const deleteEdge = vi.fn().mockResolvedValue(true);
+    const remove = buildDeleteKnowledgeEdge(
+      repository({
+        findEdgeById: vi.fn().mockResolvedValue(existing),
+        deleteEdge
+      })
+    );
+    const managerAccess = {
+      ...access,
+      teams: [{ teamId: "team-1", role: "manager" as const }]
+    };
+
+    await expect(remove(managerAccess, existing.id)).resolves.toBeUndefined();
+    expect(deleteEdge).toHaveBeenCalledWith("organization-1", existing.id);
+  });
+
   it("requires exactly one source reference", () => {
     expect(() =>
       createKnowledgeNode({

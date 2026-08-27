@@ -854,6 +854,25 @@ describe("PostgreSQL schema", () => {
         now: createdAt
       })
     );
+    await expect(
+      repository.archive(organization, documentId, createdAt)
+    ).resolves.toBe(true);
+    await expect(repository.findById(organization, documentId)).resolves.toMatchObject({
+      status: "archived"
+    });
+    await expect(
+      repository.search({ access, query: "rollback", limit: 10 })
+    ).resolves.toEqual([]);
+    await expect(
+      candidateRepository.accept({
+        candidateId: candidate.id,
+        organizationId: organization,
+        entityPromotions: [],
+        relationshipIds: [],
+        reviewedAt: createdAt,
+        reviewedBy: user
+      })
+    ).resolves.toBeNull();
   });
 
   it("upserts, searches, and traverses only accessible knowledge", async () => {
@@ -1036,6 +1055,25 @@ describe("PostgreSQL schema", () => {
     await expect(
       repository.findNeighborhood(access, sourceNodeId, 2, 10)
     ).resolves.toEqual({ nodes: [], edges: [] });
+    await expect(
+      repository.findEdgeById(organization, edge.id)
+    ).resolves.toMatchObject({ id: edge.id });
+    await expect(repository.deleteEdge(organization, edge.id)).resolves.toBe(true);
+    await expect(repository.findEdgeById(organization, edge.id)).resolves.toBeNull();
+    const cascadingEdge = createKnowledgeEdge({
+      ...edge,
+      id: "70000000-0000-0000-0000-000000000010",
+      source: { memoryId: corroboratingMemoryId },
+      now: createdAt
+    });
+    await repository.saveEdge(cascadingEdge);
+    await expect(repository.deleteNode(organization, sourceNodeId)).resolves.toBe(true);
+    await expect(
+      repository.findNodeById(organization, sourceNodeId)
+    ).resolves.toBeNull();
+    await expect(
+      repository.findEdgeById(organization, cascadingEdge.id)
+    ).resolves.toBeNull();
   });
 
   it("rejects a memory that points to a team in another organization", async () => {

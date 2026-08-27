@@ -1,7 +1,10 @@
 import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
 import { documentErrorResponse, publicDocument } from "@/lib/document-http";
 import { documentIdSchema } from "@/lib/document-schemas";
-import { getDocumentRecord } from "@/lib/document-service";
+import {
+  archiveDocumentRecord,
+  getDocumentRecord
+} from "@/lib/document-service";
 import { organizationIdSchema } from "@/lib/memory-schemas";
 
 interface RouteContext {
@@ -30,6 +33,35 @@ export async function GET(request: Request, context: RouteContext) {
         await getDocumentRecord(authorization.access, parsedDocumentId.data)
       )
     );
+  } catch (error) {
+    const response = documentErrorResponse(error);
+    if (response) {
+      return response;
+    }
+    throw error;
+  }
+}
+
+export async function DELETE(request: Request, context: RouteContext) {
+  const { organizationId, documentId } = await context.params;
+  const parsedOrganizationId = organizationIdSchema.safeParse(organizationId);
+  const parsedDocumentId = documentIdSchema.safeParse(documentId);
+  if (!parsedOrganizationId.success || !parsedDocumentId.success) {
+    return Response.json({ error: "Invalid resource ID" }, { status: 400 });
+  }
+  const authorization = await authorizeOrganizationRequest(
+    request,
+    parsedOrganizationId.data
+  );
+  if (!authorization.authorized) {
+    return authorization.response;
+  }
+  try {
+    await archiveDocumentRecord(
+      authorization.access,
+      parsedDocumentId.data
+    );
+    return new Response(null, { status: 204 });
   } catch (error) {
     const response = documentErrorResponse(error);
     if (response) {

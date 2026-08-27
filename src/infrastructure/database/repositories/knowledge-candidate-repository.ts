@@ -200,6 +200,7 @@ export function createKnowledgeCandidateRepository(
               access.organizationId
             ),
             eq(knowledgeCandidates.status, "pending"),
+            eq(documents.status, "ready"),
             candidateReviewPredicate(access)
           )
         )
@@ -237,6 +238,9 @@ export function createKnowledgeCandidateRepository(
           locked.candidate,
           scopeFromRow(locked.document)
         );
+        if (locked.document.status !== "ready") {
+          return null;
+        }
         if (candidate.status === "accepted") {
           return { candidate, nodes: [], edges: [] };
         }

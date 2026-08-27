@@ -95,10 +95,12 @@ curl \
 | `GET`, `PATCH`, `DELETE` | `/api/organizations/:organizationId/memories/:memoryId` | Memory 조회·수정·archive |
 | `GET` | `/api/organizations/:organizationId/memories/:memoryId/versions` | Memory revision 조회 |
 | `GET`, `POST` | `/api/organizations/:organizationId/documents` | 문서 chunk 검색·원본 업로드 |
-| `GET` | `/api/organizations/:organizationId/documents/:documentId` | 문서 상태 조회 |
+| `GET`, `DELETE` | `/api/organizations/:organizationId/documents/:documentId` | 문서 상태 조회·archive |
 | `POST` | `/api/organizations/:organizationId/documents/:documentId/retry` | 실패한 문서 처리 재시도 |
 | `GET`, `POST` | `/api/organizations/:organizationId/knowledge/nodes` | Knowledge node 검색·생성 |
 | `POST` | `/api/organizations/:organizationId/knowledge/edges` | Knowledge edge 생성 |
+| `DELETE` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId` | Knowledge node와 연결 edge 삭제 |
+| `DELETE` | `/api/organizations/:organizationId/knowledge/edges/:edgeId` | Knowledge edge 삭제 |
 | `GET` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId/neighborhood` | 제한된 graph neighborhood 조회 |
 | `GET` | `/api/organizations/:organizationId/knowledge/candidates` | 검토 대기 중인 AI graph 후보 조회 |
 | `POST` | `/api/organizations/:organizationId/knowledge/candidates/:candidateId/accept` | AI 후보를 Knowledge Graph로 승격 |
@@ -275,6 +277,8 @@ curl -i \
 
 Retry 성공은 `202`와 갱신된 document를 반환한다. `pending`, `processing`, `ready` 문서를 retry하면 `409`를 반환한다.
 
+`DELETE .../documents/:documentId`는 문서를 영구 제거하지 않고 archive하며 `204`를 반환한다. 원본과 chunk는 provenance 보존을 위해 유지하지만 검색, 상태 조회, retry, AI 후보 조회·승인에서는 제외한다. 삭제에는 원래 document scope의 `manage` 권한이 필요하다.
+
 ## Knowledge Graph
 
 Node 생성 입력은 `scope`, `kind`, `canonicalName`, `source`와 선택형 `summary`, `properties`다. Edge 생성 입력은 `scope`, `sourceNodeId`, `targetNodeId`, `predicate`, `source`와 선택형 `properties`다.
@@ -314,6 +318,8 @@ curl -X POST \
 ```
 
 Node 응답은 `id`, `scope`, `kind`, `canonicalName`, 선택형 `summary`, `properties`, `sources`, timestamp와 선택형 `embeddingModel`을 포함한다. Edge 응답은 node ID, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
+
+`DELETE .../knowledge/nodes/:nodeId`와 `DELETE .../knowledge/edges/:edgeId`는 해당 graph resource scope의 `manage` 권한을 요구하며 성공 시 `204`를 반환한다. Node 삭제는 연결된 edge도 함께 삭제하지만 provenance source인 Memory나 document는 삭제하지 않는다.
 
 검색은 `GET .../knowledge/nodes?q=<query>&limit=<1-100>`을 사용한다. Neighborhood는 `depth=1-5`, `limit=1-200`을 받으며 기본값은 각각 1과 100이다. 두 조회는 호출자가 현재 읽을 수 있고 active·유효한 Memory 또는 ready document chunk 근거가 하나 이상 있는 graph resource만 반환한다.
 

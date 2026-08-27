@@ -4,6 +4,10 @@ import { buildAuthorizeKnowledgeSource } from "@/application/knowledge/authorize
 import { buildCreateKnowledgeEdge } from "@/application/knowledge/create-knowledge-edge";
 import { buildCreateKnowledgeNode } from "@/application/knowledge/create-knowledge-node";
 import { buildGetKnowledgeNeighborhood } from "@/application/knowledge/get-knowledge-neighborhood";
+import {
+  buildDeleteKnowledgeEdge,
+  buildDeleteKnowledgeNode
+} from "@/application/knowledge/delete-knowledge-resource";
 import { buildSearchKnowledgeNodes } from "@/application/knowledge/search-knowledge-nodes";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { observeRetrieval } from "@/infrastructure/observability/telemetry";
@@ -53,3 +57,9 @@ export async function searchKnowledgeNodeRecords(
 
 export const getKnowledgeNeighborhoodRecord =
   buildGetKnowledgeNeighborhood(knowledgeGraphRepository);
+
+export const deleteKnowledgeNodeRecord =
+  buildDeleteKnowledgeNode(knowledgeGraphRepository);
+
+export const deleteKnowledgeEdgeRecord =
+  buildDeleteKnowledgeEdge(knowledgeGraphRepository);
