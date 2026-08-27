@@ -45,7 +45,8 @@ export function createTextEmbeddingService(
         "Content-Type": "application/json",
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
       },
-      method: "POST"
+      method: "POST",
+      signal: AbortSignal.timeout(60_000)
     });
     if (!response.ok) {
       throw new Error(`embedding request failed with status ${response.status}`);
