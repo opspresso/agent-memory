@@ -11,7 +11,13 @@ import {
 } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeNodeSearchHit } from "@/domain/knowledge/knowledge-graph-repository";
 
+import { aiErrorResponse } from "./ai-http";
+
 export function knowledgeErrorResponse(error: unknown): Response | null {
+  const aiResponse = aiErrorResponse(error);
+  if (aiResponse) {
+    return aiResponse;
+  }
   if (error instanceof KnowledgeSourceNotFoundError) {
     return Response.json(
       { error: "Knowledge source not found" },

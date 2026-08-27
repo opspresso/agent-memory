@@ -95,6 +95,8 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_BASE_URL` | OpenAI-compatible chat completions API base URL |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_API_KEY` | Extraction provider의 Bearer credential. 인증 없는 local endpoint에서는 생략 가능 |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_MODEL` | 설정 시 ready 문서에서 reviewable graph candidate 생성 |
+| AI provider | `AI_PROVIDER_MAX_CONCURRENCY` | Instance에서 동시에 실행할 embedding·extraction 요청 수. 기본값 `8` |
+| AI provider | `AI_PROVIDER_REQUESTS_PER_MINUTE` | Instance가 분당 실행할 embedding·extraction 요청의 합산 상한. 기본값 `120` |
 | Object storage | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | S3 호환 endpoint와 bucket |
 | Object storage | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3 credential |
 | Object storage | `S3_FORCE_PATH_STYLE` | MinIO 같은 path-style endpoint 사용 여부 |
@@ -106,6 +108,8 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 `ALLOWED_EMAIL_DOMAINS`는 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. 명시적으로 빈 값으로 설정하면 모든 domain을 허용한다. `ADMIN_EMAILS`는 조직 bootstrap 권한만 제어하고 기존 조직의 tenant role을 우회하지 않는다. 빈 값으로 설정하면 누구도 새 조직을 만들 수 없다.
 
+AI provider limit은 embedding과 knowledge extraction이 공유하며 application instance마다 적용된다. Replica를 늘리면 cluster 전체 상한도 instance 수만큼 늘어나므로 provider account 또는 API gateway의 조직별 예산·quota를 함께 설정하라.
+
 다음 설정은 일부만 제공하면 application 시작 시 실패한다.
 
 - `AUTH_PASSWORD_SIGNUP=true`에는 `AUTH_PASSWORD=true`가 필요하다.
@@ -113,6 +117,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 - OIDC는 `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`을 함께 설정한다.
 - `EMBEDDING_MODEL`에는 `EMBEDDING_BASE_URL`이 필요하다.
 - `KNOWLEDGE_EXTRACTION_MODEL`에는 `KNOWLEDGE_EXTRACTION_BASE_URL`이 필요하다.
+- AI provider limit은 1 이상의 정수여야 한다.
 - Langfuse는 `LANGFUSE_PUBLIC_KEY`와 `LANGFUSE_SECRET_KEY`를 함께 설정한다.
 - `LANGFUSE_EXPORT_MODE`는 `batched` 또는 `immediate`만 허용한다.
 

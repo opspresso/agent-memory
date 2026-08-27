@@ -8,9 +8,15 @@ import type { MemoryVersionSnapshot } from "@/domain/memory/memory";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { canAccessMemory } from "@/domain/memory/memory-access";
 
+import { aiErrorResponse } from "./ai-http";
+
 export { readJsonBody } from "./json-body";
 
 export function memoryErrorResponse(error: unknown): Response | null {
+  const aiResponse = aiErrorResponse(error);
+  if (aiResponse) {
+    return aiResponse;
+  }
   if (error instanceof MemoryNotFoundError) {
     return Response.json({ error: "Memory not found" }, { status: 404 });
   }

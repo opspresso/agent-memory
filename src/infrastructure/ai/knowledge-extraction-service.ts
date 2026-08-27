@@ -1,11 +1,13 @@
 import { z } from "zod";
 
 import type { KnowledgeExtractionService } from "@/domain/knowledge/knowledge-extraction-service";
+import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 
 interface KnowledgeExtractionServiceConfiguration {
   readonly apiKey?: string;
   readonly baseUrl: string;
   readonly model: string;
+  readonly requestLimiter?: AiRequestLimiter;
   readonly request?: typeof fetch;
 }
 
@@ -201,63 +203,71 @@ export function createKnowledgeExtractionService(
   const apiKey = configuration.apiKey?.trim();
   const request = configuration.request ?? fetch;
 
-  return {
-    async extract(input) {
-      const response = await request(endpoint, {
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: "system",
-              content: extractionInstructions
-            },
-            {
-              role: "user",
-              content: JSON.stringify({
-                documentTitle: input.documentTitle,
-                documentType: input.mimeType,
-                content: input.content
-              })
-            }
-          ],
-          response_format: {
-            type: "json_schema",
-            json_schema: responseJsonSchema
-          },
-          temperature: 0
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
-        },
-        method: "POST",
-        signal: AbortSignal.timeout(60_000)
-      });
-      if (!response.ok) {
-        throw new Error(
-          `knowledge extraction request failed with status ${response.status}`
-        );
-      }
-      const completion = completionResponseSchema.safeParse(
-        await response.json()
-      );
-      if (!completion.success) {
-        throw new Error("knowledge extraction response is invalid");
-      }
-      let content: unknown;
-      try {
-        content = JSON.parse(completion.data.choices[0]!.message.content);
-      } catch {
-        throw new Error("knowledge extraction response content is not JSON");
-      }
-      const graph = proposedGraphSchema.safeParse(content);
-      if (!graph.success) {
-        throw new Error("knowledge extraction graph is invalid");
-      }
-      return {
+  async function extractGraph(
+    input: Parameters<KnowledgeExtractionService["extract"]>[0]
+  ) {
+    const response = await request(endpoint, {
+      body: JSON.stringify({
         model,
-        graph: normalizeLinkedEntityNames(input.content, graph.data)
-      };
+        messages: [
+          {
+            role: "system",
+            content: extractionInstructions
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              documentTitle: input.documentTitle,
+              documentType: input.mimeType,
+              content: input.content
+            })
+          }
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: responseJsonSchema
+        },
+        temperature: 0
+      }),
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+      },
+      method: "POST",
+      signal: AbortSignal.timeout(60_000)
+    });
+    if (!response.ok) {
+      throw new Error(
+        `knowledge extraction request failed with status ${response.status}`
+      );
+    }
+    const completion = completionResponseSchema.safeParse(
+      await response.json()
+    );
+    if (!completion.success) {
+      throw new Error("knowledge extraction response is invalid");
+    }
+    let content: unknown;
+    try {
+      content = JSON.parse(completion.data.choices[0]!.message.content);
+    } catch {
+      throw new Error("knowledge extraction response content is not JSON");
+    }
+    const graph = proposedGraphSchema.safeParse(content);
+    if (!graph.success) {
+      throw new Error("knowledge extraction graph is invalid");
+    }
+    return {
+      model,
+      graph: normalizeLinkedEntityNames(input.content, graph.data)
+    };
+  }
+
+  return {
+    extract(input) {
+      return configuration.requestLimiter
+        ? configuration.requestLimiter.run(() => extractGraph(input))
+        : extractGraph(input);
     }
   };
 }

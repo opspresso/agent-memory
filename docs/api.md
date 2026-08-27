@@ -78,6 +78,7 @@ curl \
 | `409` | Memory version 또는 candidate review 상태 충돌 |
 | `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
 | `428` | Memory mutation에 유효한 `If-Match`가 없음 |
+| `429` | Application instance의 AI provider 호출 상한을 초과함. `Retry-After` header 이후 재시도 |
 | `503` | Health check에서 Database를 사용할 수 없음 |
 
 ## Endpoint
