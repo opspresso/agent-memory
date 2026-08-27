@@ -17,7 +17,6 @@ import type {
 } from "@/domain/identity/organization-access";
 import type {
   KnowledgeEdge,
-  KnowledgeNode,
   KnowledgeSource
 } from "@/domain/knowledge/knowledge-graph";
 import type {
@@ -39,81 +38,26 @@ import {
   memoryAccessGrants
 } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
+import {
+  knowledgeNodeFromRow,
+  knowledgeScopeFromRow,
+  knowledgeSourceFromRow,
+  legacyKnowledgeSources,
+  upsertKnowledgeNode
+} from "./knowledge-node-persistence";
 
-type NodeRow = typeof knowledgeNodes.$inferSelect;
 type EdgeRow = typeof knowledgeEdges.$inferSelect;
 type NodeSourceRow = typeof knowledgeNodeSources.$inferSelect;
 type EdgeSourceRow = typeof knowledgeEdgeSources.$inferSelect;
 
-function sourceFromRow(row: {
-  memoryId: string | null;
-  chunkId: string | null;
-}): KnowledgeSource {
-  return row.memoryId ? { memoryId: row.memoryId } : { chunkId: row.chunkId! };
-}
-
-function legacySources(row: {
-  sourceMemoryId: string | null;
-  sourceChunkId: string | null;
-}): readonly KnowledgeSource[] {
-  return row.sourceMemoryId
-    ? [{ memoryId: row.sourceMemoryId }]
-    : row.sourceChunkId
-      ? [{ chunkId: row.sourceChunkId }]
-      : [];
-}
-
-function scopeFromRow(row: {
-  organizationId: string;
-  scopeKind: "organization" | "team" | "user";
-  teamId: string | null;
-  userId: string | null;
-}): ScopedResource {
-  if (row.scopeKind === "team" && row.teamId) {
-    return {
-      kind: "team",
-      organizationId: row.organizationId,
-      teamId: row.teamId
-    };
-  }
-  if (row.scopeKind === "user" && row.userId) {
-    return {
-      kind: "user",
-      organizationId: row.organizationId,
-      userId: row.userId
-    };
-  }
-  return { kind: "organization", organizationId: row.organizationId };
-}
-
-export function nodeFromRow(
-  row: NodeRow,
-  sources: readonly KnowledgeSource[] = legacySources(row)
-): KnowledgeNode {
-  return {
-    id: row.id,
-    scope: scopeFromRow(row),
-    kind: row.kind,
-    canonicalName: row.canonicalName,
-    ...(row.summary ? { summary: row.summary } : {}),
-    ...(row.embedding && row.embeddingModel
-      ? { embedding: { model: row.embeddingModel, values: row.embedding } }
-      : {}),
-    properties: row.properties,
-    sources,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt
-  };
-}
-
 export function edgeFromRow(
   row: EdgeRow,
-  sources: readonly KnowledgeSource[] = legacySources(row)
+  sources: readonly KnowledgeSource[] = legacyKnowledgeSources(row)
 ): KnowledgeEdge {
   return {
     id: row.id,
     organizationId: row.organizationId,
-    scope: scopeFromRow(row),
+    scope: knowledgeScopeFromRow(row),
     sourceNodeId: row.sourceNodeId,
     targetNodeId: row.targetNodeId,
     predicate: row.predicate,
@@ -267,27 +211,6 @@ function edgeHasVisibleSource(access: OrganizationAccess): SQL {
   )`;
 }
 
-export function nodeValues(node: KnowledgeNode) {
-  const source = node.sources[0];
-  return {
-    id: node.id,
-    organizationId: node.scope.organizationId,
-    scopeKind: node.scope.kind,
-    teamId: node.scope.kind === "team" ? node.scope.teamId : null,
-    userId: node.scope.kind === "user" ? node.scope.userId : null,
-    kind: node.kind,
-    canonicalName: node.canonicalName,
-    summary: node.summary ?? null,
-    embedding: node.embedding?.values ?? null,
-    embeddingModel: node.embedding?.model ?? null,
-    properties: node.properties,
-    sourceMemoryId: source?.memoryId ?? null,
-    sourceChunkId: source?.chunkId ?? null,
-    createdAt: node.createdAt,
-    updatedAt: node.updatedAt
-  };
-}
-
 export function edgeValues(edge: KnowledgeEdge) {
   const source = edge.sources[0];
   return {
@@ -314,7 +237,7 @@ function sourcesByResourceId<T extends NodeSourceRow | EdgeSourceRow>(
   for (const row of rows) {
     const resourceId = resourceIdFor(row);
     const sources = result.get(resourceId) ?? [];
-    sources.push(sourceFromRow(row));
+    sources.push(knowledgeSourceFromRow(row));
     result.set(resourceId, sources);
   }
   return result;
@@ -332,24 +255,6 @@ function scoreExpressions(input: KnowledgeNodeSearchInput) {
 
 function vectorLiteral(values: readonly number[] | null | undefined) {
   return values ? `[${values.join(",")}]` : undefined;
-}
-
-function nodeIdentityPredicate(node: KnowledgeNode) {
-  return and(
-    eq(knowledgeNodes.organizationId, node.scope.organizationId),
-    eq(knowledgeNodes.scopeKind, node.scope.kind),
-    node.scope.kind === "team"
-      ? eq(knowledgeNodes.teamId, node.scope.teamId)
-      : isNull(knowledgeNodes.teamId),
-    node.scope.kind === "user"
-      ? eq(knowledgeNodes.userId, node.scope.userId)
-      : isNull(knowledgeNodes.userId),
-    eq(knowledgeNodes.kind, node.kind),
-    eq(
-      knowledgeNodes.canonicalNameKey,
-      knowledgeCanonicalNameKey(node.canonicalName)
-    )
-  );
 }
 
 function nodeScopePredicate(scope: ScopedResource) {
@@ -370,83 +275,9 @@ export function createKnowledgeGraphRepository(
 ): KnowledgeGraphRepository {
   return {
     async saveNode(node) {
-      const values = nodeValues(node);
-      return db.transaction(async (transaction) => {
-        const identity = `${node.scope.organizationId}:${node.scope.kind}:${node.scope.kind === "team" ? node.scope.teamId : ""}:${node.scope.kind === "user" ? node.scope.userId : ""}:${node.kind}:${knowledgeCanonicalNameKey(node.canonicalName)}`;
-        await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${identity}, 0))`
-        );
-        const [existing] = await transaction
-          .select({ id: knowledgeNodes.id })
-          .from(knowledgeNodes)
-          .where(nodeIdentityPredicate(node))
-          .limit(1);
-        const [row] = existing
-          ? await transaction
-              .update(knowledgeNodes)
-              .set({
-                summary: sql`coalesce(${values.summary}, ${knowledgeNodes.summary})`,
-                embedding: values.embedding
-                  ? sql`coalesce(${vectorLiteral(values.embedding)}::vector, ${knowledgeNodes.embedding})`
-                  : knowledgeNodes.embedding,
-                embeddingModel: sql`coalesce(${values.embeddingModel}, ${knowledgeNodes.embeddingModel})`,
-                properties: sql`${knowledgeNodes.properties} || ${JSON.stringify(values.properties)}::jsonb`,
-                updatedAt: values.updatedAt
-              })
-              .where(eq(knowledgeNodes.id, existing.id))
-              .returning()
-          : await transaction
-              .insert(knowledgeNodes)
-              .values(values)
-              .onConflictDoUpdate({
-                target: [
-                  knowledgeNodes.organizationId,
-                  knowledgeNodes.scopeKind,
-                  knowledgeNodes.teamId,
-                  knowledgeNodes.userId,
-                  knowledgeNodes.kind,
-                  knowledgeNodes.canonicalName
-                ],
-                set: {
-                  summary: sql`coalesce(excluded.summary, ${knowledgeNodes.summary})`,
-                  embedding: sql`coalesce(excluded.embedding, ${knowledgeNodes.embedding})`,
-                  embeddingModel: sql`coalesce(excluded.embedding_model, ${knowledgeNodes.embeddingModel})`,
-                  properties: sql`${knowledgeNodes.properties} || excluded.properties`,
-                  updatedAt: values.updatedAt
-                }
-              })
-              .returning();
-        if (!row) {
-          throw new Error("knowledge node upsert returned no row");
-        }
-        for (const source of node.sources) {
-          await transaction
-            .insert(knowledgeNodeSources)
-            .values({
-              organizationId: node.scope.organizationId,
-              nodeId: row.id,
-              memoryId: source.memoryId ?? null,
-              chunkId: source.chunkId ?? null,
-              createdAt: node.updatedAt
-            })
-            .onConflictDoNothing();
-        }
-        const sourceRows = await transaction
-          .select()
-          .from(knowledgeNodeSources)
-          .where(
-            and(
-              eq(knowledgeNodeSources.organizationId, node.scope.organizationId),
-              eq(knowledgeNodeSources.nodeId, row.id)
-            )
-          );
-        return nodeFromRow(
-          row,
-          sourceRows.length > 0
-            ? sourceRows.map(sourceFromRow)
-            : legacySources(row)
-        );
-      });
+      return db.transaction((transaction) =>
+        upsertKnowledgeNode(transaction, node)
+      );
     },
 
     async findNodesByCanonicalNames(access, scope, canonicalNames) {
@@ -485,7 +316,10 @@ export function createKnowledgeGraphRepository(
         : [];
       const sources = sourcesByResourceId(sourceRows, (row) => row.nodeId);
       return rows.map((row) =>
-        nodeFromRow(row, sources.get(row.id) ?? legacySources(row))
+        knowledgeNodeFromRow(
+          row,
+          sources.get(row.id) ?? legacyKnowledgeSources(row)
+        )
       );
     },
 
@@ -512,9 +346,11 @@ export function createKnowledgeGraphRepository(
             eq(knowledgeNodeSources.nodeId, row.id)
           )
         );
-      return nodeFromRow(
+      return knowledgeNodeFromRow(
         row,
-        sourceRows.length > 0 ? sourceRows.map(sourceFromRow) : legacySources(row)
+        sourceRows.length > 0
+          ? sourceRows.map(knowledgeSourceFromRow)
+          : legacyKnowledgeSources(row)
       );
     },
 
@@ -571,8 +407,8 @@ export function createKnowledgeGraphRepository(
           );
         const sourcesToMove =
           sourceNodeSourceRows.length > 0
-            ? sourceNodeSourceRows.map(sourceFromRow)
-            : legacySources(source);
+            ? sourceNodeSourceRows.map(knowledgeSourceFromRow)
+            : legacyKnowledgeSources(source);
         for (const sourceReference of sourcesToMove) {
           await transaction
             .insert(knowledgeNodeSources)
@@ -646,8 +482,8 @@ export function createKnowledgeGraphRepository(
               );
             const edgeSources =
               sourceRows.length > 0
-                ? sourceRows.map(sourceFromRow)
-                : legacySources(edge);
+                ? sourceRows.map(knowledgeSourceFromRow)
+                : legacyKnowledgeSources(edge);
             for (const sourceReference of edgeSources) {
               await transaction
                 .insert(knowledgeEdgeSources)
@@ -721,11 +557,11 @@ export function createKnowledgeGraphRepository(
               eq(knowledgeNodeSources.nodeId, target.id)
             )
           );
-        return nodeFromRow(
+        return knowledgeNodeFromRow(
           merged,
           targetSources.length > 0
-            ? targetSources.map(sourceFromRow)
-            : legacySources(merged)
+            ? targetSources.map(knowledgeSourceFromRow)
+            : legacyKnowledgeSources(merged)
         );
       });
     },
@@ -778,8 +614,8 @@ export function createKnowledgeGraphRepository(
         return edgeFromRow(
           row,
           sourceRows.length > 0
-            ? sourceRows.map(sourceFromRow)
-            : legacySources(row)
+            ? sourceRows.map(knowledgeSourceFromRow)
+            : legacyKnowledgeSources(row)
         );
       });
     },
@@ -809,7 +645,9 @@ export function createKnowledgeGraphRepository(
         );
       return edgeFromRow(
         row,
-        sourceRows.length > 0 ? sourceRows.map(sourceFromRow) : legacySources(row)
+        sourceRows.length > 0
+          ? sourceRows.map(knowledgeSourceFromRow)
+          : legacyKnowledgeSources(row)
       );
     },
 
@@ -865,9 +703,9 @@ export function createKnowledgeGraphRepository(
         : [];
       const sources = sourcesByResourceId(sourceRows, (row) => row.nodeId);
       return rows.map((row) => ({
-        node: nodeFromRow(
+        node: knowledgeNodeFromRow(
           row.node,
-          sources.get(row.node.id) ?? legacySources(row.node)
+          sources.get(row.node.id) ?? legacyKnowledgeSources(row.node)
         ),
         lexicalScore: row.lexicalScore,
         vectorScore: row.vectorScore,
@@ -982,11 +820,17 @@ export function createKnowledgeGraphRepository(
       const edgeSources = sourcesByResourceId(edgeSourceRows, (row) => row.edgeId);
       return {
         nodes: nodeRows.map((row) =>
-          nodeFromRow(row, nodeSources.get(row.id) ?? legacySources(row))
+          knowledgeNodeFromRow(
+            row,
+            nodeSources.get(row.id) ?? legacyKnowledgeSources(row)
+          )
         ),
         edges: edgeRows
           .map((row) =>
-            edgeFromRow(row, edgeSources.get(row.id) ?? legacySources(row))
+            edgeFromRow(
+              row,
+              edgeSources.get(row.id) ?? legacyKnowledgeSources(row)
+            )
           )
       };
     }

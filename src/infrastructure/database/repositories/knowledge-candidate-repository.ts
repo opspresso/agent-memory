@@ -1,10 +1,9 @@
-import { and, asc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
-import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
 import {
   createKnowledgeEdge,
   createKnowledgeNode
@@ -15,45 +14,18 @@ import {
   documents,
   knowledgeCandidates,
   knowledgeEdges,
-  knowledgeEdgeSources,
-  knowledgeNodes,
-  knowledgeNodeSources
+  knowledgeEdgeSources
 } from "../schema";
 import {
   edgeFromRow,
-  edgeValues,
-  nodeFromRow,
-  nodeValues
+  edgeValues
 } from "./knowledge-graph-repository";
+import {
+  knowledgeScopeFromRow,
+  upsertKnowledgeNode
+} from "./knowledge-node-persistence";
 
 type CandidateRow = typeof knowledgeCandidates.$inferSelect;
-
-function vectorLiteral(values: readonly number[] | null | undefined) {
-  return values ? `[${values.join(",")}]` : undefined;
-}
-
-function scopeFromRow(row: {
-  organizationId: string;
-  scopeKind: "organization" | "team" | "user";
-  teamId: string | null;
-  userId: string | null;
-}): ScopedResource {
-  if (row.scopeKind === "team" && row.teamId) {
-    return {
-      kind: "team",
-      organizationId: row.organizationId,
-      teamId: row.teamId
-    };
-  }
-  if (row.scopeKind === "user" && row.userId) {
-    return {
-      kind: "user",
-      organizationId: row.organizationId,
-      userId: row.userId
-    };
-  }
-  return { kind: "organization", organizationId: row.organizationId };
-}
 
 function candidateFromRow(
   row: CandidateRow,
@@ -123,7 +95,7 @@ export function createKnowledgeCandidateRepository(
       )
       .limit(1);
     return row
-      ? candidateFromRow(row.candidate, scopeFromRow(row.document))
+      ? candidateFromRow(row.candidate, knowledgeScopeFromRow(row.document))
       : null;
   }
 
@@ -149,7 +121,7 @@ export function createKnowledgeCandidateRepository(
         )
         .limit(1);
       return row
-        ? candidateFromRow(row.candidate, scopeFromRow(row.document))
+        ? candidateFromRow(row.candidate, knowledgeScopeFromRow(row.document))
         : null;
     },
 
@@ -212,7 +184,7 @@ export function createKnowledgeCandidateRepository(
         .orderBy(asc(knowledgeCandidates.createdAt))
         .limit(limit);
       return rows.map((row) =>
-        candidateFromRow(row.candidate, scopeFromRow(row.document))
+        candidateFromRow(row.candidate, knowledgeScopeFromRow(row.document))
       );
     },
 
@@ -241,7 +213,7 @@ export function createKnowledgeCandidateRepository(
         }
         const candidate = candidateFromRow(
           locked.candidate,
-          scopeFromRow(locked.document)
+          knowledgeScopeFromRow(locked.document)
         );
         if (locked.document.status !== "ready") {
           return null;
@@ -278,94 +250,7 @@ export function createKnowledgeCandidateRepository(
             source: { chunkId: candidate.chunkId },
             now: input.reviewedAt
           });
-          const values = nodeValues(proposedNode);
-          const canonicalNameKey = knowledgeCanonicalNameKey(
-            proposedNode.canonicalName
-          );
-          const identity = `${input.organizationId}:${candidate.scope.kind}:${candidate.scope.kind === "team" ? candidate.scope.teamId : ""}:${candidate.scope.kind === "user" ? candidate.scope.userId : ""}:${proposedNode.kind}:${canonicalNameKey}`;
-          await transaction.execute(
-            sql`select pg_advisory_xact_lock(hashtextextended(${identity}, 0))`
-          );
-          const [existing] = await transaction
-            .select({ id: knowledgeNodes.id })
-            .from(knowledgeNodes)
-            .where(
-              and(
-                eq(knowledgeNodes.organizationId, input.organizationId),
-                eq(knowledgeNodes.scopeKind, candidate.scope.kind),
-                candidate.scope.kind === "team"
-                  ? eq(knowledgeNodes.teamId, candidate.scope.teamId)
-                  : isNull(knowledgeNodes.teamId),
-                candidate.scope.kind === "user"
-                  ? eq(knowledgeNodes.userId, candidate.scope.userId)
-                  : isNull(knowledgeNodes.userId),
-                eq(knowledgeNodes.kind, proposedNode.kind),
-                eq(knowledgeNodes.canonicalNameKey, canonicalNameKey)
-              )
-            )
-            .limit(1);
-          const [row] = existing
-            ? await transaction
-                .update(knowledgeNodes)
-                .set({
-                  summary: sql`coalesce(${values.summary}, ${knowledgeNodes.summary})`,
-                  embedding: values.embedding
-                    ? sql`coalesce(${vectorLiteral(values.embedding)}::vector, ${knowledgeNodes.embedding})`
-                    : knowledgeNodes.embedding,
-                  embeddingModel: sql`coalesce(${values.embeddingModel}, ${knowledgeNodes.embeddingModel})`,
-                  updatedAt: input.reviewedAt
-                })
-                .where(eq(knowledgeNodes.id, existing.id))
-                .returning()
-            : await transaction
-                .insert(knowledgeNodes)
-                .values(values)
-                .onConflictDoUpdate({
-                  target: [
-                    knowledgeNodes.organizationId,
-                    knowledgeNodes.scopeKind,
-                    knowledgeNodes.teamId,
-                    knowledgeNodes.userId,
-                    knowledgeNodes.kind,
-                    knowledgeNodes.canonicalName
-                  ],
-                  set: {
-                    summary: sql`coalesce(excluded.summary, ${knowledgeNodes.summary})`,
-                    embedding: sql`coalesce(excluded.embedding, ${knowledgeNodes.embedding})`,
-                    embeddingModel: sql`coalesce(excluded.embedding_model, ${knowledgeNodes.embeddingModel})`,
-                    updatedAt: input.reviewedAt
-                  }
-                })
-                .returning();
-          if (!row) {
-            throw new Error("promoted knowledge node upsert returned no row");
-          }
-          await transaction
-            .insert(knowledgeNodeSources)
-            .values({
-              organizationId: input.organizationId,
-              nodeId: row.id,
-              chunkId: candidate.chunkId,
-              createdAt: input.reviewedAt
-            })
-            .onConflictDoNothing();
-          const sourceRows = await transaction
-            .select()
-            .from(knowledgeNodeSources)
-            .where(
-              and(
-                eq(knowledgeNodeSources.organizationId, input.organizationId),
-                eq(knowledgeNodeSources.nodeId, row.id)
-              )
-            );
-          const node = nodeFromRow(
-            row,
-            sourceRows.map((source) =>
-              source.memoryId
-                ? { memoryId: source.memoryId }
-                : { chunkId: source.chunkId! }
-            )
-          );
+          const node = await upsertKnowledgeNode(transaction, proposedNode);
           nodes.push(node);
           nodeIds.set(entity.key, node.id);
         }
