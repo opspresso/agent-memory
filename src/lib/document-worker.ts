@@ -49,71 +49,83 @@ const generateDocumentKnowledgeCandidates = knowledgeExtractionService
 let workers: Promise<readonly string[]> | undefined;
 
 export async function startDocumentWorker(): Promise<void> {
-  if (workers) {
-    await workers;
-    return;
-  }
-
-  const boss = await documentIngestionQueue.start();
-  const ingestionWorker = boss.work<DocumentIngestionJob>(
-    documentIngestionQueueName,
-    {
-      batchSize: 1,
-      localConcurrency: 2,
-      pollingIntervalSeconds: 2
-    },
-    async (jobs) => {
-      for (const job of jobs) {
-        const data = jobSchema.parse(job.data);
-        logger.info(
-          { documentId: data.documentId, organizationId: data.organizationId },
-          "processing document ingestion job"
-        );
-        await processDocument(data.organizationId, data.documentId);
-        if (generateDocumentKnowledgeCandidates) {
-          const document = await documentRepository.findById(
-            data.organizationId,
-            data.documentId
+  workers ??= (async () => {
+    const boss = await documentIngestionQueue.start();
+    const ingestionWorker = boss.work<DocumentIngestionJob>(
+      documentIngestionQueueName,
+      {
+        batchSize: 1,
+        localConcurrency: 2,
+        pollingIntervalSeconds: 2
+      },
+      async (jobs) => {
+        for (const job of jobs) {
+          const data = jobSchema.parse(job.data);
+          logger.info(
+            { documentId: data.documentId, organizationId: data.organizationId },
+            "processing document ingestion job"
           );
-          if (document?.status === "ready") {
-            await documentIngestionQueue.enqueueKnowledgeEnrichment(
+          await processDocument(data.organizationId, data.documentId);
+          if (generateDocumentKnowledgeCandidates) {
+            const document = await documentRepository.findById(
               data.organizationId,
               data.documentId
             );
+            if (document?.status === "ready") {
+              await documentIngestionQueue.enqueueKnowledgeEnrichment(
+                data.organizationId,
+                data.documentId
+              );
+            }
           }
         }
       }
-    }
-  );
-  const enrichmentWorker = generateDocumentKnowledgeCandidates
-    ? boss.work<DocumentKnowledgeEnrichmentJob>(
-        documentKnowledgeEnrichmentQueueName,
-        {
-          batchSize: 1,
-          localConcurrency: 1,
-          pollingIntervalSeconds: 2
-        },
-        async (jobs) => {
-          for (const job of jobs) {
-            const data = jobSchema.parse(job.data);
-            logger.info(
-              {
-                documentId: data.documentId,
-                organizationId: data.organizationId
-              },
-              "generating document knowledge candidates"
-            );
-            await generateDocumentKnowledgeCandidates(
-              data.organizationId,
-              data.documentId
-            );
+    );
+    const enrichmentWorker = generateDocumentKnowledgeCandidates
+      ? boss.work<DocumentKnowledgeEnrichmentJob>(
+          documentKnowledgeEnrichmentQueueName,
+          {
+            batchSize: 1,
+            localConcurrency: 1,
+            pollingIntervalSeconds: 2
+          },
+          async (jobs) => {
+            for (const job of jobs) {
+              const data = jobSchema.parse(job.data);
+              logger.info(
+                {
+                  documentId: data.documentId,
+                  organizationId: data.organizationId
+                },
+                "generating document knowledge candidates"
+              );
+              await generateDocumentKnowledgeCandidates(
+                data.organizationId,
+                data.documentId
+              );
+            }
           }
-        }
-      )
-    : undefined;
-  workers = Promise.all(
-    enrichmentWorker ? [ingestionWorker, enrichmentWorker] : [ingestionWorker]
-  );
+        )
+      : undefined;
+    const registered = await Promise.all(
+      enrichmentWorker
+        ? [ingestionWorker, enrichmentWorker]
+        : [ingestionWorker]
+    );
+    logger.info("document ingestion worker started");
+    return registered;
+  })().catch(async (error: unknown) => {
+    workers = undefined;
+    try {
+      await documentIngestionQueue.stop();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        "document worker startup and queue cleanup both failed"
+      );
+    }
+    throw error;
+  });
+
   await workers;
-  logger.info("document ingestion worker started");
 }
