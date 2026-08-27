@@ -155,6 +155,8 @@ pnpm db:studio
 
 Process가 `SIGTERM` 또는 `SIGINT`를 받으면 새 document job 수신을 중단하고 진행 중인 job을 최대 30초 동안 drain한 뒤 Database pool과 telemetry exporter를 순서대로 종료한다. Cleanup 일부가 실패해도 나머지 단계는 계속 실행하며 process는 실패 exit code를 반환한다.
 
+Container image는 `NEXT_MANUAL_SIG_HANDLE=true`로 Next.js 기본 signal handler를 끄고 이 종료 절차가 signal 처리를 담당한다. 기본 handler를 두면 Next.js가 drain 도중 process를 종료한다. 대신 진행 중인 HTTP 응답은 기다리지 않으므로 배포 전에 endpoint에서 instance를 먼저 제외하라. Orchestrator의 종료 유예 시간은 drain보다 길어야 한다. Helm은 `terminationGracePeriodSeconds: 45`, IDC Compose는 `stop_grace_period: 45s`를 사용한다.
+
 OpenRouter를 사용하려면 `.env.local`에 다음 값을 설정하라.
 
 ```dotenv
