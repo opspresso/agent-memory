@@ -11,6 +11,7 @@ import {
 } from "@/application/knowledge/delete-knowledge-resource";
 import { buildSearchKnowledgeNodes } from "@/application/knowledge/search-knowledge-nodes";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import type { MemoryEmbedding } from "@/domain/memory/memory";
 import { observeRetrieval } from "@/infrastructure/observability/telemetry";
 
 import {
@@ -49,10 +50,11 @@ const searchKnowledgeNodeRecordsBase = buildSearchKnowledgeNodes({
 export async function searchKnowledgeNodeRecords(
   access: OrganizationAccess,
   query: string,
-  limit = 10
+  limit = 10,
+  queryEmbedding?: MemoryEmbedding
 ) {
   return observeRetrieval("knowledge.search", access, limit, () =>
-    searchKnowledgeNodeRecordsBase(access, query, limit)
+    searchKnowledgeNodeRecordsBase(access, query, limit, queryEmbedding)
   );
 }
 

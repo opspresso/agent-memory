@@ -6,6 +6,7 @@ import type {
   DocumentRepository,
   DocumentSearchHit
 } from "@/domain/document/document-repository";
+import type { MemoryEmbedding } from "@/domain/memory/memory";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 
 export interface SearchDocumentsDependencies {
@@ -26,7 +27,8 @@ export function buildSearchDocuments(
   return async function execute(
     access: OrganizationAccess,
     query: string,
-    limit = 10
+    limit = 10,
+    providedQueryEmbedding?: MemoryEmbedding
   ): Promise<readonly DocumentSearchHit[]> {
     const normalizedQuery = query.trim();
     if (normalizedQuery.length === 0) {
@@ -45,9 +47,11 @@ export function buildSearchDocuments(
       );
     }
 
-    const queryEmbedding = dependencies.embeddingService
-      ? await dependencies.embeddingService.embed(normalizedQuery)
-      : undefined;
+    const queryEmbedding =
+      providedQueryEmbedding ??
+      (dependencies.embeddingService
+        ? await dependencies.embeddingService.embed(normalizedQuery)
+        : undefined);
     const hits = await dependencies.repository.search({
       access,
       query: normalizedQuery,

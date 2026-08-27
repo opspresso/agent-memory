@@ -36,9 +36,61 @@ describe("unified context search", () => {
       documents: [],
       knowledge: []
     });
-    expect(searchMemories).toHaveBeenCalledWith(access, "rollback", 5);
-    expect(searchDocuments).toHaveBeenCalledWith(access, "rollback", 5);
-    expect(searchKnowledge).toHaveBeenCalledWith(access, "rollback", 5);
+    expect(searchMemories).toHaveBeenCalledWith(
+      access,
+      "rollback",
+      5,
+      undefined
+    );
+    expect(searchDocuments).toHaveBeenCalledWith(
+      access,
+      "rollback",
+      5,
+      undefined
+    );
+    expect(searchKnowledge).toHaveBeenCalledWith(
+      access,
+      "rollback",
+      5,
+      undefined
+    );
+  });
+
+  it("shares one query embedding across every context store", async () => {
+    const embedding = { model: "embedding-model", values: [1, 0] };
+    const embed = vi.fn().mockResolvedValue(embedding);
+    const searchMemories = vi.fn().mockResolvedValue([]);
+    const searchDocuments = vi.fn().mockResolvedValue([]);
+    const searchKnowledge = vi.fn().mockResolvedValue([]);
+    const search = buildSearchContext({
+      embeddingService: { embed, embedMany: vi.fn() },
+      searchMemories,
+      searchDocuments,
+      searchKnowledge
+    });
+
+    await search(access, " rollback ", 5);
+
+    expect(embed).toHaveBeenCalledOnce();
+    expect(embed).toHaveBeenCalledWith("rollback");
+    expect(searchMemories).toHaveBeenCalledWith(
+      access,
+      "rollback",
+      5,
+      embedding
+    );
+    expect(searchDocuments).toHaveBeenCalledWith(
+      access,
+      "rollback",
+      5,
+      embedding
+    );
+    expect(searchKnowledge).toHaveBeenCalledWith(
+      access,
+      "rollback",
+      5,
+      embedding
+    );
   });
 
   it("merges heterogeneous hits by score and applies the total limit", () => {

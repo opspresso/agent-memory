@@ -7,6 +7,7 @@ import { buildListMemoryVersions } from "@/application/memory/list-memory-versio
 import { buildReviseMemory } from "@/application/memory/revise-memory";
 import { buildSearchMemories } from "@/application/memory/search-memories";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import type { MemoryEmbedding } from "@/domain/memory/memory";
 import { observeRetrieval } from "@/infrastructure/observability/telemetry";
 
 import { memoryRepository, textEmbeddingService } from "./container";
@@ -44,9 +45,10 @@ const searchMemoryRecordsBase = buildSearchMemories({
 export async function searchMemoryRecords(
   access: OrganizationAccess,
   query: string,
-  limit = 10
+  limit = 10,
+  queryEmbedding?: MemoryEmbedding
 ) {
   return observeRetrieval("memory.search", access, limit, () =>
-    searchMemoryRecordsBase(access, query, limit)
+    searchMemoryRecordsBase(access, query, limit, queryEmbedding)
   );
 }
