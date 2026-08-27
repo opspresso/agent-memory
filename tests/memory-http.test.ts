@@ -50,6 +50,49 @@ describe("memory HTTP concurrency", () => {
     }
   });
 
+  it("rejects a declared JSON body larger than 1 MiB before reading it", async () => {
+    const result = await readJsonBody(
+      new Request("https://memory.example.com/api/memory", {
+        method: "POST",
+        headers: { "content-length": "1048577" },
+        body: "{}"
+      })
+    );
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.response.status).toBe(413);
+      await expect(result.response.json()).resolves.toEqual({
+        error: "JSON body exceeds 1 MiB"
+      });
+    }
+  });
+
+  it("stops reading a streamed JSON body larger than 1 MiB", async () => {
+    const result = await readJsonBody(
+      new Request("https://memory.example.com/api/memory", {
+        method: "POST",
+        body: JSON.stringify({ content: "a".repeat(1_048_576) })
+      })
+    );
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.response.status).toBe(413);
+    }
+  });
+
+  it("reads valid JSON within the request limit", async () => {
+    const result = await readJsonBody(
+      new Request("https://memory.example.com/api/memory", {
+        method: "POST",
+        body: JSON.stringify({ title: "Runbook" })
+      })
+    );
+
+    expect(result).toEqual({ valid: true, value: { title: "Runbook" } });
+  });
+
   it("omits raw embeddings and ACL principals from public responses", () => {
     const now = new Date("2026-08-26T00:00:00.000Z");
     const memory = createMemory({

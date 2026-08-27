@@ -8,6 +8,8 @@ import {
 } from "@/application/identity/manage-organization";
 import { InvalidOrganizationAdministrationError } from "@/domain/identity/organization-administration";
 
+export { readJsonBody as readOrganizationJsonBody } from "./json-body";
+
 export function organizationAdministrationErrorResponse(
   error: unknown
 ): Response | null {
@@ -34,20 +36,4 @@ export function organizationAdministrationErrorResponse(
     return Response.json({ error: error.message }, { status: 400 });
   }
   return null;
-}
-
-export async function readOrganizationJsonBody(
-  request: Request
-): Promise<
-  | Readonly<{ valid: true; value: unknown }>
-  | Readonly<{ valid: false; response: Response }>
-> {
-  try {
-    return { valid: true, value: await request.json() };
-  } catch {
-    return {
-      valid: false,
-      response: Response.json({ error: "Invalid JSON body" }, { status: 400 })
-    };
-  }
 }

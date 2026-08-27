@@ -76,7 +76,7 @@ curl \
 | `403` | 조직 멤버십 또는 resource action 권한 부족 |
 | `404` | Resource가 없거나 호출자에게 존재를 공개할 수 없음 |
 | `409` | Memory version 또는 candidate review 상태 충돌 |
-| `413` | 문서 upload request 또는 파일이 제한을 초과함 |
+| `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
 | `428` | Memory mutation에 유효한 `If-Match`가 없음 |
 | `503` | Health check에서 Database를 사용할 수 없음 |
 
