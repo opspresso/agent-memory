@@ -1,4 +1,8 @@
 {{- if .Values.ingress.enabled }}
+{{- $scheme := index .Values.ingress.annotations "alb.ingress.kubernetes.io/scheme" | default "" -}}
+{{- if and (eq $scheme "internet-facing") (not .Values.ingress.tls.enabled) -}}
+{{- fail "internet-facing ingress requires ingress.tls.enabled=true" -}}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -17,7 +21,9 @@ spec:
   tls:
     - hosts:
         - {{ .Values.ingress.host }}
+      {{- with .Values.ingress.tls.secretName }}
       secretName: {{ .Values.ingress.tls.secretName }}
+      {{- end }}
   {{- end }}
   rules:
     - host: {{ .Values.ingress.host }}
