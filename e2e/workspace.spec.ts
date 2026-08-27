@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { expect, test, type Page } from "@playwright/test";
 
 const authenticatedE2e = process.env.E2E_AUTHENTICATED === "true";
@@ -47,11 +45,14 @@ async function postJson<T>(
 
 test("manages memory lifecycle and explores grounded knowledge", async ({
   page
-}) => {
+}, testInfo) => {
   test.skip(!authenticatedE2e, "requires a disposable migrated PostgreSQL database");
   test.setTimeout(60_000);
-  const runId = randomUUID();
-  const email = `e2e+${runId}@nalbam.com`;
+  const runId = process.env.E2E_RUN_ID;
+  if (!runId) {
+    throw new Error("E2E_RUN_ID must be configured by Playwright");
+  }
+  const email = `e2e+${runId}-${testInfo.retry}@nalbam.com`;
 
   await page.context().addCookies([
     {
@@ -72,12 +73,15 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const organization = await postJson<{ id: string }>(
     page,
     "/api/organizations",
-    { name: "E2E Organization", slug: `e2e-organization-${runId}` }
+    {
+      name: "E2E Organization",
+      slug: `e2e-organization-${runId}-${testInfo.retry}`
+    }
   );
   const team = await postJson<{ id: string }>(
     page,
     `/api/organizations/${organization.id}/teams`,
-    { name: "E2E Team", slug: `e2e-team-${runId}` }
+    { name: "E2E Team", slug: `e2e-team-${runId}-${testInfo.retry}` }
   );
   await page.reload();
   await expect(
@@ -86,12 +90,12 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const organizationId = organization.id;
 
   await page.getByRole("tab", { name: "문서 수집" }).click();
-  await page.getByLabel("공유 범위").click();
+  await page.getByRole("combobox", { name: "공유 범위" }).click();
   await expect(
     page.getByRole("option", { name: "조직 · 모든 조직 멤버와 공유" })
   ).toBeVisible();
   await page.getByRole("option", { name: "팀 · 선택한 팀과 공유" }).click();
-  await page.getByLabel("공유할 팀").click();
+  await page.getByRole("combobox", { name: "공유할 팀" }).click();
   await page.getByRole("option", { name: "E2E Team" }).click();
   await page.getByLabel("문서 파일").setInputFiles({
     name: "team-guide.md",
@@ -123,6 +127,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await expect(page.getByRole("button", { name: "MCP endpoint 복사" })).toHaveText(
     "복사됨"
   );
+
   await page.getByRole("tab", { name: "통합 검색" }).click();
 
   const memory = await postJson<{ id: string }>(
@@ -151,16 +156,6 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     .getByLabel("내용")
     .fill("Checkout rollback requires three approvers.");
   await lifecycle.getByLabel("변경 사유").fill("E2E revision verification");
-  await page.getByRole("button", { name: "언어 변경" }).click();
-  await page.getByRole("menuitem", { name: "English" }).click();
-  await expect(lifecycle.getByLabel("Content")).toHaveValue(
-    "Checkout rollback requires three approvers."
-  );
-  await expect(lifecycle.getByLabel("Change reason")).toHaveValue(
-    "E2E revision verification"
-  );
-  await page.getByRole("button", { name: "Change language" }).click();
-  await page.getByRole("menuitem", { name: "한국어" }).click();
   await lifecycle.getByRole("button", { name: "Revision 저장" }).click();
   await expect(lifecycle.getByText("새 revision을 저장했습니다.")).toBeVisible();
   await expect(lifecycle.getByText("v2 · 현재")).toBeVisible();

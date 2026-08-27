@@ -1,4 +1,13 @@
+import { randomUUID } from "node:crypto";
+
 import { defineConfig, devices } from "@playwright/test";
+
+const e2eRunId = process.env.E2E_RUN_ID ?? randomUUID();
+process.env.E2E_RUN_ID = e2eRunId;
+const e2eAdminEmails = Array.from(
+  { length: 3 },
+  (_, retry) => `e2e+${e2eRunId}-${retry}@nalbam.com`
+).join(",");
 
 export default defineConfig({
   testDir: "./e2e",
@@ -8,6 +17,7 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: "http://127.0.0.1:3110",
+    permissions: ["clipboard-read", "clipboard-write"],
     trace: "on-first-retry"
   },
   projects: [
@@ -23,7 +33,7 @@ export default defineConfig({
       NEXT_DIST_DIR: ".next-e2e",
       AUTH_PASSWORD: "true",
       AUTH_PASSWORD_SIGNUP: "true",
-      ADMIN_EMAILS: "e2e@nalbam.com",
+      ADMIN_EMAILS: e2eAdminEmails,
       ALLOWED_EMAIL_DOMAINS: "nalbam.com",
       BETTER_AUTH_SECRET: "agent-memory-playwright-secret-000000000000",
       BETTER_AUTH_URL: "http://127.0.0.1:3110",
