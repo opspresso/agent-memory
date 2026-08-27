@@ -1,14 +1,44 @@
 import type { Instrumentation } from "next";
 
+let shutdownRegistered = false;
+
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") {
     return;
   }
 
-  const { initializeTelemetry } = await import(
+  const { initializeTelemetry, shutdownTelemetry } = await import(
     "./infrastructure/observability/telemetry"
   );
   initializeTelemetry();
+
+  if (!shutdownRegistered) {
+    const [{ logger }, { registerRuntimeShutdown, runRuntimeShutdownSteps }] =
+      await Promise.all([
+        import("./infrastructure/observability/logger"),
+        import("./lib/runtime-lifecycle")
+      ]);
+    registerRuntimeShutdown(
+      async () => {
+        const { database, documentIngestionQueue } = await import(
+          "./lib/container"
+        );
+        await runRuntimeShutdownSteps([
+          {
+            name: "document ingestion queue",
+            execute: () => documentIngestionQueue.stop()
+          },
+          {
+            name: "database pool",
+            execute: () => database.pool.end()
+          },
+          { name: "telemetry", execute: shutdownTelemetry }
+        ]);
+      },
+      logger
+    );
+    shutdownRegistered = true;
+  }
 
   if (process.env.MIGRATE_ON_START === "true") {
     const { migrateOnStart } = await import("./lib/migrate-on-start");
