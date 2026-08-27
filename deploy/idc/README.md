@@ -54,7 +54,7 @@ Registry를 거치지 않고 host에 미리 load한 image로 최초 설치를 �
 ```bash
 scripts/deploy.sh
 docker compose ps
-docker compose logs --tail=100 app
+docker compose logs --tail=100 agent-memory
 curl -fsS https://memory.opspresso.com/api/health
 ```
 

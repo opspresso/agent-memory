@@ -7,7 +7,7 @@ x-logging: &logging
     max-file: "3"
 
 services:
-  app:
+  agent-memory:
     image: ${AGENT_MEMORY_IMAGE}
     env_file:
       - .env
@@ -31,8 +31,6 @@ services:
     networks:
       data:
       edge:
-        aliases:
-          - agent-memory
     restart: unless-stopped
 
   minio-init:
