@@ -170,6 +170,95 @@ describe("document processing", () => {
     expect(save).toHaveBeenCalledBefore(queue.enqueue as ReturnType<typeof vi.fn>);
   });
 
+  it("does not persist metadata when object storage fails", async () => {
+    const storageFailure = new Error("object storage unavailable");
+    const save = vi.fn<DocumentRepository["save"]>();
+    const storage = objectStorage({
+      put: vi.fn().mockRejectedValue(storageFailure)
+    });
+    const upload = buildUploadDocument({
+      checksum: () => "a".repeat(64),
+      clock: () => now,
+      generateId: () => "document-1",
+      objectStorage: storage,
+      queue: { enqueue: vi.fn() },
+      repository: repository({ save })
+    });
+
+    await expect(
+      upload({
+        access,
+        scope: { kind: "user", organizationId: "organization-1", userId: "user-1" },
+        title: "Runbook",
+        mimeType: "text/plain",
+        content: new TextEncoder().encode("Rollback safely")
+      })
+    ).rejects.toBe(storageFailure);
+    expect(save).not.toHaveBeenCalled();
+    expect(storage.delete).not.toHaveBeenCalled();
+  });
+
+  it("removes the source object when metadata persistence fails", async () => {
+    const persistenceFailure = new Error("database unavailable");
+    const storage = objectStorage();
+    const enqueue = vi.fn();
+    const upload = buildUploadDocument({
+      checksum: () => "a".repeat(64),
+      clock: () => now,
+      generateId: () => "document-1",
+      objectStorage: storage,
+      queue: { enqueue },
+      repository: repository({
+        save: vi.fn().mockRejectedValue(persistenceFailure)
+      })
+    });
+
+    await expect(
+      upload({
+        access,
+        scope: { kind: "user", organizationId: "organization-1", userId: "user-1" },
+        title: "Runbook",
+        mimeType: "text/plain",
+        content: new TextEncoder().encode("Rollback safely")
+      })
+    ).rejects.toBe(persistenceFailure);
+    expect(storage.delete).toHaveBeenCalledWith(
+      "organizations/organization-1/documents/document-1/source"
+    );
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("preserves persistence and cleanup failures together", async () => {
+    const persistenceFailure = new Error("database unavailable");
+    const cleanupFailure = new Error("object cleanup unavailable");
+    const upload = buildUploadDocument({
+      checksum: () => "a".repeat(64),
+      clock: () => now,
+      generateId: () => "document-1",
+      objectStorage: objectStorage({
+        delete: vi.fn().mockRejectedValue(cleanupFailure)
+      }),
+      queue: { enqueue: vi.fn() },
+      repository: repository({
+        save: vi.fn().mockRejectedValue(persistenceFailure)
+      })
+    });
+
+    const result = upload({
+      access,
+      scope: { kind: "user", organizationId: "organization-1", userId: "user-1" },
+      title: "Runbook",
+      mimeType: "text/plain",
+      content: new TextEncoder().encode("Rollback safely")
+    });
+    await expect(result).rejects.toThrow(
+      "document persistence and object cleanup both failed"
+    );
+    await expect(result).rejects.toMatchObject({
+      errors: [persistenceFailure, cleanupFailure]
+    });
+  });
+
   it("returns a retryable document identity when enqueue fails", async () => {
     const markEnqueueFailure = vi.fn<
       DocumentRepository["markEnqueueFailure"]
@@ -200,6 +289,35 @@ describe("document processing", () => {
       "failed to enqueue document ingestion",
       now
     );
+  });
+
+  it("preserves enqueue and failure-status errors together", async () => {
+    const enqueueFailure = new Error("queue unavailable");
+    const statusFailure = new Error("database unavailable");
+    const upload = buildUploadDocument({
+      checksum: () => "a".repeat(64),
+      clock: () => now,
+      generateId: () => "document-1",
+      objectStorage: objectStorage(),
+      queue: { enqueue: vi.fn().mockRejectedValue(enqueueFailure) },
+      repository: repository({
+        markEnqueueFailure: vi.fn().mockRejectedValue(statusFailure)
+      })
+    });
+
+    const result = upload({
+      access,
+      scope: { kind: "user", organizationId: "organization-1", userId: "user-1" },
+      title: "Runbook",
+      mimeType: "text/plain",
+      content: new TextEncoder().encode("Rollback safely")
+    });
+    await expect(result).rejects.toThrow(
+      "document enqueue and failure status update both failed"
+    );
+    await expect(result).rejects.toMatchObject({
+      errors: [enqueueFailure, statusFailure]
+    });
   });
 
   it("extracts, chunks, embeds, and completes a claimed document", async () => {
