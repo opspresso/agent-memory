@@ -10,7 +10,6 @@ export async function register() {
   const { initializeTelemetry, shutdownTelemetry } = await import(
     "./infrastructure/observability/telemetry"
   );
-  initializeTelemetry();
 
   if (!shutdownRegistered) {
     const [{ logger }, { registerRuntimeShutdown, runRuntimeShutdownSteps }] =
@@ -39,6 +38,15 @@ export async function register() {
     );
     shutdownRegistered = true;
   }
+
+  const [{ readAiRequestLimits }, { readMetricsToken }] = await Promise.all([
+    import("./infrastructure/ai/request-limiter"),
+    import("./lib/metrics-auth")
+  ]);
+  readAiRequestLimits();
+  readMetricsToken();
+
+  initializeTelemetry();
 
   if (process.env.MIGRATE_ON_START === "true") {
     const { migrateOnStart } = await import("./lib/migrate-on-start");

@@ -119,6 +119,7 @@ AI provider limit은 embedding과 knowledge extraction이 공유하며 applicati
 - `EMBEDDING_MODEL`에는 `EMBEDDING_BASE_URL`이 필요하다.
 - `KNOWLEDGE_EXTRACTION_MODEL`에는 `KNOWLEDGE_EXTRACTION_BASE_URL`이 필요하다.
 - AI provider limit은 1 이상의 정수여야 한다.
+- `METRICS_BEARER_TOKEN`을 설정하면 32자 이상이어야 한다.
 - Langfuse는 `LANGFUSE_PUBLIC_KEY`와 `LANGFUSE_SECRET_KEY`를 함께 설정한다.
 - `LANGFUSE_EXPORT_MODE`는 `batched` 또는 `immediate`만 허용한다.
 
