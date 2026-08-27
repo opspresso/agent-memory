@@ -1,7 +1,7 @@
 name: agent-memory-local
 
 services:
-  app:
+  agent-memory:
     build:
       context: ../..
     environment:

@@ -66,7 +66,7 @@ MinIO API는 `localhost:9010`, console은 `localhost:9011`에서 열린다. `.en
 docker compose --env-file .env.local --profile objects up -d --build
 ```
 
-Compose의 `app` service는 `.env.local`의 Google credential과 접근 정책을 전달하고 local signup, migration, document worker를 활성화하며 `http://localhost:3100`에 노출된다. Migration과 worker는 별도 Compose service가 아니라 `app` process의 Next.js instrumentation에서 시작된다. Google OAuth application의 승인된 redirect URI에는 `http://localhost:3100/api/auth/callback/google`을 등록하라. Object profile 없이 app을 실행하면 document upload에 필요한 S3 endpoint를 별도로 제공해야 한다.
+Compose의 `agent-memory` service는 `.env.local`의 Google credential과 접근 정책을 전달하고 local signup, migration, document worker를 활성화하며 `http://localhost:3100`에 노출된다. Migration과 worker는 별도 Compose service가 아니라 `agent-memory` process의 Next.js instrumentation에서 시작된다. Google OAuth application의 승인된 redirect URI에는 `http://localhost:3100/api/auth/callback/google`을 등록하라. Object profile 없이 app을 실행하면 document upload에 필요한 S3 endpoint를 별도로 제공해야 한다.
 
 Agent Studio의 PostgreSQL 17과 포트·volume을 공유하지 않는다. `docker compose down -v`는 PostgreSQL과 MinIO 데이터를 제거하므로 필요한 데이터와 대상 project를 확인하기 전에는 실행하지 마라.
 
