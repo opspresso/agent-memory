@@ -96,6 +96,8 @@ pnpm verify
 
 `pnpm verify`는 lint, typecheck, architecture, unit test, production build를 실행한다. Database 변경에는 `pnpm test:integration`, 화면·인증 변경에는 `pnpm test:e2e`를 추가한다. 자세한 기준은 [AGENTS.md](AGENTS.md#검증)를 따른다.
 
+Pull request와 `main` push CI는 PostgreSQL 18·pgvector service에서 migration, `pnpm verify`, integration test, 인증 E2E를 모두 실행한다.
+
 ## 데이터 보호
 
 `docker compose down -v`는 PostgreSQL과 MinIO volume을 제거한다. 필요한 데이터와 대상 project를 확인하지 않은 상태에서 실행하지 마라. Agent Studio의 PostgreSQL 17과는 포트와 volume을 공유하지 않으므로 두 프로젝트를 동시에 실행할 수 있다.
