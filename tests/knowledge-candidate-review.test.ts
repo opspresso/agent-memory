@@ -100,6 +100,52 @@ describe("knowledge candidate review", () => {
     });
   });
 
+  it("embeds candidate entities in one ordered batch", async () => {
+    const accept = vi.fn().mockResolvedValue({
+      candidate: { ...candidate, status: "accepted" },
+      nodes: [],
+      edges: []
+    });
+    const embedMany = vi.fn().mockResolvedValue([
+      { model: "embedding-model", values: [1, 0] },
+      { model: "embedding-model", values: [0, 1] }
+    ]);
+    const review = buildAcceptKnowledgeCandidate({
+      clock: () => now,
+      embeddingService: { embed: vi.fn(), embedMany },
+      generateId: vi
+        .fn()
+        .mockReturnValueOnce("node-1")
+        .mockReturnValueOnce("node-2")
+        .mockReturnValueOnce("edge-1"),
+      repository: repository({
+        findById: vi.fn().mockResolvedValue(candidate),
+        accept
+      })
+    });
+
+    await review(admin, candidate.id);
+
+    expect(embedMany).toHaveBeenCalledOnce();
+    expect(embedMany).toHaveBeenCalledWith(["Memory API\n", "PostgreSQL\n"]);
+    expect(accept).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityPromotions: [
+          {
+            key: "api",
+            id: "node-1",
+            embedding: { model: "embedding-model", values: [1, 0] }
+          },
+          {
+            key: "db",
+            id: "node-2",
+            embedding: { model: "embedding-model", values: [0, 1] }
+          }
+        ]
+      })
+    );
+  });
+
   it("prevents a member from promoting an organization-scoped candidate", async () => {
     const candidates = repository({
       findById: vi.fn().mockResolvedValue(candidate)

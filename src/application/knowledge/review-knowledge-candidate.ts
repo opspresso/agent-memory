@@ -112,19 +112,26 @@ export function buildAcceptKnowledgeCandidate(
       }
       return existing;
     }
-    const entityPromotions = await Promise.all(
-      candidate.graph.entities.map(async (entity) => ({
-        key: entity.key,
-        id: dependencies.generateId(),
-        ...(dependencies.embeddingService
-          ? {
-              embedding: await dependencies.embeddingService.embed(
-                `${entity.canonicalName}\n${entity.summary ?? ""}`
-              )
-            }
-          : {})
-      }))
-    );
+    const embeddings = dependencies.embeddingService
+      ? await dependencies.embeddingService.embedMany(
+          candidate.graph.entities.map(
+            (entity) => `${entity.canonicalName}\n${entity.summary ?? ""}`
+          )
+        )
+      : [];
+    if (
+      dependencies.embeddingService &&
+      embeddings.length !== candidate.graph.entities.length
+    ) {
+      throw new Error(
+        "embedding result count does not match knowledge candidate entities"
+      );
+    }
+    const entityPromotions = candidate.graph.entities.map((entity, index) => ({
+      key: entity.key,
+      id: dependencies.generateId(),
+      ...(embeddings[index] ? { embedding: embeddings[index] } : {})
+    }));
     const promoted = await dependencies.repository.accept({
       candidateId,
       entityPromotions,
