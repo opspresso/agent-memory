@@ -25,9 +25,9 @@ Local infrastructure 실행은 [local 문서](../deploy/local/README.md), IDC �
 
 IDC와 EKS에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
 
-`v*` tag를 push하면 release workflow가 `pnpm verify`와 PostgreSQL integration test를 실행하고 `ghcr.io/opspresso/agent-memory:<tag>`와 `latest` image를 생성한다. Image 게시가 성공하면 이전 tag 이후의 commit으로 release note를 만들고 같은 tag의 GitHub Release를 생성한다. 운영 배포는 `latest` 대신 immutable tag를 사용하라.
+`v*` tag를 push하면 release workflow가 self-hosted Linux runner에서 `pnpm verify`와 PostgreSQL integration test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 immutable tag를 배포한다.
 
-Release 완료 조건은 tag와 GitHub Release만 만드는 것이 아니다. Workflow 성공과 GHCR image 게시를 확인하고, IDC의 `.env`를 새 immutable tag로 바꿔 `scripts/deploy.sh`를 실행한 뒤 container image, health endpoint, 공개 화면의 version을 검증하라. 병합된 작업 branch가 있으면 마지막에 local과 remote에서 정리한다.
+Release 완료 조건은 tag와 GitHub Release만 만드는 것이 아니다. Workflow 성공, ECR·GHCR image 게시, GitOps dispatch와 Argo CD sync를 확인한 뒤 container image, health endpoint, 공개 화면의 version을 검증하라. IDC를 별도로 갱신할 때는 `.env`를 새 immutable tag로 바꿔 `scripts/deploy.sh`를 실행한다. 병합된 작업 branch가 있으면 마지막에 local과 remote에서 정리한다.
 
 IDC의 Grafana Alloy는 `https://memory.opspresso.com/api/metrics`를 `agent-memory` job으로 30초마다 scrape한다. 설정 원본은 `deploy/idc/alloy-agent-memory.alloy`이며 `up{job="agent-memory"}`로 수집 상태를 확인한다. Application metric은 process와 build 수준으로 제한하고 organization, 사용자, 검색어, Memory·문서 본문을 노출하지 않는다.
 

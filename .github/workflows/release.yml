@@ -3,51 +3,80 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing release tag to publish
-        required: true
-        type: string
 
 permissions:
+  id-token: write
   contents: read
   packages: write
 
+# One build per tag.
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: "release-${{ github.ref_name }}"
   cancel-in-progress: true
 
 env:
-  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  AWS_REGION: ap-northeast-2
+  AWS_ROLE_ARN: arn:aws:iam::396608815058:role/github--agent-memory-ecr
+  ECR_REPOSITORY: 396608815058.dkr.ecr.ap-northeast-2.amazonaws.com/agent-memory
 
+# All automation here targets the Linux runner pool. The generic self-hosted
+# label also matches macOS, which cannot initialize service containers.
 jobs:
-  verify-and-publish:
-    runs-on: ubuntu-latest
+  verify:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: [self-hosted, linux]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ env.RELEASE_TAG }}
-
-      - name: Validate release tag
-        run: '[[ "$RELEASE_TAG" == v* ]]'
-
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - run: pnpm test:integration
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+  github-release:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: [self-hosted, linux]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
-      - name: Verify
-        run: pnpm verify
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          prev="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
+          if [ -n "$prev" ]; then
+            notes="$(git log --no-merges --pretty='- %s' "${prev}..${tag}" | grep -v '^- chore: release' || true)"
+          else
+            notes="$(git log --no-merges --pretty='- %s' "${tag}" | grep -v '^- chore: release' || true)"
+          fi
+          gh release create "$tag" --title "$tag" --notes "$notes"
 
-      - name: Verify PostgreSQL integration
-        run: pnpm test:integration
+  release:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
 
       - name: Login to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -59,6 +88,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
+      # Attestations off. BuildKit adds a provenance attestation by default, and
+      # an attestation is carried as an extra manifest inside an image index —
+      # so even this single-platform build pushed an index plus two untagged
+      # children (the amd64 image and a `platform: unknown` attestation). Every
+      # release cost three ECR entries instead of one, and the two untagged ones
+      # are what a tag points at, which makes the obvious "expire untagged"
+      # lifecycle rule delete the image a released tag needs. Nothing here
+      # consumes the provenance. See docs.docker.com/build/metadata/attestations.
       - name: Build and push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -68,31 +105,52 @@ jobs:
           provenance: false
           sbom: false
           tags: |
-            ghcr.io/${{ github.repository }}:${{ env.RELEASE_TAG }}
+            ${{ env.ECR_REPOSITORY }}:${{ github.ref_name }}
+            ${{ env.ECR_REPOSITORY }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ghcr.io/${{ github.repository }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  github-release:
-    needs: verify-and-publish
-    runs-on: ubuntu-latest
+  # Its own job so a deploy-trigger failure reads as exactly that — the image
+  # is already in ECR and rerunning this job alone redeploys without a rebuild.
+  # `needs: release` keeps the ordering the single job had: never point the
+  # GitOps repo at a tag whose image does not exist yet.
+  gitops:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 5
+    # No OIDC here — the only credential is the app installation token below.
     permissions:
-      contents: write
+      contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A repository_dispatch to another repository cannot use GITHUB_TOKEN: it
+      # is scoped to the repository running the workflow. This mints a
+      # short-lived installation token instead, scoped to argocd-env-demo alone,
+      # so there is no long-lived PAT to rotate or over-scope.
+      - name: Mint a token for the GitOps repository
+        id: gitops-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          fetch-depth: 0
-          ref: ${{ env.RELEASE_TAG }}
+          client-id: ${{ vars.GITOPS_CLIENT_ID }}
+          private-key: ${{ secrets.GITOPS_PRIVATE_KEY }}
+          owner: opspresso
+          repositories: argocd-env-demo
 
-      - name: Create GitHub Release
+      # `phase: alpha` is the deployed one, not a staging step: the ApplicationSet
+      # in apps/agent-memory.yaml loads values.yaml + values-alpha.yaml, and
+      # `container: app` is the top-level key in that values file — helm.py
+      # matches it by name to find the image tag.
+      - name: Trigger GitOps 🚀
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.gitops-token.outputs.token }}
         run: |
-          tag="${RELEASE_TAG}"
-          prev="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
-          if [ -n "$prev" ]; then
-            notes="$(git log --no-merges --pretty='- %s' "${prev}..${tag}" | grep -v '^- chore: release' || true)"
-          else
-            notes="$(git log --no-merges --pretty='- %s' "$tag" | grep -v '^- chore: release' || true)"
-          fi
-          gh release create "$tag" --title "$tag" --notes "$notes"
+          gh api repos/opspresso/argocd-env-demo/dispatches \
+            -f event_type=gitops \
+            -f client_payload[username]=opspresso \
+            -f client_payload[project]=agent-memory \
+            -f client_payload[version]="${GITHUB_REF_NAME}" \
+            -f client_payload[container]=app \
+            -f client_payload[phase]=alpha \
+            -f client_payload[type]=helm
