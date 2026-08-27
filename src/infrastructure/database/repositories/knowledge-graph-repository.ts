@@ -352,6 +352,19 @@ function nodeIdentityPredicate(node: KnowledgeNode) {
   );
 }
 
+function nodeScopePredicate(scope: ScopedResource) {
+  return and(
+    eq(knowledgeNodes.organizationId, scope.organizationId),
+    eq(knowledgeNodes.scopeKind, scope.kind),
+    scope.kind === "team"
+      ? eq(knowledgeNodes.teamId, scope.teamId)
+      : isNull(knowledgeNodes.teamId),
+    scope.kind === "user"
+      ? eq(knowledgeNodes.userId, scope.userId)
+      : isNull(knowledgeNodes.userId)
+  );
+}
+
 export function createKnowledgeGraphRepository(
   db: AgentMemoryDatabase
 ): KnowledgeGraphRepository {
@@ -434,6 +447,46 @@ export function createKnowledgeGraphRepository(
             : legacySources(row)
         );
       });
+    },
+
+    async findNodesByCanonicalNames(access, scope, canonicalNames) {
+      const canonicalNameKeys = [
+        ...new Set(canonicalNames.map(knowledgeCanonicalNameKey))
+      ];
+      if (canonicalNameKeys.length === 0) {
+        return [];
+      }
+      const rows = await db
+        .select()
+        .from(knowledgeNodes)
+        .where(
+          and(
+            eq(knowledgeNodes.organizationId, access.organizationId),
+            nodeScopePredicate(scope),
+            nodeAccessPredicate(access),
+            nodeHasVisibleSource(access),
+            inArray(knowledgeNodes.canonicalNameKey, canonicalNameKeys)
+          )
+        )
+        .orderBy(asc(knowledgeNodes.canonicalName), asc(knowledgeNodes.kind));
+      const sourceRows = rows.length > 0
+        ? await db
+            .select()
+            .from(knowledgeNodeSources)
+            .where(
+              and(
+                eq(knowledgeNodeSources.organizationId, access.organizationId),
+                inArray(
+                  knowledgeNodeSources.nodeId,
+                  rows.map((row) => row.id)
+                )
+              )
+            )
+        : [];
+      const sources = sourcesByResourceId(sourceRows, (row) => row.nodeId);
+      return rows.map((row) =>
+        nodeFromRow(row, sources.get(row.id) ?? legacySources(row))
+      );
     },
 
     async findNodeById(organizationId, nodeId) {

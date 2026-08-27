@@ -7,6 +7,9 @@ import type {
   KnowledgeCandidatePromotionResult,
   KnowledgeCandidateRepository
 } from "@/domain/knowledge/knowledge-candidate-repository";
+import type { KnowledgeNode } from "@/domain/knowledge/knowledge-graph";
+import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
+import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 
 export class KnowledgeCandidateReviewAccessDeniedError extends Error {
@@ -76,6 +79,41 @@ export function buildListKnowledgeCandidates(
       );
     }
     return repository.listPending(access, limit);
+  };
+}
+
+export function buildFindKnowledgeCandidateDuplicates(dependencies: {
+  readonly candidateRepository: KnowledgeCandidateRepository;
+  readonly graphRepository: KnowledgeGraphRepository;
+}) {
+  return async function execute(
+    access: OrganizationAccess,
+    candidateId: string
+  ): Promise<Readonly<Record<string, readonly KnowledgeNode[]>>> {
+    const candidate = await dependencies.candidateRepository.findById(
+      access.organizationId,
+      candidateId
+    );
+    if (!candidate) {
+      throw new KnowledgeCandidateNotFoundError();
+    }
+    authorizeReviewer(access, candidate);
+    const nodes = await dependencies.graphRepository.findNodesByCanonicalNames(
+      access,
+      candidate.scope,
+      candidate.graph.entities.map((entity) => entity.canonicalName)
+    );
+    return Object.fromEntries(
+      candidate.graph.entities.map((entity) => {
+        const identity = knowledgeCanonicalNameKey(entity.canonicalName);
+        return [
+          entity.key,
+          nodes.filter(
+            (node) => knowledgeCanonicalNameKey(node.canonicalName) === identity
+          )
+        ];
+      })
+    );
   };
 }
 

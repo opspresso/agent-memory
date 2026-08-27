@@ -53,6 +53,7 @@ function repository(
 ): KnowledgeGraphRepository {
   return {
     saveNode: vi.fn(),
+    findNodesByCanonicalNames: vi.fn(),
     findNodeById: vi.fn(),
     deleteNode: vi.fn(),
     mergeNodes: vi.fn(),

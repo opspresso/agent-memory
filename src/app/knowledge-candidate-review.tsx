@@ -20,9 +20,8 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useEffectEvent, useState } from "react";
 
-import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
-
 import { useT } from "./_i18n/provider";
+import { responseJson } from "./http-response";
 import classes from "./knowledge-candidate-review.module.css";
 
 interface ProposedEntityView {
@@ -63,18 +62,6 @@ interface SimilarNodeView {
   readonly scope: KnowledgeCandidateView["scope"];
 }
 
-function sameScope(
-  left: KnowledgeCandidateView["scope"],
-  right: KnowledgeCandidateView["scope"]
-) {
-  return (
-    left.kind === right.kind &&
-    left.organizationId === right.organizationId &&
-    left.teamId === right.teamId &&
-    left.userId === right.userId
-  );
-}
-
 interface KnowledgeCandidateReviewProps {
   readonly organizationId: string;
 }
@@ -112,9 +99,12 @@ export function KnowledgeCandidateReview({
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [reason, setReason] = useState("");
-  const [similarNodes, setSimilarNodes] = useState<
-    Readonly<Record<string, readonly SimilarNodeView[]>>
-  >({});
+  const [duplicateState, setDuplicateState] = useState<
+    Readonly<{
+      candidateId: string;
+      nodes: Readonly<Record<string, readonly SimilarNodeView[]>>;
+    }>
+  >();
   const getLoadMessages = useEffectEvent(() => ({
     requestFailed: t("candidate.requestFailed"),
     loadFailed: t("candidate.loadFailed")
@@ -122,6 +112,10 @@ export function KnowledgeCandidateReview({
   const selected =
     candidates.find((candidate) => candidate.id === selectedId) ??
     candidates[0];
+  const similarNodes =
+    selected && duplicateState?.candidateId === selected.id
+      ? duplicateState.nodes
+      : {};
 
   async function loadCandidates() {
     setLoading(true);
@@ -176,35 +170,30 @@ export function KnowledgeCandidateReview({
       return;
     }
     const controller = new AbortController();
-    Promise.all(
-      selected.graph.entities.map(async (entity) => {
-        const response = await fetch(
-          `/api/organizations/${organizationId}/knowledge/nodes?q=${encodeURIComponent(entity.canonicalName)}&limit=10`,
-          { signal: controller.signal }
-        );
-        if (!response.ok) {
-          return [entity.key, []] as const;
-        }
-        const body = (await response.json()) as {
-          hits?: readonly { node?: SimilarNodeView }[];
-        };
-        return [
-          entity.key,
-          (body.hits ?? [])
-            .flatMap((hit) => (hit.node ? [hit.node] : []))
-            .filter(
-              (node) =>
-                knowledgeCanonicalNameKey(node.canonicalName) ===
-                  knowledgeCanonicalNameKey(entity.canonicalName) &&
-                sameScope(node.scope, selected.scope)
-            )
-        ] as const;
-      })
+    const loadMessages = getLoadMessages();
+    fetch(
+      `/api/organizations/${organizationId}/knowledge/candidates/${selected.id}/duplicates`,
+      { signal: controller.signal }
     )
-      .then((entries) => setSimilarNodes(Object.fromEntries(entries)))
-      .catch(() => {
+      .then((response) =>
+        responseJson<{
+          duplicates?: Readonly<Record<string, readonly SimilarNodeView[]>>;
+        }>(response, loadMessages.requestFailed)
+      )
+      .then((body) =>
+        setDuplicateState({
+          candidateId: selected.id,
+          nodes: body.duplicates ?? {}
+        })
+      )
+      .catch((caught: unknown) => {
         if (!controller.signal.aborted) {
-          setSimilarNodes({});
+          setDuplicateState({ candidateId: selected.id, nodes: {} });
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : loadMessages.requestFailed
+          );
         }
       });
     return () => controller.abort();

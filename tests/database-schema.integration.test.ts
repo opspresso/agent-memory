@@ -1068,6 +1068,23 @@ describe("PostgreSQL schema", () => {
         now: createdAt
       })
     );
+    await expect(
+      repository.findNodesByCanonicalNames(
+        {
+          organizationId: organization,
+          userId: user,
+          role: "member",
+          teams: [{ teamId: team, role: "member" }]
+        },
+        scope,
+        ["Ｃｈｅｃｋｏｕｔ   API"]
+      )
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: sourceNodeId }),
+        expect.objectContaining({ id: duplicateNode.id })
+      ])
+    );
     const duplicateEdge = await repository.saveEdge(
       createKnowledgeEdge({
         id: "70000000-0000-0000-0000-000000000011",
