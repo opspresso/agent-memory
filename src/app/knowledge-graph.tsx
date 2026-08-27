@@ -1,8 +1,10 @@
 "use client";
 
 import { ActionIcon, Badge, Button, Group, Paper, Stack, Text, TextInput, Title, Tooltip } from "@mantine/core";
-import { IconFocusCentered, IconMinus, IconPlus, IconRoute, IconSearch } from "@tabler/icons-react";
+import { IconFocusCentered, IconMinus, IconPlus, IconRoute, IconSearch, IconTrash } from "@tabler/icons-react";
 import { useMemo, useState, type CSSProperties } from "react";
+
+import type { ScopedResource } from "@/domain/identity/organization-access";
 
 import { useT } from "./_i18n/provider";
 import classes from "./knowledge-graph.module.css";
@@ -12,6 +14,7 @@ export interface KnowledgeGraphNodeView {
   readonly kind: string;
   readonly canonicalName: string;
   readonly summary?: string;
+  readonly scope: ScopedResource;
 }
 
 export interface KnowledgeGraphEdgeView {
@@ -19,6 +22,7 @@ export interface KnowledgeGraphEdgeView {
   readonly sourceNodeId: string;
   readonly targetNodeId: string;
   readonly predicate: string;
+  readonly scope: ScopedResource;
 }
 
 interface PositionedNode extends KnowledgeGraphNodeView {
@@ -27,10 +31,15 @@ interface PositionedNode extends KnowledgeGraphNodeView {
 }
 
 interface KnowledgeGraphProps {
+  readonly canDeleteEdge: (edge: KnowledgeGraphEdgeView) => boolean;
+  readonly canDeleteNode: (node: KnowledgeGraphNodeView) => boolean;
   readonly centerNodeId: string;
+  readonly deletingResource: boolean;
   readonly edges: readonly KnowledgeGraphEdgeView[];
   readonly nodes: readonly KnowledgeGraphNodeView[];
   readonly onExploreNode: (nodeId: string) => void;
+  readonly onDeleteEdge: (edge: KnowledgeGraphEdgeView) => void;
+  readonly onDeleteNode: (node: KnowledgeGraphNodeView) => void;
   readonly onSelectNode: (nodeId: string) => void;
   readonly selectedNodeId: string;
 }
@@ -74,7 +83,7 @@ function clippedLabel(value: string) {
   return value.length > 20 ? `${value.slice(0, 19)}…` : value;
 }
 
-export function KnowledgeGraph({ centerNodeId, edges, nodes, onExploreNode, onSelectNode, selectedNodeId }: KnowledgeGraphProps) {
+export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, deletingResource, edges, nodes, onDeleteEdge, onDeleteNode, onExploreNode, onSelectNode, selectedNodeId }: KnowledgeGraphProps) {
   const t = useT();
   const [hiddenKinds, setHiddenKinds] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState("");
@@ -157,10 +166,11 @@ export function KnowledgeGraph({ centerNodeId, edges, nodes, onExploreNode, onSe
             {selectedEdges.length > 0 ? selectedEdges.map((edge) => {
               const isOutgoing = edge.sourceNodeId === selectedNode.id;
               const related = positions.get(isOutgoing ? edge.targetNodeId : edge.sourceNodeId);
-              return <button className={classes.relation} key={edge.id} onClick={() => related && onSelectNode(related.id)} type="button"><IconRoute aria-hidden size={14} /><span>{isOutgoing ? "→" : "←"} {edge.predicate}</span><strong>{related?.canonicalName}</strong></button>;
+              return <div className={classes.relationRow} key={edge.id}><button className={classes.relation} onClick={() => related && onSelectNode(related.id)} type="button"><IconRoute aria-hidden size={14} /><span>{isOutgoing ? "→" : "←"} {edge.predicate}</span><strong>{related?.canonicalName}</strong></button>{canDeleteEdge(edge) ? <Tooltip label={t("graph.deleteEdge")}><ActionIcon aria-label={t("graph.deleteEdge")} color="red" disabled={deletingResource} onClick={() => onDeleteEdge(edge)} variant="subtle"><IconTrash size={14} /></ActionIcon></Tooltip> : null}</div>;
             }) : <Text c="dimmed" size="sm">{t("graph.noRelations")}</Text>}
           </Stack>
           {selectedNode.id !== centerNodeId ? <Button leftSection={<IconFocusCentered size={15} />} onClick={() => onExploreNode(selectedNode.id)} size="compact-sm" variant="light">{t("graph.exploreFromNode")}</Button> : null}
+          {canDeleteNode(selectedNode) ? <Button color="red" disabled={deletingResource} leftSection={<IconTrash size={15} />} onClick={() => onDeleteNode(selectedNode)} size="compact-sm" variant="subtle">{t("graph.deleteNode")}</Button> : null}
         </Stack> : null}
       </Paper>
     </section>

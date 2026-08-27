@@ -163,6 +163,51 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.keyboard.press("Escape");
   await expect(lifecycle).not.toBeVisible();
 
+  const archivedDocumentId = "40000000-0000-0000-0000-000000000099";
+  await page.route(
+    `**/api/organizations/${organizationId}/documents?q=*`,
+    async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          hits: [
+            {
+              document: {
+                id: archivedDocumentId,
+                title: "Archived team guide",
+                mimeType: "text/markdown",
+                scope: { kind: "organization", organizationId }
+              },
+              chunk: { id: "chunk-1", ordinal: 0, content: "Team guide" },
+              lexicalScore: 1,
+              vectorScore: 0,
+              score: 1
+            }
+          ]
+        }),
+        status: 200
+      });
+    }
+  );
+  await page.route(
+    `**/api/organizations/${organizationId}/documents/${archivedDocumentId}`,
+    async (route) => {
+      expect(route.request().method()).toBe("DELETE");
+      await route.fulfill({ status: 204 });
+    }
+  );
+  await page.getByText("Documents", { exact: true }).click();
+  await page
+    .getByPlaceholder("정책, 장애 대응, 시스템 관계를 검색하세요")
+    .fill("team guide");
+  await page.getByRole("button", { name: "검색", exact: true }).click();
+  await expect(page.getByText("Archived team guide")).toBeVisible();
+  await page.getByRole("button", { name: "문서 Archive" }).click();
+  const archiveDialog = page.getByRole("dialog", { name: "문서 Archive" });
+  await archiveDialog.getByRole("button", { name: "Archive 확인" }).click();
+  await expect(page.getByText("Archived team guide을 Archive했습니다.")).toBeVisible();
+  await expect(page.getByText("Archived team guide", { exact: true })).not.toBeVisible();
+
   const firstNode = await postJson<{ id: string }>(
     page,
     `/api/organizations/${organizationId}/knowledge/nodes`,
@@ -185,7 +230,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
       source: { memoryId: memory.id }
     }
   );
-  await postJson(
+  const edge = await postJson<{ id: string }>(
     page,
     `/api/organizations/${organizationId}/knowledge/edges`,
     {
@@ -215,4 +260,29 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await expect(
     page.getByRole("button", { name: "이 node 중심으로 탐색" })
   ).toBeVisible();
+  const edgeDeleteResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(
+        `/api/organizations/${organizationId}/knowledge/edges/${edge.id}`
+      ) && response.request().method() === "DELETE"
+  );
+  await page.getByRole("button", { name: "관계 삭제" }).click();
+  await page.getByRole("dialog", { name: "Graph resource 삭제" })
+    .getByRole("button", { name: "삭제 확인" })
+    .click();
+  await edgeDeleteResponse;
+  await expect(page.getByText("Graph에서 depends_on을 삭제했습니다.")).toBeVisible();
+
+  const nodeDeleteResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(
+        `/api/organizations/${organizationId}/knowledge/nodes/${secondNode.id}`
+      ) && response.request().method() === "DELETE"
+  );
+  await page.getByRole("button", { name: "Node 삭제" }).click();
+  await page.getByRole("dialog", { name: "Graph resource 삭제" })
+    .getByRole("button", { name: "삭제 확인" })
+    .click();
+  await nodeDeleteResponse;
+  await expect(page.getByText("Graph에서 Orders Database을 삭제했습니다.")).toBeVisible();
 });

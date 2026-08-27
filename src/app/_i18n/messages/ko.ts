@@ -102,12 +102,12 @@ export const ko: Messages = {
   "guide.documents.body":
     "UTF-8 text, Markdown, CSV, JSON, XML 파일을 최대 10 MiB까지 업로드할 수 있습니다. 원본은 S3 호환 storage에, 처리 상태와 chunk는 PostgreSQL에 저장됩니다.",
   "guide.documents.note":
-    "failed 문서는 오류를 확인한 뒤 다시 처리할 수 있습니다. ready가 되기 전에는 검색 결과에 포함되지 않습니다.",
+    "failed 문서는 오류를 확인한 뒤 다시 처리할 수 있습니다. 관리 가능한 검색 결과는 원본 근거를 버리지 않고 Archive할 수 있습니다.",
   "guide.graph.title": "관계를 따라가되, 근거에서 멀어지지 않습니다.",
   "guide.graph.body":
     "Graph 검색 결과에서 관계 보기를 누르면 선택 node를 중심으로 방향성 edge와 predicate가 표시됩니다. Node를 선택하면 inspector가 바뀌고, 같은 node를 다시 선택하면 그 node가 새로운 중심이 됩니다.",
   "guide.graph.note":
-    "각 node와 edge는 Memory 또는 document chunk 중 정확히 하나를 가리키는 provenance를 하나 이상 가집니다. 키보드에서는 Enter 또는 Space로 node를 선택할 수 있습니다.",
+    "각 node와 edge에는 provenance가 있습니다. 관리자는 inspector에서 원본 Memory나 문서를 지우지 않고 관계 또는 node를 삭제할 수 있습니다.",
   "guide.review.title": "AI의 제안을 검토해 지식을 완성합니다.",
   "guide.review.body":
     "AI Extractor가 문서에서 찾은 entity와 relationship은 검토 queue에 먼저 들어갑니다. Source, model, entity, 관계를 살펴보고 Graph에 반영할 내용을 선택하세요.",
@@ -201,6 +201,19 @@ export const ko: Messages = {
   "workspace.copyEndpoint": "MCP endpoint 복사",
   "workspace.copy": "복사",
   "workspace.copied": "복사됨",
+  "resource.archiveDocument": "문서 Archive",
+  "resource.archiveDocumentTitle": "문서 Archive",
+  "resource.archiveDocumentBody":
+    "{name}을 Archive할까요? 원본 근거는 보존되지만 검색, retry, AI 후보 검토에서 제외됩니다.",
+  "resource.deleteGraphTitle": "Graph resource 삭제",
+  "resource.deleteGraphBody":
+    "{name}을 영구 삭제할까요? Node를 삭제하면 연결 edge도 삭제되며 원본 Memory와 문서는 유지됩니다.",
+  "resource.documentArchived": "{name}을 Archive했습니다.",
+  "resource.graphDeleted": "Graph에서 {name}을 삭제했습니다.",
+  "resource.deleteFailed": "Resource를 제거하지 못했습니다.",
+  "resource.cancel": "취소",
+  "resource.confirmArchive": "Archive 확인",
+  "resource.confirmDelete": "삭제 확인",
   "result.evidence.directMemory": "직접 등록된 Memory",
   "result.evidence.memorySource": "{source} 출처{revision}",
   "result.evidence.revision": " · revision v{version}",
@@ -220,6 +233,8 @@ export const ko: Messages = {
   "graph.connectedBy": "연결 관계",
   "graph.noRelations": "직접 연결된 관계가 없습니다.",
   "graph.exploreFromNode": "이 node 중심으로 탐색",
+  "graph.deleteNode": "Node 삭제",
+  "graph.deleteEdge": "관계 삭제",
   "candidate.requestFailed": "후보 검토 요청을 처리하지 못했습니다.",
   "candidate.loadFailed": "Knowledge 후보를 불러오지 못했습니다.",
   "candidate.accepted": "후보를 공유 Knowledge Graph에 반영했습니다.",

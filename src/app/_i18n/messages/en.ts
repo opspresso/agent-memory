@@ -100,12 +100,12 @@ export const en = {
   "guide.documents.body":
     "Upload UTF-8 text, Markdown, CSV, JSON, or XML files up to 10 MiB. Originals live in S3-compatible storage, while processing state and chunks live in PostgreSQL.",
   "guide.documents.note":
-    "A failed document can be processed again after reviewing the error. It does not appear in search until it is ready.",
+    "A failed document can be processed again after reviewing the error. Manageable search results can be archived without discarding their source evidence.",
   "guide.graph.title": "Follow relationships without losing the evidence.",
   "guide.graph.body":
     "Select View relationships in a Graph result to see directed edges and predicates around the chosen node. Selecting a node changes the inspector; selecting it again makes it the new center.",
   "guide.graph.note":
-    "Every node and edge has at least one provenance pointing to exactly one memory or document chunk. Use Enter or Space to select a node with the keyboard.",
+    "Every node and edge has provenance. Managers can delete a relationship or node from the inspector without deleting its source memory or document.",
   "guide.review.title": "Review AI proposals to complete the knowledge.",
   "guide.review.body":
     "Entities and relationships found by the AI Extractor enter a review queue first. Inspect the source, model, entities, and relationships, then choose what to add to the Graph.",
@@ -200,6 +200,19 @@ export const en = {
   "workspace.copyEndpoint": "Copy MCP endpoint",
   "workspace.copy": "Copy",
   "workspace.copied": "Copied",
+  "resource.archiveDocument": "Archive document",
+  "resource.archiveDocumentTitle": "Archive document",
+  "resource.archiveDocumentBody":
+    "Archive {name}? It will disappear from search, retry, and AI candidate review while its source evidence is preserved.",
+  "resource.deleteGraphTitle": "Delete Graph resource",
+  "resource.deleteGraphBody":
+    "Permanently delete {name}? Deleting a node also removes its connected edges. Source memories and documents are preserved.",
+  "resource.documentArchived": "Archived {name}.",
+  "resource.graphDeleted": "Deleted {name} from the Graph.",
+  "resource.deleteFailed": "The resource could not be removed.",
+  "resource.cancel": "Cancel",
+  "resource.confirmArchive": "Confirm archive",
+  "resource.confirmDelete": "Confirm delete",
   "result.evidence.directMemory": "Directly registered memory",
   "result.evidence.memorySource": "{source} source{revision}",
   "result.evidence.revision": " · revision v{version}",
@@ -219,6 +232,8 @@ export const en = {
   "graph.connectedBy": "Connected by",
   "graph.noRelations": "There are no directly connected relationships.",
   "graph.exploreFromNode": "Explore from this node",
+  "graph.deleteNode": "Delete node",
+  "graph.deleteEdge": "Delete relationship",
   "candidate.requestFailed": "The candidate review request failed.",
   "candidate.loadFailed": "Knowledge candidates could not be loaded.",
   "candidate.accepted": "The candidate was added to the shared Knowledge Graph.",

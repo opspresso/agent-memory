@@ -96,6 +96,7 @@ export default async function Home() {
             listTeamRecords(access)
           ]);
           return {
+            access,
             administration: canManageOrganization
               ? {
                 members: members.map((member) => ({
@@ -131,6 +132,9 @@ export default async function Home() {
         ? [[entry.organizationId, entry.administration] as const]
         : []
     )
+  );
+  const accessByOrganization = Object.fromEntries(
+    organizationEntries.map((entry) => [entry.organizationId, entry.access])
   );
   const writableTeamsByOrganization = Object.fromEntries(
     organizationEntries.map((entry) => [entry.organizationId, entry.writableTeams])
@@ -169,6 +173,7 @@ export default async function Home() {
 
         {user ? (
           <Workspace
+            accessByOrganization={accessByOrganization}
             administrationByOrganization={administrationByOrganization}
             origin={origin}
             organizations={organizations}
