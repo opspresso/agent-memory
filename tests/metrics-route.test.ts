@@ -23,7 +23,7 @@ describe("metrics route", () => {
       "text/plain; version=0.0.4; charset=utf-8"
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(body).toContain('agent_memory_build_info{version="0.2.0"} 1');
+    expect(body).toContain('agent_memory_build_info{version="0.2.1"} 1');
     expect(body).toContain("process_resident_memory_bytes 100");
     expect(body).toContain("process_cpu_seconds_total 2.5");
     expect(body).not.toContain("organization_id");
