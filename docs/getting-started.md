@@ -132,16 +132,6 @@ KNOWLEDGE_EXTRACTION_MODEL=provider/structured-output-model
 
 후보는 운영 콘솔의 `AI 후보 검토`에서 승인하기 전까지 공유 Knowledge Graph에 나타나지 않는다.
 
-## 전체 Compose로 실행
-
-Host에서 Next.js를 실행하지 않고 application, migration, document worker, PostgreSQL, MinIO를 함께 시작하려면 다음 명령을 사용하라.
-
-```bash
-docker compose --env-file .env.local --profile objects up -d --build
-```
-
-Compose의 `app` process가 시작 시 migration과 document worker를 함께 실행한다. 별도의 migration 또는 worker service가 생성되는 구조는 아니다.
-
 ## 다음 단계
 
 - 운영 콘솔과 Graph 사용: [사용자 가이드](user-guide.md)

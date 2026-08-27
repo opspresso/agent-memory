@@ -2,17 +2,13 @@
 
 ## 실행 모드
 
-로컬 개발은 PostgreSQL과 선택형 MinIO를 Compose로 실행하고 Next.js를 host에서 실행한다. 전체 Compose에서는 하나의 `app` process가 Next.js application을 시작하면서 설정에 따라 migration과 document worker도 시작한다.
+로컬 개발은 PostgreSQL과 선택형 MinIO만 Compose로 실행하고 Next.js를 host에서 직접 실행한다.
 
 ```text
 로컬 개발
 host: pnpm dev ───────────────┐
                              ├──▶ PostgreSQL
 Compose: postgres, MinIO ─────┘      └── pg-boss
-
-전체 Compose
-app: Next.js + migration + worker ──▶ PostgreSQL
-                  └─────────────────▶ MinIO/S3
 ```
 
 ## 배포 형태
@@ -22,11 +18,10 @@ app: Next.js + migration + worker ──▶ PostgreSQL
 | 환경 | Application | PostgreSQL·Object storage | 진입점 |
 | --- | --- | --- | --- |
 | Local 개발 | host `pnpm dev` | 루트 Compose | `http://localhost:3100` |
-| Local container | `deploy/local` Compose | 전용 PostgreSQL·MinIO | `http://localhost:3100` |
 | IDC | `deploy/idc` Compose | Agent Studio와 instance 공유, database·bucket 격리 | 공유 Caddy의 `https://memory.opspresso.com` |
 | EKS | `deploy/helm/agent-memory` | 기존 PostgreSQL·S3가 기본, bundled service는 선택 | ALB/nginx ingress |
 
-Local container 검증은 [local 배포 문서](../deploy/local/README.md), IDC 설치·백업은 [IDC 배포 문서](../deploy/idc/README.md), EKS 값과 설치는 [Helm chart 문서](../deploy/helm/agent-memory/README.md)를 따른다.
+Local infrastructure 실행은 [local 문서](../deploy/local/README.md), IDC 설치·백업은 [IDC 배포 문서](../deploy/idc/README.md), EKS 값과 설치는 [Helm chart 문서](../deploy/helm/agent-memory/README.md)를 따른다.
 
 IDC와 EKS에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
 
@@ -59,14 +54,6 @@ pnpm dev
 ```
 
 MinIO API는 `localhost:9010`, console은 `localhost:9011`에서 열린다. `.env.example`은 document worker를 기본 활성화하므로 이를 복사한 `.env.local`에서는 별도 실행 변수가 필요하지 않다.
-
-### 전체 Compose
-
-```bash
-docker compose --env-file .env.local --profile objects up -d --build
-```
-
-Compose의 `agent-memory` service는 `.env.local`의 Google credential과 접근 정책을 전달하고 local signup, migration, document worker를 활성화하며 `http://localhost:3100`에 노출된다. Migration과 worker는 별도 Compose service가 아니라 `agent-memory` process의 Next.js instrumentation에서 시작된다. Google OAuth application의 승인된 redirect URI에는 `http://localhost:3100/api/auth/callback/google`을 등록하라. Object profile 없이 app을 실행하면 document upload에 필요한 S3 endpoint를 별도로 제공해야 한다.
 
 Agent Studio의 PostgreSQL 17과 포트·volume을 공유하지 않는다. `docker compose down -v`는 PostgreSQL과 MinIO 데이터를 제거하므로 필요한 데이터와 대상 project를 확인하기 전에는 실행하지 마라.
 
