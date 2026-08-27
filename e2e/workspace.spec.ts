@@ -285,4 +285,36 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     .click();
   await nodeDeleteResponse;
   await expect(page.getByText("Graph에서 Orders Database을 삭제했습니다.")).toBeVisible();
+
+  await postJson(
+    page,
+    `/api/organizations/${organizationId}/knowledge/nodes`,
+    {
+      scope: { kind: "user" },
+      kind: "concept",
+      canonicalName: "Duplicate Entity",
+      source: { memoryId: memory.id }
+    }
+  );
+  await postJson(
+    page,
+    `/api/organizations/${organizationId}/knowledge/nodes`,
+    {
+      scope: { kind: "user" },
+      kind: "service",
+      canonicalName: "Duplicate Entity",
+      source: { memoryId: memory.id }
+    }
+  );
+  await page
+    .getByPlaceholder("정책, 장애 대응, 시스템 관계를 검색하세요")
+    .fill("Duplicate Entity");
+  await page.getByRole("button", { name: "검색", exact: true }).click();
+  await expect(page.getByText("Duplicate Entity", { exact: true })).toHaveCount(2);
+  await page.getByRole("button", { name: "중복 병합" }).first().click();
+  const mergeDialog = page.getByRole("dialog", { name: "중복 node 병합" });
+  await mergeDialog.getByLabel("병합 사유").fill("E2E duplicate verification");
+  await mergeDialog.getByRole("button", { name: "병합 확인" }).click();
+  await expect(page.getByText("중복된 Duplicate Entity node를 병합했습니다.")).toBeVisible();
+  await expect(page.getByText("Duplicate Entity", { exact: true })).toHaveCount(1);
 });

@@ -178,6 +178,7 @@ export const en = {
   "workspace.search": "Search",
   "workspace.relativeRelevance": "Relative relevance {value}%",
   "workspace.viewRelationships": "View relationships",
+  "workspace.nodeSources": "{count} sources",
   "workspace.searchEmpty":
     "Enter a query to see context within your access scope.",
   "workspace.mapEyebrow": "Knowledge map",
@@ -213,6 +214,15 @@ export const en = {
   "resource.cancel": "Cancel",
   "resource.confirmArchive": "Confirm archive",
   "resource.confirmDelete": "Confirm delete",
+  "resource.mergeDuplicate": "Merge duplicate",
+  "resource.mergeNodesTitle": "Merge duplicate nodes",
+  "resource.mergeNodesBody":
+    "Merge the duplicate {name} nodes? Sources and relationships will move to the node on this card, and the other node will be deleted.",
+  "resource.mergeReason": "Merge reason",
+  "resource.mergeReasonPlaceholder":
+    "Record why these nodes represent the same entity",
+  "resource.confirmMerge": "Confirm merge",
+  "resource.nodesMerged": "Merged duplicate {name} nodes.",
   "result.evidence.directMemory": "Directly registered memory",
   "result.evidence.memorySource": "{source} source{revision}",
   "result.evidence.revision": " · revision v{version}",
@@ -252,6 +262,8 @@ export const en = {
   "candidate.noKnowledge": "Candidate with no knowledge",
   "candidate.documentChunk": "Document chunk",
   "candidate.noRelationships": "There are no proposed relationships.",
+  "candidate.similarNodes":
+    "{count} existing node(s) have the same name in this scope (kinds: {kinds}). Exact normalized identities merge automatically; otherwise review and merge after approval.",
   "candidate.reason": "Review reason",
   "candidate.reasonPlaceholder": "Record the basis for accepting or rejecting this candidate",
   "candidate.reject": "Reject",

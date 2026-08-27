@@ -20,6 +20,8 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useEffectEvent, useState } from "react";
 
+import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
+
 import { useT } from "./_i18n/provider";
 import classes from "./knowledge-candidate-review.module.css";
 
@@ -41,11 +43,36 @@ interface KnowledgeCandidateView {
   readonly documentId: string;
   readonly chunkId: string;
   readonly model: string;
+  readonly scope: Readonly<{
+    kind: "organization" | "team" | "user";
+    organizationId: string;
+    teamId?: string;
+    userId?: string;
+  }>;
   readonly graph: {
     readonly entities: readonly ProposedEntityView[];
     readonly relationships: readonly ProposedRelationshipView[];
   };
   readonly createdAt: string;
+}
+
+interface SimilarNodeView {
+  readonly id: string;
+  readonly kind: string;
+  readonly canonicalName: string;
+  readonly scope: KnowledgeCandidateView["scope"];
+}
+
+function sameScope(
+  left: KnowledgeCandidateView["scope"],
+  right: KnowledgeCandidateView["scope"]
+) {
+  return (
+    left.kind === right.kind &&
+    left.organizationId === right.organizationId &&
+    left.teamId === right.teamId &&
+    left.userId === right.userId
+  );
 }
 
 interface KnowledgeCandidateReviewProps {
@@ -85,6 +112,9 @@ export function KnowledgeCandidateReview({
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [reason, setReason] = useState("");
+  const [similarNodes, setSimilarNodes] = useState<
+    Readonly<Record<string, readonly SimilarNodeView[]>>
+  >({});
   const getLoadMessages = useEffectEvent(() => ({
     requestFailed: t("candidate.requestFailed"),
     loadFailed: t("candidate.loadFailed")
@@ -140,6 +170,45 @@ export function KnowledgeCandidateReview({
       active = false;
     };
   }, [organizationId]);
+
+  useEffect(() => {
+    if (!selected) {
+      return;
+    }
+    const controller = new AbortController();
+    Promise.all(
+      selected.graph.entities.map(async (entity) => {
+        const response = await fetch(
+          `/api/organizations/${organizationId}/knowledge/nodes?q=${encodeURIComponent(entity.canonicalName)}&limit=10`,
+          { signal: controller.signal }
+        );
+        if (!response.ok) {
+          return [entity.key, []] as const;
+        }
+        const body = (await response.json()) as {
+          hits?: readonly { node?: SimilarNodeView }[];
+        };
+        return [
+          entity.key,
+          (body.hits ?? [])
+            .flatMap((hit) => (hit.node ? [hit.node] : []))
+            .filter(
+              (node) =>
+                knowledgeCanonicalNameKey(node.canonicalName) ===
+                  knowledgeCanonicalNameKey(entity.canonicalName) &&
+                sameScope(node.scope, selected.scope)
+            )
+        ] as const;
+      })
+    )
+      .then((entries) => setSimilarNodes(Object.fromEntries(entries)))
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setSimilarNodes({});
+        }
+      });
+    return () => controller.abort();
+  }, [organizationId, selected]);
 
   async function review(action: "accept" | "reject") {
     if (!selected) {
@@ -283,6 +352,16 @@ export function KnowledgeCandidateReview({
                           <Text c="dimmed" mt={4} size="xs">
                             {entity.summary}
                           </Text>
+                        ) : null}
+                        {(similarNodes[entity.key]?.length ?? 0) > 0 ? (
+                          <Alert color="yellow" mt="xs" p="xs">
+                            {t("candidate.similarNodes", {
+                              count: similarNodes[entity.key]?.length ?? 0,
+                              kinds: similarNodes[entity.key]
+                                ?.map((node) => node.kind)
+                                .join(", ") ?? ""
+                            })}
+                          </Alert>
                         ) : null}
                       </Paper>
                     ))}

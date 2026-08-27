@@ -95,6 +95,9 @@ describe("knowledge extraction service", () => {
         }
       ).json_schema.schema.properties.entities.items.required
     ).toContain("summary");
+    expect(
+      (body.messages as readonly { content: string }[])[0]?.content
+    ).toContain("Use recognition for awards");
   });
 
   it("rejects malformed model output without exposing source content or credentials", async () => {

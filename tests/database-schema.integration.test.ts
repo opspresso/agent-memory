@@ -1,4 +1,5 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -7,6 +8,7 @@ import {
   createDatabase,
   type AgentMemoryDatabase
 } from "@/infrastructure/database/client";
+import { knowledgeNodeMerges } from "@/infrastructure/database/schema";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
@@ -995,6 +997,100 @@ describe("PostgreSQL schema", () => {
       now: createdAt
     });
     await repository.saveEdge(edge);
+
+    const normalizedRecognition = await repository.saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000011",
+        scope,
+        kind: "award",
+        canonicalName: "ＡＷＳ  AI Hero",
+        source: { memoryId: sourceMemoryId },
+        now: createdAt
+      })
+    );
+    const repeatedRecognition = await repository.saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000012",
+        scope,
+        kind: "designation",
+        canonicalName: "aws ai hero",
+        source: { memoryId: corroboratingMemoryId },
+        now: createdAt
+      })
+    );
+    expect(repeatedRecognition).toMatchObject({
+      id: normalizedRecognition.id,
+      kind: "recognition",
+      sources: expect.arrayContaining([
+        { memoryId: sourceMemoryId },
+        { memoryId: corroboratingMemoryId }
+      ])
+    });
+
+    const duplicateNode = await repository.saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000013",
+        scope,
+        kind: "concept",
+        canonicalName: "Checkout API",
+        source: { memoryId: corroboratingMemoryId },
+        now: createdAt
+      })
+    );
+    const duplicateEdge = await repository.saveEdge(
+      createKnowledgeEdge({
+        id: "70000000-0000-0000-0000-000000000011",
+        organizationId: organization,
+        scope,
+        sourceNodeId: duplicateNode.id,
+        targetNodeId,
+        predicate: "depends_on",
+        source: { memoryId: sourceMemoryId },
+        now: createdAt
+      })
+    );
+    const selfCollapsingEdge = await repository.saveEdge(
+      createKnowledgeEdge({
+        id: "70000000-0000-0000-0000-000000000012",
+        organizationId: organization,
+        scope,
+        sourceNodeId: duplicateNode.id,
+        targetNodeId: sourceNodeId,
+        predicate: "same_as",
+        source: { memoryId: sourceMemoryId },
+        now: createdAt
+      })
+    );
+    await expect(
+      repository.mergeNodes({
+        organizationId: organization,
+        sourceNodeId: duplicateNode.id,
+        targetNodeId: sourceNodeId,
+        mergedBy: user,
+        reason: "Same service extracted with a different kind",
+        now: createdAt
+      })
+    ).resolves.toMatchObject({
+      id: sourceNodeId,
+      sources: expect.arrayContaining([
+        { memoryId: sourceMemoryId },
+        { memoryId: corroboratingMemoryId }
+      ])
+    });
+    await expect(
+      repository.findNodeById(organization, duplicateNode.id)
+    ).resolves.toBeNull();
+    await expect(
+      repository.findEdgeById(organization, duplicateEdge.id)
+    ).resolves.toBeNull();
+    await expect(
+      repository.findEdgeById(organization, selfCollapsingEdge.id)
+    ).resolves.toBeNull();
+    const mergeAuditRows = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(knowledgeNodeMerges)
+      .where(eq(knowledgeNodeMerges.organizationId, organization));
+    expect(mergeAuditRows[0]?.count).toBe(1);
 
     const access: OrganizationAccess = {
       organizationId: organization,

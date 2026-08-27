@@ -100,6 +100,7 @@ curl \
 | `GET`, `POST` | `/api/organizations/:organizationId/knowledge/nodes` | Knowledge node 검색·생성 |
 | `POST` | `/api/organizations/:organizationId/knowledge/edges` | Knowledge edge 생성 |
 | `DELETE` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId` | Knowledge node와 연결 edge 삭제 |
+| `POST` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId/merge` | 중복 Knowledge node 병합 |
 | `DELETE` | `/api/organizations/:organizationId/knowledge/edges/:edgeId` | Knowledge edge 삭제 |
 | `GET` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId/neighborhood` | 제한된 graph neighborhood 조회 |
 | `GET` | `/api/organizations/:organizationId/knowledge/candidates` | 검토 대기 중인 AI graph 후보 조회 |
@@ -320,6 +321,10 @@ curl -X POST \
 Node 응답은 `id`, `scope`, `kind`, `canonicalName`, 선택형 `summary`, `properties`, `sources`, timestamp와 선택형 `embeddingModel`을 포함한다. Edge 응답은 node ID, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
 
 `DELETE .../knowledge/nodes/:nodeId`와 `DELETE .../knowledge/edges/:edgeId`는 해당 graph resource scope의 `manage` 권한을 요구하며 성공 시 `204`를 반환한다. Node 삭제는 연결된 edge도 함께 삭제하지만 provenance source인 Memory나 document는 삭제하지 않는다.
+
+`POST .../knowledge/nodes/:targetNodeId/merge`는 `{ "sourceNodeId": UUID, "reason": string }`을 받아 source node를 target node로 병합한다. 두 node는 같은 organization과 scope에 있어야 하며 호출자는 둘 다 `manage`할 수 있어야 한다. 병합 transaction은 provenance를 누적하고 incoming·outgoing edge를 target으로 재연결하며, 중복 edge를 합치고 self-edge를 제거한 뒤 source node를 삭제하고 audit을 저장한다.
+
+Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical name과 정규화 kind를 사용한다. `award`, `honor`, `achievement`, `designation`은 `recognition`으로 통합한다. 같은 scope에서 정규화 identity가 같으면 신규 생성과 AI 후보 승인 시 기존 node에 자동 병합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
 
 검색은 `GET .../knowledge/nodes?q=<query>&limit=<1-100>`을 사용한다. Neighborhood는 `depth=1-5`, `limit=1-200`을 받으며 기본값은 각각 1과 100이다. 두 조회는 호출자가 현재 읽을 수 있고 active·유효한 Memory 또는 ready document chunk 근거가 하나 이상 있는 graph resource만 반환한다.
 

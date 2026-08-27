@@ -89,7 +89,11 @@ Knowledge extraction model을 설정하면 별도 pg-boss queue가 ready 문서�
 
 Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenance 행은 DB constraint로 정확히 하나의 memory 또는 document chunk를 참조한다. Canonical resource가 여러 근거에서 발견되면 resource를 중복 생성하지 않고 provenance를 누적한다. 생성 시 호출자가 source를 읽을 수 있어야 하고 graph scope는 source scope보다 넓을 수 없다. 검색·Neighborhood·edge 생성은 source의 현재 권한과 active·유효·ready 상태를 다시 확인한다.
 
+Node identity는 NFKC·공백·대소문자를 정규화한 canonical name key와 ontology로 정규화한 kind를 사용한다. 동일 scope의 동일 identity 생성은 transaction advisory lock으로 직렬화해 하나의 node와 provenance로 수렴한다. 이름은 같지만 kind가 다른 node는 자동 병합하지 않고 검토 대상으로 남긴다.
+
 Graph resource 삭제는 해당 scope의 `manage` 권한을 요구한다. Edge 삭제는 edge와 provenance row만 제거하고, node 삭제는 연결 edge와 각 provenance row를 함께 제거한다. 어느 경우에도 source Memory나 document를 삭제하지 않는다.
+
+Node merge는 같은 scope에서만 허용한다. 하나의 transaction에서 source provenance를 target에 누적하고 edge endpoint를 재작성하며 동일 edge를 병합하고 self-edge를 제거한다. Source node 삭제 전 reviewer, reason, 원래 kind와 canonical name을 merge audit에 저장한다.
 
 AI candidate는 graph와 분리된 검토 queue다. 거절은 graph를 변경하지 않으며, 승인된 candidate는 다시 거절할 수 없다. 승인·거절에는 reviewer와 선택형 사유를 남긴다.
 

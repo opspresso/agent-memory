@@ -32,6 +32,14 @@ export interface KnowledgeGraphRepository {
     nodeId: string
   ): Promise<KnowledgeNode | null>;
   deleteNode(organizationId: string, nodeId: string): Promise<boolean>;
+  mergeNodes(input: {
+    readonly organizationId: string;
+    readonly sourceNodeId: string;
+    readonly targetNodeId: string;
+    readonly mergedBy: string;
+    readonly reason: string;
+    readonly now: Date;
+  }): Promise<KnowledgeNode | null>;
   saveEdge(edge: KnowledgeEdge): Promise<KnowledgeEdge>;
   findEdgeById(
     organizationId: string,

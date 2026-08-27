@@ -78,7 +78,9 @@ General rules:
 - Do not use a URL, domain, email address, date, duration, JSON property name, XML tag, or CSV header as an entity when it only describes or locates another named entity.
 - Extract only entities and directed relationships supported by the supplied text. Do not invent missing facts.
 - Prefer a smaller set of well-supported entities over speculative or structural tokens.
-- Use stable local keys, concise lowercase kinds, and lowercase snake_case predicates.
+- Use stable local keys and lowercase snake_case predicates.
+- Prefer these lowercase kinds: person, organization, product, service, project, technology, location, recognition, certification, role, event, document, concept.
+- Use recognition for awards, honors, achievements, and designations instead of inventing separate kinds.
 - Return empty arrays when no reliable knowledge is present.
 
 Format rules:

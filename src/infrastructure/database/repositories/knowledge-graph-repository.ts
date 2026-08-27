@@ -1,8 +1,11 @@
 import {
   and,
+  asc,
   desc,
   eq,
   inArray,
+  isNull,
+  ne,
   or,
   sql,
   type SQL
@@ -21,6 +24,7 @@ import type {
   KnowledgeGraphRepository,
   KnowledgeNodeSearchInput
 } from "@/domain/knowledge/knowledge-graph-repository";
+import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
 
 import type { AgentMemoryDatabase } from "../client";
 import {
@@ -28,6 +32,7 @@ import {
   documents,
   knowledgeEdges,
   knowledgeEdgeSources,
+  knowledgeNodeMerges,
   knowledgeNodes,
   knowledgeNodeSources,
   memories,
@@ -325,6 +330,28 @@ function scoreExpressions(input: KnowledgeNodeSearchInput) {
   });
 }
 
+function vectorLiteral(values: readonly number[] | null | undefined) {
+  return values ? `[${values.join(",")}]` : undefined;
+}
+
+function nodeIdentityPredicate(node: KnowledgeNode) {
+  return and(
+    eq(knowledgeNodes.organizationId, node.scope.organizationId),
+    eq(knowledgeNodes.scopeKind, node.scope.kind),
+    node.scope.kind === "team"
+      ? eq(knowledgeNodes.teamId, node.scope.teamId)
+      : isNull(knowledgeNodes.teamId),
+    node.scope.kind === "user"
+      ? eq(knowledgeNodes.userId, node.scope.userId)
+      : isNull(knowledgeNodes.userId),
+    eq(knowledgeNodes.kind, node.kind),
+    eq(
+      knowledgeNodes.canonicalNameKey,
+      knowledgeCanonicalNameKey(node.canonicalName)
+    )
+  );
+}
+
 export function createKnowledgeGraphRepository(
   db: AgentMemoryDatabase
 ): KnowledgeGraphRepository {
@@ -332,27 +359,50 @@ export function createKnowledgeGraphRepository(
     async saveNode(node) {
       const values = nodeValues(node);
       return db.transaction(async (transaction) => {
-        const [row] = await transaction
-          .insert(knowledgeNodes)
-          .values(values)
-          .onConflictDoUpdate({
-            target: [
-              knowledgeNodes.organizationId,
-              knowledgeNodes.scopeKind,
-              knowledgeNodes.teamId,
-              knowledgeNodes.userId,
-              knowledgeNodes.kind,
-              knowledgeNodes.canonicalName
-            ],
-            set: {
-              summary: sql`coalesce(excluded.summary, ${knowledgeNodes.summary})`,
-              embedding: sql`coalesce(excluded.embedding, ${knowledgeNodes.embedding})`,
-              embeddingModel: sql`coalesce(excluded.embedding_model, ${knowledgeNodes.embeddingModel})`,
-              properties: sql`${knowledgeNodes.properties} || excluded.properties`,
-              updatedAt: values.updatedAt
-            }
-          })
-          .returning();
+        const identity = `${node.scope.organizationId}:${node.scope.kind}:${node.scope.kind === "team" ? node.scope.teamId : ""}:${node.scope.kind === "user" ? node.scope.userId : ""}:${node.kind}:${knowledgeCanonicalNameKey(node.canonicalName)}`;
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${identity}, 0))`
+        );
+        const [existing] = await transaction
+          .select({ id: knowledgeNodes.id })
+          .from(knowledgeNodes)
+          .where(nodeIdentityPredicate(node))
+          .limit(1);
+        const [row] = existing
+          ? await transaction
+              .update(knowledgeNodes)
+              .set({
+                summary: sql`coalesce(${values.summary}, ${knowledgeNodes.summary})`,
+                embedding: values.embedding
+                  ? sql`coalesce(${vectorLiteral(values.embedding)}::vector, ${knowledgeNodes.embedding})`
+                  : knowledgeNodes.embedding,
+                embeddingModel: sql`coalesce(${values.embeddingModel}, ${knowledgeNodes.embeddingModel})`,
+                properties: sql`${knowledgeNodes.properties} || ${JSON.stringify(values.properties)}::jsonb`,
+                updatedAt: values.updatedAt
+              })
+              .where(eq(knowledgeNodes.id, existing.id))
+              .returning()
+          : await transaction
+              .insert(knowledgeNodes)
+              .values(values)
+              .onConflictDoUpdate({
+                target: [
+                  knowledgeNodes.organizationId,
+                  knowledgeNodes.scopeKind,
+                  knowledgeNodes.teamId,
+                  knowledgeNodes.userId,
+                  knowledgeNodes.kind,
+                  knowledgeNodes.canonicalName
+                ],
+                set: {
+                  summary: sql`coalesce(excluded.summary, ${knowledgeNodes.summary})`,
+                  embedding: sql`coalesce(excluded.embedding, ${knowledgeNodes.embedding})`,
+                  embeddingModel: sql`coalesce(excluded.embedding_model, ${knowledgeNodes.embeddingModel})`,
+                  properties: sql`${knowledgeNodes.properties} || excluded.properties`,
+                  updatedAt: values.updatedAt
+                }
+              })
+              .returning();
         if (!row) {
           throw new Error("knowledge node upsert returned no row");
         }
@@ -426,6 +476,205 @@ export function createKnowledgeGraphRepository(
         )
         .returning({ id: knowledgeNodes.id });
       return deleted !== undefined;
+    },
+
+    async mergeNodes(input) {
+      return db.transaction(async (transaction) => {
+        const locked = await transaction
+          .select()
+          .from(knowledgeNodes)
+          .where(
+            and(
+              eq(knowledgeNodes.organizationId, input.organizationId),
+              inArray(knowledgeNodes.id, [
+                input.sourceNodeId,
+                input.targetNodeId
+              ])
+            )
+          )
+          .orderBy(asc(knowledgeNodes.id))
+          .for("update");
+        const source = locked.find((row) => row.id === input.sourceNodeId);
+        const target = locked.find((row) => row.id === input.targetNodeId);
+        if (!source || !target || source.id === target.id) {
+          return null;
+        }
+        if (
+          source.scopeKind !== target.scopeKind ||
+          source.teamId !== target.teamId ||
+          source.userId !== target.userId
+        ) {
+          return null;
+        }
+
+        const sourceNodeSourceRows = await transaction
+          .select()
+          .from(knowledgeNodeSources)
+          .where(
+            and(
+              eq(knowledgeNodeSources.organizationId, input.organizationId),
+              eq(knowledgeNodeSources.nodeId, source.id)
+            )
+          );
+        const sourcesToMove =
+          sourceNodeSourceRows.length > 0
+            ? sourceNodeSourceRows.map(sourceFromRow)
+            : legacySources(source);
+        for (const sourceReference of sourcesToMove) {
+          await transaction
+            .insert(knowledgeNodeSources)
+            .values({
+              organizationId: input.organizationId,
+              nodeId: target.id,
+              memoryId: sourceReference.memoryId ?? null,
+              chunkId: sourceReference.chunkId ?? null,
+              createdAt: input.now
+            })
+            .onConflictDoNothing();
+        }
+
+        const connectedEdges = await transaction
+          .select()
+          .from(knowledgeEdges)
+          .where(
+            and(
+              eq(knowledgeEdges.organizationId, input.organizationId),
+              or(
+                eq(knowledgeEdges.sourceNodeId, source.id),
+                eq(knowledgeEdges.targetNodeId, source.id)
+              )
+            )
+          )
+          .for("update");
+        for (const edge of connectedEdges) {
+          const nextSourceNodeId =
+            edge.sourceNodeId === source.id ? target.id : edge.sourceNodeId;
+          const nextTargetNodeId =
+            edge.targetNodeId === source.id ? target.id : edge.targetNodeId;
+          if (nextSourceNodeId === nextTargetNodeId) {
+            await transaction
+              .delete(knowledgeEdges)
+              .where(eq(knowledgeEdges.id, edge.id));
+            continue;
+          }
+          const [existingEdge] = await transaction
+            .select()
+            .from(knowledgeEdges)
+            .where(
+              and(
+                eq(knowledgeEdges.organizationId, input.organizationId),
+                ne(knowledgeEdges.id, edge.id),
+                eq(knowledgeEdges.scopeKind, edge.scopeKind),
+                edge.teamId
+                  ? eq(knowledgeEdges.teamId, edge.teamId)
+                  : isNull(knowledgeEdges.teamId),
+                edge.userId
+                  ? eq(knowledgeEdges.userId, edge.userId)
+                  : isNull(knowledgeEdges.userId),
+                eq(knowledgeEdges.sourceNodeId, nextSourceNodeId),
+                eq(knowledgeEdges.targetNodeId, nextTargetNodeId),
+                eq(knowledgeEdges.predicate, edge.predicate)
+              )
+            )
+            .for("update")
+            .limit(1);
+          if (existingEdge) {
+            const sourceRows = await transaction
+              .select()
+              .from(knowledgeEdgeSources)
+              .where(
+                and(
+                  eq(
+                    knowledgeEdgeSources.organizationId,
+                    input.organizationId
+                  ),
+                  eq(knowledgeEdgeSources.edgeId, edge.id)
+                )
+              );
+            const edgeSources =
+              sourceRows.length > 0
+                ? sourceRows.map(sourceFromRow)
+                : legacySources(edge);
+            for (const sourceReference of edgeSources) {
+              await transaction
+                .insert(knowledgeEdgeSources)
+                .values({
+                  organizationId: input.organizationId,
+                  edgeId: existingEdge.id,
+                  memoryId: sourceReference.memoryId ?? null,
+                  chunkId: sourceReference.chunkId ?? null,
+                  createdAt: input.now
+                })
+                .onConflictDoNothing();
+            }
+            await transaction
+              .update(knowledgeEdges)
+              .set({
+                properties: sql`${JSON.stringify(edge.properties)}::jsonb || ${JSON.stringify(existingEdge.properties)}::jsonb`
+              })
+              .where(eq(knowledgeEdges.id, existingEdge.id));
+            await transaction
+              .delete(knowledgeEdges)
+              .where(eq(knowledgeEdges.id, edge.id));
+          } else {
+            await transaction
+              .update(knowledgeEdges)
+              .set({
+                sourceNodeId: nextSourceNodeId,
+                targetNodeId: nextTargetNodeId
+              })
+              .where(eq(knowledgeEdges.id, edge.id));
+          }
+        }
+
+        const [merged] = await transaction
+          .update(knowledgeNodes)
+          .set({
+            summary: sql`coalesce(${knowledgeNodes.summary}, ${source.summary})`,
+            embedding: source.embedding
+              ? sql`coalesce(${knowledgeNodes.embedding}, ${vectorLiteral(source.embedding)}::vector)`
+              : knowledgeNodes.embedding,
+            embeddingModel: sql`coalesce(${knowledgeNodes.embeddingModel}, ${source.embeddingModel})`,
+            properties: sql`${JSON.stringify(source.properties)}::jsonb || ${knowledgeNodes.properties}`,
+            updatedAt: input.now
+          })
+          .where(eq(knowledgeNodes.id, target.id))
+          .returning();
+        if (!merged) {
+          throw new Error("knowledge node merge target disappeared");
+        }
+        await transaction
+          .insert(knowledgeNodeMerges)
+          .values({
+            organizationId: input.organizationId,
+            sourceNodeId: source.id,
+            targetNodeId: target.id,
+            sourceKind: source.kind,
+            sourceCanonicalName: source.canonicalName,
+            mergedBy: input.mergedBy,
+            reason: input.reason,
+            createdAt: input.now
+          });
+        await transaction
+          .delete(knowledgeNodes)
+          .where(eq(knowledgeNodes.id, source.id));
+
+        const targetSources = await transaction
+          .select()
+          .from(knowledgeNodeSources)
+          .where(
+            and(
+              eq(knowledgeNodeSources.organizationId, input.organizationId),
+              eq(knowledgeNodeSources.nodeId, target.id)
+            )
+          );
+        return nodeFromRow(
+          merged,
+          targetSources.length > 0
+            ? targetSources.map(sourceFromRow)
+            : legacySources(merged)
+        );
+      });
     },
 
     async saveEdge(edge) {

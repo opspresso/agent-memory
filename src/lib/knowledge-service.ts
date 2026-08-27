@@ -4,6 +4,7 @@ import { buildAuthorizeKnowledgeSource } from "@/application/knowledge/authorize
 import { buildCreateKnowledgeEdge } from "@/application/knowledge/create-knowledge-edge";
 import { buildCreateKnowledgeNode } from "@/application/knowledge/create-knowledge-node";
 import { buildGetKnowledgeNeighborhood } from "@/application/knowledge/get-knowledge-neighborhood";
+import { buildMergeKnowledgeNodes } from "@/application/knowledge/merge-knowledge-nodes";
 import {
   buildDeleteKnowledgeEdge,
   buildDeleteKnowledgeNode
@@ -63,3 +64,8 @@ export const deleteKnowledgeNodeRecord =
 
 export const deleteKnowledgeEdgeRecord =
   buildDeleteKnowledgeEdge(knowledgeGraphRepository);
+
+export const mergeKnowledgeNodeRecords = buildMergeKnowledgeNodes({
+  clock,
+  repository: knowledgeGraphRepository
+});

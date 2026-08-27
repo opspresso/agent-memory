@@ -179,6 +179,7 @@ export const ko: Messages = {
   "workspace.search": "검색",
   "workspace.relativeRelevance": "상대 관련도 {value}%",
   "workspace.viewRelationships": "관계 보기",
+  "workspace.nodeSources": "source {count}개",
   "workspace.searchEmpty":
     "검색어를 입력하면 권한 범위 안의 Context가 표시됩니다.",
   "workspace.mapEyebrow": "Knowledge map",
@@ -214,6 +215,15 @@ export const ko: Messages = {
   "resource.cancel": "취소",
   "resource.confirmArchive": "Archive 확인",
   "resource.confirmDelete": "삭제 확인",
+  "resource.mergeDuplicate": "중복 병합",
+  "resource.mergeNodesTitle": "중복 node 병합",
+  "resource.mergeNodesBody":
+    "중복된 {name} node를 병합할까요? Source와 관계를 현재 카드의 node로 옮긴 뒤 다른 node를 삭제합니다.",
+  "resource.mergeReason": "병합 사유",
+  "resource.mergeReasonPlaceholder":
+    "두 node가 같은 entity라고 판단한 근거를 기록하세요",
+  "resource.confirmMerge": "병합 확인",
+  "resource.nodesMerged": "중복된 {name} node를 병합했습니다.",
   "result.evidence.directMemory": "직접 등록된 Memory",
   "result.evidence.memorySource": "{source} 출처{revision}",
   "result.evidence.revision": " · revision v{version}",
@@ -253,6 +263,8 @@ export const ko: Messages = {
   "candidate.noKnowledge": "지식 없음 후보",
   "candidate.documentChunk": "Document chunk",
   "candidate.noRelationships": "제안된 관계가 없습니다.",
+  "candidate.similarNodes":
+    "같은 scope와 이름의 기존 node가 {count}개 있습니다(kind: {kinds}). 정규화 identity가 정확히 같으면 자동 병합되며, 다르면 승인 후 검토하여 병합하세요.",
   "candidate.reason": "검토 사유",
   "candidate.reasonPlaceholder": "승인 또는 거절 판단의 근거를 기록하세요",
   "candidate.reject": "거절",

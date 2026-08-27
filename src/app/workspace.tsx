@@ -17,6 +17,7 @@ import {
   Tabs,
   Text,
   TextInput,
+  Textarea,
   Title
 } from "@mantine/core";
 import {
@@ -45,6 +46,7 @@ import {
   type ScopedResource
 } from "@/domain/identity/organization-access";
 import type { OrganizationMembership } from "@/domain/identity/organization-access-repository";
+import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
 import { signOut } from "@/lib/auth-client";
 import type { SessionUser } from "@/lib/session";
 
@@ -89,7 +91,13 @@ interface WorkspaceProps {
 type PendingResourceAction =
   | Readonly<{ kind: "document"; id: string; name: string }>
   | Readonly<{ kind: "edge"; id: string; name: string }>
-  | Readonly<{ kind: "node"; id: string; name: string }>;
+  | Readonly<{ kind: "node"; id: string; name: string }>
+  | Readonly<{
+      kind: "merge";
+      targetNodeId: string;
+      sourceNodeId: string;
+      name: string;
+    }>;
 
 type SearchKind =
   | "context/search"
@@ -173,6 +181,23 @@ function scopedResource(value: unknown): ScopedResource | undefined {
   return undefined;
 }
 
+function sameScope(left: unknown, right: unknown): boolean {
+  const leftScope = scopedResource(left);
+  const rightScope = scopedResource(right);
+  return Boolean(
+    leftScope &&
+      rightScope &&
+      leftScope.kind === rightScope.kind &&
+      leftScope.organizationId === rightScope.organizationId &&
+      (leftScope.kind !== "team" ||
+        (rightScope.kind === "team" &&
+          leftScope.teamId === rightScope.teamId)) &&
+      (leftScope.kind !== "user" ||
+        (rightScope.kind === "user" &&
+          leftScope.userId === rightScope.userId))
+  );
+}
+
 export function Workspace({
   accessByOrganization,
   administrationByOrganization,
@@ -210,6 +235,7 @@ export function Workspace({
   const [resourceActionError, setResourceActionError] = useState<string>();
   const [resourceActionMessage, setResourceActionMessage] = useState<string>();
   const [deletingResource, setDeletingResource] = useState(false);
+  const [mergeReason, setMergeReason] = useState("");
   const [documentScopeKind, setDocumentScopeKind] = useState<
     "organization" | "team" | "user"
   >("user");
@@ -396,11 +422,22 @@ export function Workspace({
     const path =
       action.kind === "document"
         ? `documents/${action.id}`
-        : `knowledge/${action.kind === "node" ? "nodes" : "edges"}/${action.id}`;
+        : action.kind === "merge"
+          ? `knowledge/nodes/${action.targetNodeId}/merge`
+          : `knowledge/${action.kind === "node" ? "nodes" : "edges"}/${action.id}`;
     try {
       const response = await fetch(
         `/api/organizations/${organizationId}/${path}`,
-        { method: "DELETE" }
+        action.kind === "merge"
+          ? {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sourceNodeId: action.sourceNodeId,
+                reason: mergeReason.trim()
+              })
+            }
+          : { method: "DELETE" }
       );
       if (!response.ok) {
         const body = await response.json().catch(() => ({})) as {
@@ -408,7 +445,18 @@ export function Workspace({
         };
         throw new Error(body.error ?? t("resource.deleteFailed"));
       }
-      if (action.kind === "document") {
+      if (action.kind === "merge") {
+        setHits((current) =>
+          current.filter(
+            (hit) => nestedRecord(hit, "node")?.id !== action.sourceNodeId
+          )
+        );
+        setGraphCenterNodeId(undefined);
+        setGraphSelectedNodeId(undefined);
+        setGraphNodes([]);
+        setGraphEdges([]);
+        setMergeReason("");
+      } else if (action.kind === "document") {
         setHits((current) =>
           current.filter(
             (hit) => nestedRecord(hit, "document")?.id !== action.id
@@ -448,6 +496,8 @@ export function Workspace({
       setResourceActionMessage(
         action.kind === "document"
           ? t("resource.documentArchived", { name: action.name })
+          : action.kind === "merge"
+            ? t("resource.nodesMerged", { name: action.name })
           : t("resource.graphDeleted", { name: action.name })
       );
     } catch (caught) {
@@ -660,6 +710,26 @@ export function Workspace({
                         )
                       : false;
                   const canManageDocument = canManage(document?.scope);
+                  const duplicateNode =
+                    typeof node?.id === "string" &&
+                    typeof node.canonicalName === "string"
+                      ? hits
+                          .map((candidate) => nestedRecord(candidate, "node"))
+                          .find(
+                            (candidate) =>
+                              typeof candidate?.id === "string" &&
+                              candidate.id !== node.id &&
+                              typeof candidate.canonicalName === "string" &&
+                              knowledgeCanonicalNameKey(
+                                candidate.canonicalName
+                              ) ===
+                                knowledgeCanonicalNameKey(
+                                  node.canonicalName as string
+                                ) &&
+                              sameScope(candidate.scope, node.scope) &&
+                              canManage(candidate.scope)
+                          )
+                      : undefined;
                   return (
                     <Paper
                       className={classes.resultCard}
@@ -692,6 +762,18 @@ export function Workspace({
                         ) : null}
                       </Group>
                       <Text fw={650}>{resultTitle(hit, t("workspace.resultFallback"))}</Text>
+                      {typeof node?.kind === "string" ? (
+                        <Group gap="xs">
+                          <Badge size="xs" variant="dot">{node.kind}</Badge>
+                          <Text c="dimmed" size="xs">
+                            {t("workspace.nodeSources", {
+                              count: Array.isArray(node.sources)
+                                ? node.sources.length
+                                : 0
+                            })}
+                          </Text>
+                        </Group>
+                      ) : null}
                       <Text c="dimmed" lineClamp={4} size="sm">
                         {resultSummary(hit)}
                       </Text>
@@ -739,6 +821,26 @@ export function Workspace({
                           variant="light"
                         >
                           {t("workspace.viewRelationships")}
+                        </Button>
+                      ) : null}
+                      {typeof node?.id === "string" &&
+                      typeof duplicateNode?.id === "string" &&
+                      canManage(node.scope) ? (
+                        <Button
+                          color="orange"
+                          onClick={() => {
+                            setMergeReason("");
+                            setPendingResourceAction({
+                              kind: "merge",
+                              targetNodeId: node.id as string,
+                              sourceNodeId: duplicateNode.id as string,
+                              name: String(node.canonicalName)
+                            });
+                          }}
+                          size="compact-sm"
+                          variant="light"
+                        >
+                          {t("resource.mergeDuplicate")}
                         </Button>
                       ) : null}
                       {typeof memory?.id === "string" && canManageMemory ? (
@@ -985,6 +1087,8 @@ export function Workspace({
         title={
           pendingResourceAction?.kind === "document"
             ? t("resource.archiveDocumentTitle")
+            : pendingResourceAction?.kind === "merge"
+              ? t("resource.mergeNodesTitle")
             : t("resource.deleteGraphTitle")
         }
       >
@@ -994,10 +1098,25 @@ export function Workspace({
               ? t("resource.archiveDocumentBody", {
                   name: pendingResourceAction.name
                 })
+              : pendingResourceAction?.kind === "merge"
+                ? t("resource.mergeNodesBody", {
+                    name: pendingResourceAction.name
+                  })
               : t("resource.deleteGraphBody", {
                   name: pendingResourceAction?.name ?? ""
                 })}
           </Text>
+          {pendingResourceAction?.kind === "merge" ? (
+            <Textarea
+              autosize
+              label={t("resource.mergeReason")}
+              maxLength={2_000}
+              minRows={2}
+              onChange={(event) => setMergeReason(event.currentTarget.value)}
+              placeholder={t("resource.mergeReasonPlaceholder")}
+              value={mergeReason}
+            />
+          ) : null}
           {resourceActionError ? (
             <Alert color="red">{resourceActionError}</Alert>
           ) : null}
@@ -1022,10 +1141,16 @@ export function Workspace({
                 )
               }
               loading={deletingResource}
+              disabled={
+                pendingResourceAction?.kind === "merge" &&
+                mergeReason.trim().length === 0
+              }
               onClick={() => void confirmResourceAction()}
             >
               {pendingResourceAction?.kind === "document"
                 ? t("resource.confirmArchive")
+                : pendingResourceAction?.kind === "merge"
+                  ? t("resource.confirmMerge")
                 : t("resource.confirmDelete")}
             </Button>
           </Group>

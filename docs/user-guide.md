@@ -102,6 +102,8 @@ Neighborhood가 바뀌면서 node 수가 늘거나 줄 수 있다. 서버는 새
 
 Graph node와 edge 삭제에는 해당 scope의 `manage` 권한이 필요하다. Edge를 삭제해도 연결 node와 source는 유지된다. Node를 삭제하면 연결 edge도 함께 삭제되지만 근거인 Memory나 document는 유지된다.
 
+검색 결과에서 같은 scope와 이름을 가진 node가 여러 개 발견되면 kind를 비교한다. 정규화 identity가 같은 신규 node는 자동으로 기존 node에 합쳐진다. Kind가 달라 자동 병합되지 않은 기존 node는 `중복 병합`에서 target을 확인하고 병합 사유를 입력한다. 병합은 provenance와 관계를 보존하며 되돌릴 수 없으므로 같은 실제 entity인지 확인하라.
+
 ## AI 후보 검토
 
 Knowledge extraction이 활성화되면 ready document chunk에서 entity와 relationship 후보가 생성된다. 후보는 자동으로 공유 Graph에 들어가지 않는다.
