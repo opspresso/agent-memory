@@ -297,6 +297,7 @@ export function Workspace({
     setGraphNodes([]);
     setGraphEdges([]);
     setGraphError(undefined);
+    setUploadMessage(undefined);
     setDocumentScopeKind("user");
     setDocumentTeamId(null);
     setPendingResourceAction(undefined);

@@ -83,6 +83,10 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     `/api/organizations/${organization.id}/teams`,
     { name: "E2E Team", slug: `e2e-team-${runId}-${testInfo.retry}` }
   );
+  await postJson<{ id: string }>(page, "/api/organizations", {
+    name: "E2E Other Organization",
+    slug: `e2e-other-organization-${runId}-${testInfo.retry}`
+  });
   await page.reload();
   await expect(
     page.getByRole("heading", { name: "공유 Context를 한곳에서 관리합니다." })
@@ -119,6 +123,13 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   );
   await page.getByRole("button", { name: "수집 시작" }).click();
   await expect(page.getByText("수집 대기열에 등록했습니다: e2e-document")).toBeVisible();
+  await page.getByRole("combobox", { name: "활성 조직" }).click();
+  await page.getByRole("option", { name: "E2E Other Organization" }).click();
+  await expect(
+    page.getByText("수집 대기열에 등록했습니다: e2e-document")
+  ).not.toBeVisible();
+  await page.getByRole("combobox", { name: "활성 조직" }).click();
+  await page.getByRole("option", { name: "E2E Organization" }).click();
 
   await page.getByRole("tab", { name: "Agent 연결" }).click();
   const mcpEndpoint = `${new URL(page.url()).origin}/api/organizations/${organizationId}/mcp`;
