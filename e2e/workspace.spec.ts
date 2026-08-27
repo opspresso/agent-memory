@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { expect, test, type Page } from "@playwright/test";
 
 const authenticatedE2e = process.env.E2E_AUTHENTICATED === "true";
@@ -48,6 +50,8 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
 }) => {
   test.skip(!authenticatedE2e, "requires a disposable migrated PostgreSQL database");
   test.setTimeout(60_000);
+  const runId = randomUUID();
+  const email = `e2e+${runId}@nalbam.com`;
 
   await page.context().addCookies([
     {
@@ -60,7 +64,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.goto("/");
   await page.getByText("가입", { exact: true }).click();
   await page.getByLabel("이름").fill("E2E Operator");
-  await page.getByLabel("이메일").fill("e2e@nalbam.com");
+  await page.getByLabel("이메일").fill(email);
   await page.getByLabel("비밀번호").fill("agent-memory-e2e-password");
   await page.getByRole("button", { name: "계정 만들기" }).click();
 
@@ -68,12 +72,12 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const organization = await postJson<{ id: string }>(
     page,
     "/api/organizations",
-    { name: "E2E Organization", slug: "e2e-organization" }
+    { name: "E2E Organization", slug: `e2e-organization-${runId}` }
   );
   const team = await postJson<{ id: string }>(
     page,
     `/api/organizations/${organization.id}/teams`,
-    { name: "E2E Team", slug: "e2e-team" }
+    { name: "E2E Team", slug: `e2e-team-${runId}` }
   );
   await page.reload();
   await expect(

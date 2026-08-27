@@ -19,6 +19,7 @@ export default defineConfig({
   webServer: {
     command: "./node_modules/.bin/next dev --hostname 127.0.0.1 --port 3110",
     env: {
+      WATCHPACK_POLLING: "true",
       NEXT_DIST_DIR: ".next-e2e",
       AUTH_PASSWORD: "true",
       AUTH_PASSWORD_SIGNUP: "true",
