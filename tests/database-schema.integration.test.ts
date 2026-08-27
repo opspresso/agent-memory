@@ -1,4 +1,5 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -7,6 +8,7 @@ import {
   createDatabase,
   type AgentMemoryDatabase
 } from "@/infrastructure/database/client";
+import { knowledgeNodeMerges } from "@/infrastructure/database/schema";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
@@ -344,6 +346,37 @@ describe("PostgreSQL schema", () => {
         "member"
       )
     ).resolves.toEqual({ status: "owner_immutable" });
+
+    await expect(
+      administration.upsertOrganizationMember(
+        organizationId,
+        "member-k@example.com",
+        "owner"
+      )
+    ).resolves.toMatchObject({ status: "saved", member: { role: "owner" } });
+    const concurrentDemotions = await Promise.all([
+      administration.upsertOrganizationMember(
+        organizationId,
+        "owner-k@example.com",
+        "member"
+      ),
+      administration.upsertOrganizationMember(
+        organizationId,
+        "member-k@example.com",
+        "member"
+      )
+    ]);
+    expect(concurrentDemotions.map((result) => result.status).sort()).toEqual([
+      "owner_immutable",
+      "saved"
+    ]);
+    const ownerCount = await pool.query<{ total: number }>(
+      `SELECT count(*)::int AS total
+       FROM organization_members
+       WHERE organization_id = $1 AND role = 'owner'`,
+      [organizationId]
+    );
+    expect(ownerCount.rows[0]?.total).toBe(1);
   });
 
   it("persists revisions and searches only accessible active memory", async () => {
@@ -854,6 +887,25 @@ describe("PostgreSQL schema", () => {
         now: createdAt
       })
     );
+    await expect(
+      repository.archive(organization, documentId, createdAt)
+    ).resolves.toBe(true);
+    await expect(repository.findById(organization, documentId)).resolves.toMatchObject({
+      status: "archived"
+    });
+    await expect(
+      repository.search({ access, query: "rollback", limit: 10 })
+    ).resolves.toEqual([]);
+    await expect(
+      candidateRepository.accept({
+        candidateId: candidate.id,
+        organizationId: organization,
+        entityPromotions: [],
+        relationshipIds: [],
+        reviewedAt: createdAt,
+        reviewedBy: user
+      })
+    ).resolves.toBeNull();
   });
 
   it("upserts, searches, and traverses only accessible knowledge", async () => {
@@ -977,6 +1029,117 @@ describe("PostgreSQL schema", () => {
     });
     await repository.saveEdge(edge);
 
+    const normalizedRecognition = await repository.saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000011",
+        scope,
+        kind: "award",
+        canonicalName: "ＡＷＳ  AI Hero",
+        source: { memoryId: sourceMemoryId },
+        now: createdAt
+      })
+    );
+    const repeatedRecognition = await repository.saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000012",
+        scope,
+        kind: "designation",
+        canonicalName: "aws ai hero",
+        source: { memoryId: corroboratingMemoryId },
+        now: createdAt
+      })
+    );
+    expect(repeatedRecognition).toMatchObject({
+      id: normalizedRecognition.id,
+      kind: "recognition",
+      sources: expect.arrayContaining([
+        { memoryId: sourceMemoryId },
+        { memoryId: corroboratingMemoryId }
+      ])
+    });
+
+    const duplicateNode = await repository.saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000013",
+        scope,
+        kind: "concept",
+        canonicalName: "Checkout API",
+        source: { memoryId: corroboratingMemoryId },
+        now: createdAt
+      })
+    );
+    await expect(
+      repository.findNodesByCanonicalNames(
+        {
+          organizationId: organization,
+          userId: user,
+          role: "member",
+          teams: [{ teamId: team, role: "member" }]
+        },
+        scope,
+        ["Ｃｈｅｃｋｏｕｔ   API"]
+      )
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: sourceNodeId }),
+        expect.objectContaining({ id: duplicateNode.id })
+      ])
+    );
+    const duplicateEdge = await repository.saveEdge(
+      createKnowledgeEdge({
+        id: "70000000-0000-0000-0000-000000000011",
+        organizationId: organization,
+        scope,
+        sourceNodeId: duplicateNode.id,
+        targetNodeId,
+        predicate: "depends_on",
+        source: { memoryId: sourceMemoryId },
+        now: createdAt
+      })
+    );
+    const selfCollapsingEdge = await repository.saveEdge(
+      createKnowledgeEdge({
+        id: "70000000-0000-0000-0000-000000000012",
+        organizationId: organization,
+        scope,
+        sourceNodeId: duplicateNode.id,
+        targetNodeId: sourceNodeId,
+        predicate: "same_as",
+        source: { memoryId: sourceMemoryId },
+        now: createdAt
+      })
+    );
+    await expect(
+      repository.mergeNodes({
+        organizationId: organization,
+        sourceNodeId: duplicateNode.id,
+        targetNodeId: sourceNodeId,
+        mergedBy: user,
+        reason: "Same service extracted with a different kind",
+        now: createdAt
+      })
+    ).resolves.toMatchObject({
+      id: sourceNodeId,
+      sources: expect.arrayContaining([
+        { memoryId: sourceMemoryId },
+        { memoryId: corroboratingMemoryId }
+      ])
+    });
+    await expect(
+      repository.findNodeById(organization, duplicateNode.id)
+    ).resolves.toBeNull();
+    await expect(
+      repository.findEdgeById(organization, duplicateEdge.id)
+    ).resolves.toBeNull();
+    await expect(
+      repository.findEdgeById(organization, selfCollapsingEdge.id)
+    ).resolves.toBeNull();
+    const mergeAuditRows = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(knowledgeNodeMerges)
+      .where(eq(knowledgeNodeMerges.organizationId, organization));
+    expect(mergeAuditRows[0]?.count).toBe(1);
+
     const access: OrganizationAccess = {
       organizationId: organization,
       userId: user,
@@ -1036,6 +1199,25 @@ describe("PostgreSQL schema", () => {
     await expect(
       repository.findNeighborhood(access, sourceNodeId, 2, 10)
     ).resolves.toEqual({ nodes: [], edges: [] });
+    await expect(
+      repository.findEdgeById(organization, edge.id)
+    ).resolves.toMatchObject({ id: edge.id });
+    await expect(repository.deleteEdge(organization, edge.id)).resolves.toBe(true);
+    await expect(repository.findEdgeById(organization, edge.id)).resolves.toBeNull();
+    const cascadingEdge = createKnowledgeEdge({
+      ...edge,
+      id: "70000000-0000-0000-0000-000000000010",
+      source: { memoryId: corroboratingMemoryId },
+      now: createdAt
+    });
+    await repository.saveEdge(cascadingEdge);
+    await expect(repository.deleteNode(organization, sourceNodeId)).resolves.toBe(true);
+    await expect(
+      repository.findNodeById(organization, sourceNodeId)
+    ).resolves.toBeNull();
+    await expect(
+      repository.findEdgeById(organization, cascadingEdge.id)
+    ).resolves.toBeNull();
   });
 
   it("rejects a memory that points to a team in another organization", async () => {

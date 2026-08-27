@@ -1,11 +1,13 @@
 import { z } from "zod";
 
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
+import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 
 interface TextEmbeddingServiceConfiguration {
   readonly apiKey?: string;
   readonly baseUrl: string;
   readonly model: string;
+  readonly requestLimiter?: AiRequestLimiter;
   readonly request?: typeof fetch;
 }
 
@@ -38,14 +40,15 @@ export function createTextEmbeddingService(
   const apiKey = configuration.apiKey?.trim();
   const request = configuration.request ?? fetch;
 
-  async function embedTexts(texts: readonly string[]) {
+  async function requestEmbeddings(texts: readonly string[]) {
     const response = await request(endpoint, {
       body: JSON.stringify({ input: [...texts], model }),
       headers: {
         "Content-Type": "application/json",
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
       },
-      method: "POST"
+      method: "POST",
+      signal: AbortSignal.timeout(60_000)
     });
     if (!response.ok) {
       throw new Error(`embedding request failed with status ${response.status}`);
@@ -65,6 +68,12 @@ export function createTextEmbeddingService(
       throw new Error("embedding response count does not match inputs");
     }
     return ordered.map(({ embedding }) => ({ model, values: embedding }));
+  }
+
+  function embedTexts(texts: readonly string[]) {
+    return configuration.requestLimiter
+      ? configuration.requestLimiter.run(() => requestEmbeddings(texts))
+      : requestEmbeddings(texts);
   }
 
   return {

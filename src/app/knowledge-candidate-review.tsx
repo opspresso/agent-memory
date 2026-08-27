@@ -21,6 +21,7 @@ import {
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { useT } from "./_i18n/provider";
+import { responseJson } from "./http-response";
 import classes from "./knowledge-candidate-review.module.css";
 
 interface ProposedEntityView {
@@ -41,11 +42,24 @@ interface KnowledgeCandidateView {
   readonly documentId: string;
   readonly chunkId: string;
   readonly model: string;
+  readonly scope: Readonly<{
+    kind: "organization" | "team" | "user";
+    organizationId: string;
+    teamId?: string;
+    userId?: string;
+  }>;
   readonly graph: {
     readonly entities: readonly ProposedEntityView[];
     readonly relationships: readonly ProposedRelationshipView[];
   };
   readonly createdAt: string;
+}
+
+interface SimilarNodeView {
+  readonly id: string;
+  readonly kind: string;
+  readonly canonicalName: string;
+  readonly scope: KnowledgeCandidateView["scope"];
 }
 
 interface KnowledgeCandidateReviewProps {
@@ -85,6 +99,12 @@ export function KnowledgeCandidateReview({
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [reason, setReason] = useState("");
+  const [duplicateState, setDuplicateState] = useState<
+    Readonly<{
+      candidateId: string;
+      nodes: Readonly<Record<string, readonly SimilarNodeView[]>>;
+    }>
+  >();
   const getLoadMessages = useEffectEvent(() => ({
     requestFailed: t("candidate.requestFailed"),
     loadFailed: t("candidate.loadFailed")
@@ -92,6 +112,10 @@ export function KnowledgeCandidateReview({
   const selected =
     candidates.find((candidate) => candidate.id === selectedId) ??
     candidates[0];
+  const similarNodes =
+    selected && duplicateState?.candidateId === selected.id
+      ? duplicateState.nodes
+      : {};
 
   async function loadCandidates() {
     setLoading(true);
@@ -140,6 +164,40 @@ export function KnowledgeCandidateReview({
       active = false;
     };
   }, [organizationId]);
+
+  useEffect(() => {
+    if (!selected) {
+      return;
+    }
+    const controller = new AbortController();
+    const loadMessages = getLoadMessages();
+    fetch(
+      `/api/organizations/${organizationId}/knowledge/candidates/${selected.id}/duplicates`,
+      { signal: controller.signal }
+    )
+      .then((response) =>
+        responseJson<{
+          duplicates?: Readonly<Record<string, readonly SimilarNodeView[]>>;
+        }>(response, loadMessages.requestFailed)
+      )
+      .then((body) =>
+        setDuplicateState({
+          candidateId: selected.id,
+          nodes: body.duplicates ?? {}
+        })
+      )
+      .catch((caught: unknown) => {
+        if (!controller.signal.aborted) {
+          setDuplicateState({ candidateId: selected.id, nodes: {} });
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : loadMessages.requestFailed
+          );
+        }
+      });
+    return () => controller.abort();
+  }, [organizationId, selected]);
 
   async function review(action: "accept" | "reject") {
     if (!selected) {
@@ -283,6 +341,16 @@ export function KnowledgeCandidateReview({
                           <Text c="dimmed" mt={4} size="xs">
                             {entity.summary}
                           </Text>
+                        ) : null}
+                        {(similarNodes[entity.key]?.length ?? 0) > 0 ? (
+                          <Alert color="yellow" mt="xs" p="xs">
+                            {t("candidate.similarNodes", {
+                              count: similarNodes[entity.key]?.length ?? 0,
+                              kinds: similarNodes[entity.key]
+                                ?.map((node) => node.kind)
+                                .join(", ") ?? ""
+                            })}
+                          </Alert>
                         ) : null}
                       </Paper>
                     ))}

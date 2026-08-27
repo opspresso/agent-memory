@@ -36,7 +36,8 @@ describe("text embedding service", () => {
           Authorization: "Bearer test-api-key",
           "Content-Type": "application/json"
         },
-        method: "POST"
+        method: "POST",
+        signal: expect.any(AbortSignal)
       })
     );
   });

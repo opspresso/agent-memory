@@ -1,5 +1,10 @@
 import type { ScopedResource } from "@/domain/identity/organization-access";
 
+import {
+  normalizeKnowledgeKind,
+  normalizeKnowledgeName
+} from "./knowledge-identity";
+
 export interface KnowledgeEmbedding {
   readonly model: string;
   readonly values: readonly number[];
@@ -141,9 +146,13 @@ export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNode {
   return Object.freeze({
     id: input.id,
     scope: Object.freeze({ ...input.scope }),
-    kind: normalizedText(input.kind, "knowledge node kind", 100).toLowerCase(),
+    kind: normalizedText(
+      normalizeKnowledgeKind(input.kind),
+      "knowledge node kind",
+      100
+    ),
     canonicalName: normalizedText(
-      input.canonicalName,
+      normalizeKnowledgeName(input.canonicalName),
       "knowledge node canonical name",
       500
     ),
@@ -163,21 +172,28 @@ export function createKnowledgeEdge(input: NewKnowledgeEdge): KnowledgeEdge {
       "knowledge edge scope must belong to its organization"
     );
   }
+  const sourceNodeId = normalizedText(
+    input.sourceNodeId,
+    "knowledge edge source node ID",
+    255
+  );
+  const targetNodeId = normalizedText(
+    input.targetNodeId,
+    "knowledge edge target node ID",
+    255
+  );
+  if (sourceNodeId === targetNodeId) {
+    throw new InvalidKnowledgeGraphError(
+      "knowledge edge must not be self-referential"
+    );
+  }
 
   return Object.freeze({
     id: input.id,
     organizationId: input.organizationId,
     scope: Object.freeze({ ...input.scope }),
-    sourceNodeId: normalizedText(
-      input.sourceNodeId,
-      "knowledge edge source node ID",
-      255
-    ),
-    targetNodeId: normalizedText(
-      input.targetNodeId,
-      "knowledge edge target node ID",
-      255
-    ),
+    sourceNodeId,
+    targetNodeId,
     predicate: normalizedText(
       input.predicate,
       "knowledge edge predicate",

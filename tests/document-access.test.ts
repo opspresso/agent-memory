@@ -4,6 +4,7 @@ import {
   buildGetDocument,
   DocumentNotFoundError
 } from "@/application/document/get-document";
+import { buildArchiveDocument } from "@/application/document/archive-document";
 import {
   buildRetryDocument,
   DocumentNotRetryableError
@@ -57,12 +58,53 @@ function repository(overrides: Partial<DocumentRepository>): DocumentRepository 
     completeProcessing: vi.fn(),
     failProcessing: vi.fn(),
     markEnqueueFailure: vi.fn(),
+    archive: vi.fn(),
     search: vi.fn(),
     ...overrides
   };
 }
 
 describe("document access", () => {
+  it("archives a manageable document", async () => {
+    const archive = vi.fn().mockResolvedValue(true);
+    const archiveDocument = buildArchiveDocument({
+      clock: () => now,
+      repository: repository({
+        findById: vi.fn().mockResolvedValue(document()),
+        archive
+      })
+    });
+    const managerAccess = {
+      ...memberAccess,
+      teams: [{ teamId: "team-1", role: "manager" as const }]
+    };
+
+    await expect(
+      archiveDocument(managerAccess, "document-1")
+    ).resolves.toBeUndefined();
+    expect(archive).toHaveBeenCalledWith(
+      "organization-1",
+      "document-1",
+      now
+    );
+  });
+
+  it("requires manage permission to archive a document", async () => {
+    const archive = vi.fn();
+    const archiveDocument = buildArchiveDocument({
+      clock: () => now,
+      repository: repository({
+        findById: vi.fn().mockResolvedValue(document()),
+        archive
+      })
+    });
+
+    await expect(
+      archiveDocument(memberAccess, "document-1")
+    ).rejects.toBeInstanceOf(DocumentAccessDeniedError);
+    expect(archive).not.toHaveBeenCalled();
+  });
+
   it("hides a document outside the caller scope", async () => {
     const inaccessible = {
       ...document(),

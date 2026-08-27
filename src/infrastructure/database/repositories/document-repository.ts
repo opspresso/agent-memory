@@ -333,6 +333,26 @@ export function createDocumentRepository(
         );
     },
 
+    async archive(organizationId, documentId, now) {
+      const [archived] = await db
+        .update(documents)
+        .set({
+          status: "archived",
+          errorMessage: null,
+          processingLeaseId: null,
+          updatedAt: now
+        })
+        .where(
+          and(
+            eq(documents.organizationId, organizationId),
+            eq(documents.id, documentId),
+            sql`${documents.status} <> 'archived'`
+          )
+        )
+        .returning({ id: documents.id });
+      return archived !== undefined;
+    },
+
     async search(input) {
       const scores = scoreExpressions(input);
       const rows = await db

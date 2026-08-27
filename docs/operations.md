@@ -29,7 +29,7 @@ IDC와 EKS에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유�
 
 Release 완료 조건은 tag와 GitHub Release만 만드는 것이 아니다. Workflow 성공, ECR·GHCR image 게시, GitOps dispatch와 Argo CD sync를 확인한 뒤 container image, health endpoint, 공개 화면의 version을 검증하라. IDC를 별도로 갱신할 때는 `.env`를 새 immutable tag로 바꿔 `scripts/deploy.sh`를 실행한다. 병합된 작업 branch가 있으면 마지막에 local과 remote에서 정리한다.
 
-IDC의 Grafana Alloy는 `https://memory.opspresso.com/api/metrics`를 `agent-memory` job으로 30초마다 scrape한다. 설정 원본은 `deploy/idc/alloy-agent-memory.alloy`이며 `up{job="agent-memory"}`로 수집 상태를 확인한다. Application metric은 process와 build 수준으로 제한하고 organization, 사용자, 검색어, Memory·문서 본문을 노출하지 않는다.
+IDC의 Grafana Alloy는 Bearer token으로 `https://memory.opspresso.com/api/metrics`를 인증하고 `agent-memory` job으로 30초마다 scrape한다. 설정 원본은 `deploy/idc/alloy-agent-memory.alloy`이며 `up{job="agent-memory"}`로 수집 상태를 확인한다. Application metric은 process와 build 수준으로 제한하고 organization, 사용자, 검색어, Memory·문서 본문을 노출하지 않는다.
 
 ### 로컬 개발
 
@@ -95,16 +95,21 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_BASE_URL` | OpenAI-compatible chat completions API base URL |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_API_KEY` | Extraction provider의 Bearer credential. 인증 없는 local endpoint에서는 생략 가능 |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_MODEL` | 설정 시 ready 문서에서 reviewable graph candidate 생성 |
+| AI provider | `AI_PROVIDER_MAX_CONCURRENCY` | Instance에서 동시에 실행할 embedding·extraction 요청 수. 기본값 `8` |
+| AI provider | `AI_PROVIDER_REQUESTS_PER_MINUTE` | Instance가 분당 실행할 embedding·extraction 요청의 합산 상한. 기본값 `120` |
 | Object storage | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | S3 호환 endpoint와 bucket |
 | Object storage | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3 credential |
 | Object storage | `S3_FORCE_PATH_STYLE` | MinIO 같은 path-style endpoint 사용 여부 |
 | Logging | `LOG_LEVEL` | Pino log level, 기본값 `info` |
+| Metrics | `METRICS_BEARER_TOKEN` | Prometheus scrape Bearer token. 32자 이상이며 미설정 시 endpoint 비활성화 |
 | Telemetry | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Langfuse 활성화. 두 값을 함께 설정 |
 | Telemetry | `LANGFUSE_BASE_URL` | Self-hosted 또는 cloud endpoint |
 | Telemetry | `LANGFUSE_EXPORT_MODE` | `batched` 또는 `immediate` |
 | Telemetry | `LANGFUSE_TRACING_ENVIRONMENT` | Trace 환경 이름 |
 
 `ALLOWED_EMAIL_DOMAINS`는 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. 명시적으로 빈 값으로 설정하면 모든 domain을 허용한다. `ADMIN_EMAILS`는 조직 bootstrap 권한만 제어하고 기존 조직의 tenant role을 우회하지 않는다. 빈 값으로 설정하면 누구도 새 조직을 만들 수 없다.
+
+AI provider limit은 embedding과 knowledge extraction이 공유하며 application instance마다 적용된다. Replica를 늘리면 cluster 전체 상한도 instance 수만큼 늘어나므로 provider account 또는 API gateway의 조직별 예산·quota를 함께 설정하라.
 
 다음 설정은 일부만 제공하면 application 시작 시 실패한다.
 
@@ -113,6 +118,8 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 - OIDC는 `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`을 함께 설정한다.
 - `EMBEDDING_MODEL`에는 `EMBEDDING_BASE_URL`이 필요하다.
 - `KNOWLEDGE_EXTRACTION_MODEL`에는 `KNOWLEDGE_EXTRACTION_BASE_URL`이 필요하다.
+- AI provider limit은 1 이상의 정수여야 한다.
+- `METRICS_BEARER_TOKEN`을 설정하면 32자 이상이어야 한다.
 - Langfuse는 `LANGFUSE_PUBLIC_KEY`와 `LANGFUSE_SECRET_KEY`를 함께 설정한다.
 - `LANGFUSE_EXPORT_MODE`는 `batched` 또는 `immediate`만 허용한다.
 
@@ -145,6 +152,10 @@ pnpm db:studio
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
 - AI 분석은 candidate만 생성한다. Source scope의 `manage` 권한을 가진 사용자가 운영 콘솔이나 API에서 승인해야 Knowledge Graph에 반영된다.
+
+Process가 `SIGTERM` 또는 `SIGINT`를 받으면 새 document job 수신을 중단하고 진행 중인 job을 최대 30초 동안 drain한 뒤 Database pool과 telemetry exporter를 순서대로 종료한다. Cleanup 일부가 실패해도 나머지 단계는 계속 실행하며 process는 실패 exit code를 반환한다.
+
+Container image는 `NEXT_MANUAL_SIG_HANDLE=true`로 Next.js 기본 signal handler를 끄고 이 종료 절차가 signal 처리를 담당한다. 기본 handler를 두면 Next.js가 drain 도중 process를 종료한다. 대신 진행 중인 HTTP 응답은 기다리지 않으므로 배포 전에 endpoint에서 instance를 먼저 제외하라. Orchestrator의 종료 유예 시간은 drain보다 길어야 한다. Helm은 `terminationGracePeriodSeconds: 45`, IDC Compose는 `stop_grace_period: 45s`를 사용한다.
 
 OpenRouter를 사용하려면 `.env.local`에 다음 값을 설정하라.
 

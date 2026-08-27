@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import { buildArchiveDocument } from "@/application/document/archive-document";
 import { buildGetDocument } from "@/application/document/get-document";
 import { buildRetryDocument } from "@/application/document/retry-document";
 import { buildSearchDocuments } from "@/application/document/search-documents";
 import { buildUploadDocument } from "@/application/document/upload-document";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import type { MemoryEmbedding } from "@/domain/memory/memory";
 import { observeRetrieval } from "@/infrastructure/observability/telemetry";
 
 import {
@@ -25,6 +27,11 @@ export const uploadDocumentRecord = buildUploadDocument({
 
 export const getDocumentRecord = buildGetDocument(documentRepository);
 
+export const archiveDocumentRecord = buildArchiveDocument({
+  clock: () => new Date(),
+  repository: documentRepository
+});
+
 const searchDocumentRecordsBase = buildSearchDocuments({
   repository: documentRepository,
   ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
@@ -33,10 +40,11 @@ const searchDocumentRecordsBase = buildSearchDocuments({
 export async function searchDocumentRecords(
   access: OrganizationAccess,
   query: string,
-  limit = 10
+  limit = 10,
+  queryEmbedding?: MemoryEmbedding
 ) {
   return observeRetrieval("document.search", access, limit, () =>
-    searchDocumentRecordsBase(access, query, limit)
+    searchDocumentRecordsBase(access, query, limit, queryEmbedding)
   );
 }
 

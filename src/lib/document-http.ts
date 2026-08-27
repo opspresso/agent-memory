@@ -5,6 +5,8 @@ import { DocumentAccessDeniedError } from "@/application/document/upload-documen
 import { InvalidDocumentError, type Document } from "@/domain/document/document";
 import type { DocumentSearchHit } from "@/domain/document/document-repository";
 
+import { aiErrorResponse } from "./ai-http";
+
 export const maxDocumentBytes = 10 * 1_024 * 1_024;
 export const maxDocumentRequestBytes = maxDocumentBytes + 64 * 1_024;
 
@@ -60,6 +62,10 @@ export async function boundedFormData(
 }
 
 export function documentErrorResponse(error: unknown): Response | null {
+  const aiResponse = aiErrorResponse(error);
+  if (aiResponse) {
+    return aiResponse;
+  }
   if (error instanceof DocumentNotFoundError) {
     return Response.json({ error: "Document not found" }, { status: 404 });
   }

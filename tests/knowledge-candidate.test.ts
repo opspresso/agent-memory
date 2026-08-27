@@ -55,11 +55,41 @@ function documentRepository(
     completeProcessing: vi.fn(),
     failProcessing: vi.fn(),
     markEnqueueFailure: vi.fn(),
+    archive: vi.fn(),
     search: vi.fn()
   };
 }
 
 describe("knowledge candidate", () => {
+  it("normalizes compatible extracted kinds", () => {
+    expect(
+      createKnowledgeCandidate({
+        id: "candidate-1",
+        scope,
+        documentId: "document-1",
+        chunkId: "chunk-1",
+        model: "model",
+        graph: {
+          entities: [
+            {
+              key: "hero",
+              kind: "designation",
+              canonicalName: " AWS  AI Hero "
+            }
+          ],
+          relationships: []
+        },
+        now
+      })
+    ).toMatchObject({
+      graph: {
+        entities: [
+          { kind: "recognition", canonicalName: "AWS AI Hero" }
+        ]
+      }
+    });
+  });
+
   it("normalizes a bounded graph while preserving source scope and provenance", () => {
     const candidate = createKnowledgeCandidate({
       id: "candidate-1",
@@ -153,7 +183,8 @@ describe("knowledge candidate", () => {
     });
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
-      documentTitle: document.title
+      documentTitle: document.title,
+      mimeType: document.mimeType
     });
     expect(candidates.save).toHaveBeenCalledOnce();
   });

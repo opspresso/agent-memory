@@ -9,5 +9,6 @@ export interface KnowledgeExtractionService {
   extract(input: {
     readonly content: string;
     readonly documentTitle: string;
+    readonly mimeType: string;
   }): Promise<KnowledgeExtractionResult>;
 }

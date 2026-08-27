@@ -22,11 +22,14 @@ config:
   EMBEDDING_MODEL: ""
   KNOWLEDGE_EXTRACTION_BASE_URL: ""
   KNOWLEDGE_EXTRACTION_MODEL: ""
+  AI_PROVIDER_MAX_CONCURRENCY: "8"
+  AI_PROVIDER_REQUESTS_PER_MINUTE: "120"
   extra: {}
 
 secrets:
   existingSecret: ""
   BETTER_AUTH_SECRET: ""
+  METRICS_BEARER_TOKEN: ""
   GOOGLE_CLIENT_ID: ""
   GOOGLE_CLIENT_SECRET: ""
   OIDC_CLIENT_ID: ""
@@ -49,10 +52,14 @@ ingress:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/healthcheck-path: /api/health
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
   host: memory.opspresso.com
   tls:
-    enabled: false
+    enabled: true
     secretName: ""
+
+terminationGracePeriodSeconds: 45
 
 resources:
   requests:

@@ -4,7 +4,8 @@ import { createKnowledgeNode } from "@/domain/knowledge/knowledge-graph";
 import { publicKnowledgeNode } from "@/lib/knowledge-http";
 import {
   createKnowledgeEdgeSchema,
-  createKnowledgeNodeSchema
+  createKnowledgeNodeSchema,
+  mergeKnowledgeNodesSchema
 } from "@/lib/knowledge-schemas";
 
 describe("knowledge HTTP boundary", () => {
@@ -71,5 +72,20 @@ describe("knowledge HTTP boundary", () => {
       embeddingModel: "test-embedding"
     });
     expect(publicKnowledgeNode(node)).not.toHaveProperty("embedding");
+  });
+
+  it("requires a source node and audit reason for merge", () => {
+    expect(
+      mergeKnowledgeNodesSchema.safeParse({
+        sourceNodeId: "60000000-0000-4000-8000-000000000010",
+        reason: "Same entity"
+      }).success
+    ).toBe(true);
+    expect(
+      mergeKnowledgeNodesSchema.safeParse({
+        sourceNodeId: "60000000-0000-4000-8000-000000000010",
+        reason: ""
+      }).success
+    ).toBe(false);
   });
 });

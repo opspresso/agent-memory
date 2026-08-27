@@ -7,6 +7,10 @@ import { createKnowledgeGraphRepository } from "@/infrastructure/database/reposi
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
 import { createKnowledgeExtractionService } from "@/infrastructure/ai/knowledge-extraction-service";
+import {
+  createAiRequestLimiter,
+  readAiRequestLimits
+} from "@/infrastructure/ai/request-limiter";
 import { createPlainTextExtractor } from "@/infrastructure/document/plain-text-extractor";
 import {
   createS3Client,
@@ -17,6 +21,7 @@ import { createPgBossDocumentIngestionQueue } from "@/infrastructure/queue/docum
 
 const defaultDatabaseUrl =
   "postgresql://agent_memory:agent_memory@localhost:5433/agent_memory";
+const aiRequestLimiter = createAiRequestLimiter(readAiRequestLimits());
 
 export const database = createDatabase(
   process.env.DATABASE_URL ?? defaultDatabaseUrl
@@ -47,7 +52,8 @@ function createConfiguredTextEmbeddingService() {
   return createTextEmbeddingService({
     apiKey: process.env.EMBEDDING_API_KEY,
     baseUrl: embeddingBaseUrl,
-    model: embeddingModel
+    model: embeddingModel,
+    requestLimiter: aiRequestLimiter
   });
 }
 export const textEmbeddingService = createConfiguredTextEmbeddingService();
@@ -67,7 +73,8 @@ function createConfiguredKnowledgeExtractionService() {
   return createKnowledgeExtractionService({
     apiKey: process.env.KNOWLEDGE_EXTRACTION_API_KEY,
     baseUrl: knowledgeExtractionBaseUrl,
-    model: knowledgeExtractionModel
+    model: knowledgeExtractionModel,
+    requestLimiter: aiRequestLimiter
   });
 }
 export const knowledgeExtractionService =

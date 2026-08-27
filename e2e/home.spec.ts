@@ -21,6 +21,30 @@ test("renders the anonymous memory platform landing page", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("hydrates with a stored color scheme", async ({ page }) => {
+  const hydrationErrors: string[] = [];
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" ||
+      message.text().includes("Hydration failed") ||
+      message.text().includes("Encountered a script tag")
+    ) {
+      hydrationErrors.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => hydrationErrors.push(error.message));
+  await page.addInitScript(() => {
+    window.localStorage.setItem("mantine-color-scheme-value", "light");
+  });
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("heading", { name: /Agents remember/ })
+  ).toBeVisible();
+  await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
+  expect(hydrationErrors).toEqual([]);
+});
+
 test("switches to Korean and keeps the preference across pages", async ({
   page
 }) => {

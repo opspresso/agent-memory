@@ -9,9 +9,19 @@ import {
   KnowledgeGraphAccessDeniedError
 } from "@/application/knowledge/create-knowledge-node";
 import { buildGetKnowledgeNeighborhood } from "@/application/knowledge/get-knowledge-neighborhood";
+import {
+  buildMergeKnowledgeNodes,
+  InvalidKnowledgeNodeMergeError
+} from "@/application/knowledge/merge-knowledge-nodes";
+import {
+  buildDeleteKnowledgeEdge,
+  buildDeleteKnowledgeNode,
+  KnowledgeEdgeNotFoundError
+} from "@/application/knowledge/delete-knowledge-resource";
 import { buildSearchKnowledgeNodes } from "@/application/knowledge/search-knowledge-nodes";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import {
+  createKnowledgeEdge,
   createKnowledgeNode,
   InvalidKnowledgeGraphError,
   type KnowledgeEdge,
@@ -43,8 +53,13 @@ function repository(
 ): KnowledgeGraphRepository {
   return {
     saveNode: vi.fn(),
+    findNodesByCanonicalNames: vi.fn(),
     findNodeById: vi.fn(),
+    deleteNode: vi.fn(),
+    mergeNodes: vi.fn(),
     saveEdge: vi.fn(),
+    findEdgeById: vi.fn(),
+    deleteEdge: vi.fn(),
     searchNodes: vi.fn(),
     findNeighborhood: vi.fn(),
     ...overrides
@@ -52,6 +67,146 @@ function repository(
 }
 
 describe("knowledge graph", () => {
+  it("merges manageable nodes in the same scope", async () => {
+    const source = node("source");
+    const target = node("target");
+    const mergeNodes = vi.fn().mockResolvedValue(target);
+    const merge = buildMergeKnowledgeNodes({
+      clock: () => now,
+      repository: repository({
+        findNodeById: vi
+          .fn()
+          .mockResolvedValueOnce(source)
+          .mockResolvedValueOnce(target),
+        mergeNodes
+      })
+    });
+    const managerAccess = {
+      ...access,
+      teams: [{ teamId: "team-1", role: "manager" as const }]
+    };
+
+    await expect(
+      merge(managerAccess, target.id, source.id, "Same entity")
+    ).resolves.toBe(target);
+    expect(mergeNodes).toHaveBeenCalledWith({
+      organizationId: "organization-1",
+      sourceNodeId: source.id,
+      targetNodeId: target.id,
+      mergedBy: "user-1",
+      reason: "Same entity",
+      now
+    });
+  });
+
+  it("rejects cross-scope node merges", async () => {
+    const merge = buildMergeKnowledgeNodes({
+      clock: () => now,
+      repository: repository({
+        findNodeById: vi
+          .fn()
+          .mockResolvedValueOnce(node("source"))
+          .mockResolvedValueOnce(node("target", "team-2"))
+      })
+    });
+    const adminAccess: OrganizationAccess = {
+      ...access,
+      role: "admin",
+      teams: []
+    };
+
+    await expect(
+      merge(adminAccess, "target", "source", "Same name")
+    ).rejects.toBeInstanceOf(InvalidKnowledgeNodeMergeError);
+  });
+
+  it("normalizes compatible kinds and canonical names", () => {
+    expect(
+      createKnowledgeNode({
+        id: "node-1",
+        scope: node("scope").scope,
+        kind: " Award ",
+        canonicalName: "ＡＷＳ   AI Hero",
+        source: { memoryId: "memory-1" },
+        now
+      })
+    ).toMatchObject({
+      kind: "recognition",
+      canonicalName: "AWS AI Hero"
+    });
+  });
+
+  it("deletes a manageable node", async () => {
+    const existing = node("node-1");
+    const deleteNode = vi.fn().mockResolvedValue(true);
+    const remove = buildDeleteKnowledgeNode(
+      repository({
+        findNodeById: vi.fn().mockResolvedValue(existing),
+        deleteNode
+      })
+    );
+    const managerAccess = {
+      ...access,
+      teams: [{ teamId: "team-1", role: "manager" as const }]
+    };
+
+    await expect(remove(managerAccess, existing.id)).resolves.toBeUndefined();
+    expect(deleteNode).toHaveBeenCalledWith("organization-1", existing.id);
+  });
+
+  it("requires manage permission to delete a graph node", async () => {
+    const deleteNode = vi.fn();
+    const remove = buildDeleteKnowledgeNode(
+      repository({
+        findNodeById: vi.fn().mockResolvedValue(node("node-1")),
+        deleteNode
+      })
+    );
+
+    await expect(remove(access, "node-1")).rejects.toBeInstanceOf(
+      KnowledgeGraphAccessDeniedError
+    );
+    expect(deleteNode).not.toHaveBeenCalled();
+  });
+
+  it("returns not found when deleting a missing edge", async () => {
+    const remove = buildDeleteKnowledgeEdge(
+      repository({ findEdgeById: vi.fn().mockResolvedValue(null) })
+    );
+
+    await expect(remove(access, "edge-1")).rejects.toBeInstanceOf(
+      KnowledgeEdgeNotFoundError
+    );
+  });
+
+  it("deletes a manageable edge", async () => {
+    const existing = {
+      id: "edge-1",
+      organizationId: "organization-1",
+      scope: node("node-1").scope,
+      sourceNodeId: "node-1",
+      targetNodeId: "node-2",
+      predicate: "depends_on",
+      properties: {},
+      sources: [{ memoryId: "memory-1" }],
+      createdAt: now
+    } satisfies KnowledgeEdge;
+    const deleteEdge = vi.fn().mockResolvedValue(true);
+    const remove = buildDeleteKnowledgeEdge(
+      repository({
+        findEdgeById: vi.fn().mockResolvedValue(existing),
+        deleteEdge
+      })
+    );
+    const managerAccess = {
+      ...access,
+      teams: [{ teamId: "team-1", role: "manager" as const }]
+    };
+
+    await expect(remove(managerAccess, existing.id)).resolves.toBeUndefined();
+    expect(deleteEdge).toHaveBeenCalledWith("organization-1", existing.id);
+  });
+
   it("requires exactly one source reference", () => {
     expect(() =>
       createKnowledgeNode({
@@ -60,6 +215,21 @@ describe("knowledge graph", () => {
         kind: "service",
         canonicalName: "Checkout API",
         source: { memoryId: "memory-1", chunkId: "chunk-1" },
+        now
+      })
+    ).toThrow(InvalidKnowledgeGraphError);
+  });
+
+  it("rejects self-referential edges", () => {
+    expect(() =>
+      createKnowledgeEdge({
+        id: "edge-1",
+        organizationId: "organization-1",
+        scope: node("scope").scope,
+        sourceNodeId: "node-1",
+        targetNodeId: "node-1",
+        predicate: "depends_on",
+        source: { memoryId: "memory-1" },
         now
       })
     ).toThrow(InvalidKnowledgeGraphError);

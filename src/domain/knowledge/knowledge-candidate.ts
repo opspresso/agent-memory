@@ -1,5 +1,10 @@
 import type { ScopedResource } from "@/domain/identity/organization-access";
 
+import {
+  normalizeKnowledgeKind,
+  normalizeKnowledgeName
+} from "./knowledge-identity";
+
 export const knowledgeCandidateStatuses = [
   "pending",
   "accepted",
@@ -85,9 +90,13 @@ function normalizedGraph(graph: ProposedKnowledgeGraph): ProposedKnowledgeGraph 
   }
   const entities = graph.entities.map((entity) => ({
     key: normalizedText(entity.key, "entity key", 100),
-    kind: normalizedText(entity.kind, "entity kind", 100).toLowerCase(),
+    kind: normalizedText(
+      normalizeKnowledgeKind(entity.kind),
+      "entity kind",
+      100
+    ),
     canonicalName: normalizedText(
-      entity.canonicalName,
+      normalizeKnowledgeName(entity.canonicalName),
       "entity canonical name",
       500
     ),

@@ -62,5 +62,10 @@ export interface DocumentRepository {
     errorMessage: string,
     now: Date
   ): Promise<void>;
+  archive(
+    organizationId: string,
+    documentId: string,
+    now: Date
+  ): Promise<boolean>;
   search(input: DocumentSearchInput): Promise<readonly DocumentSearchHit[]>;
 }

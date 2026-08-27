@@ -23,10 +23,16 @@ const knowledgeSourceSchema = z
   );
 
 export const knowledgeNodeIdSchema = z.uuid();
+export const knowledgeEdgeIdSchema = z.uuid();
 export const knowledgeCandidateIdSchema = z.uuid();
 
 export const reviewKnowledgeCandidateSchema = z.object({
   reason: z.string().trim().min(1).max(2_000).optional()
+});
+
+export const mergeKnowledgeNodesSchema = z.object({
+  sourceNodeId: z.uuid(),
+  reason: z.string().trim().min(1).max(2_000)
 });
 
 export const createKnowledgeNodeSchema = z.object({

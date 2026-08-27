@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildAcceptKnowledgeCandidate,
+  buildFindKnowledgeCandidateDuplicates,
   buildListKnowledgeCandidates,
   buildRejectKnowledgeCandidate,
   KnowledgeCandidateReviewAccessDeniedError,
@@ -10,6 +11,8 @@ import {
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
+import { createKnowledgeNode } from "@/domain/knowledge/knowledge-graph";
+import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
 
 const now = new Date("2026-08-26T00:00:00.000Z");
 const admin: OrganizationAccess = {
@@ -51,6 +54,24 @@ function repository(
   };
 }
 
+function graphRepository(
+  overrides: Partial<KnowledgeGraphRepository> = {}
+): KnowledgeGraphRepository {
+  return {
+    saveNode: vi.fn(),
+    findNodesByCanonicalNames: vi.fn(),
+    findNodeById: vi.fn(),
+    deleteNode: vi.fn(),
+    mergeNodes: vi.fn(),
+    saveEdge: vi.fn(),
+    findEdgeById: vi.fn(),
+    deleteEdge: vi.fn(),
+    searchNodes: vi.fn(),
+    findNeighborhood: vi.fn(),
+    ...overrides
+  };
+}
+
 describe("knowledge candidate review", () => {
   it("passes reviewer scope to the pending candidate query", async () => {
     const candidates = repository({
@@ -60,6 +81,58 @@ describe("knowledge candidate review", () => {
 
     await expect(list(admin, 25)).resolves.toEqual([candidate]);
     expect(candidates.listPending).toHaveBeenCalledWith(admin, 25);
+  });
+
+  it("groups exact canonical-name duplicates with one graph query", async () => {
+    const memoryApi = createKnowledgeNode({
+      id: "node-1",
+      scope: candidate.scope,
+      kind: "service",
+      canonicalName: "Memory API",
+      now
+    });
+    const postgres = createKnowledgeNode({
+      id: "node-2",
+      scope: candidate.scope,
+      kind: "database",
+      canonicalName: "PostgreSQL",
+      now
+    });
+    const findNodesByCanonicalNames = vi
+      .fn()
+      .mockResolvedValue([memoryApi, postgres]);
+    const findDuplicates = buildFindKnowledgeCandidateDuplicates({
+      candidateRepository: repository({
+        findById: vi.fn().mockResolvedValue(candidate)
+      }),
+      graphRepository: graphRepository({ findNodesByCanonicalNames })
+    });
+
+    await expect(findDuplicates(admin, candidate.id)).resolves.toEqual({
+      api: [memoryApi],
+      db: [postgres]
+    });
+    expect(findNodesByCanonicalNames).toHaveBeenCalledOnce();
+    expect(findNodesByCanonicalNames).toHaveBeenCalledWith(
+      admin,
+      candidate.scope,
+      ["Memory API", "PostgreSQL"]
+    );
+  });
+
+  it("does not reveal candidate duplicates to an unauthorized reviewer", async () => {
+    const findNodesByCanonicalNames = vi.fn();
+    const findDuplicates = buildFindKnowledgeCandidateDuplicates({
+      candidateRepository: repository({
+        findById: vi.fn().mockResolvedValue(candidate)
+      }),
+      graphRepository: graphRepository({ findNodesByCanonicalNames })
+    });
+
+    await expect(findDuplicates(member, candidate.id)).rejects.toBeInstanceOf(
+      KnowledgeCandidateReviewAccessDeniedError
+    );
+    expect(findNodesByCanonicalNames).not.toHaveBeenCalled();
   });
 
   it("prepares deterministic source-bound nodes and relationships for atomic promotion", async () => {
@@ -98,6 +171,52 @@ describe("knowledge candidate review", () => {
       ],
       relationshipIds: ["edge-1"]
     });
+  });
+
+  it("embeds candidate entities in one ordered batch", async () => {
+    const accept = vi.fn().mockResolvedValue({
+      candidate: { ...candidate, status: "accepted" },
+      nodes: [],
+      edges: []
+    });
+    const embedMany = vi.fn().mockResolvedValue([
+      { model: "embedding-model", values: [1, 0] },
+      { model: "embedding-model", values: [0, 1] }
+    ]);
+    const review = buildAcceptKnowledgeCandidate({
+      clock: () => now,
+      embeddingService: { embed: vi.fn(), embedMany },
+      generateId: vi
+        .fn()
+        .mockReturnValueOnce("node-1")
+        .mockReturnValueOnce("node-2")
+        .mockReturnValueOnce("edge-1"),
+      repository: repository({
+        findById: vi.fn().mockResolvedValue(candidate),
+        accept
+      })
+    });
+
+    await review(admin, candidate.id);
+
+    expect(embedMany).toHaveBeenCalledOnce();
+    expect(embedMany).toHaveBeenCalledWith(["Memory API\n", "PostgreSQL\n"]);
+    expect(accept).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityPromotions: [
+          {
+            key: "api",
+            id: "node-1",
+            embedding: { model: "embedding-model", values: [1, 0] }
+          },
+          {
+            key: "db",
+            id: "node-2",
+            embedding: { model: "embedding-model", values: [0, 1] }
+          }
+        ]
+      })
+    );
   });
 
   it("prevents a member from promoting an organization-scoped candidate", async () => {

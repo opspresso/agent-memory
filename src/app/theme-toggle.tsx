@@ -6,6 +6,7 @@ import {
   useMantineColorScheme,
   type MantineColorScheme
 } from "@mantine/core";
+import { useMounted } from "@mantine/hooks";
 import { IconDeviceDesktop, IconMoon, IconSun } from "@tabler/icons-react";
 
 import type { MessageKey } from "./_i18n/messages/en";
@@ -23,8 +24,11 @@ const options = [
 
 export function ThemeToggle() {
   const t = useT();
+  const mounted = useMounted();
   const { colorScheme, setColorScheme } = useMantineColorScheme();
-  const current = options.find((option) => option.value === colorScheme) ?? options[0];
+  const visibleColorScheme = mounted ? colorScheme : "auto";
+  const current =
+    options.find((option) => option.value === visibleColorScheme) ?? options[0];
   const CurrentIcon = current.Icon;
 
   return (
@@ -42,7 +46,7 @@ export function ThemeToggle() {
       <Menu.Dropdown>
         {options.map(({ value, label, Icon }) => (
           <Menu.Item
-            data-active={colorScheme === value || undefined}
+            data-active={visibleColorScheme === value || undefined}
             key={value}
             leftSection={<Icon size={16} stroke={1.8} />}
             onClick={() => setColorScheme(value)}

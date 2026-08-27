@@ -1,8 +1,18 @@
 import { version as appVersion } from "../../../../package.json";
 
+import { hasMetricsAccess, readMetricsToken } from "@/lib/metrics-auth";
 import { processMetricsSnapshot } from "@/lib/process-metrics";
 
-export function GET(): Response {
+const responseHeaders = { "Cache-Control": "no-store" };
+
+export function GET(request: Request): Response {
+  const token = readMetricsToken();
+  if (!token || !hasMetricsAccess(request, token)) {
+    return Response.json(
+      { error: "Not found" },
+      { status: 404, headers: responseHeaders }
+    );
+  }
   const metrics = processMetricsSnapshot();
   const body = [
     "# HELP agent_memory_build_info Build identity for this instance.",
@@ -37,7 +47,7 @@ export function GET(): Response {
 
   return new Response(body, {
     headers: {
-      "Cache-Control": "no-store",
+      ...responseHeaders,
       "Content-Type": "text/plain; version=0.0.4; charset=utf-8"
     }
   });

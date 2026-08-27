@@ -1,6 +1,8 @@
 import { KnowledgeSourceNotFoundError } from "@/application/knowledge/authorize-knowledge-source";
 import { KnowledgeNodeNotFoundError } from "@/application/knowledge/create-knowledge-edge";
 import { KnowledgeGraphAccessDeniedError } from "@/application/knowledge/create-knowledge-node";
+import { KnowledgeEdgeNotFoundError } from "@/application/knowledge/delete-knowledge-resource";
+import { InvalidKnowledgeNodeMergeError } from "@/application/knowledge/merge-knowledge-nodes";
 import { InvalidKnowledgeSearchError } from "@/application/knowledge/search-knowledge-nodes";
 import {
   InvalidKnowledgeGraphError,
@@ -9,7 +11,13 @@ import {
 } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeNodeSearchHit } from "@/domain/knowledge/knowledge-graph-repository";
 
+import { aiErrorResponse } from "./ai-http";
+
 export function knowledgeErrorResponse(error: unknown): Response | null {
+  const aiResponse = aiErrorResponse(error);
+  if (aiResponse) {
+    return aiResponse;
+  }
   if (error instanceof KnowledgeSourceNotFoundError) {
     return Response.json(
       { error: "Knowledge source not found" },
@@ -19,6 +27,9 @@ export function knowledgeErrorResponse(error: unknown): Response | null {
   if (error instanceof KnowledgeNodeNotFoundError) {
     return Response.json({ error: "Knowledge node not found" }, { status: 404 });
   }
+  if (error instanceof KnowledgeEdgeNotFoundError) {
+    return Response.json({ error: "Knowledge edge not found" }, { status: 404 });
+  }
   if (error instanceof KnowledgeGraphAccessDeniedError) {
     return Response.json(
       { error: "Knowledge graph access denied" },
@@ -27,6 +38,7 @@ export function knowledgeErrorResponse(error: unknown): Response | null {
   }
   if (
     error instanceof InvalidKnowledgeGraphError ||
+    error instanceof InvalidKnowledgeNodeMergeError ||
     error instanceof InvalidKnowledgeSearchError
   ) {
     return Response.json({ error: error.message }, { status: 400 });

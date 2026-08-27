@@ -26,6 +26,8 @@ kubectl -n agent-memory rollout status deployment/agent-memory
 curl -fsS https://memory.opspresso.com/api/health
 ```
 
-AWS Load Balancer Controller가 ACM 인증서를 사용하면 `ingress.annotations`에 `alb.ingress.kubernetes.io/certificate-arn`과 `alb.ingress.kubernetes.io/listen-ports`를 설정하라. nginx ingress와 cert-manager를 사용하면 `ingress.className`, annotation, `ingress.tls`를 해당 cluster 정책에 맞춰 바꾸라.
+AWS Load Balancer Controller의 certificate 자동 탐색을 사용하지 않으면 `ingress.annotations`에 `alb.ingress.kubernetes.io/certificate-arn`을 설정하라. nginx ingress와 cert-manager를 사용하면 `ingress.className`, annotation, `ingress.tls`를 해당 cluster 정책에 맞춰 바꾸라.
+
+기본 ALB ingress는 HTTP 80을 HTTPS 443으로 redirect하고 Ingress host와 TLS host에서 일치하는 ACM certificate를 자동 탐색한다. Cluster에 일치하는 certificate가 없으면 `alb.ingress.kubernetes.io/certificate-arn` annotation을 명시하라. Internet-facing ingress의 TLS를 끈 값은 안전하지 않으므로 chart render가 거부한다.
 
 기본 `replicaCount`는 1이며 migration과 document worker가 같은 process에서 실행된다. Application을 여러 replica로 확장하기 전에는 migration을 별도 job에서 한 번 실행하고 web/worker topology를 분리하라.

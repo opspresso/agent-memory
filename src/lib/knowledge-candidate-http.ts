@@ -7,9 +7,14 @@ import {
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import type { KnowledgeCandidatePromotionResult } from "@/domain/knowledge/knowledge-candidate-repository";
 
+import { aiErrorResponse } from "./ai-http";
 import { publicKnowledgeEdge, publicKnowledgeNode } from "./knowledge-http";
 
 export function knowledgeCandidateErrorResponse(error: unknown): Response | null {
+  const aiResponse = aiErrorResponse(error);
+  if (aiResponse) {
+    return aiResponse;
+  }
   if (error instanceof KnowledgeCandidateNotFoundError) {
     return Response.json({ error: "Knowledge candidate not found" }, { status: 404 });
   }

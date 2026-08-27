@@ -3,6 +3,7 @@ import { contextSearchQuerySchema } from "@/lib/context-schemas";
 import { searchContextRecords } from "@/lib/context-service";
 import { organizationIdSchema } from "@/lib/memory-schemas";
 import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { aiErrorResponse } from "@/lib/ai-http";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string }>;
@@ -32,16 +33,24 @@ export async function GET(request: Request, context: RouteContext) {
       { status: 400 }
     );
   }
-  const result = await searchContextRecords(
-    authorization.access,
-    parsedQuery.data.query,
-    parsedQuery.data.limit
-  );
-  return Response.json(
-    publicContextSearchResult(
-      result,
-      parsedQuery.data.limit,
-      authorization.access
-    )
-  );
+  try {
+    const result = await searchContextRecords(
+      authorization.access,
+      parsedQuery.data.query,
+      parsedQuery.data.limit
+    );
+    return Response.json(
+      publicContextSearchResult(
+        result,
+        parsedQuery.data.limit,
+        authorization.access
+      )
+    );
+  } catch (error) {
+    const response = aiErrorResponse(error);
+    if (response) {
+      return response;
+    }
+    throw error;
+  }
 }

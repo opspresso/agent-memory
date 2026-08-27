@@ -1,4 +1,5 @@
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import type { MemoryEmbedding } from "@/domain/memory/memory";
 import { canAccessMemory } from "@/domain/memory/memory-access";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 import type {
@@ -23,7 +24,8 @@ export function buildSearchMemories(dependencies: SearchMemoriesDependencies) {
   return async function execute(
     access: OrganizationAccess,
     query: string,
-    limit = 10
+    limit = 10,
+    providedQueryEmbedding?: MemoryEmbedding
   ): Promise<readonly MemorySearchHit[]> {
     const normalizedQuery = query.trim();
     if (normalizedQuery.length === 0) {
@@ -38,9 +40,11 @@ export function buildSearchMemories(dependencies: SearchMemoriesDependencies) {
       throw new InvalidMemorySearchError("memory search limit must be between 1 and 100");
     }
 
-    const queryEmbedding = dependencies.embeddingService
-      ? await dependencies.embeddingService.embed(normalizedQuery)
-      : undefined;
+    const queryEmbedding =
+      providedQueryEmbedding ??
+      (dependencies.embeddingService
+        ? await dependencies.embeddingService.embed(normalizedQuery)
+        : undefined);
     const hits = await dependencies.repository.search({
       access,
       query: normalizedQuery,

@@ -29,6 +29,10 @@ export const knowledgeNodes = pgTable(
     userId: uuid(),
     kind: text().notNull(),
     canonicalName: text().notNull(),
+    canonicalNameKey: text()
+      .generatedAlwaysAs(
+        sql`lower(regexp_replace(trim(canonical_name), '[[:space:]]+', ' ', 'g'))`
+      ),
     summary: text(),
     search: tsvector()
       .generatedAlwaysAs(
@@ -79,6 +83,14 @@ export const knowledgeNodes = pgTable(
       table.organizationId,
       table.id
     ),
+    index("knowledge_nodes_normalized_identity_idx").on(
+      table.organizationId,
+      table.scopeKind,
+      table.teamId,
+      table.userId,
+      table.kind,
+      table.canonicalNameKey
+    ),
     foreignKey({
       columns: [table.organizationId, table.sourceMemoryId],
       foreignColumns: [memories.organizationId, memories.id],
@@ -119,6 +131,10 @@ export const knowledgeEdges = pgTable(
       sql`(${table.scopeKind} = 'organization' AND ${table.teamId} IS NULL AND ${table.userId} IS NULL)
         OR (${table.scopeKind} = 'team' AND ${table.teamId} IS NOT NULL AND ${table.userId} IS NULL)
         OR (${table.scopeKind} = 'user' AND ${table.teamId} IS NULL AND ${table.userId} IS NOT NULL)`
+    ),
+    check(
+      "knowledge_edges_non_self_check",
+      sql`${table.sourceNodeId} <> ${table.targetNodeId}`
     ),
     foreignKey({
       columns: [table.organizationId, table.teamId],
@@ -260,5 +276,40 @@ export const knowledgeEdgeSources = pgTable(
     ),
     index("knowledge_edge_sources_memory_idx").on(table.memoryId),
     index("knowledge_edge_sources_chunk_idx").on(table.chunkId)
+  ]
+);
+
+export const knowledgeNodeMerges = pgTable(
+  "knowledge_node_merges",
+  {
+    id: uuid().primaryKey().default(sql`uuidv7()`),
+    organizationId: uuid()
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sourceNodeId: uuid().notNull(),
+    targetNodeId: uuid().notNull(),
+    sourceKind: text().notNull(),
+    sourceCanonicalName: text().notNull(),
+    mergedBy: uuid().notNull(),
+    reason: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.mergedBy],
+      foreignColumns: [
+        organizationMembers.organizationId,
+        organizationMembers.userId
+      ],
+      name: "knowledge_node_merges_organization_reviewer_fk"
+    }).onDelete("restrict"),
+    index("knowledge_node_merges_source_idx").on(
+      table.organizationId,
+      table.sourceNodeId
+    ),
+    index("knowledge_node_merges_target_idx").on(
+      table.organizationId,
+      table.targetNodeId
+    )
   ]
 );

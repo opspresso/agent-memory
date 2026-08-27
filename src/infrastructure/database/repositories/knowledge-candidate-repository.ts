@@ -14,41 +14,18 @@ import {
   documents,
   knowledgeCandidates,
   knowledgeEdges,
-  knowledgeEdgeSources,
-  knowledgeNodes,
-  knowledgeNodeSources
+  knowledgeEdgeSources
 } from "../schema";
 import {
   edgeFromRow,
-  edgeValues,
-  nodeFromRow,
-  nodeValues
+  edgeValues
 } from "./knowledge-graph-repository";
+import {
+  knowledgeScopeFromRow,
+  upsertKnowledgeNode
+} from "./knowledge-node-persistence";
 
 type CandidateRow = typeof knowledgeCandidates.$inferSelect;
-
-function scopeFromRow(row: {
-  organizationId: string;
-  scopeKind: "organization" | "team" | "user";
-  teamId: string | null;
-  userId: string | null;
-}): ScopedResource {
-  if (row.scopeKind === "team" && row.teamId) {
-    return {
-      kind: "team",
-      organizationId: row.organizationId,
-      teamId: row.teamId
-    };
-  }
-  if (row.scopeKind === "user" && row.userId) {
-    return {
-      kind: "user",
-      organizationId: row.organizationId,
-      userId: row.userId
-    };
-  }
-  return { kind: "organization", organizationId: row.organizationId };
-}
 
 function candidateFromRow(
   row: CandidateRow,
@@ -118,7 +95,7 @@ export function createKnowledgeCandidateRepository(
       )
       .limit(1);
     return row
-      ? candidateFromRow(row.candidate, scopeFromRow(row.document))
+      ? candidateFromRow(row.candidate, knowledgeScopeFromRow(row.document))
       : null;
   }
 
@@ -144,7 +121,7 @@ export function createKnowledgeCandidateRepository(
         )
         .limit(1);
       return row
-        ? candidateFromRow(row.candidate, scopeFromRow(row.document))
+        ? candidateFromRow(row.candidate, knowledgeScopeFromRow(row.document))
         : null;
     },
 
@@ -200,13 +177,14 @@ export function createKnowledgeCandidateRepository(
               access.organizationId
             ),
             eq(knowledgeCandidates.status, "pending"),
+            eq(documents.status, "ready"),
             candidateReviewPredicate(access)
           )
         )
         .orderBy(asc(knowledgeCandidates.createdAt))
         .limit(limit);
       return rows.map((row) =>
-        candidateFromRow(row.candidate, scopeFromRow(row.document))
+        candidateFromRow(row.candidate, knowledgeScopeFromRow(row.document))
       );
     },
 
@@ -235,8 +213,11 @@ export function createKnowledgeCandidateRepository(
         }
         const candidate = candidateFromRow(
           locked.candidate,
-          scopeFromRow(locked.document)
+          knowledgeScopeFromRow(locked.document)
         );
+        if (locked.document.status !== "ready") {
+          return null;
+        }
         if (candidate.status === "accepted") {
           return { candidate, nodes: [], edges: [] };
         }
@@ -269,55 +250,7 @@ export function createKnowledgeCandidateRepository(
             source: { chunkId: candidate.chunkId },
             now: input.reviewedAt
           });
-          const [row] = await transaction
-            .insert(knowledgeNodes)
-            .values(nodeValues(proposedNode))
-            .onConflictDoUpdate({
-              target: [
-                knowledgeNodes.organizationId,
-                knowledgeNodes.scopeKind,
-                knowledgeNodes.teamId,
-                knowledgeNodes.userId,
-                knowledgeNodes.kind,
-                knowledgeNodes.canonicalName
-              ],
-              set: {
-                summary: sql`coalesce(excluded.summary, ${knowledgeNodes.summary})`,
-                embedding: sql`coalesce(excluded.embedding, ${knowledgeNodes.embedding})`,
-                embeddingModel: sql`coalesce(excluded.embedding_model, ${knowledgeNodes.embeddingModel})`,
-                updatedAt: input.reviewedAt
-              }
-            })
-            .returning();
-          if (!row) {
-            throw new Error("promoted knowledge node upsert returned no row");
-          }
-          await transaction
-            .insert(knowledgeNodeSources)
-            .values({
-              organizationId: input.organizationId,
-              nodeId: row.id,
-              chunkId: candidate.chunkId,
-              createdAt: input.reviewedAt
-            })
-            .onConflictDoNothing();
-          const sourceRows = await transaction
-            .select()
-            .from(knowledgeNodeSources)
-            .where(
-              and(
-                eq(knowledgeNodeSources.organizationId, input.organizationId),
-                eq(knowledgeNodeSources.nodeId, row.id)
-              )
-            );
-          const node = nodeFromRow(
-            row,
-            sourceRows.map((source) =>
-              source.memoryId
-                ? { memoryId: source.memoryId }
-                : { chunkId: source.chunkId! }
-            )
-          );
+          const node = await upsertKnowledgeNode(transaction, proposedNode);
           nodes.push(node);
           nodeIds.set(entity.key, node.id);
         }
@@ -329,6 +262,9 @@ export function createKnowledgeCandidateRepository(
           const edgeId = input.relationshipIds[index];
           if (!sourceNodeId || !targetNodeId || !edgeId) {
             throw new Error("promoted knowledge relationship is incomplete");
+          }
+          if (sourceNodeId === targetNodeId) {
+            continue;
           }
           const proposedEdge = createKnowledgeEdge({
             id: edgeId,

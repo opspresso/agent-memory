@@ -7,6 +7,9 @@ import type {
   KnowledgeCandidatePromotionResult,
   KnowledgeCandidateRepository
 } from "@/domain/knowledge/knowledge-candidate-repository";
+import type { KnowledgeNode } from "@/domain/knowledge/knowledge-graph";
+import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
+import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 
 export class KnowledgeCandidateReviewAccessDeniedError extends Error {
@@ -79,6 +82,41 @@ export function buildListKnowledgeCandidates(
   };
 }
 
+export function buildFindKnowledgeCandidateDuplicates(dependencies: {
+  readonly candidateRepository: KnowledgeCandidateRepository;
+  readonly graphRepository: KnowledgeGraphRepository;
+}) {
+  return async function execute(
+    access: OrganizationAccess,
+    candidateId: string
+  ): Promise<Readonly<Record<string, readonly KnowledgeNode[]>>> {
+    const candidate = await dependencies.candidateRepository.findById(
+      access.organizationId,
+      candidateId
+    );
+    if (!candidate) {
+      throw new KnowledgeCandidateNotFoundError();
+    }
+    authorizeReviewer(access, candidate);
+    const nodes = await dependencies.graphRepository.findNodesByCanonicalNames(
+      access,
+      candidate.scope,
+      candidate.graph.entities.map((entity) => entity.canonicalName)
+    );
+    return Object.fromEntries(
+      candidate.graph.entities.map((entity) => {
+        const identity = knowledgeCanonicalNameKey(entity.canonicalName);
+        return [
+          entity.key,
+          nodes.filter(
+            (node) => knowledgeCanonicalNameKey(node.canonicalName) === identity
+          )
+        ];
+      })
+    );
+  };
+}
+
 export function buildAcceptKnowledgeCandidate(
   dependencies: ReviewKnowledgeCandidateDependencies
 ) {
@@ -112,19 +150,26 @@ export function buildAcceptKnowledgeCandidate(
       }
       return existing;
     }
-    const entityPromotions = await Promise.all(
-      candidate.graph.entities.map(async (entity) => ({
-        key: entity.key,
-        id: dependencies.generateId(),
-        ...(dependencies.embeddingService
-          ? {
-              embedding: await dependencies.embeddingService.embed(
-                `${entity.canonicalName}\n${entity.summary ?? ""}`
-              )
-            }
-          : {})
-      }))
-    );
+    const embeddings = dependencies.embeddingService
+      ? await dependencies.embeddingService.embedMany(
+          candidate.graph.entities.map(
+            (entity) => `${entity.canonicalName}\n${entity.summary ?? ""}`
+          )
+        )
+      : [];
+    if (
+      dependencies.embeddingService &&
+      embeddings.length !== candidate.graph.entities.length
+    ) {
+      throw new Error(
+        "embedding result count does not match knowledge candidate entities"
+      );
+    }
+    const entityPromotions = candidate.graph.entities.map((entity, index) => ({
+      key: entity.key,
+      id: dependencies.generateId(),
+      ...(embeddings[index] ? { embedding: embeddings[index] } : {})
+    }));
     const promoted = await dependencies.repository.accept({
       candidateId,
       entityPromotions,

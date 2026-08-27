@@ -39,7 +39,9 @@
 .kindChip[data-disabled] { opacity: .42; text-decoration: line-through; }
 .kindChip:focus-visible { outline: 2px solid var(--mantine-color-brand-5); outline-offset: 2px; }
 .inspector { border-left: 1px solid light-dark(#e2e5ee, #343742); border-radius: 0; background: light-dark(rgba(255,255,255,.9), rgba(24,27,34,.94)); backdrop-filter: blur(18px); }
+.relationRow { display: flex; gap: 6px; align-items: center; border-bottom: 1px solid light-dark(#eceef4, #333640); }
 .relation { display: grid; grid-template-columns: auto 1fr; gap: 1px 7px; width: 100%; padding: 6px 0; border: 0; border-bottom: 1px solid light-dark(#eceef4, #333640); color: inherit; text-align: left; background: transparent; cursor: pointer; }
+.relationRow .relation { border-bottom: 0; }
 .relation svg { grid-row: 1 / 3; align-self: center; color: var(--mantine-color-brand-5); }
 .relation span { color: var(--mantine-color-dimmed); font-size: 11px; }
 .relation strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }

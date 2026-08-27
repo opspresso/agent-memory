@@ -6,6 +6,7 @@ import type {
   KnowledgeGraphRepository,
   KnowledgeNodeSearchHit
 } from "@/domain/knowledge/knowledge-graph-repository";
+import type { MemoryEmbedding } from "@/domain/memory/memory";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 
 export interface SearchKnowledgeNodesDependencies {
@@ -26,7 +27,8 @@ export function buildSearchKnowledgeNodes(
   return async function execute(
     access: OrganizationAccess,
     query: string,
-    limit = 10
+    limit = 10,
+    providedQueryEmbedding?: MemoryEmbedding
   ): Promise<readonly KnowledgeNodeSearchHit[]> {
     const normalizedQuery = query.trim();
     if (normalizedQuery.length === 0 || normalizedQuery.length > 10_000) {
@@ -40,9 +42,11 @@ export function buildSearchKnowledgeNodes(
       );
     }
 
-    const queryEmbedding = dependencies.embeddingService
-      ? await dependencies.embeddingService.embed(normalizedQuery)
-      : undefined;
+    const queryEmbedding =
+      providedQueryEmbedding ??
+      (dependencies.embeddingService
+        ? await dependencies.embeddingService.embed(normalizedQuery)
+        : undefined);
     const hits = await dependencies.repository.searchNodes({
       access,
       query: normalizedQuery,

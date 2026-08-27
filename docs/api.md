@@ -10,7 +10,7 @@ export AGENT_MEMORY_TOKEN=<token>
 
 ## 인증과 요청 경계
 
-`/api/health`와 `/api/metrics`를 제외한 API는 Better Auth 인증이 필요하다. `/api/metrics`는 Prometheus text exposition format으로 build와 process 수준 지표만 반환한다. 브라우저는 session cookie를 사용하고 Agent는 Better Auth 로그인 응답의 `set-auth-token` header 값을 다음과 같이 전달한다.
+`/api/health`를 제외한 API는 인증이 필요하다. `/api/metrics`는 Better Auth 대신 `METRICS_BEARER_TOKEN`을 사용하며 token이 설정되지 않으면 `404`를 반환한다. 인증되면 Prometheus text exposition format으로 build와 process 수준 지표만 반환한다. 브라우저는 session cookie를 사용하고 Agent는 Better Auth 로그인 응답의 `set-auth-token` header 값을 다음과 같이 전달한다.
 
 ```http
 Authorization: Bearer <token>
@@ -76,8 +76,9 @@ curl \
 | `403` | 조직 멤버십 또는 resource action 권한 부족 |
 | `404` | Resource가 없거나 호출자에게 존재를 공개할 수 없음 |
 | `409` | Memory version 또는 candidate review 상태 충돌 |
-| `413` | 문서 upload request 또는 파일이 제한을 초과함 |
+| `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
 | `428` | Memory mutation에 유효한 `If-Match`가 없음 |
+| `429` | Application instance의 AI provider 호출 상한을 초과함. `Retry-After` header 이후 재시도 |
 | `503` | Health check에서 Database를 사용할 수 없음 |
 
 ## Endpoint
@@ -85,6 +86,7 @@ curl \
 | Method | Path | 역할 |
 | --- | --- | --- |
 | `GET` | `/api/health` | Database readiness 확인 |
+| `GET` | `/api/metrics` | `METRICS_BEARER_TOKEN`으로 보호된 Prometheus process·build 지표 조회 |
 | `GET`, `POST` | `/api/auth/*` | Better Auth 인증 endpoint |
 | `GET`, `POST` | `/api/organizations` | 접근 가능한 조직 조회, 전역 admin의 조직 생성 |
 | `GET` | `/api/organizations/:organizationId/me` | 현재 멤버십과 팀 역할 조회 |
@@ -95,12 +97,16 @@ curl \
 | `GET`, `PATCH`, `DELETE` | `/api/organizations/:organizationId/memories/:memoryId` | Memory 조회·수정·archive |
 | `GET` | `/api/organizations/:organizationId/memories/:memoryId/versions` | Memory revision 조회 |
 | `GET`, `POST` | `/api/organizations/:organizationId/documents` | 문서 chunk 검색·원본 업로드 |
-| `GET` | `/api/organizations/:organizationId/documents/:documentId` | 문서 상태 조회 |
+| `GET`, `DELETE` | `/api/organizations/:organizationId/documents/:documentId` | 문서 상태 조회·archive |
 | `POST` | `/api/organizations/:organizationId/documents/:documentId/retry` | 실패한 문서 처리 재시도 |
 | `GET`, `POST` | `/api/organizations/:organizationId/knowledge/nodes` | Knowledge node 검색·생성 |
 | `POST` | `/api/organizations/:organizationId/knowledge/edges` | Knowledge edge 생성 |
+| `DELETE` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId` | Knowledge node와 연결 edge 삭제 |
+| `POST` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId/merge` | 중복 Knowledge node 병합 |
+| `DELETE` | `/api/organizations/:organizationId/knowledge/edges/:edgeId` | Knowledge edge 삭제 |
 | `GET` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId/neighborhood` | 제한된 graph neighborhood 조회 |
 | `GET` | `/api/organizations/:organizationId/knowledge/candidates` | 검토 대기 중인 AI graph 후보 조회 |
+| `GET` | `/api/organizations/:organizationId/knowledge/candidates/:candidateId/duplicates` | 후보 entity와 canonical name·scope가 같은 기존 node 일괄 조회 |
 | `POST` | `/api/organizations/:organizationId/knowledge/candidates/:candidateId/accept` | AI 후보를 Knowledge Graph로 승격 |
 | `POST` | `/api/organizations/:organizationId/knowledge/candidates/:candidateId/reject` | AI 후보 거절 |
 | `GET` | `/api/organizations/:organizationId/context/search` | 통합 Context 검색 |
@@ -275,6 +281,8 @@ curl -i \
 
 Retry 성공은 `202`와 갱신된 document를 반환한다. `pending`, `processing`, `ready` 문서를 retry하면 `409`를 반환한다.
 
+`DELETE .../documents/:documentId`는 문서를 영구 제거하지 않고 archive하며 `204`를 반환한다. 원본과 chunk는 provenance 보존을 위해 유지하지만 검색, 상태 조회, retry, AI 후보 조회·승인에서는 제외한다. 삭제에는 원래 document scope의 `manage` 권한이 필요하다.
+
 ## Knowledge Graph
 
 Node 생성 입력은 `scope`, `kind`, `canonicalName`, `source`와 선택형 `summary`, `properties`다. Edge 생성 입력은 `scope`, `sourceNodeId`, `targetNodeId`, `predicate`, `source`와 선택형 `properties`다.
@@ -315,6 +323,12 @@ curl -X POST \
 
 Node 응답은 `id`, `scope`, `kind`, `canonicalName`, 선택형 `summary`, `properties`, `sources`, timestamp와 선택형 `embeddingModel`을 포함한다. Edge 응답은 node ID, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
 
+`DELETE .../knowledge/nodes/:nodeId`와 `DELETE .../knowledge/edges/:edgeId`는 해당 graph resource scope의 `manage` 권한을 요구하며 성공 시 `204`를 반환한다. Node 삭제는 연결된 edge도 함께 삭제하지만 provenance source인 Memory나 document는 삭제하지 않는다.
+
+`POST .../knowledge/nodes/:targetNodeId/merge`는 `{ "sourceNodeId": UUID, "reason": string }`을 받아 source node를 target node로 병합한다. 두 node는 같은 organization과 scope에 있어야 하며 호출자는 둘 다 `manage`할 수 있어야 한다. 병합 transaction은 provenance를 누적하고 incoming·outgoing edge를 target으로 재연결하며, 중복 edge를 합치고 self-edge를 제거한 뒤 source node를 삭제하고 audit을 저장한다.
+
+Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical name과 정규화 kind를 사용한다. `award`, `honor`, `achievement`, `designation`은 `recognition`으로 통합한다. 같은 scope에서 정규화 identity가 같으면 신규 생성과 AI 후보 승인 시 기존 node에 자동 병합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
+
 검색은 `GET .../knowledge/nodes?q=<query>&limit=<1-100>`을 사용한다. Neighborhood는 `depth=1-5`, `limit=1-200`을 받으며 기본값은 각각 1과 100이다. 두 조회는 호출자가 현재 읽을 수 있고 active·유효한 Memory 또는 ready document chunk 근거가 하나 이상 있는 graph resource만 반환한다.
 
 ```bash
@@ -328,6 +342,7 @@ Neighborhood 응답은 `{ "nodes": [...], "edges": [...] }` 형식이다. 서버
 Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity와 relationship candidate를 만든다. Candidate는 source document·chunk, 원래 scope, extraction model을 포함하며 원문 content를 응답하지 않는다.
 
 - `GET .../knowledge/candidates?limit=<1-100>`은 pending candidate를 오래된 순으로 반환하며 기본 limit은 50이다.
+- `GET .../knowledge/candidates/<candidateId>/duplicates`는 후보의 모든 entity를 한 번에 조회하고 entity key별로 같은 canonical name·scope의 읽기 가능한 기존 node를 반환한다. Semantic embedding을 생성하지 않는다.
 - 후보 조회와 승인은 source scope의 `manage` 권한을 따른다. Organization scope는 `admin`·`owner`, team scope는 team `manager` 이상, user scope는 본인만 검토한다.
 - `POST .../accept`와 `POST .../reject` body는 선택형 `{ "reason": string }`을 받으며 reason은 2,000자 이하다.
 - 승인은 node·edge와 reviewer audit을 하나의 transaction으로 저장한다. 이미 거절된 후보를 승인하거나 승인된 후보를 거절하면 `409`를 반환한다.

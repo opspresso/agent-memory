@@ -8,7 +8,15 @@ import type { MemoryVersionSnapshot } from "@/domain/memory/memory";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { canAccessMemory } from "@/domain/memory/memory-access";
 
+import { aiErrorResponse } from "./ai-http";
+
+export { readJsonBody } from "./json-body";
+
 export function memoryErrorResponse(error: unknown): Response | null {
+  const aiResponse = aiErrorResponse(error);
+  if (aiResponse) {
+    return aiResponse;
+  }
   if (error instanceof MemoryNotFoundError) {
     return Response.json({ error: "Memory not found" }, { status: 404 });
   }
@@ -35,22 +43,6 @@ export function parseIfMatch(request: Request): number | null {
   const value = request.headers.get("if-match")?.trim();
   const match = value?.match(/^"?([1-9]\d*)"?$/);
   return match ? Number(match[1]) : null;
-}
-
-export async function readJsonBody(
-  request: Request
-): Promise<
-  | Readonly<{ valid: true; value: unknown }>
-  | Readonly<{ valid: false; response: Response }>
-> {
-  try {
-    return { valid: true, value: await request.json() };
-  } catch {
-    return {
-      valid: false,
-      response: Response.json({ error: "Invalid JSON body" }, { status: 400 })
-    };
-  }
 }
 
 export function publicMemory(memory: Memory) {

@@ -7,9 +7,9 @@ import {
 } from "@/app/knowledge-graph";
 
 const nodes: readonly KnowledgeGraphNodeView[] = [
-  { id: "center", kind: "service", canonicalName: "Memory API" },
-  { id: "document", kind: "document", canonicalName: "Runbook" },
-  { id: "agent", kind: "agent", canonicalName: "Release Agent" }
+  { id: "center", kind: "service", canonicalName: "Memory API", scope: { kind: "organization", organizationId: "organization-1" } },
+  { id: "document", kind: "document", canonicalName: "Runbook", scope: { kind: "organization", organizationId: "organization-1" } },
+  { id: "agent", kind: "agent", canonicalName: "Release Agent", scope: { kind: "organization", organizationId: "organization-1" } }
 ];
 
 describe("knowledge graph layout", () => {
@@ -31,8 +31,8 @@ describe("knowledge graph layout", () => {
   it("counts only edges whose endpoints are present", () => {
     expect(
       knowledgeNodeDegrees(nodes, [
-        { id: "edge-1", sourceNodeId: "center", targetNodeId: "document", predicate: "uses" },
-        { id: "edge-2", sourceNodeId: "center", targetNodeId: "missing", predicate: "uses" }
+        { id: "edge-1", sourceNodeId: "center", targetNodeId: "document", predicate: "uses", scope: { kind: "organization", organizationId: "organization-1" } },
+        { id: "edge-2", sourceNodeId: "center", targetNodeId: "missing", predicate: "uses", scope: { kind: "organization", organizationId: "organization-1" } }
       ])
     ).toEqual(new Map([["center", 1], ["document", 1], ["agent", 0]]));
   });

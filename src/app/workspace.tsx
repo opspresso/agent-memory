@@ -8,6 +8,7 @@ import {
   Code,
   CopyButton,
   Group,
+  Modal,
   Paper,
   SegmentedControl,
   Select,
@@ -16,10 +17,12 @@ import {
   Tabs,
   Text,
   TextInput,
+  Textarea,
   Title
 } from "@mantine/core";
 import {
   IconAlertCircle,
+  IconArchive,
   IconBrain,
   IconCloudUpload,
   IconCheck,
@@ -31,12 +34,19 @@ import {
   IconSearch,
   IconShieldCheck,
   IconSettings,
-  IconTopologyStar3
+  IconTopologyStar3,
+  IconTrash
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
+import {
+  canAccessScopedResource,
+  type OrganizationAccess,
+  type ScopedResource
+} from "@/domain/identity/organization-access";
 import type { OrganizationMembership } from "@/domain/identity/organization-access-repository";
+import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
 import { signOut } from "@/lib/auth-client";
 import type { SessionUser } from "@/lib/session";
 
@@ -45,6 +55,7 @@ import {
   contextResultPresentation,
   relativeRelevance
 } from "./context-result-presentation";
+import { responseJson } from "./http-response";
 import classes from "./page.module.css";
 import {
   KnowledgeGraph,
@@ -66,6 +77,7 @@ interface OrganizationAdministrationView {
 }
 
 interface WorkspaceProps {
+  readonly accessByOrganization: Readonly<Record<string, OrganizationAccess>>;
   readonly administrationByOrganization: Readonly<
     Record<string, OrganizationAdministrationView>
   >;
@@ -76,6 +88,17 @@ interface WorkspaceProps {
     Record<string, readonly TeamView[]>
   >;
 }
+
+type PendingResourceAction =
+  | Readonly<{ kind: "document"; id: string; name: string }>
+  | Readonly<{ kind: "edge"; id: string; name: string }>
+  | Readonly<{ kind: "node"; id: string; name: string }>
+  | Readonly<{
+      kind: "merge";
+      targetNodeId: string;
+      sourceNodeId: string;
+      name: string;
+    }>;
 
 type SearchKind =
   | "context/search"
@@ -131,7 +154,53 @@ function resultKey(hit: Record<string, unknown>): string {
   return `${String(source?.id ?? "result")}:${String(chunk?.id ?? "root")}`;
 }
 
+function scopedResource(value: unknown): ScopedResource | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const scope = value as Record<string, unknown>;
+  if (typeof scope.organizationId !== "string") {
+    return undefined;
+  }
+  if (scope.kind === "organization") {
+    return { kind: "organization", organizationId: scope.organizationId };
+  }
+  if (scope.kind === "team" && typeof scope.teamId === "string") {
+    return {
+      kind: "team",
+      organizationId: scope.organizationId,
+      teamId: scope.teamId
+    };
+  }
+  if (scope.kind === "user" && typeof scope.userId === "string") {
+    return {
+      kind: "user",
+      organizationId: scope.organizationId,
+      userId: scope.userId
+    };
+  }
+  return undefined;
+}
+
+function sameScope(left: unknown, right: unknown): boolean {
+  const leftScope = scopedResource(left);
+  const rightScope = scopedResource(right);
+  return Boolean(
+    leftScope &&
+      rightScope &&
+      leftScope.kind === rightScope.kind &&
+      leftScope.organizationId === rightScope.organizationId &&
+      (leftScope.kind !== "team" ||
+        (rightScope.kind === "team" &&
+          leftScope.teamId === rightScope.teamId)) &&
+      (leftScope.kind !== "user" ||
+        (rightScope.kind === "user" &&
+          leftScope.userId === rightScope.userId))
+  );
+}
+
 export function Workspace({
+  accessByOrganization,
   administrationByOrganization,
   origin,
   organizations,
@@ -162,6 +231,12 @@ export function Workspace({
   const [signingOut, setSigningOut] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string>();
+  const [pendingResourceAction, setPendingResourceAction] =
+    useState<PendingResourceAction>();
+  const [resourceActionError, setResourceActionError] = useState<string>();
+  const [resourceActionMessage, setResourceActionMessage] = useState<string>();
+  const [deletingResource, setDeletingResource] = useState(false);
+  const [mergeReason, setMergeReason] = useState("");
   const [documentScopeKind, setDocumentScopeKind] = useState<
     "organization" | "team" | "user"
   >("user");
@@ -173,6 +248,7 @@ export function Workspace({
     () => organizations.find((organization) => organization.id === organizationId),
     [organizationId, organizations]
   );
+  const organizationAccess = accessByOrganization[organizationId];
   const writableTeams = writableTeamsByOrganization[organizationId] ?? [];
   const peakScore = useMemo(
     () =>
@@ -221,8 +297,12 @@ export function Workspace({
     setGraphNodes([]);
     setGraphEdges([]);
     setGraphError(undefined);
+    setUploadMessage(undefined);
     setDocumentScopeKind("user");
     setDocumentTeamId(null);
+    setPendingResourceAction(undefined);
+    setResourceActionError(undefined);
+    setResourceActionMessage(undefined);
   }
 
   function selectSearchKind(value: string) {
@@ -235,6 +315,18 @@ export function Workspace({
     setGraphNodes([]);
     setGraphEdges([]);
     setGraphError(undefined);
+    setPendingResourceAction(undefined);
+    setResourceActionError(undefined);
+    setResourceActionMessage(undefined);
+  }
+
+  function canManage(scope: unknown): boolean {
+    const resource = scopedResource(scope);
+    return Boolean(
+      organizationAccess &&
+        resource &&
+        canAccessScopedResource(organizationAccess, "manage", resource)
+    );
   }
 
   async function search(event: FormEvent<HTMLFormElement>) {
@@ -257,10 +349,10 @@ export function Workspace({
         `/api/organizations/${organizationId}/${searchKind}?q=${encodeURIComponent(query)}`,
         { signal: controller.signal }
       );
-      const body = (await response.json()) as SearchResponse;
-      if (!response.ok) {
-        throw new Error(body.error ?? t("workspace.searchFailed"));
-      }
+      const body = await responseJson<SearchResponse>(
+        response,
+        t("workspace.searchFailed")
+      );
       setHits(body.hits ?? []);
     } catch (caught) {
       if (controller.signal.aborted) {
@@ -292,10 +384,10 @@ export function Workspace({
         `/api/organizations/${organizationId}/knowledge/nodes/${nodeId}/neighborhood?depth=2&limit=100`,
         { signal: controller.signal }
       );
-      const body = (await response.json()) as NeighborhoodResponse;
-      if (!response.ok) {
-        throw new Error(body.error ?? t("workspace.graphFailed"));
-      }
+      const body = await responseJson<NeighborhoodResponse>(
+        response,
+        t("workspace.graphFailed")
+      );
       setGraphCenterNodeId(nodeId);
       setGraphSelectedNodeId(nodeId);
       setGraphNodes(body.nodes ?? []);
@@ -321,6 +413,104 @@ export function Workspace({
     setGraphSelectedNodeId(nodeId);
   }
 
+  async function confirmResourceAction() {
+    if (!organizationId || !pendingResourceAction) {
+      return;
+    }
+    setDeletingResource(true);
+    setResourceActionError(undefined);
+    setResourceActionMessage(undefined);
+    const action = pendingResourceAction;
+    const path =
+      action.kind === "document"
+        ? `documents/${action.id}`
+        : action.kind === "merge"
+          ? `knowledge/nodes/${action.targetNodeId}/merge`
+          : `knowledge/${action.kind === "node" ? "nodes" : "edges"}/${action.id}`;
+    try {
+      const response = await fetch(
+        `/api/organizations/${organizationId}/${path}`,
+        action.kind === "merge"
+          ? {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sourceNodeId: action.sourceNodeId,
+                reason: mergeReason.trim()
+              })
+            }
+          : { method: "DELETE" }
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as {
+          error?: string;
+        };
+        throw new Error(body.error ?? t("resource.deleteFailed"));
+      }
+      if (action.kind === "merge") {
+        setHits((current) =>
+          current.filter(
+            (hit) => nestedRecord(hit, "node")?.id !== action.sourceNodeId
+          )
+        );
+        setGraphCenterNodeId(undefined);
+        setGraphSelectedNodeId(undefined);
+        setGraphNodes([]);
+        setGraphEdges([]);
+        setMergeReason("");
+      } else if (action.kind === "document") {
+        setHits((current) =>
+          current.filter(
+            (hit) => nestedRecord(hit, "document")?.id !== action.id
+          )
+        );
+        setGraphCenterNodeId(undefined);
+        setGraphSelectedNodeId(undefined);
+        setGraphNodes([]);
+        setGraphEdges([]);
+      } else if (action.kind === "edge") {
+        setGraphEdges((current) =>
+          current.filter((edge) => edge.id !== action.id)
+        );
+      } else {
+        setHits((current) =>
+          current.filter((hit) => nestedRecord(hit, "node")?.id !== action.id)
+        );
+        setGraphNodes((current) =>
+          current.filter((node) => node.id !== action.id)
+        );
+        setGraphEdges((current) =>
+          current.filter(
+            (edge) =>
+              edge.sourceNodeId !== action.id && edge.targetNodeId !== action.id
+          )
+        );
+        if (graphCenterNodeId === action.id) {
+          setGraphCenterNodeId(undefined);
+          setGraphSelectedNodeId(undefined);
+          setGraphNodes([]);
+          setGraphEdges([]);
+        } else if (graphSelectedNodeId === action.id) {
+          setGraphSelectedNodeId(graphCenterNodeId);
+        }
+      }
+      setPendingResourceAction(undefined);
+      setResourceActionMessage(
+        action.kind === "document"
+          ? t("resource.documentArchived", { name: action.name })
+          : action.kind === "merge"
+            ? t("resource.nodesMerged", { name: action.name })
+          : t("resource.graphDeleted", { name: action.name })
+      );
+    } catch (caught) {
+      setResourceActionError(
+        caught instanceof Error ? caught.message : t("resource.deleteFailed")
+      );
+    } finally {
+      setDeletingResource(false);
+    }
+  }
+
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!organizationId) {
@@ -339,14 +529,11 @@ export function Workspace({
         `/api/organizations/${organizationId}/documents`,
         { method: "POST", body: form }
       );
-      const body = (await response.json()) as {
+      const body = await responseJson<{
         id?: string;
         error?: string;
         status?: string;
-      };
-      if (!response.ok) {
-        throw new Error(body.error ?? t("workspace.uploadFailed"));
-      }
+      }>(response, t("workspace.uploadFailed"));
       setUploadMessage(
         body.status === "failed"
           ? t("workspace.uploadQueueFailed", { id: body.id ?? "" })
@@ -500,9 +687,13 @@ export function Workspace({
                 />
               </form>
               {searchError ? <Alert color="red">{searchError}</Alert> : null}
+              {resourceActionMessage ? (
+                <Alert color="green">{resourceActionMessage}</Alert>
+              ) : null}
               <SimpleGrid cols={{ base: 1, md: 2 }}>
                 {hits.map((hit) => {
                   const node = nestedRecord(hit, "node");
+                  const document = nestedRecord(hit, "document");
                   const memory = nestedRecord(hit, "memory");
                   const presentation = contextResultPresentation(hit, t);
                   const relevance = relativeRelevance(
@@ -517,6 +708,27 @@ export function Workspace({
                             (capabilities as Record<string, unknown>).manage
                         )
                       : false;
+                  const canManageDocument = canManage(document?.scope);
+                  const duplicateNode =
+                    typeof node?.id === "string" &&
+                    typeof node.canonicalName === "string"
+                      ? hits
+                          .map((candidate) => nestedRecord(candidate, "node"))
+                          .find(
+                            (candidate) =>
+                              typeof candidate?.id === "string" &&
+                              candidate.id !== node.id &&
+                              typeof candidate.canonicalName === "string" &&
+                              knowledgeCanonicalNameKey(
+                                candidate.canonicalName
+                              ) ===
+                                knowledgeCanonicalNameKey(
+                                  node.canonicalName as string
+                                ) &&
+                              sameScope(candidate.scope, node.scope) &&
+                              canManage(candidate.scope)
+                          )
+                      : undefined;
                   return (
                     <Paper
                       className={classes.resultCard}
@@ -549,6 +761,18 @@ export function Workspace({
                         ) : null}
                       </Group>
                       <Text fw={650}>{resultTitle(hit, t("workspace.resultFallback"))}</Text>
+                      {typeof node?.kind === "string" ? (
+                        <Group gap="xs">
+                          <Badge size="xs" variant="dot">{node.kind}</Badge>
+                          <Text c="dimmed" size="xs">
+                            {t("workspace.nodeSources", {
+                              count: Array.isArray(node.sources)
+                                ? node.sources.length
+                                : 0
+                            })}
+                          </Text>
+                        </Group>
+                      ) : null}
                       <Text c="dimmed" lineClamp={4} size="sm">
                         {resultSummary(hit)}
                       </Text>
@@ -598,6 +822,26 @@ export function Workspace({
                           {t("workspace.viewRelationships")}
                         </Button>
                       ) : null}
+                      {typeof node?.id === "string" &&
+                      typeof duplicateNode?.id === "string" &&
+                      canManage(node.scope) ? (
+                        <Button
+                          color="orange"
+                          onClick={() => {
+                            setMergeReason("");
+                            setPendingResourceAction({
+                              kind: "merge",
+                              targetNodeId: node.id as string,
+                              sourceNodeId: duplicateNode.id as string,
+                              name: String(node.canonicalName)
+                            });
+                          }}
+                          size="compact-sm"
+                          variant="light"
+                        >
+                          {t("resource.mergeDuplicate")}
+                        </Button>
+                      ) : null}
                       {typeof memory?.id === "string" && canManageMemory ? (
                         <Button
                           leftSection={<IconHistory size={16} />}
@@ -606,6 +850,23 @@ export function Workspace({
                           variant="light"
                         >
                           Lifecycle
+                        </Button>
+                      ) : null}
+                      {typeof document?.id === "string" && canManageDocument ? (
+                        <Button
+                          color="red"
+                          leftSection={<IconArchive size={16} />}
+                          onClick={() =>
+                            setPendingResourceAction({
+                              kind: "document",
+                              id: document.id as string,
+                              name: String(document.title ?? t("workspace.resultFallback"))
+                            })
+                          }
+                          size="compact-sm"
+                          variant="subtle"
+                        >
+                          {t("resource.archiveDocument")}
                         </Button>
                       ) : null}
                       </Stack>
@@ -639,6 +900,23 @@ export function Workspace({
                     centerNodeId={graphCenterNodeId}
                     edges={graphEdges}
                     nodes={graphNodes}
+                    canDeleteEdge={(edge) => canManage(edge.scope)}
+                    canDeleteNode={(node) => canManage(node.scope)}
+                    deletingResource={deletingResource}
+                    onDeleteEdge={(edge) =>
+                      setPendingResourceAction({
+                        kind: "edge",
+                        id: edge.id,
+                        name: edge.predicate
+                      })
+                    }
+                    onDeleteNode={(node) =>
+                      setPendingResourceAction({
+                        kind: "node",
+                        id: node.id,
+                        name: node.canonicalName
+                      })
+                    }
                     onExploreNode={(nodeId) => void exploreKnowledgeNode(nodeId)}
                     onSelectNode={selectKnowledgeNode}
                     selectedNodeId={graphSelectedNodeId ?? graphCenterNodeId}
@@ -794,6 +1072,89 @@ export function Workspace({
           organizationId={organizationId}
         />
       ) : null}
+      <Modal
+        centered
+        closeOnClickOutside={!deletingResource}
+        closeOnEscape={!deletingResource}
+        onClose={() => {
+          if (!deletingResource) {
+            setPendingResourceAction(undefined);
+            setResourceActionError(undefined);
+          }
+        }}
+        opened={pendingResourceAction !== undefined}
+        title={
+          pendingResourceAction?.kind === "document"
+            ? t("resource.archiveDocumentTitle")
+            : pendingResourceAction?.kind === "merge"
+              ? t("resource.mergeNodesTitle")
+            : t("resource.deleteGraphTitle")
+        }
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            {pendingResourceAction?.kind === "document"
+              ? t("resource.archiveDocumentBody", {
+                  name: pendingResourceAction.name
+                })
+              : pendingResourceAction?.kind === "merge"
+                ? t("resource.mergeNodesBody", {
+                    name: pendingResourceAction.name
+                  })
+              : t("resource.deleteGraphBody", {
+                  name: pendingResourceAction?.name ?? ""
+                })}
+          </Text>
+          {pendingResourceAction?.kind === "merge" ? (
+            <Textarea
+              autosize
+              label={t("resource.mergeReason")}
+              maxLength={2_000}
+              minRows={2}
+              onChange={(event) => setMergeReason(event.currentTarget.value)}
+              placeholder={t("resource.mergeReasonPlaceholder")}
+              value={mergeReason}
+            />
+          ) : null}
+          {resourceActionError ? (
+            <Alert color="red">{resourceActionError}</Alert>
+          ) : null}
+          <Group justify="flex-end">
+            <Button
+              disabled={deletingResource}
+              onClick={() => {
+                setPendingResourceAction(undefined);
+                setResourceActionError(undefined);
+              }}
+              variant="default"
+            >
+              {t("resource.cancel")}
+            </Button>
+            <Button
+              color="red"
+              leftSection={
+                pendingResourceAction?.kind === "document" ? (
+                  <IconArchive size={16} />
+                ) : (
+                  <IconTrash size={16} />
+                )
+              }
+              loading={deletingResource}
+              disabled={
+                pendingResourceAction?.kind === "merge" &&
+                mergeReason.trim().length === 0
+              }
+              onClick={() => void confirmResourceAction()}
+            >
+              {pendingResourceAction?.kind === "document"
+                ? t("resource.confirmArchive")
+                : pendingResourceAction?.kind === "merge"
+                  ? t("resource.confirmMerge")
+                : t("resource.confirmDelete")}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </main>
   );
 }
