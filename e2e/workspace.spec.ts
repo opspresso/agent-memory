@@ -128,6 +128,72 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     "복사됨"
   );
 
+  const candidateId = "80000000-0000-4000-8000-000000000099";
+  let duplicateRequests = 0;
+  await page.route(
+    `**/api/organizations/${organizationId}/knowledge/candidates?limit=100`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          candidates: [
+            {
+              id: candidateId,
+              documentId: "40000000-0000-4000-8000-000000000098",
+              chunkId: "50000000-0000-4000-8000-000000000098",
+              model: "e2e-extractor",
+              scope: {
+                kind: "user",
+                organizationId,
+                userId: "10000000-0000-4000-8000-000000000098"
+              },
+              graph: {
+                entities: [
+                  { key: "api", kind: "service", canonicalName: "Agent API" },
+                  { key: "db", kind: "database", canonicalName: "Agent DB" }
+                ],
+                relationships: []
+              },
+              createdAt: "2026-08-27T00:00:00.000Z"
+            }
+          ]
+        }),
+        status: 200
+      })
+  );
+  await page.route(
+    `**/api/organizations/${organizationId}/knowledge/candidates/${candidateId}/duplicates`,
+    (route) => {
+      duplicateRequests += 1;
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          duplicates: {
+            api: [
+              {
+                id: "60000000-0000-4000-8000-000000000098",
+                kind: "service",
+                canonicalName: "Agent API",
+                scope: {
+                  kind: "user",
+                  organizationId,
+                  userId: "10000000-0000-4000-8000-000000000098"
+                }
+              }
+            ],
+            db: []
+          }
+        }),
+        status: 200
+      });
+    }
+  );
+  await page.getByRole("tab", { name: "AI 후보 검토" }).click();
+  await expect(
+    page.getByText(/같은 scope와 이름의 기존 node가 1개 있습니다/)
+  ).toBeVisible();
+  expect(duplicateRequests).toBe(1);
+
   await page.getByRole("tab", { name: "통합 검색" }).click();
 
   const memory = await postJson<{ id: string }>(
