@@ -86,6 +86,7 @@ curl \
 | Method | Path | 역할 |
 | --- | --- | --- |
 | `GET` | `/api/health` | Database readiness 확인 |
+| `GET` | `/api/metrics` | `METRICS_BEARER_TOKEN`으로 보호된 Prometheus process·build 지표 조회 |
 | `GET`, `POST` | `/api/auth/*` | Better Auth 인증 endpoint |
 | `GET`, `POST` | `/api/organizations` | 접근 가능한 조직 조회, 전역 admin의 조직 생성 |
 | `GET` | `/api/organizations/:organizationId/me` | 현재 멤버십과 팀 역할 조회 |
