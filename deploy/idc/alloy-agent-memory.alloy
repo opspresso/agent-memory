@@ -10,5 +10,10 @@ prometheus.scrape "agent_memory" {
   scrape_timeout  = "10s"
   job_name        = "agent-memory"
 
+  authorization {
+    type        = "Bearer"
+    credentials = sys.env("AGENT_MEMORY_METRICS_TOKEN")
+  }
+
   forward_to = [prometheus.remote_write.metrics_service.receiver]
 }

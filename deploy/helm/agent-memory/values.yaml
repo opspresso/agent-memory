@@ -29,6 +29,7 @@ config:
 secrets:
   existingSecret: ""
   BETTER_AUTH_SECRET: ""
+  METRICS_BEARER_TOKEN: ""
   GOOGLE_CLIENT_ID: ""
   GOOGLE_CLIENT_SECRET: ""
   OIDC_CLIENT_ID: ""

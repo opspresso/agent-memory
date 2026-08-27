@@ -29,7 +29,7 @@ fi
 if [[ ! -f .env.secrets ]]; then
   cp .env.secrets.example .env.secrets
   chmod 600 .env.secrets
-  echo "created .env.secrets; fill BETTER_AUTH_SECRET and run this script again" >&2
+  echo "created .env.secrets; fill BETTER_AUTH_SECRET and METRICS_BEARER_TOKEN, then run this script again" >&2
   exit 1
 fi
 
@@ -93,6 +93,10 @@ mv .env.runtime-secrets.tmp .env.runtime-secrets
 
 if ! grep -Eq '^BETTER_AUTH_SECRET=.{32,}$' .env.runtime-secrets; then
   echo "BETTER_AUTH_SECRET must contain at least 32 characters" >&2
+  exit 1
+fi
+if ! grep -Eq '^METRICS_BEARER_TOKEN=.{32,}$' .env.runtime-secrets; then
+  echo "METRICS_BEARER_TOKEN must contain at least 32 characters" >&2
   exit 1
 fi
 

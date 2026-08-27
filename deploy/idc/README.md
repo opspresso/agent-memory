@@ -12,7 +12,7 @@ cd /opt/compose/apps/agent-memory
 scripts/deploy.sh
 ```
 
-첫 실행은 `.env`, `.env.secrets`, `.env.infrastructure`를 생성한 뒤 중단한다. 값을 검토하고 `BETTER_AUTH_SECRET`을 `openssl rand -base64 32`로 설정하라. `.env.infrastructure`에는 공유 PostgreSQL의 `agent_memory` database URL과 공유 MinIO credential·endpoint를 넣는다.
+첫 실행은 `.env`, `.env.secrets`, `.env.infrastructure`를 생성한 뒤 중단한다. 값을 검토하고 `BETTER_AUTH_SECRET`과 `METRICS_BEARER_TOKEN`을 각각 `openssl rand -base64 32`로 설정하라. `.env.infrastructure`에는 공유 PostgreSQL의 `agent_memory` database URL과 공유 MinIO credential·endpoint를 넣는다.
 
 Agent Studio와 같은 AWS credential을 `.env.aws`에 두면 deploy script가 아래 SSM Parameter Store 값을 매번 읽어 `.env.runtime-secrets`를 생성한다. `.env.runtime-secrets`는 직접 편집하지 않는다. 네 parameter 중 하나라도 없으면 빈 값으로 배포하지 않고 즉시 실패한다.
 
@@ -64,12 +64,12 @@ curl -fsS https://memory.opspresso.com/api/health
 
 ## 지표 수집
 
-Application은 인증과 database 조회가 필요 없는 Prometheus endpoint `GET /api/metrics`를 제공한다. [Alloy scrape 설정](alloy-agent-memory.alloy)을 Agent Studio가 관리하는 `/etc/alloy/config.alloy`에 합친 뒤 검증하고 reload하라.
+Application은 database 조회 없이 동작하지만 Bearer token을 요구하는 Prometheus endpoint `GET /api/metrics`를 제공한다. `.env.secrets`의 `METRICS_BEARER_TOKEN`과 같은 값을 Alloy service 환경 변수 `AGENT_MEMORY_METRICS_TOKEN`으로 설정하라. [Alloy scrape 설정](alloy-agent-memory.alloy)을 Agent Studio가 관리하는 `/etc/alloy/config.alloy`에 합친 뒤 검증하고 reload하라.
 
 ```bash
 sudo alloy validate /etc/alloy/config.alloy
 sudo systemctl reload alloy
-curl -fsS https://memory.opspresso.com/api/metrics
+curl -fsS -H "Authorization: Bearer $METRICS_BEARER_TOKEN" https://memory.opspresso.com/api/metrics
 ```
 
 Grafana에서는 `up{job="agent-memory"}`가 `1`인지 확인한다. Endpoint는 build version과 process CPU·memory·event-loop, document worker 활성 상태만 노출하며 organization, 사용자, 검색어, Memory·문서 본문을 label이나 값에 포함하지 않는다.
