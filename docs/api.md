@@ -10,7 +10,7 @@ export AGENT_MEMORY_TOKEN=<token>
 
 ## 인증과 요청 경계
 
-`/api/health`를 제외한 API는 Better Auth 인증이 필요하다. 브라우저는 session cookie를 사용하고 Agent는 Better Auth 로그인 응답의 `set-auth-token` header 값을 다음과 같이 전달한다.
+`/api/health`와 `/api/metrics`를 제외한 API는 Better Auth 인증이 필요하다. `/api/metrics`는 Prometheus text exposition format으로 build와 process 수준 지표만 반환한다. 브라우저는 session cookie를 사용하고 Agent는 Better Auth 로그인 응답의 `set-auth-token` header 값을 다음과 같이 전달한다.
 
 ```http
 Authorization: Bearer <token>

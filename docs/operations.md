@@ -29,6 +29,8 @@ IDC와 EKS에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유�
 
 Release 완료 조건은 tag와 GitHub Release만 만드는 것이 아니다. Workflow 성공과 GHCR image 게시를 확인하고, IDC의 `.env`를 새 immutable tag로 바꿔 `scripts/deploy.sh`를 실행한 뒤 container image, health endpoint, 공개 화면의 version을 검증하라. 병합된 작업 branch가 있으면 마지막에 local과 remote에서 정리한다.
 
+IDC의 Grafana Alloy는 `https://memory.opspresso.com/api/metrics`를 `agent-memory` job으로 30초마다 scrape한다. 설정 원본은 `deploy/idc/alloy-agent-memory.alloy`이며 `up{job="agent-memory"}`로 수집 상태를 확인한다. Application metric은 process와 build 수준으로 제한하고 organization, 사용자, 검색어, Memory·문서 본문을 노출하지 않는다.
+
 ### 로컬 개발
 
 Node.js 24, pnpm 11, Docker가 필요하다.

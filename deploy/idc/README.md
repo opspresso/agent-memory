@@ -43,7 +43,7 @@ docker compose --project-directory ../agent-studio up -d caddy
 docker exec agent-studio-caddy-1 caddy reload --config /etc/caddy/Caddyfile
 ```
 
-이후 `scripts/deploy.sh`를 실행한다. Script가 app을 공유 data·edge network에 연결하고 `agent-memory` bucket을 멱등 생성한다.
+이후 `scripts/deploy.sh`를 실행한다. Script가 `agent-memory` service를 공유 data·edge network에 연결하고 `agent-memory` bucket을 멱등 생성한다.
 
 Registry를 거치지 않고 host에 미리 load한 image로 최초 설치를 검증할 때만 `PULL_IMAGES=false`를 사용하라. 이후 업데이트는 registry의 immutable tag를 pull하라.
 
@@ -59,6 +59,18 @@ curl -fsS https://memory.opspresso.com/api/health
 ```
 
 `latest`는 최초 확인용이다. 운영 업데이트는 `v0.1.0` 같은 release tag를 고정하라.
+
+## 지표 수집
+
+Application은 인증과 database 조회가 필요 없는 Prometheus endpoint `GET /api/metrics`를 제공한다. [Alloy scrape 설정](alloy-agent-memory.alloy)을 Agent Studio가 관리하는 `/etc/alloy/config.alloy`에 합친 뒤 검증하고 reload하라.
+
+```bash
+sudo alloy validate /etc/alloy/config.alloy
+sudo systemctl reload alloy
+curl -fsS https://memory.opspresso.com/api/metrics
+```
+
+Grafana에서는 `up{job="agent-memory"}`가 `1`인지 확인한다. Endpoint는 build version과 process CPU·memory·event-loop, document worker 활성 상태만 노출하며 organization, 사용자, 검색어, Memory·문서 본문을 label이나 값에 포함하지 않는다.
 
 ## 백업
 
