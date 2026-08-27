@@ -55,6 +55,7 @@ import {
   contextResultPresentation,
   relativeRelevance
 } from "./context-result-presentation";
+import { responseJson } from "./http-response";
 import classes from "./page.module.css";
 import {
   KnowledgeGraph,
@@ -347,10 +348,10 @@ export function Workspace({
         `/api/organizations/${organizationId}/${searchKind}?q=${encodeURIComponent(query)}`,
         { signal: controller.signal }
       );
-      const body = (await response.json()) as SearchResponse;
-      if (!response.ok) {
-        throw new Error(body.error ?? t("workspace.searchFailed"));
-      }
+      const body = await responseJson<SearchResponse>(
+        response,
+        t("workspace.searchFailed")
+      );
       setHits(body.hits ?? []);
     } catch (caught) {
       if (controller.signal.aborted) {
@@ -382,10 +383,10 @@ export function Workspace({
         `/api/organizations/${organizationId}/knowledge/nodes/${nodeId}/neighborhood?depth=2&limit=100`,
         { signal: controller.signal }
       );
-      const body = (await response.json()) as NeighborhoodResponse;
-      if (!response.ok) {
-        throw new Error(body.error ?? t("workspace.graphFailed"));
-      }
+      const body = await responseJson<NeighborhoodResponse>(
+        response,
+        t("workspace.graphFailed")
+      );
       setGraphCenterNodeId(nodeId);
       setGraphSelectedNodeId(nodeId);
       setGraphNodes(body.nodes ?? []);
@@ -527,14 +528,11 @@ export function Workspace({
         `/api/organizations/${organizationId}/documents`,
         { method: "POST", body: form }
       );
-      const body = (await response.json()) as {
+      const body = await responseJson<{
         id?: string;
         error?: string;
         status?: string;
-      };
-      if (!response.ok) {
-        throw new Error(body.error ?? t("workspace.uploadFailed"));
-      }
+      }>(response, t("workspace.uploadFailed"));
       setUploadMessage(
         body.status === "failed"
           ? t("workspace.uploadQueueFailed", { id: body.id ?? "" })
