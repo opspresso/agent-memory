@@ -346,6 +346,37 @@ describe("PostgreSQL schema", () => {
         "member"
       )
     ).resolves.toEqual({ status: "owner_immutable" });
+
+    await expect(
+      administration.upsertOrganizationMember(
+        organizationId,
+        "member-k@example.com",
+        "owner"
+      )
+    ).resolves.toMatchObject({ status: "saved", member: { role: "owner" } });
+    const concurrentDemotions = await Promise.all([
+      administration.upsertOrganizationMember(
+        organizationId,
+        "owner-k@example.com",
+        "member"
+      ),
+      administration.upsertOrganizationMember(
+        organizationId,
+        "member-k@example.com",
+        "member"
+      )
+    ]);
+    expect(concurrentDemotions.map((result) => result.status).sort()).toEqual([
+      "owner_immutable",
+      "saved"
+    ]);
+    const ownerCount = await pool.query<{ total: number }>(
+      `SELECT count(*)::int AS total
+       FROM organization_members
+       WHERE organization_id = $1 AND role = 'owner'`,
+      [organizationId]
+    );
+    expect(ownerCount.rows[0]?.total).toBe(1);
   });
 
   it("persists revisions and searches only accessible active memory", async () => {

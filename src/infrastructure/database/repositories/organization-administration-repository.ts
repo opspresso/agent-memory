@@ -1,4 +1,4 @@
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 
 import type { OrganizationAdministrationRepository } from "@/domain/identity/organization-administration-repository";
 
@@ -51,65 +51,70 @@ export function createOrganizationAdministrationRepository(
     },
 
     async upsertOrganizationMember(organizationId, email, role) {
-      const [user] = await db
-        .select({ id: users.id, email: users.email, name: users.name })
-        .from(users)
-        .where(eq(users.email, email))
-        .limit(1);
-      if (!user) {
-        return { status: "user_not_found" };
-      }
-      const [existing] = await db
-        .select({ role: organizationMembers.role })
-        .from(organizationMembers)
-        .where(
-          and(
-            eq(organizationMembers.organizationId, organizationId),
-            eq(organizationMembers.userId, user.id)
-          )
-        )
-        .limit(1);
-      if (existing?.role === "owner" && role !== "owner") {
-        const [owners] = await db
-          .select({ total: count() })
+      return db.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
+        );
+        const [user] = await transaction
+          .select({ id: users.id, email: users.email, name: users.name })
+          .from(users)
+          .where(eq(users.email, email))
+          .limit(1);
+        if (!user) {
+          return { status: "user_not_found" } as const;
+        }
+        const [existing] = await transaction
+          .select({ role: organizationMembers.role })
           .from(organizationMembers)
           .where(
             and(
               eq(organizationMembers.organizationId, organizationId),
-              eq(organizationMembers.role, "owner")
+              eq(organizationMembers.userId, user.id)
             )
-          );
-        if (!owners || owners.total <= 1) {
-          return { status: "owner_immutable" };
+          )
+          .limit(1);
+        if (existing?.role === "owner" && role !== "owner") {
+          const [owners] = await transaction
+            .select({ total: count() })
+            .from(organizationMembers)
+            .where(
+              and(
+                eq(organizationMembers.organizationId, organizationId),
+                eq(organizationMembers.role, "owner")
+              )
+            );
+          if (!owners || owners.total <= 1) {
+            return { status: "owner_immutable" } as const;
+          }
         }
-      }
 
-      const [saved] = await db
-        .insert(organizationMembers)
-        .values({ organizationId, userId: user.id, role })
-        .onConflictDoUpdate({
-          target: [
-            organizationMembers.organizationId,
-            organizationMembers.userId
-          ],
-          set: { role }
-        })
-        .returning({
-          role: organizationMembers.role,
-          createdAt: organizationMembers.createdAt
-        });
-      if (!saved) {
-        throw new Error("organization member upsert returned no row");
-      }
-      return {
-        status: "saved",
-        member: {
-          userId: user.id,
-          email: user.email,
-          name: user.name,
-          ...saved
+        const [saved] = await transaction
+          .insert(organizationMembers)
+          .values({ organizationId, userId: user.id, role })
+          .onConflictDoUpdate({
+            target: [
+              organizationMembers.organizationId,
+              organizationMembers.userId
+            ],
+            set: { role }
+          })
+          .returning({
+            role: organizationMembers.role,
+            createdAt: organizationMembers.createdAt
+          });
+        if (!saved) {
+          throw new Error("organization member upsert returned no row");
         }
-      };
+        return {
+          status: "saved",
+          member: {
+            userId: user.id,
+            email: user.email,
+            name: user.name,
+            ...saved
+          }
+        } as const;
+      });
     },
 
     async createTeam(team) {
