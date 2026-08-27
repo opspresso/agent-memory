@@ -34,11 +34,13 @@ Agent Studio의 `agent-studio` IAM user를 함께 사용하려면 `terraform-env
 docker exec -it agent-studio-postgres-1 createdb -U agent_studio agent_memory
 ```
 
-공유 edge network를 만들고 `agent-studio.compose.override.yaml`을 Agent Studio 설치 경로의 `compose.override.yaml`로 복사하라. 이렇게 해야 Agent Studio가 Caddy를 재생성해도 shared-edge 연결이 유지된다. `Caddyfile.shared-edge`의 site block도 기존 Caddyfile에 합쳐 reload하라.
+공유 edge network를 만들고 `agent-studio.compose.override.yaml`을 Agent Studio 설치 경로의 `compose.override.yaml`로 복사하라. 이렇게 해야 Agent Studio가 Caddy를 재생성해도 shared-edge 연결과 Agent Memory site mount가 유지된다. Agent Studio의 `Caddyfile`에는 site import를 한 번 추가하라.
 
 ```bash
 docker network create opspresso-edge
 cp agent-studio.compose.override.yaml ../agent-studio/compose.override.yaml
+grep -qxF 'import /etc/caddy/sites/*.caddy' ../agent-studio/Caddyfile || \
+  echo 'import /etc/caddy/sites/*.caddy' >> ../agent-studio/Caddyfile
 docker compose --project-directory ../agent-studio up -d caddy
 docker exec agent-studio-caddy-1 caddy reload --config /etc/caddy/Caddyfile
 ```
