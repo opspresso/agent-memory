@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { version as appVersion } from "../package.json";
+
 vi.mock("@/lib/process-metrics", () => ({
   processMetricsSnapshot: () => ({
     residentMemoryBytes: 100,
@@ -50,7 +52,9 @@ describe("metrics route", () => {
       "text/plain; version=0.0.4; charset=utf-8"
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(body).toContain('agent_memory_build_info{version="0.3.0"} 1');
+    expect(body).toContain(
+      `agent_memory_build_info{version="${appVersion}"} 1`
+    );
     expect(body).toContain("process_resident_memory_bytes 100");
     expect(body).toContain("process_cpu_seconds_total 2.5");
     expect(body).not.toContain("organization_id");
