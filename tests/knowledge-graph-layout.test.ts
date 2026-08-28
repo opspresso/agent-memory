@@ -28,6 +28,18 @@ describe("knowledge graph layout", () => {
     );
   });
 
+  it("places direct and second-degree neighbors on separate orbits", () => {
+    const layout = layoutKnowledgeGraph(nodes, "center", [
+      { id: "edge-1", sourceNodeId: "center", targetNodeId: "document", predicate: "uses", scope: { kind: "organization", organizationId: "organization-1" } },
+      { id: "edge-2", sourceNodeId: "document", targetNodeId: "agent", predicate: "read-by", scope: { kind: "organization", organizationId: "organization-1" } }
+    ]);
+    const document = layout.find((node) => node.id === "document");
+    const agent = layout.find((node) => node.id === "agent");
+
+    expect(Math.hypot((document?.x ?? 50) - 50, (document?.y ?? 50) - 50)).toBeCloseTo(21);
+    expect(Math.hypot((agent?.x ?? 50) - 50, (agent?.y ?? 50) - 50)).toBeCloseTo(34);
+  });
+
   it("counts only edges whose endpoints are present", () => {
     expect(
       knowledgeNodeDegrees(nodes, [
