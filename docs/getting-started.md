@@ -46,11 +46,11 @@ ADMIN_EMAILS=me@nalbam.com
 ## 2. Database 시작과 migration
 
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres minio minio-init
 pnpm db:migrate
 ```
 
-PostgreSQL은 `localhost:5433`에서 열린다. Migration이 완료되면 application을 시작하라.
+PostgreSQL은 `localhost:5433`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. Migration이 완료되면 application을 시작하라.
 
 ```bash
 pnpm dev
@@ -94,11 +94,7 @@ Memory를 만든 뒤 운영 콘솔에서 다음 순서로 확인한다.
 
 ## 5. 문서 수집 활성화
 
-문서 업로드에는 S3 호환 storage가 필요하다. 로컬에서는 MinIO와 bucket 초기화를 실행한다.
-
-```bash
-docker compose --profile objects up -d minio minio-init
-```
+문서 업로드에는 S3 호환 storage가 필요하다. localdev는 Agent Memory 전용 MinIO를 사용한다.
 
 - MinIO API: `http://localhost:9010`
 - MinIO console: `http://localhost:9011`

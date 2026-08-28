@@ -2,7 +2,7 @@
 
 ## 실행 모드
 
-로컬 개발은 PostgreSQL과 선택형 MinIO만 Compose로 실행하고 Next.js를 host에서 직접 실행한다.
+로컬 개발은 독립된 `agent-memory-local` PostgreSQL 18·MinIO를 사용하고 Next.js를 host에서 직접 실행한다.
 
 ```text
 로컬 개발
@@ -17,19 +17,17 @@ Compose: postgres, MinIO ─────┘      └── pg-boss
 
 | 환경 | Application | PostgreSQL·Object storage | 진입점 |
 | --- | --- | --- | --- |
-| Local 개발 | host `pnpm dev` | 루트 Compose | `http://localhost:3100` |
-| IDC | `deploy/idc` Compose | Agent Studio와 instance 공유, database·bucket 격리 | 공유 Caddy의 `https://memory.opspresso.com` |
-| EKS | `deploy/helm/agent-memory` | 기존 PostgreSQL·S3가 기본, bundled service는 선택 | ALB/nginx ingress |
+| Local 개발 | host `pnpm dev` | 독립 `agent-memory-local` PostgreSQL 18·MinIO | `http://localhost:3100` |
+| IDC | `../dockpad` | 배포 저장소가 소유 | 배포 저장소가 소유 |
+| EKS | `../argocd-env-demo` | GitOps 저장소가 소유 | GitOps 저장소가 소유 |
 
-Local infrastructure 실행은 [local 문서](../deploy/local/README.md), IDC 설치·백업은 [IDC 배포 문서](../deploy/idc/README.md), EKS 값과 설치는 [Helm chart 문서](../deploy/helm/agent-memory/README.md)를 따른다.
+이 저장소는 IDC Compose나 Kubernetes manifest를 보관하지 않는다. Release workflow는 image 게시 후 `argocd-env-demo`에 tag만 전달한다.
 
 IDC와 EKS에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
 
 `v*` tag를 push하면 release workflow가 self-hosted Linux runner에서 `pnpm verify`와 PostgreSQL integration test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 immutable tag를 배포한다.
 
-Release 완료 조건은 tag와 GitHub Release만 만드는 것이 아니다. Workflow 성공, ECR·GHCR image 게시, GitOps dispatch와 Argo CD sync를 확인한 뒤 container image, health endpoint, 공개 화면의 version을 검증하라. IDC를 별도로 갱신할 때는 `.env`를 새 immutable tag로 바꿔 `scripts/deploy.sh`를 실행한다. 병합된 작업 branch가 있으면 마지막에 local과 remote에서 정리한다.
-
-IDC의 Grafana Alloy는 Bearer token으로 `https://memory.opspresso.com/api/metrics`를 인증하고 `agent-memory` job으로 30초마다 scrape한다. 설정 원본은 `deploy/idc/alloy-agent-memory.alloy`이며 `up{job="agent-memory"}`로 수집 상태를 확인한다. Application metric은 process와 build 수준으로 제한하고 organization, 사용자, 검색어, Memory·문서 본문을 노출하지 않는다.
+Release 완료 조건은 tag와 GitHub Release만 만드는 것이 아니다. Workflow 성공, ECR·GHCR image 게시, GitOps dispatch와 Argo CD sync를 확인한 뒤 container image, health endpoint, 공개 화면의 version을 검증하라. IDC rollout과 관측성은 `../dockpad`, EKS rollout은 `../argocd-env-demo`에서 확인한다.
 
 ### 로컬 개발
 
@@ -39,25 +37,16 @@ Node.js 24, pnpm 11, Docker가 필요하다.
 corepack enable
 pnpm install
 cp .env.example .env.local
-docker compose up -d postgres
+docker compose up -d postgres minio minio-init
 pnpm db:migrate
 pnpm dev
 ```
 
-Application은 `http://localhost:3100`, PostgreSQL은 `localhost:5433`에서 열린다. `.env.local`의 Google 또는 OIDC 설정을 사용하며, password 로그인이 필요하면 `AUTH_PASSWORD`와 `AUTH_PASSWORD_SIGNUP`을 `true`로 설정하라.
+Application은 `http://localhost:3100`, PostgreSQL은 `localhost:5433`, MinIO는 `localhost:9010`에서 열린다. `.env.local`의 Google 또는 OIDC 설정을 사용하며, password 로그인이 필요하면 `AUTH_PASSWORD`와 `AUTH_PASSWORD_SIGNUP`을 `true`로 설정하라.
 
 로그인 가능한 환경부터 첫 검색까지의 절차는 [시작 가이드](getting-started.md)를 따른다.
 
-문서 수집을 개발하려면 MinIO와 bucket 초기화를 실행하고 worker를 켜라.
-
-```bash
-docker compose --profile objects up -d minio minio-init
-pnpm dev
-```
-
-MinIO API는 `localhost:9010`, console은 `localhost:9011`에서 열린다. `.env.example`은 document worker를 기본 활성화하므로 이를 복사한 `.env.local`에서는 별도 실행 변수가 필요하지 않다.
-
-Agent Studio의 PostgreSQL 17과 포트·volume을 공유하지 않는다. `docker compose down -v`는 PostgreSQL과 MinIO 데이터를 제거하므로 필요한 데이터와 대상 project를 확인하기 전에는 실행하지 마라.
+`.env.example`은 document worker와 전용 MinIO 설정을 기본 활성화한다. `docker compose down -v`는 Agent Memory의 PostgreSQL과 MinIO volume을 삭제하므로 데이터를 확인하지 않고 실행하지 마라.
 
 ## 화면 언어
 
@@ -155,7 +144,7 @@ pnpm db:studio
 
 Process가 `SIGTERM` 또는 `SIGINT`를 받으면 새 document job 수신을 중단하고 진행 중인 job을 최대 30초 동안 drain한 뒤 Database pool과 telemetry exporter를 순서대로 종료한다. Cleanup 일부가 실패해도 나머지 단계는 계속 실행하며 process는 실패 exit code를 반환한다.
 
-Container image는 `NEXT_MANUAL_SIG_HANDLE=true`로 Next.js 기본 signal handler를 끄고 이 종료 절차가 signal 처리를 담당한다. 기본 handler를 두면 Next.js가 drain 도중 process를 종료한다. 대신 진행 중인 HTTP 응답은 기다리지 않으므로 배포 전에 endpoint에서 instance를 먼저 제외하라. Orchestrator의 종료 유예 시간은 drain보다 길어야 한다. Helm은 `terminationGracePeriodSeconds: 45`, IDC Compose는 `stop_grace_period: 45s`를 사용한다.
+Container image는 `NEXT_MANUAL_SIG_HANDLE=true`로 Next.js 기본 signal handler를 끄고 이 종료 절차가 signal 처리를 담당한다. 기본 handler를 두면 Next.js가 drain 도중 process를 종료한다. 대신 진행 중인 HTTP 응답은 기다리지 않으므로 배포 전에 endpoint에서 instance를 먼저 제외하라. Orchestrator의 종료 유예 시간은 drain보다 길어야 하며 구체 값은 배포 저장소가 소유한다.
 
 OpenRouter를 사용하려면 `.env.local`에 다음 값을 설정하라.
 

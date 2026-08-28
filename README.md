@@ -29,7 +29,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-배포 환경별 절차는 [운영 가이드](docs/operations.md#배포-형태)를 따른다. Production image 기반 local stack, 공유 PostgreSQL·MinIO를 사용하는 IDC Compose, EKS Helm chart를 제공한다.
+이 저장소는 application image와 localdev 설정만 소유한다. IDC 배포는 `../dockpad`, EKS/Kubernetes 배포는 `../argocd-env-demo`가 관리한다. Release workflow의 GitOps tag 전달은 유지한다.
 
 로컬에서 로그인하려면 `.env.local`에서 password provider와 signup을 활성화하라.
 
@@ -41,7 +41,7 @@ AUTH_PASSWORD_SIGNUP=true
 그다음 Database migration과 application을 실행하라.
 
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres minio minio-init
 pnpm db:migrate
 pnpm dev
 ```
@@ -50,11 +50,7 @@ pnpm dev
 
 로그인 전후에 `http://localhost:3100/guide`에서 제품 사용 흐름과 기능별 설명을 확인할 수 있다.
 
-문서 업로드까지 사용하려면 MinIO bucket을 함께 시작하라.
-
-```bash
-docker compose --profile objects up -d minio minio-init
-```
+이 명령은 독립된 `agent-memory-local` PostgreSQL 18과 MinIO를 시작하고 `agent-memory` bucket을 멱등하게 만든다.
 
 설치부터 첫 Memory 검색까지의 전체 절차는 [시작 가이드](docs/getting-started.md)를 따른다.
 
@@ -100,4 +96,4 @@ Pull request와 `main` push CI는 PostgreSQL 18·pgvector service에서 migratio
 
 ## 데이터 보호
 
-`docker compose down -v`는 PostgreSQL과 MinIO volume을 제거한다. 필요한 데이터와 대상 project를 확인하지 않은 상태에서 실행하지 마라. Agent Studio의 PostgreSQL 17과는 포트와 volume을 공유하지 않으므로 두 프로젝트를 동시에 실행할 수 있다.
+PostgreSQL 18과 MinIO volume은 Agent Memory 전용이다. `docker compose down -v`는 두 volume을 삭제하므로 데이터와 대상을 확인하지 않고 실행하지 마라.
