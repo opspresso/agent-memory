@@ -1,4 +1,0 @@
-memory.opspresso.com {
-	encode zstd gzip
-	reverse_proxy agent-memory:3000
-}

@@ -10,7 +10,7 @@ services:
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql
+      - postgres18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agent_memory -d agent_memory"]
       interval: 5s
@@ -20,8 +20,7 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    profiles: ["objects"]
-    command: server /data --console-address ":9001"
+    command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: agent_memory
       MINIO_ROOT_PASSWORD: agent_memory_dev
@@ -39,17 +38,17 @@ services:
 
   minio-init:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
-    profiles: ["objects"]
+    restart: "no"
     depends_on:
       minio:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - >-
-        mc alias set local http://minio:9000 agent_memory agent_memory_dev &&
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 agent_memory agent_memory_dev
         mc mb --ignore-existing local/agent-memory
-    restart: "no"
 
 volumes:
-  postgres-data:
+  postgres18-data:
   minio-data:
