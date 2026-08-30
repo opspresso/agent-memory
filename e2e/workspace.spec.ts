@@ -144,7 +144,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   page
 }, testInfo) => {
   test.skip(!authenticatedE2e, "requires a disposable migrated PostgreSQL database");
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const runId = process.env.E2E_RUN_ID;
   if (!runId) {
     throw new Error("E2E_RUN_ID must be configured by Playwright");

@@ -32,9 +32,11 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: "./node_modules/.bin/next dev --hostname 127.0.0.1 --port 3110",
+    // A production server keeps route responses fast and avoids the dev
+    // compiler's memory pressure on shared CI runners.
+    command:
+      "./node_modules/.bin/next build && ./node_modules/.bin/next start --hostname 127.0.0.1 --port 3110",
     env: {
-      WATCHPACK_POLLING: "true",
       NEXT_DIST_DIR: ".next-e2e",
       AUTH_PASSWORD: "true",
       AUTH_PASSWORD_SIGNUP: "true",
@@ -49,7 +51,7 @@ export default defineConfig({
       OIDC_ISSUER: ""
     },
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 300_000,
     url: "http://127.0.0.1:3110"
   }
 });
