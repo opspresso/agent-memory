@@ -17,6 +17,9 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
+  // The dev web server compiles each route on first visit; on slower CI
+  // runners that regularly exceeds Playwright's 5s default.
+  expect: { timeout: 15_000 },
   use: {
     baseURL: "http://127.0.0.1:3110",
     permissions: ["clipboard-read", "clipboard-write"],

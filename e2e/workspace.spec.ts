@@ -56,6 +56,9 @@ test("onboards, approves, and manages members through the console", async ({
   const adminEmail = `e2e-admin2+${runId}-${testInfo.retry}@nalbam.com`;
   const memberEmail = `e2e-member+${runId}-${testInfo.retry}@nalbam.com`;
   const password = "agent-memory-e2e-password";
+  // Retries reuse the same database, so the display name must be unique
+  // per attempt or the onboarding card locator matches stale organizations.
+  const approvalOrganizationName = `E2E Approval Organization R${testInfo.retry}`;
 
   await page.context().addCookies([
     { name: "agent-memory-locale", value: "ko", domain: "127.0.0.1", path: "/" }
@@ -74,7 +77,7 @@ test("onboards, approves, and manages members through the console", async ({
     page,
     "/api/organizations",
     {
-      name: "E2E Approval Organization",
+      name: approvalOrganizationName,
       slug: `e2e-approval-${runId}-${testInfo.retry}`
     }
   );
@@ -110,7 +113,7 @@ test("onboards, approves, and manages members through the console", async ({
     memberPage.getByRole("heading", { name: "참여할 조직을 선택하세요" })
   ).toBeVisible();
   await memberPage
-    .locator(".mantine-Paper-root", { hasText: "E2E Approval Organization" })
+    .locator(".mantine-Paper-root", { hasText: approvalOrganizationName })
     .getByRole("button", { name: "가입" })
     .click();
   await expect(
