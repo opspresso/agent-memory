@@ -1,5 +1,6 @@
 import {
   organizationAdministrationErrorResponse,
+  publicOrganization,
   readOrganizationJsonBody
 } from "@/lib/organization-administration-http";
 import { createOrganizationSchema } from "@/lib/organization-administration-schemas";
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
   const organizations = await listOrganizationMemberships(
     authentication.user.id
   );
-  return Response.json({ organizations, total: organizations.length });
+  return Response.json({ organizations, count: organizations.length });
 }
 
 export async function POST(request: Request) {
@@ -47,7 +48,9 @@ export async function POST(request: Request) {
       parsed.data.slug,
       parsed.data.name
     );
-    return Response.json(organization, { status: 201 });
+    return Response.json(publicOrganization(organization, { canManage: true }), {
+      status: 201
+    });
   } catch (error) {
     const response = organizationAdministrationErrorResponse(error);
     if (response) {
