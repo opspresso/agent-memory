@@ -1,7 +1,10 @@
 import {
+  AlreadyOrganizationMemberError,
   OrganizationAdministrationAccessDeniedError,
   OrganizationMemberNotFoundError,
+  OrganizationNotFoundError,
   OrganizationOwnerImmutableError,
+  OrganizationSelfManagementError,
   OrganizationSlugConflictError,
   TeamNotFoundError,
   TeamSlugConflictError
@@ -22,11 +25,14 @@ export function organizationAdministrationErrorResponse(
   if (
     error instanceof OrganizationSlugConflictError ||
     error instanceof TeamSlugConflictError ||
-    error instanceof OrganizationOwnerImmutableError
+    error instanceof OrganizationOwnerImmutableError ||
+    error instanceof OrganizationSelfManagementError ||
+    error instanceof AlreadyOrganizationMemberError
   ) {
     return Response.json({ error: error.message }, { status: 409 });
   }
   if (
+    error instanceof OrganizationNotFoundError ||
     error instanceof OrganizationMemberNotFoundError ||
     error instanceof TeamNotFoundError
   ) {

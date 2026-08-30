@@ -9,12 +9,22 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
+  type AnyPgColumn
 } from "drizzle-orm/pg-core";
 
-import { organizationRoles, teamRoles } from "@/domain/identity/organization-access";
+import {
+  organizationMemberStatuses,
+  organizationRoles,
+  teamRoles,
+  type NewMemberStatus
+} from "@/domain/identity/organization-access";
 
 export const organizationRole = pgEnum("organization_role", [...organizationRoles]);
+
+export const organizationMemberStatus = pgEnum("organization_member_status", [
+  ...organizationMemberStatuses
+]);
 
 export const teamRole = pgEnum("team_role", [...teamRoles]);
 
@@ -24,6 +34,13 @@ export const organizations = pgTable(
     id: uuid().primaryKey().default(sql`uuidv7()`),
     slug: text().notNull(),
     name: text().notNull(),
+    newMemberStatus: organizationMemberStatus()
+      .$type<NewMemberStatus>()
+      .notNull()
+      .default("active"),
+    defaultTeamId: uuid().references((): AnyPgColumn => teams.id, {
+      onDelete: "set null"
+    }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
@@ -54,6 +71,7 @@ export const organizationMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     role: organizationRole().notNull().default("member"),
+    status: organizationMemberStatus().notNull().default("active"),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [

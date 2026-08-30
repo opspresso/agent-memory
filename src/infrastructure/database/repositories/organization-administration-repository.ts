@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, eq, notInArray, sql } from "drizzle-orm";
 
 import type { OrganizationAdministrationRepository } from "@/domain/identity/organization-administration-repository";
 
@@ -29,10 +29,66 @@ export function createOrganizationAdministrationRepository(
           organizationId: created.id,
           userId: ownerUserId,
           role: "owner",
+          status: "active",
           createdAt: organization.createdAt
         });
         return { status: "created", organization: created } as const;
       });
+    },
+
+    async findOrganization(organizationId) {
+      const [organization] = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, organizationId))
+        .limit(1);
+      return organization ?? null;
+    },
+
+    async updateOrganizationSettings(organizationId, update) {
+      return db.transaction(async (transaction) => {
+        if (update.defaultTeamId) {
+          const [team] = await transaction
+            .select({ id: teams.id })
+            .from(teams)
+            .where(
+              and(
+                eq(teams.organizationId, organizationId),
+                eq(teams.id, update.defaultTeamId)
+              )
+            )
+            .limit(1);
+          if (!team) {
+            return { status: "team_not_found" } as const;
+          }
+        }
+        const [organization] = await transaction
+          .update(organizations)
+          .set({
+            ...(update.name === undefined ? {} : { name: update.name }),
+            ...(update.newMemberStatus === undefined
+              ? {}
+              : { newMemberStatus: update.newMemberStatus }),
+            ...(update.defaultTeamId === undefined
+              ? {}
+              : { defaultTeamId: update.defaultTeamId }),
+            updatedAt: new Date()
+          })
+          .where(eq(organizations.id, organizationId))
+          .returning();
+        if (!organization) {
+          return { status: "organization_not_found" } as const;
+        }
+        return { status: "updated", organization } as const;
+      });
+    },
+
+    async deleteOrganization(organizationId) {
+      const deleted = await db
+        .delete(organizations)
+        .where(eq(organizations.id, organizationId))
+        .returning({ id: organizations.id });
+      return deleted.length > 0;
     },
 
     async listOrganizationMembers(organizationId) {
@@ -42,12 +98,35 @@ export function createOrganizationAdministrationRepository(
           email: users.email,
           name: users.name,
           role: organizationMembers.role,
+          status: organizationMembers.status,
           createdAt: organizationMembers.createdAt
         })
         .from(organizationMembers)
         .innerJoin(users, eq(users.id, organizationMembers.userId))
         .where(eq(organizationMembers.organizationId, organizationId))
         .orderBy(asc(users.name), asc(users.id));
+    },
+
+    async findOrganizationMember(organizationId, userId) {
+      const [member] = await db
+        .select({
+          userId: users.id,
+          email: users.email,
+          name: users.name,
+          role: organizationMembers.role,
+          status: organizationMembers.status,
+          createdAt: organizationMembers.createdAt
+        })
+        .from(organizationMembers)
+        .innerJoin(users, eq(users.id, organizationMembers.userId))
+        .where(
+          and(
+            eq(organizationMembers.organizationId, organizationId),
+            eq(organizationMembers.userId, userId)
+          )
+        )
+        .limit(1);
+      return member ?? null;
     },
 
     async upsertOrganizationMember(organizationId, email, role) {
@@ -90,16 +169,17 @@ export function createOrganizationAdministrationRepository(
 
         const [saved] = await transaction
           .insert(organizationMembers)
-          .values({ organizationId, userId: user.id, role })
+          .values({ organizationId, userId: user.id, role, status: "active" })
           .onConflictDoUpdate({
             target: [
               organizationMembers.organizationId,
               organizationMembers.userId
             ],
-            set: { role }
+            set: { role, status: "active" }
           })
           .returning({
             role: organizationMembers.role,
+            status: organizationMembers.status,
             createdAt: organizationMembers.createdAt
           });
         if (!saved) {
@@ -114,6 +194,158 @@ export function createOrganizationAdministrationRepository(
             ...saved
           }
         } as const;
+      });
+    },
+
+    async updateOrganizationMember(organizationId, userId, update) {
+      return db.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
+        );
+        const [existing] = await transaction
+          .select({
+            role: organizationMembers.role,
+            status: organizationMembers.status
+          })
+          .from(organizationMembers)
+          .where(
+            and(
+              eq(organizationMembers.organizationId, organizationId),
+              eq(organizationMembers.userId, userId)
+            )
+          )
+          .limit(1);
+        if (!existing) {
+          return { status: "member_not_found" } as const;
+        }
+        const demotesOwner =
+          existing.role === "owner" &&
+          (update.role !== undefined && update.role !== "owner");
+        const deactivatesOwner =
+          existing.role === "owner" &&
+          update.status !== undefined &&
+          update.status !== "active";
+        if (demotesOwner || deactivatesOwner) {
+          const [owners] = await transaction
+            .select({ total: count() })
+            .from(organizationMembers)
+            .where(
+              and(
+                eq(organizationMembers.organizationId, organizationId),
+                eq(organizationMembers.role, "owner"),
+                eq(organizationMembers.status, "active")
+              )
+            );
+          if (!owners || owners.total <= 1) {
+            return { status: "owner_immutable" } as const;
+          }
+        }
+
+        const [saved] = await transaction
+          .update(organizationMembers)
+          .set({
+            ...(update.role === undefined ? {} : { role: update.role }),
+            ...(update.status === undefined ? {} : { status: update.status })
+          })
+          .where(
+            and(
+              eq(organizationMembers.organizationId, organizationId),
+              eq(organizationMembers.userId, userId)
+            )
+          )
+          .returning({
+            role: organizationMembers.role,
+            status: organizationMembers.status,
+            createdAt: organizationMembers.createdAt
+          });
+        if (!saved) {
+          return { status: "member_not_found" } as const;
+        }
+
+        const becameActive =
+          existing.status !== "active" && saved.status === "active";
+        if (becameActive) {
+          const [organization] = await transaction
+            .select({ defaultTeamId: organizations.defaultTeamId })
+            .from(organizations)
+            .where(eq(organizations.id, organizationId))
+            .limit(1);
+          if (organization?.defaultTeamId) {
+            await transaction
+              .insert(teamMembers)
+              .values({
+                organizationId,
+                teamId: organization.defaultTeamId,
+                userId,
+                role: "member"
+              })
+              .onConflictDoNothing({
+                target: [teamMembers.teamId, teamMembers.userId]
+              });
+          }
+        }
+
+        const [user] = await transaction
+          .select({ id: users.id, email: users.email, name: users.name })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        if (!user) {
+          return { status: "member_not_found" } as const;
+        }
+        return {
+          status: "saved",
+          member: {
+            userId: user.id,
+            email: user.email,
+            name: user.name,
+            ...saved
+          }
+        } as const;
+      });
+    },
+
+    async removeOrganizationMember(organizationId, userId) {
+      return db.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
+        );
+        const [existing] = await transaction
+          .select({ role: organizationMembers.role })
+          .from(organizationMembers)
+          .where(
+            and(
+              eq(organizationMembers.organizationId, organizationId),
+              eq(organizationMembers.userId, userId)
+            )
+          )
+          .limit(1);
+        if (!existing) {
+          return { status: "member_not_found" } as const;
+        }
+        if (existing.role === "owner") {
+          const [owners] = await transaction
+            .select({ total: count() })
+            .from(organizationMembers)
+            .where(
+              and(
+                eq(organizationMembers.organizationId, organizationId),
+                eq(organizationMembers.role, "owner")
+              )
+            );
+          if (!owners || owners.total <= 1) {
+            return { status: "owner_immutable" } as const;
+          }
+        }
+        await transaction
+          .delete(organizationMembers)
+          .where(
+            and(
+              eq(organizationMembers.organizationId, organizationId),
+              eq(organizationMembers.userId, userId)
+            )
+          );
+        return { status: "removed" } as const;
       });
     },
 
@@ -136,6 +368,60 @@ export function createOrganizationAdministrationRepository(
         .from(teams)
         .where(eq(teams.organizationId, organizationId))
         .orderBy(asc(teams.name), asc(teams.id));
+    },
+
+    async updateTeam(organizationId, teamId, name) {
+      const [team] = await db
+        .update(teams)
+        .set({ name, updatedAt: new Date() })
+        .where(
+          and(eq(teams.organizationId, organizationId), eq(teams.id, teamId))
+        )
+        .returning();
+      return team
+        ? { status: "updated", team }
+        : { status: "team_not_found" };
+    },
+
+    async deleteTeam(organizationId, teamId) {
+      const deleted = await db
+        .delete(teams)
+        .where(
+          and(eq(teams.organizationId, organizationId), eq(teams.id, teamId))
+        )
+        .returning({ id: teams.id });
+      return deleted.length > 0;
+    },
+
+    async listTeamMembers(organizationId, teamId) {
+      const [team] = await db
+        .select({ id: teams.id })
+        .from(teams)
+        .where(
+          and(eq(teams.organizationId, organizationId), eq(teams.id, teamId))
+        )
+        .limit(1);
+      if (!team) {
+        return null;
+      }
+      return db
+        .select({
+          teamId: teamMembers.teamId,
+          userId: users.id,
+          email: users.email,
+          name: users.name,
+          role: teamMembers.role,
+          createdAt: teamMembers.createdAt
+        })
+        .from(teamMembers)
+        .innerJoin(users, eq(users.id, teamMembers.userId))
+        .where(
+          and(
+            eq(teamMembers.organizationId, organizationId),
+            eq(teamMembers.teamId, teamId)
+          )
+        )
+        .orderBy(asc(users.name), asc(users.id));
     },
 
     async upsertTeamMember(organizationId, teamId, email, role) {
@@ -191,6 +477,90 @@ export function createOrganizationAdministrationRepository(
         throw new Error("team member upsert returned no row");
       }
       return { status: "saved", member: { ...member, teamId, ...saved } };
+    },
+
+    async removeTeamMember(organizationId, teamId, userId) {
+      const removed = await db
+        .delete(teamMembers)
+        .where(
+          and(
+            eq(teamMembers.organizationId, organizationId),
+            eq(teamMembers.teamId, teamId),
+            eq(teamMembers.userId, userId)
+          )
+        )
+        .returning({ userId: teamMembers.userId });
+      return removed.length > 0;
+    },
+
+    async listJoinableOrganizations(userId) {
+      const memberships = db
+        .select({ organizationId: organizationMembers.organizationId })
+        .from(organizationMembers)
+        .where(eq(organizationMembers.userId, userId));
+      return db
+        .select({
+          id: organizations.id,
+          slug: organizations.slug,
+          name: organizations.name
+        })
+        .from(organizations)
+        .where(notInArray(organizations.id, memberships))
+        .orderBy(asc(organizations.name), asc(organizations.id));
+    },
+
+    async joinOrganization(organizationId, userId) {
+      return db.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
+        );
+        const [organization] = await transaction
+          .select({
+            newMemberStatus: organizations.newMemberStatus,
+            defaultTeamId: organizations.defaultTeamId
+          })
+          .from(organizations)
+          .where(eq(organizations.id, organizationId))
+          .limit(1);
+        if (!organization) {
+          return { status: "organization_not_found" } as const;
+        }
+        const [inserted] = await transaction
+          .insert(organizationMembers)
+          .values({
+            organizationId,
+            userId,
+            role: "member",
+            status: organization.newMemberStatus
+          })
+          .onConflictDoNothing({
+            target: [
+              organizationMembers.organizationId,
+              organizationMembers.userId
+            ]
+          })
+          .returning({ status: organizationMembers.status });
+        if (!inserted) {
+          return { status: "already_member" } as const;
+        }
+        if (inserted.status === "active" && organization.defaultTeamId) {
+          await transaction
+            .insert(teamMembers)
+            .values({
+              organizationId,
+              teamId: organization.defaultTeamId,
+              userId,
+              role: "member"
+            })
+            .onConflictDoNothing({
+              target: [teamMembers.teamId, teamMembers.userId]
+            });
+        }
+        return {
+          status: "joined",
+          membershipStatus: inserted.status
+        } as const;
+      });
     }
   };
 }

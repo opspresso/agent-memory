@@ -58,12 +58,16 @@ pnpm dev
 
 운영 콘솔은 다음 작업을 제공한다.
 
+- 좌측 메뉴와 상단 메뉴로 구성된 셸에서 조직을 전환하며 작업
 - Memory·문서·Knowledge Graph 통합 검색과 검색 근거 확인
 - Memory revision 생성, version 이력 확인, archive
 - 개인·팀·조직 범위 문서 업로드와 실패한 처리 재시도
 - 검색·종류 필터·관계 집중을 제공하는 Knowledge Graph 관계 지도 탐색
 - AI graph 후보의 source·entity·relationship 검토와 승인·거절
-- 조직 멤버·팀 역할 관리와 MCP 연결 정보 확인
+- 최초 로그인 시 가입할 조직 선택, 조직 정책에 따른 즉시 활성화 또는 승인 대기
+- 조직 회원 목록에서 role·status(승인·차단)·팀 배정 관리, 팀 생성·이름 변경·삭제
+- 조직 설정에서 신규 회원 정책·기본 팀 관리, 조직 생성(전역 admin)·삭제(owner)
+- MCP 연결 정보 확인
 
 ## 기술 구성
 

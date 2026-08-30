@@ -15,7 +15,8 @@ export function createOrganizationAccessRepository(
           id: organizations.id,
           slug: organizations.slug,
           name: organizations.name,
-          role: organizationMembers.role
+          role: organizationMembers.role,
+          status: organizationMembers.status
         })
         .from(organizationMembers)
         .innerJoin(
@@ -44,7 +45,8 @@ export function createOrganizationAccessRepository(
         .where(
           and(
             eq(organizationMembers.organizationId, organizationId),
-            eq(organizationMembers.userId, userId)
+            eq(organizationMembers.userId, userId),
+            eq(organizationMembers.status, "active")
           )
         );
 

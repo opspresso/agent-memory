@@ -4,10 +4,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 const e2eRunId = process.env.E2E_RUN_ID ?? randomUUID();
 process.env.E2E_RUN_ID = e2eRunId;
-const e2eAdminEmails = Array.from(
-  { length: 3 },
-  (_, retry) => `e2e+${e2eRunId}-${retry}@nalbam.com`
-).join(",");
+const e2eAdminEmails = Array.from({ length: 3 }, (_, retry) => [
+  `e2e+${e2eRunId}-${retry}@nalbam.com`,
+  `e2e-admin2+${e2eRunId}-${retry}@nalbam.com`
+])
+  .flat()
+  .join(",");
 
 export default defineConfig({
   testDir: "./e2e",

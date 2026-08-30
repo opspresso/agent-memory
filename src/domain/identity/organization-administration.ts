@@ -1,4 +1,6 @@
 import type {
+  NewMemberStatus,
+  OrganizationMemberStatus,
   OrganizationRole,
   TeamRole
 } from "./organization-access";
@@ -7,6 +9,8 @@ export interface Organization {
   readonly id: string;
   readonly slug: string;
   readonly name: string;
+  readonly newMemberStatus: NewMemberStatus;
+  readonly defaultTeamId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -16,6 +20,7 @@ export interface OrganizationMember {
   readonly email: string;
   readonly name: string;
   readonly role: OrganizationRole;
+  readonly status: OrganizationMemberStatus;
   readonly createdAt: Date;
 }
 
@@ -84,9 +89,15 @@ export function createOrganization(input: NewOrganization): Organization {
     id: input.id,
     slug: normalizedSlug(input.slug),
     name: normalizedName(input.name),
+    newMemberStatus: "active" as const,
+    defaultTeamId: null,
     createdAt: new Date(input.now),
     updatedAt: new Date(input.now)
   });
+}
+
+export function normalizedOrganizationName(name: string): string {
+  return normalizedName(name);
 }
 
 export function createTeam(input: NewTeam): Team {

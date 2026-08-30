@@ -73,8 +73,8 @@ curl -i http://localhost:3100/api/health
 1. `http://localhost:3100`을 연다.
 2. `가입`을 선택한다.
 3. `ADMIN_EMAILS`에 등록한 email로 계정을 만든다.
-4. 로그인 후 `첫 조직 만들기`에서 이름과 slug를 입력한다.
-5. 생성한 사용자는 해당 조직의 `owner`가 된다.
+4. 로그인하면 조직 선택 화면으로 이동한다. `첫 조직 만들기`에서 이름과 slug를 입력한다.
+5. 생성한 사용자는 해당 조직의 `owner`가 된다. 이후 가입하는 사용자는 조직 선택 화면에서 조직을 골라 가입하며, 조직 설정에 따라 즉시 활성화되거나 승인 대기 상태가 된다.
 
 로그인 provider가 화면에 나타나지 않으면 `.env.local`에서 provider 설정을 확인하고 `pnpm dev`를 다시 시작하라. Password 가입에는 `AUTH_PASSWORD=true`와 `AUTH_PASSWORD_SIGNUP=true`가 모두 필요하다.
 

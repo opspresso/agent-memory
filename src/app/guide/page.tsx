@@ -5,8 +5,6 @@ import {
   Button,
   Code,
   Container,
-  Group,
-  Image,
   Paper,
   SimpleGrid,
   Stack,
@@ -15,7 +13,6 @@ import {
   Title
 } from "@mantine/core";
 import {
-  IconArrowLeft,
   IconBinaryTree,
   IconBrain,
   IconCheck,
@@ -29,8 +26,6 @@ import type { Metadata } from "next";
 
 import type { MessageKey } from "../_i18n/messages/en";
 import { getT } from "../_i18n/server";
-import { LocaleToggle } from "../locale-toggle";
-import { ThemeToggle } from "../theme-toggle";
 import classes from "./guide.module.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -87,25 +82,6 @@ export default async function GuidePage() {
   return (
     <Box className={classes.page}>
       <Container className={classes.shell} size="xl">
-        <header className={classes.header}>
-          <Anchor className={classes.brand} component="a" href="/" underline="never">
-            <Image alt="Agent Memory logo" className={classes.logo} src="/logo.png" />
-            <Text c="var(--mantine-color-text)" fw={750}>Agent Memory</Text>
-          </Anchor>
-          <Group gap="xs">
-            <Button
-              component="a"
-              href="/"
-              leftSection={<IconArrowLeft size={16} />}
-              variant="subtle"
-            >
-              {t("guide.console")}
-            </Button>
-            <LocaleToggle />
-            <ThemeToggle />
-          </Group>
-        </header>
-
         <main>
           <section className={classes.hero}>
             <Stack className={classes.heroCopy} gap="lg">
