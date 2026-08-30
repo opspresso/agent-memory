@@ -27,6 +27,7 @@ import type {
 import type { AgentMemoryDatabase } from "../client";
 import { documentChunks, documents } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
+import { scopedReadPredicate } from "./scope-predicates";
 
 type DocumentRow = typeof documents.$inferSelect;
 type ChunkRow = typeof documentChunks.$inferSelect;
@@ -89,23 +90,7 @@ function chunkFromRow(row: ChunkRow): DocumentChunk {
 }
 
 function accessPredicate(access: OrganizationAccess) {
-  if (access.role === "admin" || access.role === "owner") {
-    return sql`true`;
-  }
-  const teamIds = access.teams.map((team) => team.teamId);
-  return or(
-    eq(documents.scopeKind, "organization"),
-    and(
-      eq(documents.scopeKind, "user"),
-      eq(documents.userId, access.userId)
-    ),
-    teamIds.length > 0
-      ? and(
-          eq(documents.scopeKind, "team"),
-          inArray(documents.teamId, teamIds)
-        )
-      : undefined
-  );
+  return scopedReadPredicate(access, documents);
 }
 
 function scoreExpressions(input: DocumentSearchInput) {

@@ -38,6 +38,7 @@ import {
   memoryAccessGrants
 } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
+import { scopedReadPredicate } from "./scope-predicates";
 import {
   knowledgeNodeFromRow,
   knowledgeScopeFromRow,
@@ -68,49 +69,14 @@ export function edgeFromRow(
 }
 
 function nodeAccessPredicate(access: OrganizationAccess): SQL {
-  if (access.role === "admin" || access.role === "owner") {
-    return sql`true`;
-  }
-  const teamIds = access.teams.map((team) => team.teamId);
-  return or(
-    eq(knowledgeNodes.scopeKind, "organization"),
-    and(
-      eq(knowledgeNodes.scopeKind, "user"),
-      eq(knowledgeNodes.userId, access.userId)
-    ),
-    teamIds.length > 0
-      ? and(
-          eq(knowledgeNodes.scopeKind, "team"),
-          inArray(knowledgeNodes.teamId, teamIds)
-        )
-      : undefined
-  )!;
+  return scopedReadPredicate(access, knowledgeNodes);
 }
 
 function edgeAccessPredicate(access: OrganizationAccess): SQL {
-  if (access.role === "admin" || access.role === "owner") {
-    return sql`true`;
-  }
-  const teamIds = access.teams.map((team) => team.teamId);
-  return or(
-    eq(knowledgeEdges.scopeKind, "organization"),
-    and(
-      eq(knowledgeEdges.scopeKind, "user"),
-      eq(knowledgeEdges.userId, access.userId)
-    ),
-    teamIds.length > 0
-      ? and(
-          eq(knowledgeEdges.scopeKind, "team"),
-          inArray(knowledgeEdges.teamId, teamIds)
-        )
-      : undefined
-  )!;
+  return scopedReadPredicate(access, knowledgeEdges);
 }
 
 function memorySourceAccessPredicate(access: OrganizationAccess): SQL {
-  if (access.role === "admin" || access.role === "owner") {
-    return sql`true`;
-  }
   const teamIds = access.teams.map((team) => team.teamId);
   const grantPredicate = or(
     and(
@@ -124,33 +90,20 @@ function memorySourceAccessPredicate(access: OrganizationAccess): SQL {
         )
       : undefined
   );
-  return or(
-    eq(memories.scopeKind, "organization"),
-    and(eq(memories.scopeKind, "user"), eq(memories.userId, access.userId)),
-    teamIds.length > 0
-      ? and(eq(memories.scopeKind, "team"), inArray(memories.teamId, teamIds))
-      : undefined,
+  return scopedReadPredicate(
+    access,
+    memories,
     sql`EXISTS (
       SELECT 1 FROM ${memoryAccessGrants}
       WHERE ${memoryAccessGrants.organizationId} = ${memories.organizationId}
         AND ${memoryAccessGrants.memoryId} = ${memories.id}
         AND ${grantPredicate}
     )`
-  )!;
+  );
 }
 
 function documentSourceAccessPredicate(access: OrganizationAccess): SQL {
-  if (access.role === "admin" || access.role === "owner") {
-    return sql`true`;
-  }
-  const teamIds = access.teams.map((team) => team.teamId);
-  return or(
-    eq(documents.scopeKind, "organization"),
-    and(eq(documents.scopeKind, "user"), eq(documents.userId, access.userId)),
-    teamIds.length > 0
-      ? and(eq(documents.scopeKind, "team"), inArray(documents.teamId, teamIds))
-      : undefined
-  )!;
+  return scopedReadPredicate(access, documents);
 }
 
 function nodeHasVisibleSource(access: OrganizationAccess): SQL {

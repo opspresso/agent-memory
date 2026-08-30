@@ -1,5 +1,5 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -8,7 +8,10 @@ import {
   createDatabase,
   type AgentMemoryDatabase
 } from "@/infrastructure/database/client";
-import { knowledgeNodeMerges } from "@/infrastructure/database/schema";
+import {
+  documents as documentsTable,
+  knowledgeNodeMerges
+} from "@/infrastructure/database/schema";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
@@ -16,6 +19,10 @@ import { createDocumentRepository } from "@/infrastructure/database/repositories
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
 import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
 import { createKnowledgeOntologyReader } from "@/infrastructure/database/repositories/knowledge-ontology-reader";
+import {
+  scopedManagePredicate,
+  scopedReadPredicate
+} from "@/infrastructure/database/repositories/scope-predicates";
 import { createAuth } from "@/lib/create-auth";
 import { createMemory, reviseMemory } from "@/domain/memory/memory";
 import {
@@ -27,7 +34,11 @@ import {
   createKnowledgeNode
 } from "@/domain/knowledge/knowledge-graph";
 import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
-import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import {
+  canAccessScopedResource,
+  type OrganizationAccess,
+  type ScopedResource
+} from "@/domain/identity/organization-access";
 import {
   createOrganization,
   createTeam
@@ -439,6 +450,115 @@ describe("PostgreSQL schema", () => {
     await expect(
       ontologyReader.findByOrganization("00000000-0000-0000-0000-0000000000ff")
     ).resolves.toBeNull();
+  });
+
+  it("keeps SQL scope predicates equivalent to the domain access policy", async () => {
+    const organization = "00000000-0000-0000-0000-000000000051";
+    const user = "10000000-0000-0000-0000-000000000051";
+    const otherUser = "10000000-0000-0000-0000-000000000052";
+    const teamA = "20000000-0000-0000-0000-000000000051";
+    const teamB = "20000000-0000-0000-0000-000000000052";
+    await pool.query(
+      `INSERT INTO organizations (id, slug, name)
+       VALUES ($1, 'organization-s', 'Organization S')`,
+      [organization]
+    );
+    await pool.query(
+      `INSERT INTO users (id, email, name)
+       VALUES ($1, 'user-s@example.com', 'User S'),
+              ($2, 'user-t@example.com', 'User T')`,
+      [user, otherUser]
+    );
+    await pool.query(
+      `INSERT INTO organization_members (organization_id, user_id)
+       VALUES ($1, $2), ($1, $3)`,
+      [organization, user, otherUser]
+    );
+    await pool.query(
+      `INSERT INTO teams (id, organization_id, slug, name)
+       VALUES ($1, $3, 'team-s', 'Team S'), ($2, $3, 'team-t', 'Team T')`,
+      [teamA, teamB, organization]
+    );
+
+    const repository = createDocumentRepository(db);
+    const createdAt = new Date("2026-08-26T00:00:00.000Z");
+    const scopes: readonly (readonly [string, ScopedResource])[] = [
+      [
+        "40000000-0000-0000-0000-000000000051",
+        { kind: "organization", organizationId: organization }
+      ],
+      [
+        "40000000-0000-0000-0000-000000000052",
+        { kind: "team", organizationId: organization, teamId: teamA }
+      ],
+      [
+        "40000000-0000-0000-0000-000000000053",
+        { kind: "team", organizationId: organization, teamId: teamB }
+      ],
+      [
+        "40000000-0000-0000-0000-000000000054",
+        { kind: "user", organizationId: organization, userId: user }
+      ],
+      [
+        "40000000-0000-0000-0000-000000000055",
+        { kind: "user", organizationId: organization, userId: otherUser }
+      ]
+    ];
+    for (const [id, scope] of scopes) {
+      await repository.save(
+        createDocument({
+          id,
+          scope,
+          title: `Scope fixture ${id}`,
+          objectKey: `organizations/${organization}/documents/${id}/source`,
+          checksum: "c".repeat(64),
+          mimeType: "text/plain",
+          sizeBytes: 16,
+          createdBy: user,
+          now: createdAt
+        })
+      );
+    }
+
+    const accessVariants: readonly OrganizationAccess[] = [
+      { organizationId: organization, userId: user, role: "member", teams: [] },
+      {
+        organizationId: organization,
+        userId: user,
+        role: "member",
+        teams: [{ teamId: teamA, role: "member" }]
+      },
+      {
+        organizationId: organization,
+        userId: user,
+        role: "member",
+        teams: [{ teamId: teamA, role: "manager" }]
+      },
+      { organizationId: organization, userId: user, role: "admin", teams: [] },
+      { organizationId: organization, userId: user, role: "owner", teams: [] }
+    ];
+    for (const access of accessVariants) {
+      for (const action of ["read", "manage"] as const) {
+        const predicate =
+          action === "read"
+            ? scopedReadPredicate(access, documentsTable)
+            : scopedManagePredicate(access, documentsTable);
+        const rows = await db
+          .select({ id: documentsTable.id })
+          .from(documentsTable)
+          .where(
+            and(eq(documentsTable.organizationId, organization), predicate)
+          );
+        const expected = scopes
+          .filter(([, scope]) => canAccessScopedResource(access, action, scope))
+          .map(([id]) => id)
+          .toSorted();
+        expect(
+          rows.map((row) => row.id).toSorted(),
+          `${access.role} teams=${JSON.stringify(access.teams)} action=${action}`
+        ).toEqual(expected);
+      }
+    }
   });
 
   it("applies join policy, membership status, and default team assignment", async () => {
@@ -1158,6 +1278,8 @@ describe("PostgreSQL schema", () => {
     await expect(
       repository.search({ access, query: "rollback", limit: 10 })
     ).resolves.toEqual([]);
+    // Re-accepting an already promoted candidate stays idempotent even after
+    // its source document is archived; only new promotions require readiness.
     await expect(
       candidateRepository.accept({
         candidateId: candidate.id,
@@ -1167,7 +1289,10 @@ describe("PostgreSQL schema", () => {
         reviewedAt: createdAt,
         reviewedBy: user
       })
-    ).resolves.toBeNull();
+    ).resolves.toMatchObject({
+      status: "promoted",
+      candidate: { status: "accepted" }
+    });
   });
 
   it("upserts, searches, and traverses only accessible knowledge", async () => {
