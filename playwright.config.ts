@@ -4,10 +4,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 const e2eRunId = process.env.E2E_RUN_ID ?? randomUUID();
 process.env.E2E_RUN_ID = e2eRunId;
-const e2eAdminEmails = Array.from(
-  { length: 3 },
-  (_, retry) => `e2e+${e2eRunId}-${retry}@nalbam.com`
-).join(",");
+const e2eAdminEmails = Array.from({ length: 3 }, (_, retry) => [
+  `e2e+${e2eRunId}-${retry}@nalbam.com`,
+  `e2e-admin2+${e2eRunId}-${retry}@nalbam.com`
+])
+  .flat()
+  .join(",");
 
 export default defineConfig({
   testDir: "./e2e",
@@ -15,6 +17,9 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
+  // The dev web server compiles each route on first visit; on slower CI
+  // runners that regularly exceeds Playwright's 5s default.
+  expect: { timeout: 15_000 },
   use: {
     baseURL: "http://127.0.0.1:3110",
     permissions: ["clipboard-read", "clipboard-write"],
@@ -27,9 +32,11 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: "./node_modules/.bin/next dev --hostname 127.0.0.1 --port 3110",
+    // A production server keeps route responses fast and avoids the dev
+    // compiler's memory pressure on shared CI runners.
+    command:
+      "./node_modules/.bin/next build && ./node_modules/.bin/next start --hostname 127.0.0.1 --port 3110",
     env: {
-      WATCHPACK_POLLING: "true",
       NEXT_DIST_DIR: ".next-e2e",
       AUTH_PASSWORD: "true",
       AUTH_PASSWORD_SIGNUP: "true",
@@ -44,7 +51,7 @@ export default defineConfig({
       OIDC_ISSUER: ""
     },
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 300_000,
     url: "http://127.0.0.1:3110"
   }
 });

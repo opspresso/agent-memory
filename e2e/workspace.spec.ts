@@ -43,11 +43,108 @@ async function postJson<T>(
   );
 }
 
+test("onboards, approves, and manages members through the console", async ({
+  browser,
+  page
+}, testInfo) => {
+  test.skip(!authenticatedE2e, "requires a disposable migrated PostgreSQL database");
+  test.setTimeout(90_000);
+  const runId = process.env.E2E_RUN_ID;
+  if (!runId) {
+    throw new Error("E2E_RUN_ID must be configured by Playwright");
+  }
+  const adminEmail = `e2e-admin2+${runId}-${testInfo.retry}@nalbam.com`;
+  const memberEmail = `e2e-member+${runId}-${testInfo.retry}@nalbam.com`;
+  const password = "agent-memory-e2e-password";
+  // Retries reuse the same database, so the display name must be unique
+  // per attempt or the onboarding card locator matches stale organizations.
+  const approvalOrganizationName = `E2E Approval Organization R${testInfo.retry}`;
+
+  await page.context().addCookies([
+    { name: "agent-memory-locale", value: "ko", domain: "127.0.0.1", path: "/" }
+  ]);
+  await page.goto("/");
+  await page.getByText("가입", { exact: true }).click();
+  await page.getByLabel("이름").fill("E2E Admin Two");
+  await page.getByLabel("이메일").fill(adminEmail);
+  await page.getByLabel("비밀번호").fill(password);
+  await page.getByRole("button", { name: "계정 만들기" }).click();
+  await expect(
+    page.getByRole("heading", { name: "참여할 조직을 선택하세요" })
+  ).toBeVisible();
+
+  const organization = await postJson<{ id: string }>(
+    page,
+    "/api/organizations",
+    {
+      name: approvalOrganizationName,
+      slug: `e2e-approval-${runId}-${testInfo.retry}`
+    }
+  );
+  await postJson<{ id: string }>(
+    page,
+    `/api/organizations/${organization.id}/teams`,
+    { name: "E2E Default Team", slug: `e2e-default-${runId}-${testInfo.retry}` }
+  );
+
+  await page.goto("/settings");
+  await expect(
+    page.getByRole("heading", { name: "조직 설정" })
+  ).toBeVisible();
+  await page.getByRole("combobox", { name: "신규 회원 정책" }).click();
+  await page.getByRole("option", { name: "승인 대기" }).click();
+  await page.getByRole("combobox", { name: "기본 팀" }).click();
+  await page.getByRole("option", { name: "E2E Default Team" }).click();
+  await page.getByRole("button", { name: "설정 저장" }).click();
+  await expect(page.getByText("설정을 저장했습니다.")).toBeVisible();
+
+  const memberContext = await browser.newContext();
+  const memberPage = await memberContext.newPage();
+  await memberContext.addCookies([
+    { name: "agent-memory-locale", value: "ko", domain: "127.0.0.1", path: "/" }
+  ]);
+  await memberPage.goto("/");
+  await memberPage.getByText("가입", { exact: true }).click();
+  await memberPage.getByLabel("이름").fill("E2E Member");
+  await memberPage.getByLabel("이메일").fill(memberEmail);
+  await memberPage.getByLabel("비밀번호").fill(password);
+  await memberPage.getByRole("button", { name: "계정 만들기" }).click();
+  await expect(
+    memberPage.getByRole("heading", { name: "참여할 조직을 선택하세요" })
+  ).toBeVisible();
+  await memberPage
+    .locator(".mantine-Paper-root", { hasText: approvalOrganizationName })
+    .getByRole("button", { name: "가입" })
+    .click();
+  await expect(
+    memberPage.getByText("조직 관리자의 승인을 기다리고 있습니다.")
+  ).toBeVisible();
+
+  await page.goto("/members");
+  await expect(page.getByText(memberEmail, { exact: true })).toBeVisible();
+  await expect(page.getByText("승인 대기", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "승인" }).click();
+  await expect(page.getByText("회원을 승인했습니다.")).toBeVisible();
+  await expect(page.getByText("E2E Default Team").first()).toBeVisible();
+
+  await memberPage.goto("/");
+  await expect(
+    memberPage.getByRole("heading", { name: "공유 Context를 한곳에서 관리합니다." })
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: `${memberEmail}에 대한 작업` }).click();
+  await page.getByRole("menuitem", { name: "차단" }).click();
+  await expect(page.getByText("회원을 차단했습니다.")).toBeVisible();
+  await expect(page.getByText("차단됨", { exact: true })).toBeVisible();
+
+  await memberContext.close();
+});
+
 test("manages memory lifecycle and explores grounded knowledge", async ({
   page
 }, testInfo) => {
   test.skip(!authenticatedE2e, "requires a disposable migrated PostgreSQL database");
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const runId = process.env.E2E_RUN_ID;
   if (!runId) {
     throw new Error("E2E_RUN_ID must be configured by Playwright");
@@ -69,6 +166,9 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByLabel("비밀번호").fill("agent-memory-e2e-password");
   await page.getByRole("button", { name: "계정 만들기" }).click();
 
+  await expect(
+    page.getByRole("heading", { name: "참여할 조직을 선택하세요" })
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "첫 조직 만들기" })).toBeVisible();
   const organization = await postJson<{ id: string }>(
     page,
@@ -87,13 +187,13 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     name: "E2E Other Organization",
     slug: `e2e-other-organization-${runId}-${testInfo.retry}`
   });
-  await page.reload();
+  await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "공유 Context를 한곳에서 관리합니다." })
   ).toBeVisible();
   const organizationId = organization.id;
 
-  await page.getByRole("tab", { name: "문서 수집" }).click();
+  await page.getByRole("link", { name: "문서 수집" }).click();
   await page.getByRole("combobox", { name: "공유 범위" }).click();
   await expect(
     page.getByRole("option", { name: "조직 · 모든 조직 멤버와 공유" })
@@ -131,7 +231,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByRole("combobox", { name: "활성 조직" }).click();
   await page.getByRole("option", { name: "E2E Organization" }).click();
 
-  await page.getByRole("tab", { name: "Agent 연결" }).click();
+  await page.getByRole("link", { name: "Agent 연결" }).click();
   const mcpEndpoint = `${new URL(page.url()).origin}/api/organizations/${organizationId}/mcp`;
   await expect(page.getByText(mcpEndpoint, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "MCP endpoint 복사" }).click();
@@ -199,13 +299,13 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
       });
     }
   );
-  await page.getByRole("tab", { name: "AI 후보 검토" }).click();
+  await page.getByRole("link", { name: "AI 후보 검토" }).click();
   await expect(
     page.getByText(/같은 scope와 이름의 기존 node가 1개 있습니다/)
   ).toBeVisible();
   expect(duplicateRequests).toBe(1);
 
-  await page.getByRole("tab", { name: "통합 검색" }).click();
+  await page.getByRole("link", { name: "통합 검색" }).click();
 
   const memory = await postJson<{ id: string }>(
     page,

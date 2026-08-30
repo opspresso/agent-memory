@@ -7,11 +7,43 @@ import {
   teamIdSchema,
   teamMemberSchema
 } from "@/lib/organization-administration-schemas";
-import { upsertTeamMemberRecord } from "@/lib/organization-administration-service";
+import {
+  listTeamMemberRecords,
+  upsertTeamMemberRecord
+} from "@/lib/organization-administration-service";
 import { organizationIdSchema } from "@/lib/memory-schemas";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string; teamId: string }>;
+}
+
+export async function GET(request: Request, context: RouteContext) {
+  const params = await context.params;
+  const organizationId = organizationIdSchema.safeParse(params.organizationId);
+  const teamId = teamIdSchema.safeParse(params.teamId);
+  if (!organizationId.success || !teamId.success) {
+    return Response.json({ error: "Invalid resource ID" }, { status: 400 });
+  }
+  const authorization = await authorizeOrganizationRequest(
+    request,
+    organizationId.data
+  );
+  if (!authorization.authorized) {
+    return authorization.response;
+  }
+  try {
+    const members = await listTeamMemberRecords(
+      authorization.access,
+      teamId.data
+    );
+    return Response.json({ members, total: members.length });
+  } catch (error) {
+    const response = organizationAdministrationErrorResponse(error);
+    if (response) {
+      return response;
+    }
+    throw error;
+  }
 }
 
 export async function PUT(request: Request, context: RouteContext) {

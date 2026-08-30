@@ -11,12 +11,18 @@ import {
 } from "@mantine/core";
 import type { Metadata } from "next";
 import { Chakra_Petch, Figtree, JetBrains_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
+
+import { listOrganizationMemberships } from "@/lib/organization-service";
+import { getSessionUser } from "@/lib/session";
 
 import packageJson from "../../package.json";
 
+import { AppShellFrame } from "./app-shell";
 import { I18nProvider } from "./_i18n/provider";
 import { getT, resolveLocale } from "./_i18n/server";
+import { OrganizationProvider } from "./organization-context";
 import { theme } from "./theme";
 
 import "./globals.css";
@@ -45,6 +51,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const locale = await resolveLocale();
+  const user = await getSessionUser(new Headers(await headers()));
+  const organizations = user
+    ? await listOrganizationMemberships(user.id)
+    : [];
 
   return (
     <html
@@ -58,31 +68,37 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <body>
         <MantineProvider theme={theme} defaultColorScheme="auto">
           <I18nProvider locale={locale}>
-            {children}
-            <Box
-              component="footer"
-              px="md"
-              py="sm"
-              style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}
-            >
-              <Group gap="xs" justify="center" wrap="wrap">
-                <Text c="dimmed" size="xs">
-                  Agent Memory v{packageJson.version}
-                </Text>
-                <Text c="dimmed" size="xs">·</Text>
-                <Text c="dimmed" size="xs">
-                  © {new Date().getUTCFullYear()} {" "}
-                  <Anchor
-                    c="dimmed"
-                    href="https://opspresso.com"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Opspresso
-                  </Anchor>
-                </Text>
-              </Group>
-            </Box>
+            <OrganizationProvider organizations={organizations}>
+              <AppShellFrame user={user} version={packageJson.version}>
+                {children}
+                <Box
+                  component="footer"
+                  mt="xl"
+                  py="sm"
+                  style={{
+                    borderTop: "1px solid var(--mantine-color-default-border)"
+                  }}
+                >
+                  <Group gap="xs" justify="center" wrap="wrap">
+                    <Text c="dimmed" size="xs">
+                      Agent Memory v{packageJson.version}
+                    </Text>
+                    <Text c="dimmed" size="xs">·</Text>
+                    <Text c="dimmed" size="xs">
+                      © {new Date().getUTCFullYear()} {" "}
+                      <Anchor
+                        c="dimmed"
+                        href="https://opspresso.com"
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Opspresso
+                      </Anchor>
+                    </Text>
+                  </Group>
+                </Box>
+              </AppShellFrame>
+            </OrganizationProvider>
           </I18nProvider>
         </MantineProvider>
       </body>

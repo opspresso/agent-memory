@@ -3,7 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildCreateOrganization,
   buildCreateTeam,
+  buildDeleteOrganization,
+  buildDeleteTeam,
+  buildJoinOrganization,
   buildListOrganizationMembers,
+  buildListTeamMembers,
+  buildRemoveOrganizationMember,
+  buildUpdateOrganizationMember,
+  buildUpdateOrganizationSettings,
   buildUpsertOrganizationMember,
   buildUpsertTeamMember
 } from "@/application/identity/manage-organization";
@@ -23,11 +30,23 @@ function repository(
 ): OrganizationAdministrationRepository {
   return {
     createOrganization: vi.fn(),
+    findOrganization: vi.fn(),
+    updateOrganizationSettings: vi.fn(),
+    deleteOrganization: vi.fn(),
     listOrganizationMembers: vi.fn(),
+    findOrganizationMember: vi.fn(),
     upsertOrganizationMember: vi.fn(),
+    updateOrganizationMember: vi.fn(),
+    removeOrganizationMember: vi.fn(),
     createTeam: vi.fn(),
     listTeams: vi.fn(),
+    updateTeam: vi.fn(),
+    deleteTeam: vi.fn(),
+    listTeamMembers: vi.fn(),
     upsertTeamMember: vi.fn(),
+    removeTeamMember: vi.fn(),
+    listJoinableOrganizations: vi.fn(),
+    joinOrganization: vi.fn(),
     ...overrides
   };
 }
@@ -47,7 +66,9 @@ describe("organization administration", () => {
       .toMatchObject({
         id: "organization-1",
         slug: "platform-team",
-        name: "Platform Team"
+        name: "Platform Team",
+        newMemberStatus: "pending",
+        defaultTeamId: null
       });
     expect(createOrganization).toHaveBeenCalledWith(
       expect.objectContaining({ id: "organization-1" }),
@@ -68,6 +89,7 @@ describe("organization administration", () => {
         email: "member@example.com",
         name: "Member",
         role: "owner",
+        status: "active",
         createdAt: now
       }
     });
@@ -130,5 +152,149 @@ describe("organization administration", () => {
     await expect(
       create({ ...ownerAccess, role: "member" }, "platform", "Platform")
     ).rejects.toThrow("organization administration access denied");
+  });
+
+  it("updates organization settings for administrators only", async () => {
+    const updateOrganizationSettings = vi.fn().mockImplementation(
+      async (_organizationId, update) => ({
+        status: "updated",
+        organization: {
+          id: "organization-1",
+          slug: "platform",
+          name: update.name ?? "Platform",
+          newMemberStatus: update.newMemberStatus ?? "active",
+          defaultTeamId: update.defaultTeamId ?? null,
+          createdAt: now,
+          updatedAt: now
+        }
+      })
+    );
+    const update = buildUpdateOrganizationSettings(
+      repository({ updateOrganizationSettings })
+    );
+
+    await expect(
+      update({ ...ownerAccess, role: "member" }, { newMemberStatus: "pending" })
+    ).rejects.toThrow("organization administration access denied");
+    await expect(
+      update(ownerAccess, { name: " Platform Guild ", newMemberStatus: "pending" })
+    ).resolves.toMatchObject({
+      name: "Platform Guild",
+      newMemberStatus: "pending"
+    });
+    expect(updateOrganizationSettings).toHaveBeenCalledWith(
+      "organization-1",
+      expect.objectContaining({ name: "Platform Guild" })
+    );
+  });
+
+  it("reserves organization deletion for owners", async () => {
+    const deleteOrganization = vi.fn().mockResolvedValue(true);
+    const remove = buildDeleteOrganization(
+      repository({ deleteOrganization })
+    );
+
+    await expect(
+      remove({ ...ownerAccess, role: "admin" })
+    ).rejects.toThrow("organization administration access denied");
+    await expect(remove(ownerAccess)).resolves.toBeUndefined();
+    expect(deleteOrganization).toHaveBeenCalledWith("organization-1");
+  });
+
+  it("protects members from self and owner-target changes", async () => {
+    const findOrganizationMember = vi.fn().mockResolvedValue({
+      userId: "user-2",
+      email: "member@example.com",
+      name: "Member",
+      role: "owner",
+      status: "active",
+      createdAt: now
+    });
+    const updateOrganizationMember = vi.fn().mockResolvedValue({
+      status: "saved",
+      member: {
+        userId: "user-2",
+        email: "member@example.com",
+        name: "Member",
+        role: "owner",
+        status: "blocked",
+        createdAt: now
+      }
+    });
+    const update = buildUpdateOrganizationMember(
+      repository({ findOrganizationMember, updateOrganizationMember })
+    );
+
+    await expect(
+      update(ownerAccess, "user-1", { status: "blocked" })
+    ).rejects.toThrow("organization members cannot change their own membership");
+    await expect(
+      update({ ...ownerAccess, role: "admin" }, "user-2", { status: "blocked" })
+    ).rejects.toThrow("organization administration access denied");
+    await expect(
+      update(ownerAccess, "user-2", { status: "blocked" })
+    ).resolves.toMatchObject({ status: "blocked" });
+
+    const removeOrganizationMember = vi.fn().mockResolvedValue({
+      status: "removed"
+    });
+    const remove = buildRemoveOrganizationMember(
+      repository({ findOrganizationMember, removeOrganizationMember })
+    );
+    await expect(remove(ownerAccess, "user-1")).rejects.toThrow(
+      "organization members cannot change their own membership"
+    );
+    await expect(remove(ownerAccess, "user-2")).resolves.toBeUndefined();
+  });
+
+  it("limits team member listing to administrators and team members", async () => {
+    const listTeamMembers = vi.fn().mockResolvedValue([]);
+    const list = buildListTeamMembers(repository({ listTeamMembers }));
+
+    await expect(
+      list({ ...ownerAccess, role: "member" }, "team-1")
+    ).rejects.toThrow("organization administration access denied");
+    await expect(
+      list(
+        { ...ownerAccess, role: "member", teams: [{ teamId: "team-1", role: "member" }] },
+        "team-1"
+      )
+    ).resolves.toEqual([]);
+    await expect(list(ownerAccess, "team-1")).resolves.toEqual([]);
+  });
+
+  it("reserves team deletion for organization administrators", async () => {
+    const deleteTeam = vi.fn().mockResolvedValue(true);
+    const remove = buildDeleteTeam(repository({ deleteTeam }));
+    const managerAccess: OrganizationAccess = {
+      ...ownerAccess,
+      role: "member",
+      teams: [{ teamId: "team-1", role: "manager" }]
+    };
+
+    await expect(remove(managerAccess, "team-1")).rejects.toThrow(
+      "organization administration access denied"
+    );
+    await expect(remove(ownerAccess, "team-1")).resolves.toBeUndefined();
+  });
+
+  it("joins an organization with the configured membership status", async () => {
+    const joinOrganization = vi.fn().mockResolvedValue({
+      status: "joined",
+      membershipStatus: "pending"
+    });
+    const join = buildJoinOrganization(repository({ joinOrganization }));
+
+    await expect(join("user-1", "organization-1")).resolves.toBe("pending");
+    expect(joinOrganization).toHaveBeenCalledWith("organization-1", "user-1");
+
+    const alreadyMember = buildJoinOrganization(
+      repository({
+        joinOrganization: vi.fn().mockResolvedValue({ status: "already_member" })
+      })
+    );
+    await expect(alreadyMember("user-1", "organization-1")).rejects.toThrow(
+      "user already belongs to this organization"
+    );
   });
 });

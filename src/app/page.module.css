@@ -22,8 +22,8 @@
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.75fr);
   gap: clamp(3rem, 7vw, 7rem);
   align-items: center;
-  min-height: calc(100vh - 112px);
-  padding-block: 4rem;
+  min-height: calc(100vh - 320px);
+  padding-block: 3rem;
 }
 
 .intro {

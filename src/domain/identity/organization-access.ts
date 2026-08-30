@@ -1,6 +1,17 @@
 export const organizationRoles = ["member", "admin", "owner"] as const;
 export type OrganizationRole = (typeof organizationRoles)[number];
 
+export const organizationMemberStatuses = [
+  "active",
+  "pending",
+  "blocked"
+] as const;
+export type OrganizationMemberStatus =
+  (typeof organizationMemberStatuses)[number];
+
+export const newMemberStatuses = ["active", "pending"] as const;
+export type NewMemberStatus = (typeof newMemberStatuses)[number];
+
 export const teamRoles = ["member", "manager"] as const;
 export type TeamRole = (typeof teamRoles)[number];
 

@@ -259,7 +259,8 @@ describe("PostgreSQL schema", () => {
         id: organization,
         slug: "organization-c",
         name: "Organization C",
-        role: "admin"
+        role: "admin",
+        status: "active"
       }
     ]);
     await expect(repository.findByUser(organization, user)).resolves.toEqual({
@@ -377,6 +378,128 @@ describe("PostgreSQL schema", () => {
       [organizationId]
     );
     expect(ownerCount.rows[0]?.total).toBe(1);
+  });
+
+  it("applies join policy, membership status, and default team assignment", async () => {
+    const organizationId = "00000000-0000-0000-0000-000000000021";
+    const ownerId = "10000000-0000-0000-0000-000000000021";
+    const joinerId = "10000000-0000-0000-0000-000000000022";
+    const teamId = "20000000-0000-0000-0000-000000000021";
+    const createdAt = new Date("2026-08-26T00:00:00.000Z");
+    await pool.query(
+      `INSERT INTO users (id, email, name)
+       VALUES ($1, 'owner-p@example.com', 'Owner P'),
+              ($2, 'joiner-p@example.com', 'Joiner P')`,
+      [ownerId, joinerId]
+    );
+    const administration = createOrganizationAdministrationRepository(db);
+    const access = createOrganizationAccessRepository(db);
+    await administration.createOrganization(
+      createOrganization({
+        id: organizationId,
+        slug: "organization-p",
+        name: "Organization P",
+        now: createdAt
+      }),
+      ownerId
+    );
+    await administration.createTeam(
+      createTeam({
+        id: teamId,
+        organizationId,
+        slug: "team-p",
+        name: "Team P",
+        now: createdAt
+      })
+    );
+    await expect(
+      administration.updateOrganizationSettings(organizationId, {
+        newMemberStatus: "pending",
+        defaultTeamId: teamId
+      })
+    ).resolves.toMatchObject({
+      status: "updated",
+      organization: { newMemberStatus: "pending", defaultTeamId: teamId }
+    });
+
+    await expect(
+      administration.listJoinableOrganizations(joinerId)
+    ).resolves.toContainEqual({
+      id: organizationId,
+      slug: "organization-p",
+      name: "Organization P"
+    });
+    await expect(
+      administration.joinOrganization(organizationId, joinerId)
+    ).resolves.toEqual({ status: "joined", membershipStatus: "pending" });
+    await expect(
+      administration.joinOrganization(organizationId, joinerId)
+    ).resolves.toEqual({ status: "already_member" });
+    await expect(
+      administration.listJoinableOrganizations(joinerId)
+    ).resolves.not.toContainEqual(
+      expect.objectContaining({ id: organizationId })
+    );
+
+    await expect(
+      access.findByUser(organizationId, joinerId)
+    ).resolves.toBeNull();
+
+    await expect(
+      administration.updateOrganizationMember(organizationId, joinerId, {
+        status: "active"
+      })
+    ).resolves.toMatchObject({
+      status: "saved",
+      member: { status: "active" }
+    });
+    await expect(
+      access.findByUser(organizationId, joinerId)
+    ).resolves.toMatchObject({
+      role: "member",
+      teams: [{ teamId, role: "member" }]
+    });
+
+    await expect(
+      administration.updateOrganizationMember(organizationId, joinerId, {
+        status: "blocked"
+      })
+    ).resolves.toMatchObject({ status: "saved" });
+    await expect(
+      access.findByUser(organizationId, joinerId)
+    ).resolves.toBeNull();
+    await expect(
+      administration.upsertOrganizationMember(
+        organizationId,
+        "joiner-p@example.com",
+        "admin"
+      )
+    ).resolves.toMatchObject({
+      status: "saved",
+      member: { role: "admin", status: "blocked" }
+    });
+
+    await expect(
+      administration.updateOrganizationMember(organizationId, ownerId, {
+        status: "blocked"
+      })
+    ).resolves.toEqual({ status: "owner_immutable" });
+    await expect(
+      administration.removeOrganizationMember(organizationId, ownerId)
+    ).resolves.toEqual({ status: "owner_immutable" });
+    await expect(
+      administration.removeOrganizationMember(organizationId, joinerId)
+    ).resolves.toEqual({ status: "removed" });
+
+    await expect(
+      administration.deleteOrganization(organizationId)
+    ).resolves.toBe(true);
+    const remaining = await pool.query<{ total: number }>(
+      `SELECT count(*)::int AS total FROM organization_members
+       WHERE organization_id = $1`,
+      [organizationId]
+    );
+    expect(remaining.rows[0]?.total).toBe(0);
   });
 
   it("persists revisions and searches only accessible active memory", async () => {

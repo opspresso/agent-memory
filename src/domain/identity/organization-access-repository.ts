@@ -1,10 +1,14 @@
-import type { OrganizationAccess } from "./organization-access";
+import type {
+  OrganizationAccess,
+  OrganizationMemberStatus
+} from "./organization-access";
 
 export interface OrganizationMembership {
   readonly id: string;
   readonly slug: string;
   readonly name: string;
   readonly role: OrganizationAccess["role"];
+  readonly status: OrganizationMemberStatus;
 }
 
 export interface OrganizationAccessRepository {

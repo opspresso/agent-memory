@@ -1,12 +1,18 @@
 import type {
   OrganizationAccess,
+  OrganizationMemberStatus,
   OrganizationRole,
   TeamRole
 } from "@/domain/identity/organization-access";
-import type { OrganizationAdministrationRepository } from "@/domain/identity/organization-administration-repository";
+import type {
+  OrganizationAdministrationRepository,
+  OrganizationMemberUpdate,
+  OrganizationSettingsUpdate
+} from "@/domain/identity/organization-administration-repository";
 import {
   createOrganization,
   createTeam,
+  normalizedOrganizationName,
   type Organization,
   type OrganizationMember,
   type Team,
@@ -27,6 +33,13 @@ export class OrganizationSlugConflictError extends Error {
   }
 }
 
+export class OrganizationNotFoundError extends Error {
+  constructor() {
+    super("organization not found");
+    this.name = "OrganizationNotFoundError";
+  }
+}
+
 export class OrganizationMemberNotFoundError extends Error {
   constructor() {
     super("organization member not found");
@@ -38,6 +51,20 @@ export class OrganizationOwnerImmutableError extends Error {
   constructor() {
     super("last organization owner role cannot be changed");
     this.name = "OrganizationOwnerImmutableError";
+  }
+}
+
+export class OrganizationSelfManagementError extends Error {
+  constructor() {
+    super("organization members cannot change their own membership");
+    this.name = "OrganizationSelfManagementError";
+  }
+}
+
+export class AlreadyOrganizationMemberError extends Error {
+  constructor() {
+    super("user already belongs to this organization");
+    this.name = "AlreadyOrganizationMemberError";
   }
 }
 
@@ -97,6 +124,62 @@ export function buildCreateOrganization(dependencies: CreateDependencies) {
   };
 }
 
+export function buildGetOrganization(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(
+    access: OrganizationAccess
+  ): Promise<Organization> {
+    const organization = await repository.findOrganization(
+      access.organizationId
+    );
+    if (!organization) {
+      throw new OrganizationNotFoundError();
+    }
+    return organization;
+  };
+}
+
+export function buildUpdateOrganizationSettings(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(
+    access: OrganizationAccess,
+    update: OrganizationSettingsUpdate
+  ): Promise<Organization> {
+    if (!canManageOrganization(access)) {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    const result = await repository.updateOrganizationSettings(
+      access.organizationId,
+      update.name === undefined
+        ? update
+        : { ...update, name: normalizedOrganizationName(update.name) }
+    );
+    if (result.status === "organization_not_found") {
+      throw new OrganizationNotFoundError();
+    }
+    if (result.status === "team_not_found") {
+      throw new TeamNotFoundError();
+    }
+    return result.organization;
+  };
+}
+
+export function buildDeleteOrganization(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(access: OrganizationAccess): Promise<void> {
+    if (access.role !== "owner") {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    const deleted = await repository.deleteOrganization(access.organizationId);
+    if (!deleted) {
+      throw new OrganizationNotFoundError();
+    }
+  };
+}
+
 export function buildListOrganizationMembers(
   repository: OrganizationAdministrationRepository
 ) {
@@ -139,6 +222,84 @@ export function buildUpsertOrganizationMember(
   };
 }
 
+export function buildUpdateOrganizationMember(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(
+    access: OrganizationAccess,
+    userId: string,
+    update: OrganizationMemberUpdate
+  ): Promise<OrganizationMember> {
+    if (!canManageOrganization(access)) {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    if (userId === access.userId) {
+      throw new OrganizationSelfManagementError();
+    }
+    if (update.role === "owner" && access.role !== "owner") {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    const target = await repository.findOrganizationMember(
+      access.organizationId,
+      userId
+    );
+    if (!target) {
+      throw new OrganizationMemberNotFoundError();
+    }
+    if (target.role === "owner" && access.role !== "owner") {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    const result = await repository.updateOrganizationMember(
+      access.organizationId,
+      userId,
+      update
+    );
+    if (result.status === "member_not_found") {
+      throw new OrganizationMemberNotFoundError();
+    }
+    if (result.status === "owner_immutable") {
+      throw new OrganizationOwnerImmutableError();
+    }
+    return result.member;
+  };
+}
+
+export function buildRemoveOrganizationMember(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(
+    access: OrganizationAccess,
+    userId: string
+  ): Promise<void> {
+    if (!canManageOrganization(access)) {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    if (userId === access.userId) {
+      throw new OrganizationSelfManagementError();
+    }
+    const target = await repository.findOrganizationMember(
+      access.organizationId,
+      userId
+    );
+    if (!target) {
+      throw new OrganizationMemberNotFoundError();
+    }
+    if (target.role === "owner" && access.role !== "owner") {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    const result = await repository.removeOrganizationMember(
+      access.organizationId,
+      userId
+    );
+    if (result.status === "member_not_found") {
+      throw new OrganizationMemberNotFoundError();
+    }
+    if (result.status === "owner_immutable") {
+      throw new OrganizationOwnerImmutableError();
+    }
+  };
+}
+
 export function buildCreateTeam(dependencies: CreateDependencies) {
   return async function execute(
     access: OrganizationAccess,
@@ -171,6 +332,68 @@ export function buildListTeams(repository: OrganizationAdministrationRepository)
   };
 }
 
+export function buildUpdateTeam(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(
+    access: OrganizationAccess,
+    teamId: string,
+    name: string
+  ): Promise<Team> {
+    if (!canManageTeam(access, teamId)) {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    const result = await repository.updateTeam(
+      access.organizationId,
+      teamId,
+      normalizedOrganizationName(name)
+    );
+    if (result.status === "team_not_found") {
+      throw new TeamNotFoundError();
+    }
+    return result.team;
+  };
+}
+
+export function buildDeleteTeam(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(
+    access: OrganizationAccess,
+    teamId: string
+  ): Promise<void> {
+    if (!canManageOrganization(access)) {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    const deleted = await repository.deleteTeam(access.organizationId, teamId);
+    if (!deleted) {
+      throw new TeamNotFoundError();
+    }
+  };
+}
+
+export function buildListTeamMembers(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(
+    access: OrganizationAccess,
+    teamId: string
+  ): Promise<readonly TeamMember[]> {
+    const isTeamMember = access.teams.some((team) => team.teamId === teamId);
+    if (!canManageOrganization(access) && !isTeamMember) {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    const members = await repository.listTeamMembers(
+      access.organizationId,
+      teamId
+    );
+    if (!members) {
+      throw new TeamNotFoundError();
+    }
+    return members;
+  };
+}
+
 export function buildUpsertTeamMember(
   repository: OrganizationAdministrationRepository
 ) {
@@ -196,5 +419,53 @@ export function buildUpsertTeamMember(
       throw new TeamNotFoundError();
     }
     return result.member;
+  };
+}
+
+export function buildRemoveTeamMember(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(
+    access: OrganizationAccess,
+    teamId: string,
+    userId: string
+  ): Promise<void> {
+    if (!canManageTeam(access, teamId)) {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
+    const removed = await repository.removeTeamMember(
+      access.organizationId,
+      teamId,
+      userId
+    );
+    if (!removed) {
+      throw new OrganizationMemberNotFoundError();
+    }
+  };
+}
+
+export function buildListJoinableOrganizations(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(userId: string) {
+    return repository.listJoinableOrganizations(userId);
+  };
+}
+
+export function buildJoinOrganization(
+  repository: OrganizationAdministrationRepository
+) {
+  return async function execute(
+    userId: string,
+    organizationId: string
+  ): Promise<OrganizationMemberStatus> {
+    const result = await repository.joinOrganization(organizationId, userId);
+    if (result.status === "organization_not_found") {
+      throw new OrganizationNotFoundError();
+    }
+    if (result.status === "already_member") {
+      throw new AlreadyOrganizationMemberError();
+    }
+    return result.membershipStatus;
   };
 }

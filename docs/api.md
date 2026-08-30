@@ -54,12 +54,15 @@ curl \
       "id": "00000000-0000-0000-0000-000000000000",
       "name": "Example Organization",
       "slug": "example",
-      "role": "owner"
+      "role": "owner",
+      "status": "active"
     }
   ],
   "total": 1
 }
 ```
+
+`status`는 `active`, `pending`, `blocked` 중 하나다. `active` membership만 조직 resource에 접근할 수 있으며, `pending`과 `blocked` 사용자의 조직 요청은 `403`을 반환한다.
 
 현재 role과 team membership은 `GET .../:organizationId/me`로 확인한다.
 
@@ -89,10 +92,16 @@ curl \
 | `GET` | `/api/metrics` | `METRICS_BEARER_TOKEN`으로 보호된 Prometheus process·build 지표 조회 |
 | `GET`, `POST` | `/api/auth/*` | Better Auth 인증 endpoint |
 | `GET`, `POST` | `/api/organizations` | 접근 가능한 조직 조회, 전역 admin의 조직 생성 |
+| `GET` | `/api/organizations/available` | 인증 사용자가 가입할 수 있는 조직 조회 |
+| `GET`, `PATCH`, `DELETE` | `/api/organizations/:organizationId` | 조직 조회, 설정 변경(admin·owner), 조직 삭제(owner) |
+| `POST` | `/api/organizations/:organizationId/join` | 인증 사용자의 조직 가입 |
 | `GET` | `/api/organizations/:organizationId/me` | 현재 멤버십과 팀 역할 조회 |
 | `GET`, `PUT` | `/api/organizations/:organizationId/members` | 조직 멤버 조회·추가·역할 변경 |
+| `PATCH`, `DELETE` | `/api/organizations/:organizationId/members/:userId` | 멤버 role·status 변경, 멤버 제거 |
 | `GET`, `POST` | `/api/organizations/:organizationId/teams` | 팀 조회·생성 |
-| `PUT` | `/api/organizations/:organizationId/teams/:teamId/members` | 기존 조직 멤버를 팀에 추가·역할 변경 |
+| `PATCH`, `DELETE` | `/api/organizations/:organizationId/teams/:teamId` | 팀 이름 변경, 팀 삭제(admin·owner) |
+| `GET`, `PUT` | `/api/organizations/:organizationId/teams/:teamId/members` | 팀 멤버 조회, 기존 조직 멤버를 팀에 추가·역할 변경 |
+| `DELETE` | `/api/organizations/:organizationId/teams/:teamId/members/:userId` | 팀 멤버 제거 |
 | `GET`, `POST` | `/api/organizations/:organizationId/memories` | Memory 검색·생성 |
 | `GET`, `PATCH`, `DELETE` | `/api/organizations/:organizationId/memories/:memoryId` | Memory 조회·수정·archive |
 | `GET` | `/api/organizations/:organizationId/memories/:memoryId/versions` | Memory revision 조회 |
@@ -115,11 +124,23 @@ curl \
 ## 조직 관리 입력
 
 - 조직 생성: `{ "slug": string, "name": string }`
+- 조직 설정 변경(`PATCH .../:organizationId`): `{ "name"?: string, "newMemberStatus"?: "active" | "pending", "defaultTeamId"?: UUID | null }` — 필드 하나 이상 필요
 - 조직 멤버 추가·변경: `{ "email": string, "role": "member" | "admin" | "owner" }`
+- 멤버 변경(`PATCH .../members/:userId`): `{ "role"?: "member" | "admin" | "owner", "status"?: "active" | "pending" | "blocked" }` — 필드 하나 이상 필요
 - 팀 생성: `{ "slug": string, "name": string }`
+- 팀 이름 변경(`PATCH .../teams/:teamId`): `{ "name": string }`
 - 팀 멤버 추가·변경: `{ "email": string, "role": "member" | "manager" }`
 
-`slug`는 63자 이하의 소문자 영숫자와 단일 hyphen 구분 형식을 사용한다. 멤버·팀 관리는 organization `admin` 또는 `owner`가 수행하고, team `manager`는 자신이 관리하는 팀에 기존 조직 멤버를 배정할 수 있다.
+`slug`는 63자 이하의 소문자 영숫자와 단일 hyphen 구분 형식을 사용한다. 멤버·팀 관리는 organization `admin` 또는 `owner`가 수행하고, team `manager`는 자신이 관리하는 팀에 기존 조직 멤버를 배정하거나 팀 이름을 변경할 수 있다. 팀 삭제와 조직 설정 변경은 `admin`·`owner`, 조직 삭제는 `owner`만 가능하다.
+
+### 멤버십 status와 가입 흐름
+
+- `POST .../:organizationId/join`은 인증 사용자를 `member` role로 가입시키고 조직의 `newMemberStatus` 설정에 따라 `active` 또는 `pending` status를 부여한다. 기본값은 `pending`이며 즉시 활성화는 조직이 명시적으로 선택한다. 응답은 `{ "status": "active" | "pending" }`이다.
+- 조직에 `defaultTeamId`가 설정되어 있으면 멤버가 `active`가 되는 시점(즉시 가입 또는 pending 승인)에 해당 팀의 `member`로 자동 배정한다.
+- `owner` role 부여와 `owner` 멤버 변경·제거는 `owner`만 수행할 수 있고, 마지막 active `owner`는 강등·차단·제거할 수 없다(`409`).
+- 자기 자신의 role·status 변경과 제거는 허용하지 않는다(`409`).
+- `DELETE .../teams/:teamId`는 팀 소속과 team scope의 memory, 문서 metadata, Knowledge Graph를 함께 삭제한다.
+- `DELETE .../:organizationId`는 조직과 멤버십, 팀, memory, 문서 metadata, Knowledge Graph를 함께 삭제한다.
 
 ## Memory
 
