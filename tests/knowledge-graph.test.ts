@@ -28,6 +28,11 @@ import {
   type KnowledgeNode
 } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
+import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
+import type {
+  KnowledgeOntologyReader,
+  OrganizationKnowledgeOntology
+} from "@/domain/knowledge/knowledge-ontology-reader";
 
 const now = new Date("2026-08-26T00:00:00.000Z");
 const access: OrganizationAccess = {
@@ -46,6 +51,12 @@ function node(id: string, teamId = "team-1"): KnowledgeNode {
     source: { memoryId: `${id}-memory` },
     now
   });
+}
+
+function ontologyReader(
+  result: OrganizationKnowledgeOntology | null = null
+): KnowledgeOntologyReader {
+  return { findByOrganization: vi.fn().mockResolvedValue(result) };
 }
 
 function repository(
@@ -241,6 +252,7 @@ describe("knowledge graph", () => {
       .fn()
       .mockResolvedValue({ model: "embedding-model", values: [1, 0] });
     const createNode = buildCreateKnowledgeNode({
+      ontologyReader: ontologyReader(),
       authorizeSource: vi.fn(),
       clock: () => now,
       embeddingService: { embed, embedMany: vi.fn() },
@@ -260,17 +272,138 @@ describe("knowledge graph", () => {
       summary: " Handles purchases "
     });
 
-    expect(result).toMatchObject({
+    expect(result.node).toMatchObject({
       kind: "service",
       canonicalName: "Checkout API",
       summary: "Handles purchases",
       embedding: { model: "embedding-model", values: [1, 0] }
     });
+    expect(result.ontologyWarnings).toEqual([]);
     expect(embed).toHaveBeenCalledWith("Checkout API\nHandles purchases");
+  });
+
+  it("returns ontology warnings for an unknown node kind in warn mode", async () => {
+    const saveNode = vi.fn(async (value: KnowledgeNode) => value);
+    const createNode = buildCreateKnowledgeNode({
+      authorizeSource: vi.fn(),
+      clock: () => now,
+      generateId: () => "node-1",
+      ontologyReader: ontologyReader({
+        mode: "warn",
+        ontology: { nodeKinds: ["service"], edgePredicates: [] }
+      }),
+      repository: repository({ saveNode })
+    });
+
+    const result = await createNode({
+      access,
+      scope: node("scope").scope,
+      kind: "Gadget",
+      canonicalName: "Checkout API"
+    });
+
+    expect(result.ontologyWarnings).toEqual([
+      { type: "unknown_kind", term: "gadget" }
+    ]);
+    expect(saveNode).toHaveBeenCalled();
+  });
+
+  it("rejects an unknown node kind in strict mode before embedding", async () => {
+    const saveNode = vi.fn();
+    const embed = vi.fn();
+    const createNode = buildCreateKnowledgeNode({
+      authorizeSource: vi.fn(),
+      clock: () => now,
+      embeddingService: { embed, embedMany: vi.fn() },
+      generateId: () => "node-1",
+      ontologyReader: ontologyReader({
+        mode: "strict",
+        ontology: { nodeKinds: ["service"], edgePredicates: [] }
+      }),
+      repository: repository({ saveNode })
+    });
+
+    await expect(
+      createNode({
+        access,
+        scope: node("scope").scope,
+        kind: "gadget",
+        canonicalName: "Checkout API"
+      })
+    ).rejects.toBeInstanceOf(KnowledgeOntologyViolationError);
+    expect(embed).not.toHaveBeenCalled();
+    expect(saveNode).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown edge predicate in strict mode", async () => {
+    const sourceNode = node("node-1");
+    const targetNode = node("node-2");
+    const saveEdge = vi.fn();
+    const createEdge = buildCreateKnowledgeEdge({
+      authorizeSource: vi.fn(),
+      clock: () => now,
+      generateId: () => "edge-1",
+      ontologyReader: ontologyReader({
+        mode: "strict",
+        ontology: { nodeKinds: [], edgePredicates: ["depends_on"] }
+      }),
+      repository: repository({
+        findNodeById: vi
+          .fn()
+          .mockResolvedValueOnce(sourceNode)
+          .mockResolvedValueOnce(targetNode),
+        saveEdge
+      })
+    });
+
+    await expect(
+      createEdge({
+        access,
+        scope: sourceNode.scope,
+        sourceNodeId: sourceNode.id,
+        targetNodeId: targetNode.id,
+        predicate: "loves"
+      })
+    ).rejects.toBeInstanceOf(KnowledgeOntologyViolationError);
+    expect(saveEdge).not.toHaveBeenCalled();
+  });
+
+  it("normalizes full-width edge predicates to the ontology form", async () => {
+    const sourceNode = node("node-1");
+    const targetNode = node("node-2");
+    const saveEdge = vi.fn(async (value: KnowledgeEdge) => value);
+    const createEdge = buildCreateKnowledgeEdge({
+      authorizeSource: vi.fn(),
+      clock: () => now,
+      generateId: () => "edge-1",
+      ontologyReader: ontologyReader({
+        mode: "strict",
+        ontology: { nodeKinds: [], edgePredicates: ["depends_on"] }
+      }),
+      repository: repository({
+        findNodeById: vi
+          .fn()
+          .mockResolvedValueOnce(sourceNode)
+          .mockResolvedValueOnce(targetNode),
+        saveEdge
+      })
+    });
+
+    const result = await createEdge({
+      access,
+      scope: sourceNode.scope,
+      sourceNodeId: sourceNode.id,
+      targetNodeId: targetNode.id,
+      predicate: " ＤＥＰＥＮＤＳ＿ＯＮ "
+    });
+
+    expect(result.edge.predicate).toBe("depends_on");
+    expect(result.ontologyWarnings).toEqual([]);
   });
 
   it("rejects a node outside the caller write scope", async () => {
     const createNode = buildCreateKnowledgeNode({
+      ontologyReader: ontologyReader(),
       authorizeSource: vi.fn(),
       clock: () => now,
       generateId: () => "node-1",
@@ -290,6 +423,7 @@ describe("knowledge graph", () => {
     const authorizeSource = vi.fn().mockResolvedValue(undefined);
     const saveNode = vi.fn(async (value: KnowledgeNode) => value);
     const createNode = buildCreateKnowledgeNode({
+      ontologyReader: ontologyReader(),
       authorizeSource,
       clock: () => now,
       generateId: () => "node-1",
@@ -319,6 +453,7 @@ describe("knowledge graph", () => {
     const source = node("node-1");
     const target = node("node-2", "team-2");
     const createEdge = buildCreateKnowledgeEdge({
+      ontologyReader: ontologyReader(),
       authorizeSource: vi.fn(),
       clock: () => now,
       generateId: () => "edge-1",
@@ -348,6 +483,7 @@ describe("knowledge graph", () => {
     const authorizeSource = vi.fn().mockResolvedValue(undefined);
     const saveEdge = vi.fn(async (value: KnowledgeEdge) => value);
     const createEdge = buildCreateKnowledgeEdge({
+      ontologyReader: ontologyReader(),
       authorizeSource,
       clock: () => now,
       generateId: () => "edge-1",

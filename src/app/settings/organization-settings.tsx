@@ -9,6 +9,7 @@ import {
   Paper,
   Select,
   Stack,
+  TagsInput,
   Text,
   TextInput,
   Title
@@ -18,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { NewMemberStatus } from "@/domain/identity/organization-access";
+import type { KnowledgeOntologyMode } from "@/domain/knowledge/knowledge-ontology";
 
 import { useT } from "../_i18n/provider";
 import { responseJson } from "../http-response";
@@ -30,6 +32,25 @@ interface OrganizationDetail {
   readonly name: string;
   readonly newMemberStatus?: NewMemberStatus;
   readonly defaultTeamId?: string | null;
+  readonly ontologyMode?: KnowledgeOntologyMode;
+  readonly ontology?: {
+    readonly nodeKinds: readonly string[];
+    readonly edgePredicates: readonly string[];
+  };
+}
+
+const ONTOLOGY_TERM_LIMIT = 200;
+const ONTOLOGY_TERM_LENGTH = 100;
+
+function normalizedOntologyTerms(values: readonly string[]): string[] {
+  const terms = new Set<string>();
+  for (const value of values) {
+    const term = value.trim().toLowerCase();
+    if (term.length > 0 && term.length <= ONTOLOGY_TERM_LENGTH) {
+      terms.add(term);
+    }
+  }
+  return [...terms].slice(0, ONTOLOGY_TERM_LIMIT);
 }
 
 interface TeamView {
@@ -64,6 +85,9 @@ function OrganizationSettingsView({
   const [newMemberStatus, setNewMemberStatus] =
     useState<NewMemberStatus>("pending");
   const [defaultTeamId, setDefaultTeamId] = useState<string | null>(null);
+  const [ontologyMode, setOntologyMode] = useState<KnowledgeOntologyMode>("off");
+  const [nodeKinds, setNodeKinds] = useState<string[]>([]);
+  const [edgePredicates, setEdgePredicates] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
@@ -100,6 +124,9 @@ function OrganizationSettingsView({
         setName(detail.name);
         setNewMemberStatus(detail.newMemberStatus ?? "pending");
         setDefaultTeamId(detail.defaultTeamId ?? null);
+        setOntologyMode(detail.ontologyMode ?? "off");
+        setNodeKinds([...(detail.ontology?.nodeKinds ?? [])]);
+        setEdgePredicates([...(detail.ontology?.edgePredicates ?? [])]);
       }
     } catch (caught) {
       setError(
@@ -123,7 +150,9 @@ function OrganizationSettingsView({
         body: JSON.stringify({
           name,
           newMemberStatus,
-          defaultTeamId
+          defaultTeamId,
+          ontologyMode,
+          ontology: { nodeKinds, edgePredicates }
         })
       });
       if (!response.ok) {
@@ -236,6 +265,62 @@ function OrganizationSettingsView({
           </Group>
         </Stack>
       </Paper>
+      ) : null}
+
+      {organization ? (
+        <Paper p="lg" radius="lg" withBorder>
+          <Stack gap="md">
+            <Stack gap={4}>
+              <Title order={3}>{t("settings.ontology.title")}</Title>
+              <Text c="dimmed" size="sm">
+                {t("settings.ontology.body")}
+              </Text>
+            </Stack>
+            <Select
+              allowDeselect={false}
+              data={[
+                { value: "off", label: t("settings.ontology.mode.off") },
+                { value: "warn", label: t("settings.ontology.mode.warn") },
+                { value: "strict", label: t("settings.ontology.mode.strict") }
+              ]}
+              description={t("settings.ontology.mode.description")}
+              label={t("settings.ontology.mode.label")}
+              onChange={(value) => {
+                if (value === "off" || value === "warn" || value === "strict") {
+                  setOntologyMode(value);
+                }
+              }}
+              value={ontologyMode}
+            />
+            <TagsInput
+              description={`${t("settings.ontology.nodeKinds.description")} · ${t(
+                "settings.ontology.termCount",
+                { count: String(nodeKinds.length), max: String(ONTOLOGY_TERM_LIMIT) }
+              )}`}
+              label={t("settings.ontology.nodeKinds.label")}
+              onChange={(values) => setNodeKinds(normalizedOntologyTerms(values))}
+              placeholder={t("settings.ontology.nodeKinds.placeholder")}
+              splitChars={[",", " "]}
+              value={nodeKinds}
+            />
+            <TagsInput
+              description={`${t("settings.ontology.edgePredicates.description")} · ${t(
+                "settings.ontology.termCount",
+                {
+                  count: String(edgePredicates.length),
+                  max: String(ONTOLOGY_TERM_LIMIT)
+                }
+              )}`}
+              label={t("settings.ontology.edgePredicates.label")}
+              onChange={(values) =>
+                setEdgePredicates(normalizedOntologyTerms(values))
+              }
+              placeholder={t("settings.ontology.edgePredicates.placeholder")}
+              splitChars={[",", " "]}
+              value={edgePredicates}
+            />
+          </Stack>
+        </Paper>
       ) : null}
 
       {isAdmin ? (

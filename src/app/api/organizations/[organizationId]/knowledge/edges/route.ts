@@ -56,7 +56,7 @@ export async function POST(request: Request, context: RouteContext) {
           };
 
   try {
-    const edge = await createKnowledgeEdgeRecord({
+    const { edge, ontologyWarnings } = await createKnowledgeEdgeRecord({
       access: authorization.access,
       scope,
       sourceNodeId: parsed.data.sourceNodeId,
@@ -65,7 +65,10 @@ export async function POST(request: Request, context: RouteContext) {
       ...(parsed.data.properties ? { properties: parsed.data.properties } : {}),
       ...(parsed.data.source ? { source: parsed.data.source } : {})
     });
-    return Response.json(publicKnowledgeEdge(edge));
+    return Response.json({
+      ...publicKnowledgeEdge(edge),
+      ...(ontologyWarnings.length > 0 ? { ontologyWarnings } : {})
+    });
   } catch (error) {
     const response = knowledgeErrorResponse(error);
     if (response) {

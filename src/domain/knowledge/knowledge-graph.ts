@@ -2,7 +2,8 @@ import type { ScopedResource } from "@/domain/identity/organization-access";
 
 import {
   normalizeKnowledgeKind,
-  normalizeKnowledgeName
+  normalizeKnowledgeName,
+  normalizeKnowledgePredicate
 } from "./knowledge-identity";
 
 export interface KnowledgeEmbedding {
@@ -195,10 +196,10 @@ export function createKnowledgeEdge(input: NewKnowledgeEdge): KnowledgeEdge {
     sourceNodeId,
     targetNodeId,
     predicate: normalizedText(
-      input.predicate,
+      normalizeKnowledgePredicate(input.predicate),
       "knowledge edge predicate",
       100
-    ).toLowerCase(),
+    ),
     properties: validatedProperties(input.properties),
     sources: Object.freeze(source ? [source] : []),
     createdAt: new Date(input.now)

@@ -3,6 +3,7 @@ import {
   boolean,
   foreignKey,
   index,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -19,6 +20,11 @@ import {
   teamRoles,
   type NewMemberStatus
 } from "@/domain/identity/organization-access";
+import {
+  knowledgeOntologyModes,
+  type KnowledgeOntology,
+  type KnowledgeOntologyMode
+} from "@/domain/knowledge/knowledge-ontology";
 
 export const organizationRole = pgEnum("organization_role", [...organizationRoles]);
 
@@ -27,6 +33,10 @@ export const organizationMemberStatus = pgEnum("organization_member_status", [
 ]);
 
 export const teamRole = pgEnum("team_role", [...teamRoles]);
+
+export const knowledgeOntologyMode = pgEnum("knowledge_ontology_mode", [
+  ...knowledgeOntologyModes
+]);
 
 export const organizations = pgTable(
   "organizations",
@@ -41,6 +51,14 @@ export const organizations = pgTable(
     defaultTeamId: uuid().references((): AnyPgColumn => teams.id, {
       onDelete: "set null"
     }),
+    ontologyMode: knowledgeOntologyMode()
+      .$type<KnowledgeOntologyMode>()
+      .notNull()
+      .default("off"),
+    ontology: jsonb()
+      .$type<KnowledgeOntology>()
+      .notNull()
+      .default({ nodeKinds: [], edgePredicates: [] }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },

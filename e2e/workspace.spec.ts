@@ -95,8 +95,23 @@ test("onboards, approves, and manages members through the console", async ({
   await page.getByRole("option", { name: "승인 대기" }).click();
   await page.getByRole("combobox", { name: "기본 팀" }).click();
   await page.getByRole("option", { name: "E2E Default Team" }).click();
+  await page.getByRole("combobox", { name: "검증 모드" }).click();
+  await page.getByRole("option", { name: "경고 · 미등록 용어 표시" }).click();
+  await page.getByRole("combobox", { name: "Node kind 사전" }).fill("Service");
+  await page.keyboard.press("Enter");
+  await page
+    .getByRole("combobox", { name: "Edge predicate 사전" })
+    .fill("depends_on");
+  await page.keyboard.press("Enter");
   await page.getByRole("button", { name: "설정 저장" }).click();
   await expect(page.getByText("설정을 저장했습니다.")).toBeVisible();
+
+  await page.reload();
+  await expect(
+    page.getByRole("combobox", { name: "검증 모드" })
+  ).toHaveValue("경고 · 미등록 용어 표시");
+  await expect(page.getByText("service", { exact: true })).toBeVisible();
+  await expect(page.getByText("depends_on", { exact: true })).toBeVisible();
 
   const memberContext = await browser.newContext();
   const memberPage = await memberContext.newPage();
@@ -311,6 +326,10 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
               }
             ],
             db: []
+          },
+          ontology: {
+            mode: "warn",
+            violations: [{ type: "unknown_kind", term: "database" }]
           }
         }),
         status: 200
@@ -320,6 +339,10 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByRole("link", { name: "AI 후보 검토" }).click();
   await expect(
     page.getByText(/같은 scope와 이름의 기존 node가 1개 있습니다/)
+  ).toBeVisible();
+  await expect(page.getByText("온톨로지에 없음", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(/온톨로지 사전에 없는 용어가 포함되어 있습니다: database/)
   ).toBeVisible();
   expect(duplicateRequests).toBe(1);
 

@@ -62,6 +62,14 @@ interface SimilarNodeView {
   readonly scope: KnowledgeCandidateView["scope"];
 }
 
+interface OntologyFlagsView {
+  readonly mode: "off" | "warn" | "strict";
+  readonly violations: readonly Readonly<{
+    type: "unknown_kind" | "unknown_predicate";
+    term: string;
+  }>[];
+}
+
 interface KnowledgeCandidateReviewProps {
   readonly organizationId: string;
 }
@@ -103,6 +111,7 @@ export function KnowledgeCandidateReview({
     Readonly<{
       candidateId: string;
       nodes: Readonly<Record<string, readonly SimilarNodeView[]>>;
+      ontology?: OntologyFlagsView;
     }>
   >();
   const getLoadMessages = useEffectEvent(() => ({
@@ -116,6 +125,25 @@ export function KnowledgeCandidateReview({
     selected && duplicateState?.candidateId === selected.id
       ? duplicateState.nodes
       : {};
+  const ontologyFlags =
+    selected && duplicateState?.candidateId === selected.id
+      ? duplicateState.ontology
+      : undefined;
+  const ontologyViolations =
+    ontologyFlags && ontologyFlags.mode !== "off"
+      ? ontologyFlags.violations
+      : [];
+  const unknownKinds = ontologyViolations
+    .filter((violation) => violation.type === "unknown_kind")
+    .map((violation) => violation.term);
+  const unknownPredicates = ontologyViolations
+    .filter((violation) => violation.type === "unknown_predicate")
+    .map((violation) => violation.term);
+  const strictBlocked =
+    ontologyFlags?.mode === "strict" && ontologyViolations.length > 0;
+  const unknownTerms = ontologyViolations
+    .map((violation) => violation.term)
+    .join(", ");
 
   async function loadCandidates() {
     setLoading(true);
@@ -178,12 +206,14 @@ export function KnowledgeCandidateReview({
       .then((response) =>
         responseJson<{
           duplicates?: Readonly<Record<string, readonly SimilarNodeView[]>>;
+          ontology?: OntologyFlagsView;
         }>(response, loadMessages.requestFailed)
       )
       .then((body) =>
         setDuplicateState({
           candidateId: selected.id,
-          nodes: body.duplicates ?? {}
+          nodes: body.duplicates ?? {},
+          ...(body.ontology ? { ontology: body.ontology } : {})
         })
       )
       .catch((caught: unknown) => {
@@ -335,6 +365,11 @@ export function KnowledgeCandidateReview({
                       <Paper className={classes.fact} key={entity.key} p="sm">
                         <Group gap="xs">
                           <Badge size="xs" variant="dot">{entity.kind}</Badge>
+                          {unknownKinds.includes(entity.kind) ? (
+                            <Badge color="orange" size="xs" variant="light">
+                              {t("candidate.ontologyUnknown")}
+                            </Badge>
+                          ) : null}
                           <Text fw={650} size="sm">{entity.canonicalName}</Text>
                         </Group>
                         {entity.summary ? (
@@ -368,6 +403,11 @@ export function KnowledgeCandidateReview({
                           {relationship.predicate}
                         </span>
                         <strong>{relationship.targetKey}</strong>
+                        {unknownPredicates.includes(relationship.predicate) ? (
+                          <Badge color="orange" ml="xs" size="xs" variant="light">
+                            {t("candidate.ontologyUnknown")}
+                          </Badge>
+                        ) : null}
                       </Text>
                     ))}
                     {selected.graph.relationships.length === 0 ? (
@@ -377,6 +417,13 @@ export function KnowledgeCandidateReview({
                 </section>
               </div>
 
+              {ontologyViolations.length > 0 ? (
+                <Alert color={strictBlocked ? "red" : "orange"}>
+                  {strictBlocked
+                    ? t("candidate.ontologyStrict", { terms: unknownTerms })
+                    : t("candidate.ontologyWarn", { terms: unknownTerms })}
+                </Alert>
+              ) : null}
               <Textarea
                 autosize
                 id="knowledge-review-reason"
@@ -399,6 +446,7 @@ export function KnowledgeCandidateReview({
                 </Button>
                 <Button
                   color="teal"
+                  disabled={strictBlocked}
                   leftSection={<IconCheck size={16} />}
                   loading={reviewing}
                   onClick={() => void review("accept")}

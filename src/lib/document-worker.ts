@@ -16,6 +16,7 @@ import {
   documentIngestionQueue,
   knowledgeCandidateRepository,
   knowledgeExtractionService,
+  knowledgeOntologyReader,
   documentObjectStorage,
   documentRepository,
   documentTextExtractor,
@@ -42,7 +43,8 @@ const generateDocumentKnowledgeCandidates = knowledgeExtractionService
       clock: () => new Date(),
       documentRepository,
       extractionService: knowledgeExtractionService,
-      generateId: randomUUID
+      generateId: randomUUID,
+      ontologyReader: knowledgeOntologyReader
     })
   : undefined;
 

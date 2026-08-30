@@ -9,6 +9,7 @@ import {
   type KnowledgeEdge,
   type KnowledgeNode
 } from "@/domain/knowledge/knowledge-graph";
+import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
 import type { KnowledgeNodeSearchHit } from "@/domain/knowledge/knowledge-graph-repository";
 
 import { aiErrorResponse } from "./ai-http";
@@ -34,6 +35,12 @@ export function knowledgeErrorResponse(error: unknown): Response | null {
     return Response.json(
       { error: "Knowledge graph access denied" },
       { status: 403 }
+    );
+  }
+  if (error instanceof KnowledgeOntologyViolationError) {
+    return Response.json(
+      { error: "knowledge ontology violation", violations: error.violations },
+      { status: 422 }
     );
   }
   if (

@@ -6,6 +6,7 @@ import {
   organizationRoles,
   teamRoles
 } from "@/domain/identity/organization-access";
+import { knowledgeOntologyModes } from "@/domain/knowledge/knowledge-ontology";
 
 const slugSchema = z
   .string()
@@ -39,17 +40,28 @@ export const teamMemberSchema = z.object({
   role: z.enum(teamRoles)
 });
 
+const ontologyTermSchema = z.string().trim().min(1).max(100);
+
 export const updateOrganizationSchema = z
   .object({
     name: z.string().trim().min(1).max(200).optional(),
     newMemberStatus: z.enum(newMemberStatuses).optional(),
-    defaultTeamId: z.uuid().nullable().optional()
+    defaultTeamId: z.uuid().nullable().optional(),
+    ontologyMode: z.enum(knowledgeOntologyModes).optional(),
+    ontology: z
+      .object({
+        nodeKinds: z.array(ontologyTermSchema).max(200),
+        edgePredicates: z.array(ontologyTermSchema).max(200)
+      })
+      .optional()
   })
   .refine(
     (value) =>
       value.name !== undefined ||
       value.newMemberStatus !== undefined ||
-      value.defaultTeamId !== undefined,
+      value.defaultTeamId !== undefined ||
+      value.ontologyMode !== undefined ||
+      value.ontology !== undefined,
     { message: "at least one field is required" }
   );
 

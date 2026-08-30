@@ -10,6 +10,7 @@ import {
 import {
   knowledgeCandidateRepository,
   knowledgeGraphRepository,
+  knowledgeOntologyReader,
   textEmbeddingService
 } from "./container";
 
@@ -22,12 +23,14 @@ export const listKnowledgeCandidateRecords = buildListKnowledgeCandidates(
 export const findKnowledgeCandidateDuplicateRecords =
   buildFindKnowledgeCandidateDuplicates({
     candidateRepository: knowledgeCandidateRepository,
-    graphRepository: knowledgeGraphRepository
+    graphRepository: knowledgeGraphRepository,
+    ontologyReader: knowledgeOntologyReader
   });
 
 export const acceptKnowledgeCandidateRecord = buildAcceptKnowledgeCandidate({
   clock,
   generateId: randomUUID,
+  ontologyReader: knowledgeOntologyReader,
   repository: knowledgeCandidateRepository,
   ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
 });

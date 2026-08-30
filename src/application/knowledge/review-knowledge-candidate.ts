@@ -10,6 +10,13 @@ import type {
 import type { KnowledgeNode } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
 import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
+import {
+  enforceKnowledgeOntology,
+  evaluateKnowledgeOntology,
+  type KnowledgeOntologyMode,
+  type KnowledgeOntologyViolation
+} from "@/domain/knowledge/knowledge-ontology";
+import type { KnowledgeOntologyReader } from "@/domain/knowledge/knowledge-ontology-reader";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 
 export class KnowledgeCandidateReviewAccessDeniedError extends Error {
@@ -63,7 +70,17 @@ interface ReviewKnowledgeCandidateDependencies {
   readonly clock: () => Date;
   readonly embeddingService?: TextEmbeddingService;
   readonly generateId: () => string;
+  readonly ontologyReader: KnowledgeOntologyReader;
   readonly repository: KnowledgeCandidateRepository;
+}
+
+function candidateOntologyTerms(candidate: KnowledgeCandidate) {
+  return {
+    kinds: candidate.graph.entities.map((entity) => entity.kind),
+    predicates: candidate.graph.relationships.map(
+      (relationship) => relationship.predicate
+    )
+  };
 }
 
 export function buildListKnowledgeCandidates(
@@ -82,14 +99,23 @@ export function buildListKnowledgeCandidates(
   };
 }
 
+export interface KnowledgeCandidateDuplicatesResult {
+  readonly duplicates: Readonly<Record<string, readonly KnowledgeNode[]>>;
+  readonly ontology: Readonly<{
+    mode: KnowledgeOntologyMode;
+    violations: readonly KnowledgeOntologyViolation[];
+  }>;
+}
+
 export function buildFindKnowledgeCandidateDuplicates(dependencies: {
   readonly candidateRepository: KnowledgeCandidateRepository;
   readonly graphRepository: KnowledgeGraphRepository;
+  readonly ontologyReader: KnowledgeOntologyReader;
 }) {
   return async function execute(
     access: OrganizationAccess,
     candidateId: string
-  ): Promise<Readonly<Record<string, readonly KnowledgeNode[]>>> {
+  ): Promise<KnowledgeCandidateDuplicatesResult> {
     const candidate = await dependencies.candidateRepository.findById(
       access.organizationId,
       candidateId
@@ -98,12 +124,15 @@ export function buildFindKnowledgeCandidateDuplicates(dependencies: {
       throw new KnowledgeCandidateNotFoundError();
     }
     authorizeReviewer(access, candidate);
+    const settings = await dependencies.ontologyReader.findByOrganization(
+      access.organizationId
+    );
     const nodes = await dependencies.graphRepository.findNodesByCanonicalNames(
       access,
       candidate.scope,
       candidate.graph.entities.map((entity) => entity.canonicalName)
     );
-    return Object.fromEntries(
+    const duplicates = Object.fromEntries(
       candidate.graph.entities.map((entity) => {
         const identity = knowledgeCanonicalNameKey(entity.canonicalName);
         return [
@@ -114,8 +143,24 @@ export function buildFindKnowledgeCandidateDuplicates(dependencies: {
         ];
       })
     );
+    return {
+      duplicates,
+      ontology: {
+        mode: settings?.mode ?? "off",
+        violations:
+          settings && settings.mode !== "off"
+            ? evaluateKnowledgeOntology(
+                settings.ontology,
+                candidateOntologyTerms(candidate)
+              )
+            : []
+      }
+    };
   };
 }
+
+export type AcceptKnowledgeCandidateResult = KnowledgeCandidatePromotionResult &
+  Readonly<{ ontologyWarnings: readonly KnowledgeOntologyViolation[] }>;
 
 export function buildAcceptKnowledgeCandidate(
   dependencies: ReviewKnowledgeCandidateDependencies
@@ -124,7 +169,7 @@ export function buildAcceptKnowledgeCandidate(
     access: OrganizationAccess,
     candidateId: string,
     reason?: string
-  ): Promise<KnowledgeCandidatePromotionResult> {
+  ): Promise<AcceptKnowledgeCandidateResult> {
     const candidate = await dependencies.repository.findById(
       access.organizationId,
       candidateId
@@ -148,8 +193,20 @@ export function buildAcceptKnowledgeCandidate(
       if (!existing) {
         throw new KnowledgeCandidateReviewConflictError();
       }
-      return existing;
+      return { ...existing, ontologyWarnings: [] };
     }
+    const settings = await dependencies.ontologyReader.findByOrganization(
+      access.organizationId
+    );
+    const ontologyWarnings = settings
+      ? enforceKnowledgeOntology(
+          settings.mode,
+          evaluateKnowledgeOntology(
+            settings.ontology,
+            candidateOntologyTerms(candidate)
+          )
+        )
+      : [];
     const embeddings = dependencies.embeddingService
       ? await dependencies.embeddingService.embedMany(
           candidate.graph.entities.map(
@@ -184,7 +241,7 @@ export function buildAcceptKnowledgeCandidate(
     if (!promoted) {
       throw new KnowledgeCandidateReviewConflictError();
     }
-    return promoted;
+    return { ...promoted, ontologyWarnings };
   };
 }
 

@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import type { KnowledgeExtractionService } from "@/domain/knowledge/knowledge-extraction-service";
+import type {
+  KnowledgeExtractionOntologyHint,
+  KnowledgeExtractionService
+} from "@/domain/knowledge/knowledge-extraction-service";
 import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 
 interface KnowledgeExtractionServiceConfiguration {
@@ -72,7 +75,38 @@ const completionResponseSchema = z.object({
     .min(1)
 });
 
-const extractionInstructions = `Extract a reviewable knowledge graph from the supplied document chunk.
+const defaultKindInstruction =
+  "- Prefer these lowercase kinds: person, organization, product, service, project, technology, location, recognition, certification, role, event, document, concept.";
+
+function ontologyInstructions(
+  ontology: KnowledgeExtractionOntologyHint | undefined
+): readonly string[] {
+  const lines: string[] = [];
+  if (ontology && ontology.nodeKinds.length > 0) {
+    const kinds = ontology.nodeKinds.join(", ");
+    lines.push(
+      ontology.mode === "strict"
+        ? `- Use only these lowercase kinds defined by the organization: ${kinds}. Omit entities that do not fit a listed kind.`
+        : `- Prefer these lowercase kinds defined by the organization: ${kinds}.`
+    );
+  } else {
+    lines.push(defaultKindInstruction);
+  }
+  if (ontology && ontology.edgePredicates.length > 0) {
+    const predicates = ontology.edgePredicates.join(", ");
+    lines.push(
+      ontology.mode === "strict"
+        ? `- Use only these lowercase snake_case predicates defined by the organization: ${predicates}. Omit relationships that do not fit a listed predicate.`
+        : `- Prefer these lowercase snake_case predicates defined by the organization: ${predicates}.`
+    );
+  }
+  return lines;
+}
+
+function extractionInstructions(
+  ontology: KnowledgeExtractionOntologyHint | undefined
+): string {
+  return `Extract a reviewable knowledge graph from the supplied document chunk.
 
 General rules:
 - Extract named real-world or software entities such as products, services, projects, organizations, people, systems, technologies, and locations.
@@ -81,7 +115,7 @@ General rules:
 - Extract only entities and directed relationships supported by the supplied text. Do not invent missing facts.
 - Prefer a smaller set of well-supported entities over speculative or structural tokens.
 - Use stable local keys and lowercase snake_case predicates.
-- Prefer these lowercase kinds: person, organization, product, service, project, technology, location, recognition, certification, role, event, document, concept.
+${ontologyInstructions(ontology).join("\n")}
 - Use recognition for awards, honors, achievements, and designations instead of inventing separate kinds.
 - Return empty arrays when no reliable knowledge is present.
 
@@ -94,6 +128,7 @@ Format rules:
 
 Example:
 Input Markdown contains heading "Agent Studio", link label "studio.opspresso.com", and text stating that it is a platform for building and operating production AI agents. Extract "Agent Studio" as a product or platform entity. Do not extract "studio.opspresso.com" as an entity.`;
+}
 
 function markdownLinkNames(content: string): ReadonlyMap<string, string> {
   const names = new Map<string, string>();
@@ -139,46 +174,51 @@ function normalizeLinkedEntityNames(
   };
 }
 
-const responseJsonSchema = {
-  name: "knowledge_candidate",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      entities: {
-        type: "array",
-        maxItems: 100,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            key: { type: "string" },
-            kind: { type: "string" },
-            canonicalName: { type: "string" },
-            summary: { type: ["string", "null"] }
-          },
-          required: ["key", "kind", "canonicalName", "summary"]
+function buildResponseJsonSchema(kindEnum?: readonly string[]) {
+  return {
+    name: "knowledge_candidate",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        entities: {
+          type: "array",
+          maxItems: 100,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              key: { type: "string" },
+              kind:
+                kindEnum && kindEnum.length > 0
+                  ? { type: "string", enum: [...kindEnum] }
+                  : { type: "string" },
+              canonicalName: { type: "string" },
+              summary: { type: ["string", "null"] }
+            },
+            required: ["key", "kind", "canonicalName", "summary"]
+          }
+        },
+        relationships: {
+          type: "array",
+          maxItems: 200,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              sourceKey: { type: "string" },
+              targetKey: { type: "string" },
+              predicate: { type: "string" }
+            },
+            required: ["sourceKey", "targetKey", "predicate"]
+          }
         }
       },
-      relationships: {
-        type: "array",
-        maxItems: 200,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            sourceKey: { type: "string" },
-            targetKey: { type: "string" },
-            predicate: { type: "string" }
-          },
-          required: ["sourceKey", "targetKey", "predicate"]
-        }
-      }
-    },
-    required: ["entities", "relationships"]
-  }
-} as const;
+      required: ["entities", "relationships"]
+    }
+  } as const;
+}
 
 function requiredSetting(value: string, name: string): string {
   const setting = value.trim();
@@ -212,7 +252,7 @@ export function createKnowledgeExtractionService(
         messages: [
           {
             role: "system",
-            content: extractionInstructions
+            content: extractionInstructions(input.ontology)
           },
           {
             role: "user",
@@ -225,7 +265,11 @@ export function createKnowledgeExtractionService(
         ],
         response_format: {
           type: "json_schema",
-          json_schema: responseJsonSchema
+          json_schema: buildResponseJsonSchema(
+            input.ontology?.mode === "strict"
+              ? input.ontology.nodeKinds
+              : undefined
+          )
         },
         temperature: 0
       }),

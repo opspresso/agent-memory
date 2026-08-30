@@ -4,6 +4,7 @@ import { createOrganizationAdministrationRepository } from "@/infrastructure/dat
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
+import { createKnowledgeOntologyReader } from "@/infrastructure/database/repositories/knowledge-ontology-reader";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
 import { createKnowledgeExtractionService } from "@/infrastructure/ai/knowledge-extraction-service";
@@ -37,6 +38,9 @@ export const documentRepository = createDocumentRepository(database.db);
 export const knowledgeGraphRepository = createKnowledgeGraphRepository(database.db);
 export const knowledgeCandidateRepository =
   createKnowledgeCandidateRepository(database.db);
+export const knowledgeOntologyReader = createKnowledgeOntologyReader(
+  database.db
+);
 
 const embeddingModel = process.env.EMBEDDING_MODEL?.trim();
 const embeddingBaseUrl = process.env.EMBEDDING_BASE_URL?.trim();

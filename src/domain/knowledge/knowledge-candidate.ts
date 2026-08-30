@@ -2,7 +2,8 @@ import type { ScopedResource } from "@/domain/identity/organization-access";
 
 import {
   normalizeKnowledgeKind,
-  normalizeKnowledgeName
+  normalizeKnowledgeName,
+  normalizeKnowledgePredicate
 } from "./knowledge-identity";
 
 export const knowledgeCandidateStatuses = [
@@ -135,10 +136,10 @@ function normalizedGraph(graph: ProposedKnowledgeGraph): ProposedKnowledgeGraph 
       sourceKey,
       targetKey,
       predicate: normalizedText(
-        relationship.predicate,
+        normalizeKnowledgePredicate(relationship.predicate),
         "relationship predicate",
         100
-      ).toLowerCase()
+      )
     };
   });
   return Object.freeze({

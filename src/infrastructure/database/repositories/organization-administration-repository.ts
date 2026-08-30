@@ -72,6 +72,12 @@ export function createOrganizationAdministrationRepository(
             ...(update.defaultTeamId === undefined
               ? {}
               : { defaultTeamId: update.defaultTeamId }),
+            ...(update.ontologyMode === undefined
+              ? {}
+              : { ontologyMode: update.ontologyMode }),
+            ...(update.ontology === undefined
+              ? {}
+              : { ontology: update.ontology }),
             updatedAt: new Date()
           })
           .where(eq(organizations.id, organizationId))

@@ -10,6 +10,7 @@ import {
   TeamSlugConflictError
 } from "@/application/identity/manage-organization";
 import { InvalidOrganizationAdministrationError } from "@/domain/identity/organization-administration";
+import { InvalidKnowledgeOntologyError } from "@/domain/knowledge/knowledge-ontology";
 
 export { readJsonBody as readOrganizationJsonBody } from "./json-body";
 
@@ -38,7 +39,10 @@ export function organizationAdministrationErrorResponse(
   ) {
     return Response.json({ error: error.message }, { status: 404 });
   }
-  if (error instanceof InvalidOrganizationAdministrationError) {
+  if (
+    error instanceof InvalidOrganizationAdministrationError ||
+    error instanceof InvalidKnowledgeOntologyError
+  ) {
     return Response.json({ error: error.message }, { status: 400 });
   }
   return null;

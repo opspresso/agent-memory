@@ -2,10 +2,11 @@ import {
   InvalidKnowledgeCandidateReviewError,
   KnowledgeCandidateNotFoundError,
   KnowledgeCandidateReviewAccessDeniedError,
-  KnowledgeCandidateReviewConflictError
+  KnowledgeCandidateReviewConflictError,
+  type AcceptKnowledgeCandidateResult
 } from "@/application/knowledge/review-knowledge-candidate";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
-import type { KnowledgeCandidatePromotionResult } from "@/domain/knowledge/knowledge-candidate-repository";
+import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
 
 import { aiErrorResponse } from "./ai-http";
 import { publicKnowledgeEdge, publicKnowledgeNode } from "./knowledge-http";
@@ -26,6 +27,12 @@ export function knowledgeCandidateErrorResponse(error: unknown): Response | null
   }
   if (error instanceof KnowledgeCandidateReviewConflictError) {
     return Response.json({ error: error.message }, { status: 409 });
+  }
+  if (error instanceof KnowledgeOntologyViolationError) {
+    return Response.json(
+      { error: "knowledge ontology violation", violations: error.violations },
+      { status: 422 }
+    );
   }
   if (error instanceof InvalidKnowledgeCandidateReviewError) {
     return Response.json({ error: error.message }, { status: 400 });
@@ -53,11 +60,14 @@ export function publicKnowledgeCandidate(candidate: KnowledgeCandidate) {
 }
 
 export function publicKnowledgeCandidatePromotion(
-  result: KnowledgeCandidatePromotionResult
+  result: AcceptKnowledgeCandidateResult
 ) {
   return {
     candidate: publicKnowledgeCandidate(result.candidate),
     nodes: result.nodes.map(publicKnowledgeNode),
-    edges: result.edges.map(publicKnowledgeEdge)
+    edges: result.edges.map(publicKnowledgeEdge),
+    ...(result.ontologyWarnings.length > 0
+      ? { ontologyWarnings: result.ontologyWarnings }
+      : {})
   };
 }

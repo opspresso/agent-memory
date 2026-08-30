@@ -13,6 +13,11 @@ import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
 import { createKnowledgeNode } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
+import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
+import type {
+  KnowledgeOntologyReader,
+  OrganizationKnowledgeOntology
+} from "@/domain/knowledge/knowledge-ontology-reader";
 
 const now = new Date("2026-08-26T00:00:00.000Z");
 const admin: OrganizationAccess = {
@@ -52,6 +57,12 @@ function repository(
     reject: vi.fn(),
     ...overrides
   };
+}
+
+function ontologyReader(
+  result: OrganizationKnowledgeOntology | null = null
+): KnowledgeOntologyReader {
+  return { findByOrganization: vi.fn().mockResolvedValue(result) };
 }
 
 function graphRepository(
@@ -105,12 +116,16 @@ describe("knowledge candidate review", () => {
       candidateRepository: repository({
         findById: vi.fn().mockResolvedValue(candidate)
       }),
-      graphRepository: graphRepository({ findNodesByCanonicalNames })
+      graphRepository: graphRepository({ findNodesByCanonicalNames }),
+      ontologyReader: ontologyReader()
     });
 
     await expect(findDuplicates(admin, candidate.id)).resolves.toEqual({
-      api: [memoryApi],
-      db: [postgres]
+      duplicates: {
+        api: [memoryApi],
+        db: [postgres]
+      },
+      ontology: { mode: "off", violations: [] }
     });
     expect(findNodesByCanonicalNames).toHaveBeenCalledOnce();
     expect(findNodesByCanonicalNames).toHaveBeenCalledWith(
@@ -126,7 +141,8 @@ describe("knowledge candidate review", () => {
       candidateRepository: repository({
         findById: vi.fn().mockResolvedValue(candidate)
       }),
-      graphRepository: graphRepository({ findNodesByCanonicalNames })
+      graphRepository: graphRepository({ findNodesByCanonicalNames }),
+      ontologyReader: ontologyReader()
     });
 
     await expect(findDuplicates(member, candidate.id)).rejects.toBeInstanceOf(
@@ -152,6 +168,7 @@ describe("knowledge candidate review", () => {
       .mockReturnValueOnce("node-2")
       .mockReturnValueOnce("edge-1");
     const review = buildAcceptKnowledgeCandidate({
+      ontologyReader: ontologyReader(),
       clock: () => now,
       generateId,
       repository: candidates
@@ -184,6 +201,7 @@ describe("knowledge candidate review", () => {
       { model: "embedding-model", values: [0, 1] }
     ]);
     const review = buildAcceptKnowledgeCandidate({
+      ontologyReader: ontologyReader(),
       clock: () => now,
       embeddingService: { embed: vi.fn(), embedMany },
       generateId: vi
@@ -219,11 +237,83 @@ describe("knowledge candidate review", () => {
     );
   });
 
+  it("reports ontology violations alongside duplicates for reviewers", async () => {
+    const findDuplicates = buildFindKnowledgeCandidateDuplicates({
+      candidateRepository: repository({
+        findById: vi.fn().mockResolvedValue(candidate)
+      }),
+      graphRepository: graphRepository({
+        findNodesByCanonicalNames: vi.fn().mockResolvedValue([])
+      }),
+      ontologyReader: ontologyReader({
+        mode: "warn",
+        ontology: { nodeKinds: ["service"], edgePredicates: ["depends_on"] }
+      })
+    });
+
+    await expect(findDuplicates(admin, candidate.id)).resolves.toMatchObject({
+      ontology: {
+        mode: "warn",
+        violations: [
+          { type: "unknown_kind", term: "database" },
+          { type: "unknown_predicate", term: "stores_in" }
+        ]
+      }
+    });
+  });
+
+  it("threads ontology warnings through a warn-mode promotion", async () => {
+    const review = buildAcceptKnowledgeCandidate({
+      clock: () => now,
+      generateId: vi.fn().mockReturnValue("id"),
+      ontologyReader: ontologyReader({
+        mode: "warn",
+        ontology: { nodeKinds: ["service"], edgePredicates: [] }
+      }),
+      repository: repository({
+        findById: vi.fn().mockResolvedValue(candidate),
+        accept: vi.fn().mockResolvedValue({
+          candidate: { ...candidate, status: "accepted" },
+          nodes: [],
+          edges: []
+        })
+      })
+    });
+
+    await expect(review(admin, candidate.id)).resolves.toMatchObject({
+      ontologyWarnings: [{ type: "unknown_kind", term: "database" }]
+    });
+  });
+
+  it("rejects a strict-mode promotion before embedding or persistence", async () => {
+    const embedMany = vi.fn();
+    const candidates = repository({
+      findById: vi.fn().mockResolvedValue(candidate)
+    });
+    const review = buildAcceptKnowledgeCandidate({
+      clock: () => now,
+      embeddingService: { embed: vi.fn(), embedMany },
+      generateId: vi.fn(),
+      ontologyReader: ontologyReader({
+        mode: "strict",
+        ontology: { nodeKinds: ["service"], edgePredicates: [] }
+      }),
+      repository: candidates
+    });
+
+    await expect(review(admin, candidate.id)).rejects.toBeInstanceOf(
+      KnowledgeOntologyViolationError
+    );
+    expect(embedMany).not.toHaveBeenCalled();
+    expect(candidates.accept).not.toHaveBeenCalled();
+  });
+
   it("prevents a member from promoting an organization-scoped candidate", async () => {
     const candidates = repository({
       findById: vi.fn().mockResolvedValue(candidate)
     });
     const review = buildAcceptKnowledgeCandidate({
+      ontologyReader: ontologyReader(),
       clock: () => now,
       generateId: vi.fn(),
       repository: candidates

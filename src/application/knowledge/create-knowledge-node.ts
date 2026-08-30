@@ -9,6 +9,12 @@ import {
   type KnowledgeSource
 } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
+import {
+  enforceKnowledgeOntology,
+  evaluateKnowledgeOntology,
+  type KnowledgeOntologyViolation
+} from "@/domain/knowledge/knowledge-ontology";
+import type { KnowledgeOntologyReader } from "@/domain/knowledge/knowledge-ontology-reader";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 
 import type { AuthorizeKnowledgeSource } from "./authorize-knowledge-source";
@@ -28,7 +34,13 @@ export interface CreateKnowledgeNodeDependencies {
   readonly clock: () => Date;
   readonly embeddingService?: TextEmbeddingService;
   readonly generateId: () => string;
+  readonly ontologyReader: KnowledgeOntologyReader;
   readonly repository: KnowledgeGraphRepository;
+}
+
+export interface CreateKnowledgeNodeResult {
+  readonly node: KnowledgeNode;
+  readonly ontologyWarnings: readonly KnowledgeOntologyViolation[];
 }
 
 export class KnowledgeGraphAccessDeniedError extends Error {
@@ -43,7 +55,7 @@ export function buildCreateKnowledgeNode(
 ) {
   return async function execute(
     input: CreateKnowledgeNodeInput
-  ): Promise<KnowledgeNode> {
+  ): Promise<CreateKnowledgeNodeResult> {
     if (!canAccessScopedResource(input.access, "write", input.scope)) {
       throw new KnowledgeGraphAccessDeniedError();
     }
@@ -56,12 +68,22 @@ export function buildCreateKnowledgeNode(
       );
     }
 
+    const settings = await dependencies.ontologyReader.findByOrganization(
+      input.access.organizationId
+    );
+    const ontologyWarnings = settings
+      ? enforceKnowledgeOntology(
+          settings.mode,
+          evaluateKnowledgeOntology(settings.ontology, { kinds: [input.kind] })
+        )
+      : [];
+
     const embedding = dependencies.embeddingService
       ? await dependencies.embeddingService.embed(
           `${input.canonicalName.trim()}\n${input.summary?.trim() ?? ""}`
         )
       : undefined;
-    const node = createKnowledgeNode({
+    const created = createKnowledgeNode({
       id: dependencies.generateId(),
       scope: input.scope,
       kind: input.kind,
@@ -72,6 +94,7 @@ export function buildCreateKnowledgeNode(
       ...(input.source ? { source: input.source } : {}),
       now: dependencies.clock()
     });
-    return dependencies.repository.saveNode(node);
+    const node = await dependencies.repository.saveNode(created);
+    return { node, ontologyWarnings };
   };
 }

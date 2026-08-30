@@ -18,6 +18,7 @@ import {
   type Team,
   type TeamMember
 } from "@/domain/identity/organization-administration";
+import { createKnowledgeOntology } from "@/domain/knowledge/knowledge-ontology";
 
 export class OrganizationAdministrationAccessDeniedError extends Error {
   constructor() {
@@ -152,9 +153,15 @@ export function buildUpdateOrganizationSettings(
     }
     const result = await repository.updateOrganizationSettings(
       access.organizationId,
-      update.name === undefined
-        ? update
-        : { ...update, name: normalizedOrganizationName(update.name) }
+      {
+        ...update,
+        ...(update.name === undefined
+          ? {}
+          : { name: normalizedOrganizationName(update.name) }),
+        ...(update.ontology === undefined
+          ? {}
+          : { ontology: createKnowledgeOntology(update.ontology) })
+      }
     );
     if (result.status === "organization_not_found") {
       throw new OrganizationNotFoundError();
