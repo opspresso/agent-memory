@@ -135,10 +135,11 @@ curl \
 
 ### 멤버십 status와 가입 흐름
 
-- `POST .../:organizationId/join`은 인증 사용자를 `member` role로 가입시키고 조직의 `newMemberStatus` 설정에 따라 `active` 또는 `pending` status를 부여한다. 응답은 `{ "status": "active" | "pending" }`이다.
+- `POST .../:organizationId/join`은 인증 사용자를 `member` role로 가입시키고 조직의 `newMemberStatus` 설정에 따라 `active` 또는 `pending` status를 부여한다. 기본값은 `pending`이며 즉시 활성화는 조직이 명시적으로 선택한다. 응답은 `{ "status": "active" | "pending" }`이다.
 - 조직에 `defaultTeamId`가 설정되어 있으면 멤버가 `active`가 되는 시점(즉시 가입 또는 pending 승인)에 해당 팀의 `member`로 자동 배정한다.
 - `owner` role 부여와 `owner` 멤버 변경·제거는 `owner`만 수행할 수 있고, 마지막 active `owner`는 강등·차단·제거할 수 없다(`409`).
 - 자기 자신의 role·status 변경과 제거는 허용하지 않는다(`409`).
+- `DELETE .../teams/:teamId`는 팀 소속과 team scope의 memory, 문서 metadata, Knowledge Graph를 함께 삭제한다.
 - `DELETE .../:organizationId`는 조직과 멤버십, 팀, memory, 문서 metadata, Knowledge Graph를 함께 삭제한다.
 
 ## Memory

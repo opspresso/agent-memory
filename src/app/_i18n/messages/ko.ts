@@ -214,7 +214,7 @@ export const ko: Messages = {
   "teams.deleted": "팀을 삭제했습니다.",
   "teams.deleteTitle": "팀 삭제",
   "teams.deleteBody":
-    "{name} 팀을 삭제할까요? 팀 소속은 제거되며 team scope Context는 남지만 이 팀과의 연결을 잃습니다.",
+    "{name} 팀을 삭제할까요? 팀 소속과 team scope의 Memory·문서·Knowledge Graph가 영구히 삭제됩니다.",
   "settings.title": "조직 설정",
   "settings.lede": "조직 프로필과 신규 회원 가입 정책을 관리합니다.",
   "settings.general": "일반",

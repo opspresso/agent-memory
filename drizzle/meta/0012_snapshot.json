@@ -1,5 +1,5 @@
 {
-  "id": "81057795-69ac-4b18-991b-25ab929a7eac",
+  "id": "f05177e1-beb5-48d4-9457-ea774f5f6227",
   "prevId": "3b80885c-0e31-457f-9e05-261249dbae74",
   "version": "7",
   "dialect": "postgresql",
@@ -959,7 +959,7 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'active'"
+          "default": "'pending'"
         },
         "default_team_id": {
           "name": "default_team_id",

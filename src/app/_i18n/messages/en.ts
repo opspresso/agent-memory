@@ -213,7 +213,7 @@ export const en = {
   "teams.deleted": "The team was deleted.",
   "teams.deleteTitle": "Delete team",
   "teams.deleteBody":
-    "Delete {name}? Team memberships are removed, and team-scoped context stays but loses this team.",
+    "Delete {name}? Team memberships and all team-scoped memories, documents, and knowledge are permanently deleted.",
   "settings.title": "Organization settings",
   "settings.lede": "Control the organization profile and how new members join.",
   "settings.general": "General",

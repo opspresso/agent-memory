@@ -62,7 +62,7 @@ function OrganizationSettingsView({
   const [teams, setTeams] = useState<readonly TeamView[]>([]);
   const [name, setName] = useState("");
   const [newMemberStatus, setNewMemberStatus] =
-    useState<NewMemberStatus>("active");
+    useState<NewMemberStatus>("pending");
   const [defaultTeamId, setDefaultTeamId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -98,7 +98,7 @@ function OrganizationSettingsView({
       if (!formInitialized.current) {
         formInitialized.current = true;
         setName(detail.name);
-        setNewMemberStatus(detail.newMemberStatus ?? "active");
+        setNewMemberStatus(detail.newMemberStatus ?? "pending");
         setDefaultTeamId(detail.defaultTeamId ?? null);
       }
     } catch (caught) {

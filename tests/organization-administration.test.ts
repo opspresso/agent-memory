@@ -67,7 +67,7 @@ describe("organization administration", () => {
         id: "organization-1",
         slug: "platform-team",
         name: "Platform Team",
-        newMemberStatus: "active",
+        newMemberStatus: "pending",
         defaultTeamId: null
       });
     expect(createOrganization).toHaveBeenCalledWith(

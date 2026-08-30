@@ -175,7 +175,7 @@ export function createOrganizationAdministrationRepository(
               organizationMembers.organizationId,
               organizationMembers.userId
             ],
-            set: { role, status: "active" }
+            set: { role }
           })
           .returning({
             role: organizationMembers.role,

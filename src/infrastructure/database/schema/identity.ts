@@ -37,7 +37,7 @@ export const organizations = pgTable(
     newMemberStatus: organizationMemberStatus()
       .$type<NewMemberStatus>()
       .notNull()
-      .default("active"),
+      .default("pending"),
     defaultTeamId: uuid().references((): AnyPgColumn => teams.id, {
       onDelete: "set null"
     }),

@@ -89,7 +89,7 @@ export function createOrganization(input: NewOrganization): Organization {
     id: input.id,
     slug: normalizedSlug(input.slug),
     name: normalizedName(input.name),
-    newMemberStatus: "active" as const,
+    newMemberStatus: "pending" as const,
     defaultTeamId: null,
     createdAt: new Date(input.now),
     updatedAt: new Date(input.now)

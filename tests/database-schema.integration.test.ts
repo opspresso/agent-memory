@@ -468,6 +468,16 @@ describe("PostgreSQL schema", () => {
     await expect(
       access.findByUser(organizationId, joinerId)
     ).resolves.toBeNull();
+    await expect(
+      administration.upsertOrganizationMember(
+        organizationId,
+        "joiner-p@example.com",
+        "admin"
+      )
+    ).resolves.toMatchObject({
+      status: "saved",
+      member: { role: "admin", status: "blocked" }
+    });
 
     await expect(
       administration.updateOrganizationMember(organizationId, ownerId, {
