@@ -14,9 +14,6 @@ export default async function OnboardingPage() {
     redirect("/");
   }
   const organizations = await listOrganizationMemberships(user.id);
-  if (organizations.some((organization) => organization.status === "active")) {
-    redirect("/");
-  }
   return (
     <OrganizationOnboarding
       isAdmin={user.isAdmin}

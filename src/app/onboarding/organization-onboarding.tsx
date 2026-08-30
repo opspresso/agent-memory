@@ -79,6 +79,7 @@ export function OrganizationOnboarding({
         t("onboarding.joinFailed")
       );
       if (body.status === "active") {
+        router.push("/");
         router.refresh();
         return;
       }

@@ -132,6 +132,24 @@ test("onboards, approves, and manages members through the console", async ({
     memberPage.getByRole("heading", { name: "공유 Context를 한곳에서 관리합니다." })
   ).toBeVisible();
 
+  const secondOrganizationName = `E2E Second Organization R${testInfo.retry}`;
+  await postJson<{ id: string }>(page, "/api/organizations", {
+    name: secondOrganizationName,
+    slug: `e2e-second-${runId}-${testInfo.retry}`
+  });
+  await memberPage.getByRole("button", { name: "계정 메뉴" }).click();
+  await memberPage.getByRole("menuitem", { name: "다른 조직 가입" }).click();
+  await expect(
+    memberPage.getByRole("heading", { name: "참여할 조직을 선택하세요" })
+  ).toBeVisible();
+  await memberPage
+    .locator(".mantine-Paper-root", { hasText: secondOrganizationName })
+    .getByRole("button", { name: "가입" })
+    .click();
+  await expect(
+    memberPage.getByText("조직 관리자의 승인을 기다리고 있습니다.")
+  ).toBeVisible();
+
   await page.getByRole("button", { name: `${memberEmail}에 대한 작업` }).click();
   await page.getByRole("menuitem", { name: "차단" }).click();
   await expect(page.getByText("회원을 차단했습니다.")).toBeVisible();

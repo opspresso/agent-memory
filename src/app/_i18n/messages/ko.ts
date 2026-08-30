@@ -21,6 +21,7 @@ export const ko: Messages = {
   "nav.settings": "설정",
   "shell.toggleNavigation": "내비게이션 열기/닫기",
   "shell.userMenu": "계정 메뉴",
+  "shell.joinOrganization": "다른 조직 가입",
   "home.badge": "공유 Context",
   "home.eyebrow": "AI Agent를 위한 공유 Context 인프라",
   "home.title": "에이전트가 기억하고,",

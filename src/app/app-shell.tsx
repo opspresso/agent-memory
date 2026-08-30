@@ -27,7 +27,8 @@ import {
   IconSettings,
   IconShieldCheck,
   IconUsers,
-  IconUsersGroup
+  IconUsersGroup,
+  IconUsersPlus
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -227,6 +228,15 @@ export function AppShellFrame({
                         </Badge>
                       </Group>
                     </Menu.Label>
+                  ) : null}
+                  {activeOrganizations.length > 0 ? (
+                    <Menu.Item
+                      component={Link}
+                      href="/onboarding"
+                      leftSection={<IconUsersPlus size={15} />}
+                    >
+                      {t("shell.joinOrganization")}
+                    </Menu.Item>
                   ) : null}
                   <Menu.Divider />
                   <Menu.Item

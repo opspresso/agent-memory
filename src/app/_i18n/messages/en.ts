@@ -19,6 +19,7 @@ export const en = {
   "nav.settings": "Settings",
   "shell.toggleNavigation": "Toggle navigation",
   "shell.userMenu": "Account menu",
+  "shell.joinOrganization": "Join another organization",
   "home.badge": "Shared Context",
   "home.eyebrow": "Shared context infrastructure for AI agents",
   "home.title": "Agents remember,",
