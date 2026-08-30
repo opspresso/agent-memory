@@ -11,6 +11,10 @@ export function normalizeKnowledgeKind(value: string): string {
   return kindAliases[normalized] ?? normalized;
 }
 
+export function normalizeKnowledgePredicate(value: string): string {
+  return value.normalize("NFKC").trim().toLowerCase();
+}
+
 export function normalizeKnowledgeName(value: string): string {
   return value.normalize("NFKC").trim().replace(/\s+/g, " ");
 }

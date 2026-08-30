@@ -336,6 +336,8 @@ describe("knowledge graph", () => {
   });
 
   it("rejects an unknown edge predicate in strict mode", async () => {
+    const sourceNode = node("node-1");
+    const targetNode = node("node-2");
     const saveEdge = vi.fn();
     const createEdge = buildCreateKnowledgeEdge({
       authorizeSource: vi.fn(),
@@ -345,19 +347,58 @@ describe("knowledge graph", () => {
         mode: "strict",
         ontology: { nodeKinds: [], edgePredicates: ["depends_on"] }
       }),
-      repository: repository({ saveEdge })
+      repository: repository({
+        findNodeById: vi
+          .fn()
+          .mockResolvedValueOnce(sourceNode)
+          .mockResolvedValueOnce(targetNode),
+        saveEdge
+      })
     });
 
     await expect(
       createEdge({
         access,
-        scope: node("scope").scope,
-        sourceNodeId: "node-1",
-        targetNodeId: "node-2",
+        scope: sourceNode.scope,
+        sourceNodeId: sourceNode.id,
+        targetNodeId: targetNode.id,
         predicate: "loves"
       })
     ).rejects.toBeInstanceOf(KnowledgeOntologyViolationError);
     expect(saveEdge).not.toHaveBeenCalled();
+  });
+
+  it("normalizes full-width edge predicates to the ontology form", async () => {
+    const sourceNode = node("node-1");
+    const targetNode = node("node-2");
+    const saveEdge = vi.fn(async (value: KnowledgeEdge) => value);
+    const createEdge = buildCreateKnowledgeEdge({
+      authorizeSource: vi.fn(),
+      clock: () => now,
+      generateId: () => "edge-1",
+      ontologyReader: ontologyReader({
+        mode: "strict",
+        ontology: { nodeKinds: [], edgePredicates: ["depends_on"] }
+      }),
+      repository: repository({
+        findNodeById: vi
+          .fn()
+          .mockResolvedValueOnce(sourceNode)
+          .mockResolvedValueOnce(targetNode),
+        saveEdge
+      })
+    });
+
+    const result = await createEdge({
+      access,
+      scope: sourceNode.scope,
+      sourceNodeId: sourceNode.id,
+      targetNodeId: targetNode.id,
+      predicate: " ＤＥＰＥＮＤＳ＿ＯＮ "
+    });
+
+    expect(result.edge.predicate).toBe("depends_on");
+    expect(result.ontologyWarnings).toEqual([]);
   });
 
   it("rejects a node outside the caller write scope", async () => {

@@ -82,18 +82,6 @@ export function buildCreateKnowledgeEdge(
       throw new KnowledgeGraphAccessDeniedError();
     }
 
-    const settings = await dependencies.ontologyReader.findByOrganization(
-      input.access.organizationId
-    );
-    const ontologyWarnings = settings
-      ? enforceKnowledgeOntology(
-          settings.mode,
-          evaluateKnowledgeOntology(settings.ontology, {
-            predicates: [input.predicate]
-          })
-        )
-      : [];
-
     if (input.source) {
       await dependencies.authorizeSource(
         input.access,
@@ -135,6 +123,18 @@ export function buildCreateKnowledgeEdge(
     if (!canReadSourceNode || !canReadTargetNode) {
       throw new KnowledgeNodeNotFoundError();
     }
+
+    const settings = await dependencies.ontologyReader.findByOrganization(
+      input.access.organizationId
+    );
+    const ontologyWarnings = settings
+      ? enforceKnowledgeOntology(
+          settings.mode,
+          evaluateKnowledgeOntology(settings.ontology, {
+            predicates: [input.predicate]
+          })
+        )
+      : [];
 
     const edge = await dependencies.repository.saveEdge(
       createKnowledgeEdge({

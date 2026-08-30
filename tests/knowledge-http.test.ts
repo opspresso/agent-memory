@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { createKnowledgeNode } from "@/domain/knowledge/knowledge-graph";
-import { publicKnowledgeNode } from "@/lib/knowledge-http";
+import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
+import { knowledgeErrorResponse, publicKnowledgeNode } from "@/lib/knowledge-http";
 import {
   createKnowledgeEdgeSchema,
   createKnowledgeNodeSchema,
@@ -9,6 +10,20 @@ import {
 } from "@/lib/knowledge-schemas";
 
 describe("knowledge HTTP boundary", () => {
+  it("maps a strict ontology rejection to 422 with its violations", async () => {
+    const response = knowledgeErrorResponse(
+      new KnowledgeOntologyViolationError([
+        { type: "unknown_predicate", term: "loves" }
+      ])
+    );
+
+    expect(response?.status).toBe(422);
+    await expect(response?.json()).resolves.toEqual({
+      error: "knowledge ontology violation",
+      violations: [{ type: "unknown_predicate", term: "loves" }]
+    });
+  });
+
   it("validates scoped node and edge input", () => {
     expect(
       createKnowledgeNodeSchema.safeParse({

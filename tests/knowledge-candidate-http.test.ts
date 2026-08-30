@@ -7,6 +7,7 @@ import {
   KnowledgeCandidateReviewConflictError
 } from "@/application/knowledge/review-knowledge-candidate";
 import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
+import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
 import {
   knowledgeCandidateErrorResponse,
   publicKnowledgeCandidate
@@ -54,8 +55,27 @@ describe("knowledge candidate HTTP boundary", () => {
     [new KnowledgeCandidateNotFoundError(), 404],
     [new KnowledgeCandidateReviewAccessDeniedError(), 403],
     [new KnowledgeCandidateReviewConflictError(), 409],
+    [
+      new KnowledgeOntologyViolationError([
+        { type: "unknown_kind", term: "gadget" }
+      ]),
+      422
+    ],
     [new InvalidKnowledgeCandidateReviewError("invalid"), 400]
   ])("maps review errors without leaking internal data", (error, status) => {
     expect(knowledgeCandidateErrorResponse(error)?.status).toBe(status);
+  });
+
+  it("includes the violations in a strict ontology rejection body", async () => {
+    const response = knowledgeCandidateErrorResponse(
+      new KnowledgeOntologyViolationError([
+        { type: "unknown_kind", term: "gadget" }
+      ])
+    );
+
+    await expect(response?.json()).resolves.toEqual({
+      error: "knowledge ontology violation",
+      violations: [{ type: "unknown_kind", term: "gadget" }]
+    });
   });
 });

@@ -1,4 +1,7 @@
-import { normalizeKnowledgeKind } from "./knowledge-identity";
+import {
+  normalizeKnowledgeKind,
+  normalizeKnowledgePredicate
+} from "./knowledge-identity";
 
 export const knowledgeOntologyModes = ["off", "warn", "strict"] as const;
 
@@ -40,10 +43,6 @@ export class KnowledgeOntologyViolationError extends Error {
 const TERM_LIMIT = 200;
 const TERM_MAX_LENGTH = 100;
 
-export function normalizeKnowledgeOntologyPredicate(value: string): string {
-  return value.normalize("NFKC").trim().toLowerCase();
-}
-
 function normalizedTerms(
   values: readonly string[],
   label: string,
@@ -80,7 +79,7 @@ export function createKnowledgeOntology(input: {
     edgePredicates: normalizedTerms(
       input.edgePredicates,
       "ontology edge predicates",
-      normalizeKnowledgeOntologyPredicate
+      normalizeKnowledgePredicate
     )
   });
 }
@@ -105,7 +104,7 @@ export function evaluateKnowledgeOntology(
   if (ontology.edgePredicates.length > 0) {
     const allowed = new Set(ontology.edgePredicates);
     for (const predicate of terms.predicates ?? []) {
-      const term = normalizeKnowledgeOntologyPredicate(predicate);
+      const term = normalizeKnowledgePredicate(predicate);
       if (!allowed.has(term)) {
         violations.set(`unknown_predicate:${term}`, {
           type: "unknown_predicate",
