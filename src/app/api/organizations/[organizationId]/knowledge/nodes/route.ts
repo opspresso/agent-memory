@@ -115,7 +115,7 @@ export async function GET(request: Request, context: RouteContext) {
     );
     return Response.json({
       hits: hits.map(publicKnowledgeHit),
-      total: hits.length
+      count: hits.length
     });
   } catch (error) {
     const response = knowledgeErrorResponse(error);

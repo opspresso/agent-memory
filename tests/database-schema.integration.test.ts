@@ -1092,6 +1092,7 @@ describe("PostgreSQL schema", () => {
       reason: "Verified against the source chunk"
     });
     expect(promotion).toMatchObject({
+      status: "promoted",
       candidate: {
         id: candidate.id,
         status: "accepted",
@@ -1118,7 +1119,10 @@ describe("PostgreSQL schema", () => {
         reviewedAt: createdAt,
         reviewedBy: user
       })
-    ).resolves.toMatchObject({ candidate: { status: "accepted" } });
+    ).resolves.toMatchObject({
+      status: "promoted",
+      candidate: { status: "accepted" }
+    });
     await expect(
       candidateRepository.reject({
         candidateId: candidate.id,

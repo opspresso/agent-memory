@@ -121,7 +121,7 @@ export async function GET(request: Request, context: RouteContext) {
         ...hit,
         memory: publicMemoryForAccess(hit.memory, authorization.access)
       })),
-      total: hits.length
+      count: hits.length
     });
   } catch (error) {
     const response = memoryErrorResponse(error);

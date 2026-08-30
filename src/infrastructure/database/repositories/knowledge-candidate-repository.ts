@@ -209,20 +209,23 @@ export function createKnowledgeCandidateRepository(
           .for("update")
           .limit(1);
         if (!locked) {
-          return null;
+          return { status: "not_found" } as const;
         }
         const candidate = candidateFromRow(
           locked.candidate,
           knowledgeScopeFromRow(locked.document)
         );
-        if (locked.document.status !== "ready") {
-          return null;
-        }
+        // The idempotent already-accepted return must stay ahead of both the
+        // source-readiness and promotion-completeness checks: callers replay
+        // accepted candidates with empty promotion inputs.
         if (candidate.status === "accepted") {
-          return { candidate, nodes: [], edges: [] };
+          return { status: "promoted", candidate, nodes: [], edges: [] } as const;
         }
         if (candidate.status !== "pending") {
-          return null;
+          return { status: "already_rejected" } as const;
+        }
+        if (locked.document.status !== "ready") {
+          return { status: "source_not_ready" } as const;
         }
         const promotions = new Map(
           input.entityPromotions.map((promotion) => [promotion.key, promotion])
@@ -345,10 +348,11 @@ export function createKnowledgeCandidateRepository(
           throw new Error("knowledge candidate review claim was lost");
         }
         return {
+          status: "promoted",
           candidate: candidateFromRow(reviewed, candidate.scope),
           nodes,
           edges
-        };
+        } as const;
       });
     },
 

@@ -33,7 +33,7 @@ export async function GET(request: Request, context: RouteContext) {
     );
     return Response.json({
       candidates: candidates.map(publicKnowledgeCandidate),
-      total: candidates.length
+      count: candidates.length
     });
   } catch (error) {
     const response = knowledgeCandidateErrorResponse(error);

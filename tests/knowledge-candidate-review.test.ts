@@ -153,6 +153,7 @@ describe("knowledge candidate review", () => {
 
   it("prepares deterministic source-bound nodes and relationships for atomic promotion", async () => {
     const accept = vi.fn().mockImplementation(async (input) => ({
+      status: "promoted",
       candidate: { ...candidate, status: "accepted" },
       nodes: [],
       edges: [],
@@ -192,6 +193,7 @@ describe("knowledge candidate review", () => {
 
   it("embeds candidate entities in one ordered batch", async () => {
     const accept = vi.fn().mockResolvedValue({
+      status: "promoted",
       candidate: { ...candidate, status: "accepted" },
       nodes: [],
       edges: []
@@ -273,6 +275,7 @@ describe("knowledge candidate review", () => {
       repository: repository({
         findById: vi.fn().mockResolvedValue(candidate),
         accept: vi.fn().mockResolvedValue({
+          status: "promoted",
           candidate: { ...candidate, status: "accepted" },
           nodes: [],
           edges: []
@@ -306,6 +309,22 @@ describe("knowledge candidate review", () => {
     );
     expect(embedMany).not.toHaveBeenCalled();
     expect(candidates.accept).not.toHaveBeenCalled();
+  });
+
+  it("reports a not-ready source document instead of a generic conflict", async () => {
+    const review = buildAcceptKnowledgeCandidate({
+      clock: () => now,
+      generateId: vi.fn().mockReturnValue("id"),
+      ontologyReader: ontologyReader(),
+      repository: repository({
+        findById: vi.fn().mockResolvedValue(candidate),
+        accept: vi.fn().mockResolvedValue({ status: "source_not_ready" })
+      })
+    });
+
+    await expect(review(admin, candidate.id)).rejects.toThrow(
+      "knowledge candidate source document is not ready"
+    );
   });
 
   it("prevents a member from promoting an organization-scoped candidate", async () => {

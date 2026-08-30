@@ -36,7 +36,7 @@ export async function GET(request: Request, context: RouteContext) {
   }
   try {
     const members = await listOrganizationMemberRecords(authorization.access);
-    return Response.json({ members, total: members.length });
+    return Response.json({ members, count: members.length });
   } catch (error) {
     const response = organizationAdministrationErrorResponse(error);
     if (response) {

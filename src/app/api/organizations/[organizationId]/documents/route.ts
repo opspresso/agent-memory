@@ -160,7 +160,7 @@ export async function GET(request: Request, context: RouteContext) {
     );
     return Response.json({
       hits: hits.map(publicDocumentHit),
-      total: hits.length
+      count: hits.length
     });
   } catch (error) {
     const response = documentErrorResponse(error);

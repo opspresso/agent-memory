@@ -35,7 +35,7 @@ export async function GET(request: Request, context: RouteContext) {
     return authorization.response;
   }
   const teams = await listTeamRecords(authorization.access);
-  return Response.json({ teams, total: teams.length });
+  return Response.json({ teams, count: teams.length });
 }
 
 export async function POST(request: Request, context: RouteContext) {
