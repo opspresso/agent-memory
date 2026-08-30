@@ -47,7 +47,9 @@ export async function GET(request: Request, context: RouteContext) {
       ...(canManage
         ? {
             newMemberStatus: organization.newMemberStatus,
-            defaultTeamId: organization.defaultTeamId
+            defaultTeamId: organization.defaultTeamId,
+            ontologyMode: organization.ontologyMode,
+            ontology: organization.ontology
           }
         : {}),
       createdAt: organization.createdAt

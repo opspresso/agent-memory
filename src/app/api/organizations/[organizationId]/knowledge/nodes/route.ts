@@ -60,7 +60,7 @@ export async function POST(request: Request, context: RouteContext) {
           };
 
   try {
-    const node = await createKnowledgeNodeRecord({
+    const { node, ontologyWarnings } = await createKnowledgeNodeRecord({
       access: authorization.access,
       scope,
       kind: parsed.data.kind,
@@ -69,11 +69,17 @@ export async function POST(request: Request, context: RouteContext) {
       ...(parsed.data.properties ? { properties: parsed.data.properties } : {}),
       ...(parsed.data.source ? { source: parsed.data.source } : {})
     });
-    return Response.json(publicKnowledgeNode(node), {
-      headers: {
-        Location: `/api/organizations/${organizationId}/knowledge/nodes/${node.id}/neighborhood`
+    return Response.json(
+      {
+        ...publicKnowledgeNode(node),
+        ...(ontologyWarnings.length > 0 ? { ontologyWarnings } : {})
+      },
+      {
+        headers: {
+          Location: `/api/organizations/${organizationId}/knowledge/nodes/${node.id}/neighborhood`
+        }
       }
-    });
+    );
   } catch (error) {
     const response = knowledgeErrorResponse(error);
     if (response) {

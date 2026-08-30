@@ -10,6 +10,12 @@ import {
   type KnowledgeSource
 } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
+import {
+  enforceKnowledgeOntology,
+  evaluateKnowledgeOntology,
+  type KnowledgeOntologyViolation
+} from "@/domain/knowledge/knowledge-ontology";
+import type { KnowledgeOntologyReader } from "@/domain/knowledge/knowledge-ontology-reader";
 
 import {
   KnowledgeSourceNotFoundError,
@@ -31,7 +37,13 @@ export interface CreateKnowledgeEdgeDependencies {
   readonly authorizeSource: AuthorizeKnowledgeSource;
   readonly clock: () => Date;
   readonly generateId: () => string;
+  readonly ontologyReader: KnowledgeOntologyReader;
   readonly repository: KnowledgeGraphRepository;
+}
+
+export interface CreateKnowledgeEdgeResult {
+  readonly edge: KnowledgeEdge;
+  readonly ontologyWarnings: readonly KnowledgeOntologyViolation[];
 }
 
 export class KnowledgeNodeNotFoundError extends Error {
@@ -65,10 +77,22 @@ export function buildCreateKnowledgeEdge(
 ) {
   return async function execute(
     input: CreateKnowledgeEdgeInput
-  ): Promise<KnowledgeEdge> {
+  ): Promise<CreateKnowledgeEdgeResult> {
     if (!canAccessScopedResource(input.access, "write", input.scope)) {
       throw new KnowledgeGraphAccessDeniedError();
     }
+
+    const settings = await dependencies.ontologyReader.findByOrganization(
+      input.access.organizationId
+    );
+    const ontologyWarnings = settings
+      ? enforceKnowledgeOntology(
+          settings.mode,
+          evaluateKnowledgeOntology(settings.ontology, {
+            predicates: [input.predicate]
+          })
+        )
+      : [];
 
     if (input.source) {
       await dependencies.authorizeSource(
@@ -112,7 +136,7 @@ export function buildCreateKnowledgeEdge(
       throw new KnowledgeNodeNotFoundError();
     }
 
-    return dependencies.repository.saveEdge(
+    const edge = await dependencies.repository.saveEdge(
       createKnowledgeEdge({
         id: dependencies.generateId(),
         organizationId: input.access.organizationId,
@@ -125,5 +149,6 @@ export function buildCreateKnowledgeEdge(
         now: dependencies.clock()
       })
     );
+    return { edge, ontologyWarnings };
   };
 }

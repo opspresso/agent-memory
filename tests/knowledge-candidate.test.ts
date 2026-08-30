@@ -12,6 +12,10 @@ import {
   InvalidKnowledgeCandidateError
 } from "@/domain/knowledge/knowledge-candidate";
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
+import type {
+  KnowledgeOntologyReader,
+  OrganizationKnowledgeOntology
+} from "@/domain/knowledge/knowledge-ontology-reader";
 
 const now = new Date("2026-08-26T00:00:00.000Z");
 const scope = {
@@ -30,6 +34,12 @@ function graph() {
       { sourceKey: "api", targetKey: "db", predicate: "stores_in" }
     ]
   };
+}
+
+function ontologyReader(
+  result: OrganizationKnowledgeOntology | null = null
+): KnowledgeOntologyReader {
+  return { findByOrganization: vi.fn().mockResolvedValue(result) };
 }
 
 function candidateRepository(): KnowledgeCandidateRepository {
@@ -167,6 +177,7 @@ describe("knowledge candidate", () => {
     const candidates = candidateRepository();
     const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
     const generate = buildGenerateKnowledgeCandidate({
+      ontologyReader: ontologyReader(),
       candidateRepository: candidates,
       clock: () => now,
       documentRepository: documentRepository(
@@ -203,6 +214,7 @@ describe("knowledge candidate", () => {
     vi.mocked(candidates.findByChunkId).mockResolvedValue(existing);
     const extractionService = { extract: vi.fn() };
     const generate = buildGenerateKnowledgeCandidate({
+      ontologyReader: ontologyReader(),
       candidateRepository: candidates,
       clock: () => now,
       documentRepository: documentRepository(vi.fn()),
@@ -236,6 +248,7 @@ describe("knowledge candidate", () => {
       now
     });
     const generate = buildGenerateKnowledgeCandidate({
+      ontologyReader: ontologyReader(),
       candidateRepository: candidateRepository(),
       clock: () => now,
       documentRepository: documentRepository(
@@ -248,6 +261,105 @@ describe("knowledge candidate", () => {
     await expect(generate("organization-1", "chunk-1")).rejects.toBeInstanceOf(
       KnowledgeCandidateSourceNotFoundError
     );
+  });
+
+  it("passes the organization ontology hint to extraction when enabled", async () => {
+    const document = {
+      ...createDocument({
+        id: "document-1",
+        scope,
+        title: "Architecture",
+        objectKey: "document-1/source",
+        checksum: "a".repeat(64),
+        mimeType: "text/plain",
+        sizeBytes: 10,
+        createdBy: "user-1",
+        now
+      }),
+      status: "ready" as const
+    };
+    const chunk = createDocumentChunk({
+      id: "chunk-1",
+      organizationId: "organization-1",
+      documentId: "document-1",
+      ordinal: 0,
+      content: "Memory API stores data in Memory Database.",
+      now
+    });
+    const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
+    const generate = buildGenerateKnowledgeCandidate({
+      candidateRepository: candidateRepository(),
+      clock: () => now,
+      documentRepository: documentRepository(
+        vi.fn().mockResolvedValue({ document, chunk })
+      ),
+      extractionService: { extract },
+      generateId: () => "candidate-1",
+      ontologyReader: ontologyReader({
+        mode: "warn",
+        ontology: { nodeKinds: ["service"], edgePredicates: ["stores_in"] }
+      })
+    });
+
+    await generate("organization-1", "chunk-1");
+
+    expect(extract).toHaveBeenCalledWith({
+      content: chunk.content,
+      documentTitle: document.title,
+      mimeType: document.mimeType,
+      ontology: {
+        mode: "warn",
+        nodeKinds: ["service"],
+        edgePredicates: ["stores_in"]
+      }
+    });
+  });
+
+  it("omits the ontology hint when validation is off or the dictionary is empty", async () => {
+    const document = {
+      ...createDocument({
+        id: "document-1",
+        scope,
+        title: "Architecture",
+        objectKey: "document-1/source",
+        checksum: "a".repeat(64),
+        mimeType: "text/plain",
+        sizeBytes: 10,
+        createdBy: "user-1",
+        now
+      }),
+      status: "ready" as const
+    };
+    const chunk = createDocumentChunk({
+      id: "chunk-1",
+      organizationId: "organization-1",
+      documentId: "document-1",
+      ordinal: 0,
+      content: "content",
+      now
+    });
+    const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
+    const generate = buildGenerateKnowledgeCandidate({
+      candidateRepository: candidateRepository(),
+      clock: () => now,
+      documentRepository: documentRepository(
+        vi.fn().mockResolvedValue({ document, chunk })
+      ),
+      extractionService: { extract },
+      generateId: () => "candidate-1",
+      ontologyReader: ontologyReader({
+        mode: "strict",
+        ontology: { nodeKinds: [], edgePredicates: [] }
+      })
+    });
+
+    await generate("organization-1", "chunk-1");
+
+    expect(extract).toHaveBeenCalledWith({
+      content: chunk.content,
+      documentTitle: document.title,
+      mimeType: document.mimeType
+    });
   });
 
   it("enriches every ready document chunk and remains idempotent per chunk", async () => {
@@ -286,6 +398,7 @@ describe("knowledge candidate", () => {
     const candidates = candidateRepository();
     const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
     const enrich = buildGenerateDocumentKnowledgeCandidates({
+      ontologyReader: ontologyReader(),
       candidateRepository: candidates,
       clock: () => now,
       documentRepository: documents,

@@ -1,3 +1,8 @@
+import {
+  emptyKnowledgeOntology,
+  type KnowledgeOntology,
+  type KnowledgeOntologyMode
+} from "../knowledge/knowledge-ontology";
 import type {
   NewMemberStatus,
   OrganizationMemberStatus,
@@ -11,6 +16,8 @@ export interface Organization {
   readonly name: string;
   readonly newMemberStatus: NewMemberStatus;
   readonly defaultTeamId: string | null;
+  readonly ontologyMode: KnowledgeOntologyMode;
+  readonly ontology: KnowledgeOntology;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -91,6 +98,8 @@ export function createOrganization(input: NewOrganization): Organization {
     name: normalizedName(input.name),
     newMemberStatus: "pending" as const,
     defaultTeamId: null,
+    ontologyMode: "off" as const,
+    ontology: emptyKnowledgeOntology,
     createdAt: new Date(input.now),
     updatedAt: new Date(input.now)
   });

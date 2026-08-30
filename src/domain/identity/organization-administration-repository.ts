@@ -1,4 +1,8 @@
 import type {
+  KnowledgeOntology,
+  KnowledgeOntologyMode
+} from "../knowledge/knowledge-ontology";
+import type {
   NewMemberStatus,
   OrganizationMemberStatus,
   OrganizationRole,
@@ -19,6 +23,8 @@ export interface OrganizationSettingsUpdate {
   readonly name?: string;
   readonly newMemberStatus?: NewMemberStatus;
   readonly defaultTeamId?: string | null;
+  readonly ontologyMode?: KnowledgeOntologyMode;
+  readonly ontology?: KnowledgeOntology;
 }
 
 export type UpdateOrganizationSettingsResult =

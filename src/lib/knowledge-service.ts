@@ -17,6 +17,7 @@ import { observeRetrieval } from "@/infrastructure/observability/telemetry";
 import {
   documentRepository,
   knowledgeGraphRepository,
+  knowledgeOntologyReader,
   memoryRepository,
   textEmbeddingService
 } from "./container";
@@ -31,6 +32,7 @@ export const createKnowledgeNodeRecord = buildCreateKnowledgeNode({
   authorizeSource,
   clock,
   generateId: randomUUID,
+  ontologyReader: knowledgeOntologyReader,
   repository: knowledgeGraphRepository,
   ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
 });
@@ -39,6 +41,7 @@ export const createKnowledgeEdgeRecord = buildCreateKnowledgeEdge({
   authorizeSource,
   clock,
   generateId: randomUUID,
+  ontologyReader: knowledgeOntologyReader,
   repository: knowledgeGraphRepository
 });
 

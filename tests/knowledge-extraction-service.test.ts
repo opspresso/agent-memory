@@ -100,6 +100,109 @@ describe("knowledge extraction service", () => {
     ).toContain("Use recognition for awards");
   });
 
+  it("injects the organization ontology into the prompt and constrains kinds in strict mode", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({ entities: [], relationships: [] })
+            }
+          }
+        ]
+      })
+    );
+    const service = createKnowledgeExtractionService({
+      baseUrl: "http://localhost:11434/v1",
+      model: "local-model",
+      request
+    });
+
+    await service.extract({
+      documentTitle: "Architecture",
+      mimeType: "text/plain",
+      content: "content",
+      ontology: {
+        mode: "strict",
+        nodeKinds: ["service", "database"],
+        edgePredicates: ["depends_on"]
+      }
+    });
+
+    const body = JSON.parse(
+      vi.mocked(request).mock.calls[0]?.[1]?.body as string
+    ) as {
+      messages: readonly { content: string }[];
+      response_format: {
+        json_schema: {
+          schema: {
+            properties: {
+              entities: { items: { properties: { kind: { enum?: string[] } } } };
+            };
+          };
+        };
+      };
+    };
+    expect(body.messages[0]?.content).toContain(
+      "Use only these lowercase kinds defined by the organization: service, database."
+    );
+    expect(body.messages[0]?.content).toContain(
+      "Use only these lowercase snake_case predicates defined by the organization: depends_on."
+    );
+    expect(
+      body.response_format.json_schema.schema.properties.entities.items
+        .properties.kind.enum
+    ).toEqual(["service", "database"]);
+  });
+
+  it("prefers ontology terms without an enum in warn mode", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({ entities: [], relationships: [] })
+            }
+          }
+        ]
+      })
+    );
+    const service = createKnowledgeExtractionService({
+      baseUrl: "http://localhost:11434/v1",
+      model: "local-model",
+      request
+    });
+
+    await service.extract({
+      documentTitle: "Architecture",
+      mimeType: "text/plain",
+      content: "content",
+      ontology: { mode: "warn", nodeKinds: ["service"], edgePredicates: [] }
+    });
+
+    const body = JSON.parse(
+      vi.mocked(request).mock.calls[0]?.[1]?.body as string
+    ) as {
+      messages: readonly { content: string }[];
+      response_format: {
+        json_schema: {
+          schema: {
+            properties: {
+              entities: { items: { properties: { kind: { enum?: string[] } } } };
+            };
+          };
+        };
+      };
+    };
+    expect(body.messages[0]?.content).toContain(
+      "Prefer these lowercase kinds defined by the organization: service."
+    );
+    expect(
+      body.response_format.json_schema.schema.properties.entities.items
+        .properties.kind.enum
+    ).toBeUndefined();
+  });
+
   it("rejects malformed model output without exposing source content or credentials", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({

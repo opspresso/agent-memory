@@ -68,7 +68,9 @@ describe("organization administration", () => {
         slug: "platform-team",
         name: "Platform Team",
         newMemberStatus: "pending",
-        defaultTeamId: null
+        defaultTeamId: null,
+        ontologyMode: "off",
+        ontology: { nodeKinds: [], edgePredicates: [] }
       });
     expect(createOrganization).toHaveBeenCalledWith(
       expect.objectContaining({ id: "organization-1" }),
@@ -186,6 +188,47 @@ describe("organization administration", () => {
       "organization-1",
       expect.objectContaining({ name: "Platform Guild" })
     );
+  });
+
+  it("normalizes the ontology dictionary before persisting settings", async () => {
+    const updateOrganizationSettings = vi.fn().mockImplementation(
+      async (_organizationId, update) => ({
+        status: "updated",
+        organization: { id: "organization-1", ...update }
+      })
+    );
+    const update = buildUpdateOrganizationSettings(
+      repository({ updateOrganizationSettings })
+    );
+
+    await update(ownerAccess, {
+      ontologyMode: "warn",
+      ontology: {
+        nodeKinds: [" Service ", "service", "Award"],
+        edgePredicates: [" DEPENDS_ON "]
+      }
+    });
+
+    expect(updateOrganizationSettings).toHaveBeenCalledWith("organization-1", {
+      ontologyMode: "warn",
+      ontology: {
+        nodeKinds: ["service", "recognition"],
+        edgePredicates: ["depends_on"]
+      }
+    });
+  });
+
+  it("rejects an ontology dictionary above the term limit", async () => {
+    const update = buildUpdateOrganizationSettings(repository());
+
+    await expect(
+      update(ownerAccess, {
+        ontology: {
+          nodeKinds: Array.from({ length: 201 }, (_, index) => `kind-${index}`),
+          edgePredicates: []
+        }
+      })
+    ).rejects.toThrow("ontology node kinds must contain at most 200 terms");
   });
 
   it("reserves organization deletion for owners", async () => {

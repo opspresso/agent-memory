@@ -80,6 +80,7 @@ curl \
 | `404` | Resource가 없거나 호출자에게 존재를 공개할 수 없음 |
 | `409` | Memory version 또는 candidate review 상태 충돌 |
 | `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
+| `422` | 조직 온톨로지 검증(strict)에서 미등록 kind·predicate를 거부함. 응답에 `violations` 배열 포함 |
 | `428` | Memory mutation에 유효한 `If-Match`가 없음 |
 | `429` | Application instance의 AI provider 호출 상한을 초과함. `Retry-After` header 이후 재시도 |
 | `503` | Health check에서 Database를 사용할 수 없음 |
@@ -124,7 +125,7 @@ curl \
 ## 조직 관리 입력
 
 - 조직 생성: `{ "slug": string, "name": string }`
-- 조직 설정 변경(`PATCH .../:organizationId`): `{ "name"?: string, "newMemberStatus"?: "active" | "pending", "defaultTeamId"?: UUID | null }` — 필드 하나 이상 필요
+- 조직 설정 변경(`PATCH .../:organizationId`): `{ "name"?: string, "newMemberStatus"?: "active" | "pending", "defaultTeamId"?: UUID | null, "ontologyMode"?: "off" | "warn" | "strict", "ontology"?: { "nodeKinds": string[], "edgePredicates": string[] } }` — 필드 하나 이상 필요. `ontology`는 두 목록 전체를 치환하며 목록당 최대 200개, 용어당 최대 100자다. 용어는 소문자로 정규화하고 중복을 제거해 저장한다.
 - 조직 멤버 추가·변경: `{ "email": string, "role": "member" | "admin" | "owner" }`
 - 멤버 변경(`PATCH .../members/:userId`): `{ "role"?: "member" | "admin" | "owner", "status"?: "active" | "pending" | "blocked" }` — 필드 하나 이상 필요
 - 팀 생성: `{ "slug": string, "name": string }`
@@ -349,6 +350,16 @@ Node 응답은 `id`, `scope`, `kind`, `canonicalName`, 선택형 `summary`, `pro
 `POST .../knowledge/nodes/:targetNodeId/merge`는 `{ "sourceNodeId": UUID, "reason": string }`을 받아 source node를 target node로 병합한다. 두 node는 같은 organization과 scope에 있어야 하며 호출자는 둘 다 `manage`할 수 있어야 한다. 병합 transaction은 provenance를 누적하고 incoming·outgoing edge를 target으로 재연결하며, 중복 edge를 합치고 self-edge를 제거한 뒤 source node를 삭제하고 audit을 저장한다.
 
 Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical name과 정규화 kind를 사용한다. `award`, `honor`, `achievement`, `designation`은 `recognition`으로 통합한다. 같은 scope에서 정규화 identity가 같으면 신규 생성과 AI 후보 승인 시 기존 node에 자동 병합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
+
+### 조직 온톨로지 검증
+
+조직은 허용 node kind·edge predicate 사전(`ontology`)과 검증 모드(`ontologyMode`)를 설정할 수 있다(`PATCH /api/organizations/:organizationId`, admin·owner). 검증은 node 생성, edge 생성, AI 후보 승인에 적용되며 정규화(NFKC·소문자·kind alias)된 용어로 사전과 비교한다. 빈 목록은 해당 축을 검증하지 않는다.
+
+- `off`(기본): 검증하지 않는다.
+- `warn`: 쓰기를 허용하고 성공 응답에 `ontologyWarnings: [{ "type": "unknown_kind" | "unknown_predicate", "term": string }]`를 포함한다(위반이 없으면 필드 생략).
+- `strict`: 미등록 용어를 `422` `{ "error": "knowledge ontology violation", "violations": [...] }`로 거부한다. AI 후보 승인은 node·edge 생성과 embedding 호출 전에 거부된다.
+
+`GET .../candidates/:candidateId/duplicates` 응답은 `duplicates`와 함께 `ontology: { "mode": string, "violations": [...] }`를 반환해 검토 화면이 미등록 용어를 표시할 수 있게 한다. 검증 모드가 `off`가 아니고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전이 힌트로 주입되며, `strict`에서는 entity kind가 사전 값으로 제약된다(predicate는 제약하지 않고 승인 시점에 검증한다).
 
 검색은 `GET .../knowledge/nodes?q=<query>&limit=<1-100>`을 사용한다. Neighborhood는 `depth=1-5`, `limit=1-200`을 받으며 기본값은 각각 1과 100이다. 두 조회는 호출자가 현재 읽을 수 있고 active·유효한 Memory 또는 ready document chunk 근거가 하나 이상 있는 graph resource만 반환한다.
 

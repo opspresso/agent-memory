@@ -24,17 +24,18 @@ export async function GET(request: Request, context: RouteContext) {
     return authorization.response;
   }
   try {
-    const duplicates = await findKnowledgeCandidateDuplicateRecords(
+    const result = await findKnowledgeCandidateDuplicateRecords(
       authorization.access,
       parsedCandidateId.data
     );
     return Response.json({
       duplicates: Object.fromEntries(
-        Object.entries(duplicates).map(([key, nodes]) => [
+        Object.entries(result.duplicates).map(([key, nodes]) => [
           key,
           nodes.map(publicKnowledgeNode)
         ])
-      )
+      ),
+      ontology: result.ontology
     });
   } catch (error) {
     const response = knowledgeCandidateErrorResponse(error);

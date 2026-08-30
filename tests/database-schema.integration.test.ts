@@ -15,6 +15,7 @@ import { createMemoryRepository } from "@/infrastructure/database/repositories/m
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
 import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
+import { createKnowledgeOntologyReader } from "@/infrastructure/database/repositories/knowledge-ontology-reader";
 import { createAuth } from "@/lib/create-auth";
 import { createMemory, reviseMemory } from "@/domain/memory/memory";
 import {
@@ -378,6 +379,66 @@ describe("PostgreSQL schema", () => {
       [organizationId]
     );
     expect(ownerCount.rows[0]?.total).toBe(1);
+  });
+
+  it("stores and reads the organization ontology dictionary and mode", async () => {
+    const organizationId = "00000000-0000-0000-0000-000000000031";
+    const ownerId = "10000000-0000-0000-0000-000000000031";
+    const createdAt = new Date("2026-08-26T00:00:00.000Z");
+    await pool.query(
+      `INSERT INTO users (id, email, name) VALUES ($1, 'owner-q@example.com', 'Owner Q')`,
+      [ownerId]
+    );
+    const administration = createOrganizationAdministrationRepository(db);
+    const ontologyReader = createKnowledgeOntologyReader(db);
+    await administration.createOrganization(
+      createOrganization({
+        id: organizationId,
+        slug: "organization-q",
+        name: "Organization Q",
+        now: createdAt
+      }),
+      ownerId
+    );
+
+    await expect(
+      administration.findOrganization(organizationId)
+    ).resolves.toMatchObject({
+      ontologyMode: "off",
+      ontology: { nodeKinds: [], edgePredicates: [] }
+    });
+
+    await expect(
+      administration.updateOrganizationSettings(organizationId, {
+        ontologyMode: "strict",
+        ontology: {
+          nodeKinds: ["service", "database"],
+          edgePredicates: ["depends_on"]
+        }
+      })
+    ).resolves.toMatchObject({
+      status: "updated",
+      organization: {
+        ontologyMode: "strict",
+        ontology: {
+          nodeKinds: ["service", "database"],
+          edgePredicates: ["depends_on"]
+        }
+      }
+    });
+
+    await expect(
+      ontologyReader.findByOrganization(organizationId)
+    ).resolves.toEqual({
+      mode: "strict",
+      ontology: {
+        nodeKinds: ["service", "database"],
+        edgePredicates: ["depends_on"]
+      }
+    });
+    await expect(
+      ontologyReader.findByOrganization("00000000-0000-0000-0000-0000000000ff")
+    ).resolves.toBeNull();
   });
 
   it("applies join policy, membership status, and default team assignment", async () => {

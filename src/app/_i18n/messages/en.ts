@@ -238,6 +238,24 @@ export const en = {
   "settings.deleteConfirmBody":
     "This permanently deletes {name} and all of its data. This cannot be undone.",
   "settings.deleteConfirmLabel": "Type {slug} to confirm",
+  "settings.ontology.title": "Ontology",
+  "settings.ontology.body":
+    "Define the node kinds and edge predicates allowed in the Knowledge Graph.",
+  "settings.ontology.mode.label": "Validation mode",
+  "settings.ontology.mode.description":
+    "How knowledge writes using terms outside the dictionary are handled.",
+  "settings.ontology.mode.off": "Off · do not validate",
+  "settings.ontology.mode.warn": "Warn · flag unknown terms",
+  "settings.ontology.mode.strict": "Strict · reject unknown terms",
+  "settings.ontology.nodeKinds.label": "Node kinds",
+  "settings.ontology.nodeKinds.description":
+    "Allowed entity kinds. Press Enter to add; terms are lowercased.",
+  "settings.ontology.nodeKinds.placeholder": "service, database, concept",
+  "settings.ontology.edgePredicates.label": "Edge predicates",
+  "settings.ontology.edgePredicates.description":
+    "Allowed relationship predicates. Press Enter to add; terms are lowercased.",
+  "settings.ontology.edgePredicates.placeholder": "depends_on, owns, uses",
+  "settings.ontology.termCount": "{count}/{max} terms",
   "workspace.resultFallback": "Search result",
   "workspace.selectOrganization": "Select an organization",
   "workspace.searchFailed": "Search failed.",
@@ -354,6 +372,11 @@ export const en = {
   "candidate.reasonPlaceholder": "Record the basis for accepting or rejecting this candidate",
   "candidate.reject": "Reject",
   "candidate.accept": "Accept into Graph",
+  "candidate.ontologyUnknown": "Not in ontology",
+  "candidate.ontologyWarn":
+    "This candidate uses terms outside the ontology dictionary: {terms}",
+  "candidate.ontologyStrict":
+    "Accepting is blocked because these terms are not in the ontology dictionary: {terms}. Update the dictionary in organization settings.",
   "memory.requestFailed": "The Memory request failed.",
   "memory.etagMissing": "The Memory version header is missing.",
   "memory.loadFailed": "The Memory could not be loaded.",

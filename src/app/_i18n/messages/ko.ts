@@ -239,6 +239,24 @@ export const ko: Messages = {
   "settings.deleteConfirmBody":
     "{name} 조직과 모든 데이터가 영구히 삭제됩니다. 되돌릴 수 없습니다.",
   "settings.deleteConfirmLabel": "확인을 위해 {slug} 입력",
+  "settings.ontology.title": "온톨로지",
+  "settings.ontology.body":
+    "Knowledge Graph에서 허용할 node kind와 edge predicate를 정의합니다.",
+  "settings.ontology.mode.label": "검증 모드",
+  "settings.ontology.mode.description":
+    "사전에 없는 용어를 사용한 knowledge 쓰기를 처리하는 방식입니다.",
+  "settings.ontology.mode.off": "사용 안 함 · 검증하지 않음",
+  "settings.ontology.mode.warn": "경고 · 미등록 용어 표시",
+  "settings.ontology.mode.strict": "엄격 · 미등록 용어 거부",
+  "settings.ontology.nodeKinds.label": "Node kind 사전",
+  "settings.ontology.nodeKinds.description":
+    "허용하는 entity kind입니다. Enter로 추가하며 소문자로 저장됩니다.",
+  "settings.ontology.nodeKinds.placeholder": "service, database, concept",
+  "settings.ontology.edgePredicates.label": "Edge predicate 사전",
+  "settings.ontology.edgePredicates.description":
+    "허용하는 관계 predicate입니다. Enter로 추가하며 소문자로 저장됩니다.",
+  "settings.ontology.edgePredicates.placeholder": "depends_on, owns, uses",
+  "settings.ontology.termCount": "{count}/{max}개 용어",
   "workspace.resultFallback": "검색 결과",
   "workspace.selectOrganization": "조직을 선택하세요",
   "workspace.searchFailed": "검색에 실패했습니다.",
@@ -354,6 +372,11 @@ export const ko: Messages = {
   "candidate.reasonPlaceholder": "승인 또는 거절 판단의 근거를 기록하세요",
   "candidate.reject": "거절",
   "candidate.accept": "Graph에 승인",
+  "candidate.ontologyUnknown": "온톨로지에 없음",
+  "candidate.ontologyWarn":
+    "온톨로지 사전에 없는 용어가 포함되어 있습니다: {terms}",
+  "candidate.ontologyStrict":
+    "온톨로지 사전에 없는 용어가 있어 승인할 수 없습니다: {terms}. 조직 설정에서 사전을 갱신하세요.",
   "memory.requestFailed": "Memory 요청을 처리하지 못했습니다.",
   "memory.etagMissing": "Memory version header가 없습니다.",
   "memory.loadFailed": "Memory를 불러오지 못했습니다.",
