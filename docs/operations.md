@@ -98,6 +98,8 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 `ALLOWED_EMAIL_DOMAINS`는 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. 명시적으로 빈 값으로 설정하면 모든 domain을 허용한다. `ADMIN_EMAILS`는 조직 bootstrap 권한만 제어하고 기존 조직의 tenant role을 우회하지 않는다. 빈 값으로 설정하면 누구도 새 조직을 만들 수 없다.
 
+`NODE_ENV=production`에서는 `DATABASE_URL`, `ADMIN_EMAILS`, `ALLOWED_EMAIL_DOMAINS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`이 필수다. 하나라도 비어 있으면 서버가 시작 시점에 실패한다 — 개발용 기본값으로의 무경고 fallback은 개발 환경에서만 동작한다.
+
 AI provider limit은 embedding과 knowledge extraction이 공유하며 application instance마다 적용된다. Replica를 늘리면 cluster 전체 상한도 instance 수만큼 늘어나므로 provider account 또는 API gateway의 조직별 예산·quota를 함께 설정하라.
 
 다음 설정은 일부만 제공하면 application 시작 시 실패한다.

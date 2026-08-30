@@ -7,6 +7,11 @@ export async function register() {
     return;
   }
 
+  const { assertProductionConfiguration } = await import(
+    "./lib/production-config"
+  );
+  assertProductionConfiguration();
+
   const { initializeTelemetry, shutdownTelemetry } = await import(
     "./infrastructure/observability/telemetry"
   );
@@ -70,7 +75,9 @@ export const onRequestError: Instrumentation.onRequestError = async (
       {
         err: error,
         method: request.method,
-        path: request.path,
+        // request.path carries the full URL including query strings, which can
+        // contain search terms — logging those violates the telemetry policy.
+        path: request.path.split("?", 1)[0],
         routePath: context.routePath,
         routeType: context.routeType
       },

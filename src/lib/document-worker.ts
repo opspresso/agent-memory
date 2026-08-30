@@ -67,18 +67,30 @@ export async function startDocumentWorker(): Promise<void> {
             { documentId: data.documentId, organizationId: data.organizationId },
             "processing document ingestion job"
           );
-          await processDocument(data.organizationId, data.documentId);
-          if (generateDocumentKnowledgeCandidates) {
-            const document = await documentRepository.findById(
-              data.organizationId,
-              data.documentId
-            );
-            if (document?.status === "ready") {
-              await documentIngestionQueue.enqueueKnowledgeEnrichment(
+          try {
+            await processDocument(data.organizationId, data.documentId);
+            if (generateDocumentKnowledgeCandidates) {
+              const document = await documentRepository.findById(
                 data.organizationId,
                 data.documentId
               );
+              if (document?.status === "ready") {
+                await documentIngestionQueue.enqueueKnowledgeEnrichment(
+                  data.organizationId,
+                  data.documentId
+                );
+              }
             }
+          } catch (error) {
+            logger.error(
+              {
+                err: error,
+                documentId: data.documentId,
+                organizationId: data.organizationId
+              },
+              "document ingestion job failed"
+            );
+            throw error;
           }
         }
       }
@@ -101,10 +113,22 @@ export async function startDocumentWorker(): Promise<void> {
                 },
                 "generating document knowledge candidates"
               );
-              await generateDocumentKnowledgeCandidates(
-                data.organizationId,
-                data.documentId
-              );
+              try {
+                await generateDocumentKnowledgeCandidates(
+                  data.organizationId,
+                  data.documentId
+                );
+              } catch (error) {
+                logger.error(
+                  {
+                    err: error,
+                    documentId: data.documentId,
+                    organizationId: data.organizationId
+                  },
+                  "document knowledge enrichment job failed"
+                );
+                throw error;
+              }
             }
           }
         )

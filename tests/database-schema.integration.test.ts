@@ -748,6 +748,80 @@ describe("PostgreSQL schema", () => {
     ]);
   });
 
+  it("excludes expired and not-yet-valid memory from search", async () => {
+    const organization = "00000000-0000-0000-0000-000000000041";
+    const user = "10000000-0000-0000-0000-000000000041";
+    await pool.query(
+      `INSERT INTO organizations (id, slug, name)
+       VALUES ($1, 'organization-r', 'Organization R')`,
+      [organization]
+    );
+    await pool.query(
+      `INSERT INTO users (id, email, name)
+       VALUES ($1, 'user-r@example.com', 'User R')`,
+      [user]
+    );
+    await pool.query(
+      `INSERT INTO organization_members (organization_id, user_id)
+       VALUES ($1, $2)`,
+      [organization, user]
+    );
+
+    const repository = createMemoryRepository(db);
+    const access: OrganizationAccess = {
+      organizationId: organization,
+      userId: user,
+      role: "member",
+      teams: []
+    };
+    const createdAt = new Date("2026-08-26T00:00:00.000Z");
+    await repository.save(
+      createMemory({
+        id: "30000000-0000-0000-0000-000000000041",
+        kind: "rule",
+        scope: { kind: "organization", organizationId: organization },
+        title: "Expiring freeze policy",
+        content: "The deployment freeze policy expires soon.",
+        source: { type: "user" },
+        createdBy: user,
+        validFrom: createdAt,
+        expiresAt: new Date("2026-08-28T00:00:00.000Z"),
+        now: createdAt
+      })
+    );
+    await repository.save(
+      createMemory({
+        id: "30000000-0000-0000-0000-000000000042",
+        kind: "rule",
+        scope: { kind: "organization", organizationId: organization },
+        title: "Upcoming freeze policy",
+        content: "The next deployment freeze policy starts later.",
+        source: { type: "user" },
+        createdBy: user,
+        validFrom: new Date("2026-09-01T00:00:00.000Z"),
+        now: createdAt
+      })
+    );
+
+    const insideWindow = await repository.search({
+      access,
+      query: "freeze policy",
+      now: new Date("2026-08-27T00:00:00.000Z"),
+      limit: 10
+    });
+    expect(insideWindow.map((hit) => hit.memory.id)).toEqual([
+      "30000000-0000-0000-0000-000000000041"
+    ]);
+
+    const afterExpiry = await repository.search({
+      access,
+      query: "freeze policy",
+      now: new Date("2026-08-29T00:00:00.000Z"),
+      limit: 10
+    });
+    expect(afterExpiry).toEqual([]);
+  });
+
   it("claims, indexes, and scope-filters RAG documents", async () => {
     const organization = "00000000-0000-0000-0000-000000000006";
     const user = "10000000-0000-0000-0000-000000000006";
