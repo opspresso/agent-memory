@@ -1,4 +1,4 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   boundedFormData,
   DocumentUploadTooLargeError,
@@ -13,7 +13,7 @@ import {
   searchDocumentRecords,
   uploadDocumentRecord
 } from "@/lib/document-service";
-import { organizationIdSchema } from "@/lib/memory-schemas";
+import { resolveScopedResource } from "@/lib/scoped-resource";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string }>;
@@ -26,14 +26,9 @@ function textField(formData: FormData, name: string): string | undefined {
 
 export async function POST(request: Request, context: RouteContext) {
   const { organizationId } = await context.params;
-  const parsedOrganizationId = organizationIdSchema.safeParse(organizationId);
-  if (!parsedOrganizationId.success) {
-    return Response.json({ error: "Invalid organization ID" }, { status: 400 });
-  }
-
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    parsedOrganizationId.data
+    organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;
@@ -90,23 +85,15 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  const scope =
+  const scope = resolveScopedResource(
     parsed.data.scopeKind === "organization"
-      ? {
-          kind: "organization" as const,
-          organizationId: parsedOrganizationId.data
-        }
+      ? { kind: "organization" }
       : parsed.data.scopeKind === "team"
-        ? {
-            kind: "team" as const,
-            organizationId: parsedOrganizationId.data,
-            teamId: parsed.data.teamId!
-          }
-        : {
-            kind: "user" as const,
-            organizationId: parsedOrganizationId.data,
-            userId: parsed.data.userId ?? authorization.user.id
-          };
+        ? { kind: "team", teamId: parsed.data.teamId! }
+        : { kind: "user", userId: parsed.data.userId },
+    organizationId,
+    authorization.user.id
+  );
 
   try {
     const document = await uploadDocumentRecord({
@@ -135,14 +122,9 @@ export async function POST(request: Request, context: RouteContext) {
 
 export async function GET(request: Request, context: RouteContext) {
   const { organizationId } = await context.params;
-  const parsedOrganizationId = organizationIdSchema.safeParse(organizationId);
-  if (!parsedOrganizationId.success) {
-    return Response.json({ error: "Invalid organization ID" }, { status: 400 });
-  }
-
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    parsedOrganizationId.data
+    organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;

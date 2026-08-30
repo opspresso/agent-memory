@@ -1,8 +1,7 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { documentErrorResponse, publicDocument } from "@/lib/document-http";
 import { documentIdSchema } from "@/lib/document-schemas";
 import { retryDocumentRecord } from "@/lib/document-service";
-import { organizationIdSchema } from "@/lib/memory-schemas";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string; documentId: string }>;
@@ -10,15 +9,14 @@ interface RouteContext {
 
 export async function POST(request: Request, context: RouteContext) {
   const { organizationId, documentId } = await context.params;
-  const parsedOrganizationId = organizationIdSchema.safeParse(organizationId);
   const parsedDocumentId = documentIdSchema.safeParse(documentId);
-  if (!parsedOrganizationId.success || !parsedDocumentId.success) {
+  if (!parsedDocumentId.success) {
     return Response.json({ error: "Invalid resource ID" }, { status: 400 });
   }
 
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    parsedOrganizationId.data
+    organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;

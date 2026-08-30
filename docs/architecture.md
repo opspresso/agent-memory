@@ -51,6 +51,8 @@ Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경
 
 ## Scope와 권한
 
+검색·조회 SQL의 scope 필터는 `scope-predicates`(infrastructure repository 공용 builder)가 단일 소유하며, domain의 `canAccessScopedResource`와의 동치성을 integration test로 고정한다. user scope 자원은 검색 결과에서도 본인에게만 보인다 — `admin`·`owner`도 다른 사용자의 user scope 자원을 검색으로 열람할 수 없다.
+
 조직 membership은 `active`, `pending`, `blocked` status를 가진다. 조직 접근 조회는 `active` membership만 반환하므로 `pending`·`blocked` 사용자는 모든 조직 API에서 `403`을 받는다. 조직은 신규 가입자의 기본 status(`newMemberStatus`, 기본값 `pending`)와 기본 팀(`defaultTeamId`)을 설정할 수 있으며, 멤버가 `active`가 되는 시점에 기본 팀에 `member`로 배정된다. 조직 온톨로지(`ontology` 사전, `ontologyMode`)를 포함한 조직 설정 변경은 `admin`·`owner`만 수행한다. 마지막 active `owner`는 강등·차단·제거할 수 없고, 자기 자신의 membership 변경은 허용하지 않는다.
 
 모든 memory, document, knowledge node와 edge는 하나의 organization에 속하며 다음 scope 중 하나를 갖는다.

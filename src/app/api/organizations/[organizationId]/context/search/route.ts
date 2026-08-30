@@ -1,8 +1,7 @@
 import { publicContextSearchResult } from "@/lib/context-http";
 import { contextSearchQuerySchema } from "@/lib/context-schemas";
 import { searchContextRecords } from "@/lib/context-service";
-import { organizationIdSchema } from "@/lib/memory-schemas";
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { aiErrorResponse } from "@/lib/ai-http";
 
 interface RouteContext {
@@ -11,13 +10,9 @@ interface RouteContext {
 
 export async function GET(request: Request, context: RouteContext) {
   const { organizationId } = await context.params;
-  const parsedOrganizationId = organizationIdSchema.safeParse(organizationId);
-  if (!parsedOrganizationId.success) {
-    return Response.json({ error: "Invalid organization ID" }, { status: 400 });
-  }
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    parsedOrganizationId.data
+    organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;

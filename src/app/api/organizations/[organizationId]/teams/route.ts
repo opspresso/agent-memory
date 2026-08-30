@@ -1,4 +1,4 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   organizationAdministrationErrorResponse,
   readOrganizationJsonBody
@@ -8,29 +8,17 @@ import {
   createTeamRecord,
   listTeamRecords
 } from "@/lib/organization-administration-service";
-import { organizationIdSchema } from "@/lib/memory-schemas";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string }>;
 }
 
-async function routeAccess(request: Request, context: RouteContext) {
-  const { organizationId } = await context.params;
-  const parsed = organizationIdSchema.safeParse(organizationId);
-  if (!parsed.success) {
-    return {
-      authorized: false as const,
-      response: Response.json(
-        { error: "Invalid organization ID" },
-        { status: 400 }
-      )
-    };
-  }
-  return authorizeOrganizationRequest(request, parsed.data);
-}
-
 export async function GET(request: Request, context: RouteContext) {
-  const authorization = await routeAccess(request, context);
+  const { organizationId } = await context.params;
+  const authorization = await authorizeOrganizationRoute(
+    request,
+    organizationId
+  );
   if (!authorization.authorized) {
     return authorization.response;
   }
@@ -39,7 +27,11 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const authorization = await routeAccess(request, context);
+  const { organizationId } = await context.params;
+  const authorization = await authorizeOrganizationRoute(
+    request,
+    organizationId
+  );
   if (!authorization.authorized) {
     return authorization.response;
   }

@@ -1,4 +1,4 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   organizationAdministrationErrorResponse,
   readOrganizationJsonBody
@@ -11,7 +11,6 @@ import {
   removeOrganizationMemberRecord,
   updateOrganizationMemberRecord
 } from "@/lib/organization-administration-service";
-import { organizationIdSchema } from "@/lib/memory-schemas";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string; userId: string }>;
@@ -19,17 +18,16 @@ interface RouteContext {
 
 async function routeAccess(request: Request, context: RouteContext) {
   const params = await context.params;
-  const organizationId = organizationIdSchema.safeParse(params.organizationId);
   const userId = memberUserIdSchema.safeParse(params.userId);
-  if (!organizationId.success || !userId.success) {
+  if (!userId.success) {
     return {
       authorized: false as const,
       response: Response.json({ error: "Invalid resource ID" }, { status: 400 })
     };
   }
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    organizationId.data
+    params.organizationId
   );
   if (!authorization.authorized) {
     return authorization;

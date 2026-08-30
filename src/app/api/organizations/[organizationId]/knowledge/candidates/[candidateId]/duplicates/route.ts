@@ -1,9 +1,8 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { knowledgeCandidateErrorResponse } from "@/lib/knowledge-candidate-http";
 import { findKnowledgeCandidateDuplicateRecords } from "@/lib/knowledge-candidate-service";
 import { publicKnowledgeNode } from "@/lib/knowledge-http";
 import { knowledgeCandidateIdSchema } from "@/lib/knowledge-schemas";
-import { organizationIdSchema } from "@/lib/memory-schemas";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string; candidateId: string }>;
@@ -11,14 +10,13 @@ interface RouteContext {
 
 export async function GET(request: Request, context: RouteContext) {
   const { organizationId, candidateId } = await context.params;
-  const parsedOrganizationId = organizationIdSchema.safeParse(organizationId);
   const parsedCandidateId = knowledgeCandidateIdSchema.safeParse(candidateId);
-  if (!parsedOrganizationId.success || !parsedCandidateId.success) {
+  if (!parsedCandidateId.success) {
     return Response.json({ error: "Invalid resource ID" }, { status: 400 });
   }
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    parsedOrganizationId.data
+    organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;

@@ -1,4 +1,4 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   knowledgeErrorResponse,
   publicKnowledgeEdge
@@ -6,7 +6,7 @@ import {
 import { createKnowledgeEdgeSchema } from "@/lib/knowledge-schemas";
 import { createKnowledgeEdgeRecord } from "@/lib/knowledge-service";
 import { readJsonBody } from "@/lib/memory-http";
-import { organizationIdSchema } from "@/lib/memory-schemas";
+import { resolveScopedResource } from "@/lib/scoped-resource";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string }>;
@@ -14,13 +14,9 @@ interface RouteContext {
 
 export async function POST(request: Request, context: RouteContext) {
   const { organizationId } = await context.params;
-  const parsedOrganizationId = organizationIdSchema.safeParse(organizationId);
-  if (!parsedOrganizationId.success) {
-    return Response.json({ error: "Invalid organization ID" }, { status: 400 });
-  }
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    parsedOrganizationId.data
+    organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;
@@ -37,23 +33,11 @@ export async function POST(request: Request, context: RouteContext) {
       { status: 400 }
     );
   }
-  const scope =
-    parsed.data.scope.kind === "organization"
-      ? {
-          kind: "organization" as const,
-          organizationId: parsedOrganizationId.data
-        }
-      : parsed.data.scope.kind === "team"
-        ? {
-            kind: "team" as const,
-            organizationId: parsedOrganizationId.data,
-            teamId: parsed.data.scope.teamId
-          }
-        : {
-            kind: "user" as const,
-            organizationId: parsedOrganizationId.data,
-            userId: parsed.data.scope.userId ?? authorization.user.id
-          };
+  const scope = resolveScopedResource(
+    parsed.data.scope,
+    organizationId,
+    authorization.user.id
+  );
 
   try {
     const { edge, ontologyWarnings } = await createKnowledgeEdgeRecord({

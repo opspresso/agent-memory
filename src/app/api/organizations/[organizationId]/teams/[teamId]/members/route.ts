@@ -1,4 +1,4 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   organizationAdministrationErrorResponse,
   readOrganizationJsonBody
@@ -11,7 +11,6 @@ import {
   listTeamMemberRecords,
   upsertTeamMemberRecord
 } from "@/lib/organization-administration-service";
-import { organizationIdSchema } from "@/lib/memory-schemas";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string; teamId: string }>;
@@ -19,14 +18,13 @@ interface RouteContext {
 
 export async function GET(request: Request, context: RouteContext) {
   const params = await context.params;
-  const organizationId = organizationIdSchema.safeParse(params.organizationId);
   const teamId = teamIdSchema.safeParse(params.teamId);
-  if (!organizationId.success || !teamId.success) {
+  if (!teamId.success) {
     return Response.json({ error: "Invalid resource ID" }, { status: 400 });
   }
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    organizationId.data
+    params.organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;
@@ -48,14 +46,13 @@ export async function GET(request: Request, context: RouteContext) {
 
 export async function PUT(request: Request, context: RouteContext) {
   const params = await context.params;
-  const organizationId = organizationIdSchema.safeParse(params.organizationId);
   const teamId = teamIdSchema.safeParse(params.teamId);
-  if (!organizationId.success || !teamId.success) {
+  if (!teamId.success) {
     return Response.json({ error: "Invalid resource ID" }, { status: 400 });
   }
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    organizationId.data
+    params.organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;
