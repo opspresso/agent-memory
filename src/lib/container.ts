@@ -5,6 +5,8 @@ import { createMemoryRepository } from "@/infrastructure/database/repositories/m
 import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
 import { createKnowledgeOntologyReader } from "@/infrastructure/database/repositories/knowledge-ontology-reader";
+import { createKnowledgeTermUsageRepository } from "@/infrastructure/database/repositories/knowledge-term-usage-repository";
+import { createKnowledgeOntologySuggestionService } from "@/infrastructure/ai/knowledge-ontology-suggestion-service";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
 import { createKnowledgeExtractionService } from "@/infrastructure/ai/knowledge-extraction-service";
@@ -39,6 +41,9 @@ export const knowledgeGraphRepository = createKnowledgeGraphRepository(database.
 export const knowledgeCandidateRepository =
   createKnowledgeCandidateRepository(database.db);
 export const knowledgeOntologyReader = createKnowledgeOntologyReader(
+  database.db
+);
+export const knowledgeTermUsageRepository = createKnowledgeTermUsageRepository(
   database.db
 );
 
@@ -83,6 +88,20 @@ function createConfiguredKnowledgeExtractionService() {
 }
 export const knowledgeExtractionService =
   createConfiguredKnowledgeExtractionService();
+
+function createConfiguredKnowledgeOntologySuggestionService() {
+  if (!knowledgeExtractionModel || !knowledgeExtractionBaseUrl) {
+    return undefined;
+  }
+  return createKnowledgeOntologySuggestionService({
+    apiKey: process.env.KNOWLEDGE_EXTRACTION_API_KEY,
+    baseUrl: knowledgeExtractionBaseUrl,
+    model: knowledgeExtractionModel,
+    requestLimiter: aiRequestLimiter
+  });
+}
+export const knowledgeOntologySuggestionService =
+  createConfiguredKnowledgeOntologySuggestionService();
 
 const s3Client = createS3Client({
   endpoint: process.env.S3_ENDPOINT ?? "http://localhost:9010",

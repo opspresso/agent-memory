@@ -4,6 +4,7 @@ import type {
   KnowledgeExtractionOntologyHint,
   KnowledgeExtractionService
 } from "@/domain/knowledge/knowledge-extraction-service";
+import { defaultKnowledgeOntology } from "@/domain/knowledge/knowledge-ontology";
 import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 
 interface KnowledgeExtractionServiceConfiguration {
@@ -75,8 +76,7 @@ const completionResponseSchema = z.object({
     .min(1)
 });
 
-const defaultKindInstruction =
-  "- Prefer these lowercase kinds: person, organization, product, service, project, technology, location, recognition, certification, role, event, document, concept.";
+const defaultKindInstruction = `- Prefer these lowercase kinds: ${defaultKnowledgeOntology.nodeKinds.join(", ")}.`;
 
 function ontologyInstructions(
   ontology: KnowledgeExtractionOntologyHint | undefined

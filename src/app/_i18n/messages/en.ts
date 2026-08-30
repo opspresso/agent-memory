@@ -256,6 +256,15 @@ export const en = {
     "Allowed relationship predicates. Press Enter to add; terms are lowercased.",
   "settings.ontology.edgePredicates.placeholder": "depends_on, owns, uses",
   "settings.ontology.termCount": "{count}/{max} terms",
+  "settings.ontology.recommend.title": "Recommended from your documents",
+  "settings.ontology.recommend.body":
+    "Terms observed in this organization's extracted knowledge. Click to add.",
+  "settings.ontology.suggest.button": "AI suggestions",
+  "settings.ontology.suggest.body":
+    "Ask the extraction model to curate terms from observed usage.",
+  "settings.ontology.suggest.title": "AI suggested terms",
+  "settings.ontology.suggest.empty":
+    "The model found nothing new to suggest.",
   "workspace.resultFallback": "Search result",
   "workspace.selectOrganization": "Select an organization",
   "workspace.searchFailed": "Search failed.",

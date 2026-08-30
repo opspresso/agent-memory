@@ -35,6 +35,11 @@ import {
 } from "@/domain/knowledge/knowledge-graph";
 import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import {
+  defaultKnowledgeOntology,
+  defaultKnowledgeOntologyMode
+} from "@/domain/knowledge/knowledge-ontology";
+import { createKnowledgeTermUsageRepository } from "@/infrastructure/database/repositories/knowledge-term-usage-repository";
+import {
   canAccessScopedResource,
   type OrganizationAccess,
   type ScopedResource
@@ -415,8 +420,8 @@ describe("PostgreSQL schema", () => {
     await expect(
       administration.findOrganization(organizationId)
     ).resolves.toMatchObject({
-      ontologyMode: "off",
-      ontology: { nodeKinds: [], edgePredicates: [] }
+      ontologyMode: defaultKnowledgeOntologyMode,
+      ontology: defaultKnowledgeOntology
     });
 
     await expect(
@@ -450,6 +455,114 @@ describe("PostgreSQL schema", () => {
     await expect(
       ontologyReader.findByOrganization("00000000-0000-0000-0000-0000000000ff")
     ).resolves.toBeNull();
+  });
+
+  it("aggregates ontology term usage from graph rows and pending candidates", async () => {
+    const organization = "00000000-0000-0000-0000-000000000061";
+    const user = "10000000-0000-0000-0000-000000000061";
+    const documentId = "40000000-0000-0000-0000-000000000061";
+    const chunkId = "50000000-0000-0000-0000-000000000061";
+    const createdAt = new Date("2026-08-26T00:00:00.000Z");
+    await pool.query(
+      `INSERT INTO organizations (id, slug, name)
+       VALUES ($1, 'organization-u', 'Organization U')`,
+      [organization]
+    );
+    await pool.query(
+      `INSERT INTO users (id, email, name)
+       VALUES ($1, 'user-u@example.com', 'User U')`,
+      [user]
+    );
+    await pool.query(
+      `INSERT INTO organization_members (organization_id, user_id)
+       VALUES ($1, $2)`,
+      [organization, user]
+    );
+    const documentRepository = createDocumentRepository(db);
+    await documentRepository.save({
+      ...createDocument({
+        id: documentId,
+        scope: { kind: "organization", organizationId: organization },
+        title: "Usage fixture",
+        objectKey: `organizations/${organization}/documents/${documentId}/source`,
+        checksum: "d".repeat(64),
+        mimeType: "text/plain",
+        sizeBytes: 16,
+        createdBy: user,
+        now: createdAt
+      })
+    });
+    await pool.query(
+      `INSERT INTO document_chunks (id, organization_id, document_id, ordinal, content)
+       VALUES ($1, $2, $3, 0, 'usage fixture chunk')`,
+      [chunkId, organization, documentId]
+    );
+
+    const graphRepository = createKnowledgeGraphRepository(db);
+    const pipeline = await graphRepository.saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000081",
+        scope: { kind: "organization", organizationId: organization },
+        kind: "pipeline",
+        canonicalName: "Usage Pipeline",
+        source: { chunkId },
+        now: createdAt
+      })
+    );
+    const warehouse = await graphRepository.saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000082",
+        scope: { kind: "organization", organizationId: organization },
+        kind: "pipeline",
+        canonicalName: "Usage Warehouse",
+        source: { chunkId },
+        now: createdAt
+      })
+    );
+    await graphRepository.saveEdge(
+      createKnowledgeEdge({
+        id: "70000000-0000-0000-0000-000000000081",
+        organizationId: organization,
+        scope: { kind: "organization", organizationId: organization },
+        sourceNodeId: pipeline.id,
+        targetNodeId: warehouse.id,
+        predicate: "stores_in",
+        source: { chunkId },
+        now: createdAt
+      })
+    );
+    const candidateRepository = createKnowledgeCandidateRepository(db);
+    await candidateRepository.save(
+      createKnowledgeCandidate({
+        id: "80000000-0000-0000-0000-000000000081",
+        scope: { kind: "organization", organizationId: organization },
+        documentId,
+        chunkId,
+        model: "usage-model",
+        graph: {
+          entities: [
+            { key: "a", kind: "pipeline", canonicalName: "Ingest Pipeline" },
+            { key: "b", kind: "gadget", canonicalName: "Widget" }
+          ],
+          relationships: [
+            { sourceKey: "a", targetKey: "b", predicate: "stores_in" }
+          ]
+        },
+        now: createdAt
+      })
+    );
+
+    const usageRepository = createKnowledgeTermUsageRepository(db);
+    await expect(usageRepository.collect(organization)).resolves.toEqual({
+      nodeKinds: [
+        { term: "pipeline", count: 3 },
+        { term: "gadget", count: 1 }
+      ],
+      edgePredicates: [{ term: "stores_in", count: 2 }]
+    });
+    await expect(
+      usageRepository.collect("00000000-0000-0000-0000-0000000000ee")
+    ).resolves.toEqual({ nodeKinds: [], edgePredicates: [] });
   });
 
   it("keeps SQL scope predicates equivalent to the domain access policy", async () => {

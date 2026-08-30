@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   createKnowledgeOntology,
+  defaultKnowledgeOntology,
+  defaultKnowledgeOntologyMode,
   emptyKnowledgeOntology,
   enforceKnowledgeOntology,
   evaluateKnowledgeOntology,
@@ -10,6 +12,15 @@ import {
 } from "@/domain/knowledge/knowledge-ontology";
 
 describe("knowledge ontology", () => {
+  it("ships an already normalized default dictionary with warn mode", () => {
+    expect(defaultKnowledgeOntologyMode).toBe("warn");
+    expect(createKnowledgeOntology(defaultKnowledgeOntology)).toEqual(
+      defaultKnowledgeOntology
+    );
+    expect(defaultKnowledgeOntology.nodeKinds).toContain("service");
+    expect(defaultKnowledgeOntology.edgePredicates).toContain("depends_on");
+  });
+
   it("normalizes, aliases, and dedupes dictionary terms", () => {
     expect(
       createKnowledgeOntology({

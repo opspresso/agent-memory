@@ -16,6 +16,10 @@ import {
 } from "@/application/identity/manage-organization";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import type { OrganizationAdministrationRepository } from "@/domain/identity/organization-administration-repository";
+import {
+  defaultKnowledgeOntology,
+  defaultKnowledgeOntologyMode
+} from "@/domain/knowledge/knowledge-ontology";
 
 const now = new Date("2026-08-26T00:00:00.000Z");
 const ownerAccess: OrganizationAccess = {
@@ -69,8 +73,8 @@ describe("organization administration", () => {
         name: "Platform Team",
         newMemberStatus: "pending",
         defaultTeamId: null,
-        ontologyMode: "off",
-        ontology: { nodeKinds: [], edgePredicates: [] }
+        ontologyMode: defaultKnowledgeOntologyMode,
+        ontology: defaultKnowledgeOntology
       });
     expect(createOrganization).toHaveBeenCalledWith(
       expect.objectContaining({ id: "organization-1" }),

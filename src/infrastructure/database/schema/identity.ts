@@ -21,6 +21,8 @@ import {
   type NewMemberStatus
 } from "@/domain/identity/organization-access";
 import {
+  defaultKnowledgeOntology,
+  defaultKnowledgeOntologyMode,
   knowledgeOntologyModes,
   type KnowledgeOntology,
   type KnowledgeOntologyMode
@@ -54,11 +56,11 @@ export const organizations = pgTable(
     ontologyMode: knowledgeOntologyMode()
       .$type<KnowledgeOntologyMode>()
       .notNull()
-      .default("off"),
+      .default(defaultKnowledgeOntologyMode),
     ontology: jsonb()
       .$type<KnowledgeOntology>()
       .notNull()
-      .default({ nodeKinds: [], edgePredicates: [] }),
+      .default(defaultKnowledgeOntology),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },

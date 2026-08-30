@@ -257,6 +257,14 @@ export const ko: Messages = {
     "허용하는 관계 predicate입니다. Enter로 추가하며 소문자로 저장됩니다.",
   "settings.ontology.edgePredicates.placeholder": "depends_on, owns, uses",
   "settings.ontology.termCount": "{count}/{max}개 용어",
+  "settings.ontology.recommend.title": "문서 기반 추천",
+  "settings.ontology.recommend.body":
+    "이 조직의 추출된 knowledge에서 관찰된 용어입니다. 클릭하면 사전에 추가됩니다.",
+  "settings.ontology.suggest.button": "AI 추천",
+  "settings.ontology.suggest.body":
+    "추출 모델에게 관찰된 용어의 정제·통합을 요청합니다.",
+  "settings.ontology.suggest.title": "AI 추천 용어",
+  "settings.ontology.suggest.empty": "모델이 새로 제안할 용어를 찾지 못했습니다.",
   "workspace.resultFallback": "검색 결과",
   "workspace.selectOrganization": "조직을 선택하세요",
   "workspace.searchFailed": "검색에 실패했습니다.",

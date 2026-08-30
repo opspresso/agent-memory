@@ -1,0 +1,2 @@
+ALTER TABLE "organizations" ALTER COLUMN "ontology_mode" SET DEFAULT 'warn';--> statement-breakpoint
+ALTER TABLE "organizations" ALTER COLUMN "ontology" SET DEFAULT '{"nodeKinds":["person","organization","product","service","project","technology","location","recognition","certification","role","event","document","concept"],"edgePredicates":["depends_on","uses","owns","part_of","member_of","works_for","located_in","integrates_with","produces","manages"]}'::jsonb;
