@@ -69,7 +69,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Database | `DATABASE_URL` | PostgreSQL 연결 문자열 |
 | Startup | `MIGRATE_ON_START` | Node.js runtime 시작 시 migration 실행 |
 | Worker | `DOCUMENT_WORKER_ENABLED` | 같은 process에서 pg-boss document worker 시작 |
-| Auth | `BETTER_AUTH_SECRET` | Better Auth secret, 32자 이상 |
+| Auth | `BETTER_AUTH_SECRET` | Better Auth secret, 32자 이상. 조직 Agent token 암호화 key도 HKDF로 파생하므로 값을 변경하면 기존 token을 reveal할 수 없음 |
 | Auth | `BETTER_AUTH_URL` | Application base URL과 trusted origin |
 | Auth | `AUTH_PASSWORD` | Email/password 로그인 활성화 |
 | Auth | `AUTH_PASSWORD_SIGNUP` | Self-signup 활성화. `AUTH_PASSWORD=true`가 함께 필요 |

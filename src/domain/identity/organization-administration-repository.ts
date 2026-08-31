@@ -137,8 +137,8 @@ export interface OrganizationAdministrationRepository {
   listJoinableOrganizations(
     userId: string
   ): Promise<readonly JoinableOrganization[]>;
-  joinOrganization(
-    organizationId: string,
+  joinOrganizationBySlug(
+    organizationSlug: string,
     userId: string
   ): Promise<JoinOrganizationResult>;
 }

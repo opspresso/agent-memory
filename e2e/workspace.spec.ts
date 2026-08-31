@@ -58,7 +58,7 @@ test("onboards, approves, and manages members through the console", async ({
   const password = "agent-memory-e2e-password";
   // Retries reuse the same database, so the display name must be unique
   // per attempt or the onboarding card locator matches stale organizations.
-  const approvalOrganizationName = `E2E Approval Organization R${testInfo.retry}`;
+  const approvalOrganizationName = `E2E Approval Organization ${runId} R${testInfo.retry}`;
 
   await page.context().addCookies([
     { name: "agent-memory-locale", value: "ko", domain: "127.0.0.1", path: "/" }
@@ -73,17 +73,18 @@ test("onboards, approves, and manages members through the console", async ({
     page.getByRole("heading", { name: "참여할 조직을 선택하세요" })
   ).toBeVisible();
 
-  const organization = await postJson<{ id: string }>(
+  const approvalOrganizationSlug = `e2e-approval-${runId}-${testInfo.retry}`;
+  await postJson<{ id: string }>(
     page,
     "/api/organizations",
     {
       name: approvalOrganizationName,
-      slug: `e2e-approval-${runId}-${testInfo.retry}`
+      slug: approvalOrganizationSlug
     }
   );
   await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organization.id}/teams`,
+    `/api/organizations/${approvalOrganizationSlug}/teams`,
     { name: "E2E Default Team", slug: `e2e-default-${runId}-${testInfo.retry}` }
   );
 
@@ -147,7 +148,7 @@ test("onboards, approves, and manages members through the console", async ({
     memberPage.getByRole("heading", { name: "공유 Context를 한곳에서 관리합니다." })
   ).toBeVisible();
 
-  const secondOrganizationName = `E2E Second Organization R${testInfo.retry}`;
+  const secondOrganizationName = `E2E Second Organization ${runId} R${testInfo.retry}`;
   await postJson<{ id: string }>(page, "/api/organizations", {
     name: secondOrganizationName,
     slug: `e2e-second-${runId}-${testInfo.retry}`
@@ -203,17 +204,18 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     page.getByRole("heading", { name: "참여할 조직을 선택하세요" })
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "첫 조직 만들기" })).toBeVisible();
+  const organizationSlug = `e2e-organization-${runId}-${testInfo.retry}`;
   const organization = await postJson<{ id: string }>(
     page,
     "/api/organizations",
     {
       name: "E2E Organization",
-      slug: `e2e-organization-${runId}-${testInfo.retry}`
+      slug: organizationSlug
     }
   );
   const team = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organization.id}/teams`,
+    `/api/organizations/${organizationSlug}/teams`,
     { name: "E2E Team", slug: `e2e-team-${runId}-${testInfo.retry}` }
   );
   await postJson<{ id: string }>(page, "/api/organizations", {
@@ -240,7 +242,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     buffer: Buffer.from("# Team guide")
   });
   await page.route(
-    `**/api/organizations/${organizationId}/documents`,
+    `**/api/organizations/${organizationSlug}/documents`,
     async (route) => {
       const payload = route.request().postData() ?? "";
       expect(payload).toContain('name="scopeKind"');
@@ -265,17 +267,44 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByRole("option", { name: "E2E Organization" }).click();
 
   await page.getByRole("link", { name: "Agent 연결" }).click();
-  const mcpEndpoint = `${new URL(page.url()).origin}/api/organizations/${organizationId}/mcp`;
+  const mcpEndpoint = `${new URL(page.url()).origin}/api/organizations/${organizationSlug}/mcp`;
   await expect(page.getByText(mcpEndpoint, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "MCP endpoint 복사" }).click();
   await expect(page.getByRole("button", { name: "MCP endpoint 복사" })).toHaveText(
     "복사됨"
   );
+  await page.getByRole("button", { name: "Token 생성" }).click();
+  const authorization = await page
+    .getByText(/^Bearer amt_[A-Za-z0-9_-]{43}$/)
+    .textContent();
+  expect(authorization).toBeTruthy();
+  await page.getByRole("button", { name: "Token 숨기기" }).click();
+  await expect(page.getByText(authorization!, { exact: true })).not.toBeVisible();
+  await page.getByRole("button", { name: "Token 보기" }).click();
+  await expect(page.getByText(authorization!, { exact: true })).toBeVisible();
+  const initializeResponse = await page.request.post(mcpEndpoint, {
+    data: {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "agent-memory-e2e", version: "1.0.0" }
+      }
+    },
+    headers: {
+      Accept: "application/json, text/event-stream",
+      Authorization: authorization!,
+      "Content-Type": "application/json"
+    }
+  });
+  expect(initializeResponse.ok()).toBe(true);
 
   const candidateId = "80000000-0000-4000-8000-000000000099";
   let duplicateRequests = 0;
   await page.route(
-    `**/api/organizations/${organizationId}/knowledge/candidates?limit=100`,
+    `**/api/organizations/${organizationSlug}/knowledge/candidates?limit=100`,
     (route) =>
       route.fulfill({
         contentType: "application/json",
@@ -306,7 +335,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
       })
   );
   await page.route(
-    `**/api/organizations/${organizationId}/knowledge/candidates/${candidateId}/duplicates`,
+    `**/api/organizations/${organizationSlug}/knowledge/candidates/${candidateId}/duplicates`,
     (route) => {
       duplicateRequests += 1;
       return route.fulfill({
@@ -350,7 +379,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
 
   const memory = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organizationId}/memories`,
+    `/api/organizations/${organizationSlug}/memories`,
     {
       kind: "decision",
       scope: { kind: "user" },
@@ -382,7 +411,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
 
   const archivedDocumentId = "40000000-0000-0000-0000-000000000099";
   await page.route(
-    `**/api/organizations/${organizationId}/documents?q=*`,
+    `**/api/organizations/${organizationSlug}/documents?q=*`,
     async (route) => {
       await route.fulfill({
         contentType: "application/json",
@@ -407,7 +436,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     }
   );
   await page.route(
-    `**/api/organizations/${organizationId}/documents/${archivedDocumentId}`,
+    `**/api/organizations/${organizationSlug}/documents/${archivedDocumentId}`,
     async (route) => {
       expect(route.request().method()).toBe("DELETE");
       await route.fulfill({ status: 204 });
@@ -427,7 +456,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
 
   const firstNode = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organizationId}/knowledge/nodes`,
+    `/api/organizations/${organizationSlug}/knowledge/nodes`,
     {
       scope: { kind: "user" },
       kind: "service",
@@ -438,7 +467,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   );
   const secondNode = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organizationId}/knowledge/nodes`,
+    `/api/organizations/${organizationSlug}/knowledge/nodes`,
     {
       scope: { kind: "user" },
       kind: "database",
@@ -449,7 +478,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   );
   const edge = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organizationId}/knowledge/edges`,
+    `/api/organizations/${organizationSlug}/knowledge/edges`,
     {
       scope: { kind: "user" },
       sourceNodeId: firstNode.id,
@@ -480,7 +509,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const edgeDeleteResponse = page.waitForResponse(
     (response) =>
       response.url().endsWith(
-        `/api/organizations/${organizationId}/knowledge/edges/${edge.id}`
+        `/api/organizations/${organizationSlug}/knowledge/edges/${edge.id}`
       ) && response.request().method() === "DELETE"
   );
   await page.getByRole("button", { name: "관계 삭제" }).click();
@@ -493,7 +522,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const nodeDeleteResponse = page.waitForResponse(
     (response) =>
       response.url().endsWith(
-        `/api/organizations/${organizationId}/knowledge/nodes/${secondNode.id}`
+        `/api/organizations/${organizationSlug}/knowledge/nodes/${secondNode.id}`
       ) && response.request().method() === "DELETE"
   );
   await page.getByRole("button", { name: "Node 삭제" }).click();
@@ -505,7 +534,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
 
   await postJson(
     page,
-    `/api/organizations/${organizationId}/knowledge/nodes`,
+    `/api/organizations/${organizationSlug}/knowledge/nodes`,
     {
       scope: { kind: "user" },
       kind: "concept",
@@ -515,7 +544,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   );
   await postJson(
     page,
-    `/api/organizations/${organizationId}/knowledge/nodes`,
+    `/api/organizations/${organizationSlug}/knowledge/nodes`,
     {
       scope: { kind: "user" },
       kind: "service",

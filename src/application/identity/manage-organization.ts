@@ -464,9 +464,12 @@ export function buildJoinOrganization(
 ) {
   return async function execute(
     userId: string,
-    organizationId: string
+    organizationSlug: string
   ): Promise<OrganizationMemberStatus> {
-    const result = await repository.joinOrganization(organizationId, userId);
+    const result = await repository.joinOrganizationBySlug(
+      organizationSlug,
+      userId
+    );
     if (result.status === "organization_not_found") {
       throw new OrganizationNotFoundError();
     }

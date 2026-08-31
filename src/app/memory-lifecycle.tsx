@@ -67,7 +67,7 @@ interface MemoryVersionView {
 interface MemoryLifecycleProps {
   readonly memoryId: string;
   readonly onClose: () => void;
-  readonly organizationId: string;
+  readonly organizationSlug: string;
 }
 
 interface LoadedMemory {
@@ -84,13 +84,13 @@ async function responseError(response: Response, fallback: string) {
 }
 
 async function requestMemory(
-  organizationId: string,
+  organizationSlug: string,
   memoryId: string,
   fallback: string,
   etagMissing: string
 ): Promise<LoadedMemory> {
   const response = await fetch(
-    `/api/organizations/${organizationId}/memories/${memoryId}`
+    `/api/organizations/${organizationSlug}/memories/${memoryId}`
   );
   if (!response.ok) {
     throw new Error(await responseError(response, fallback));
@@ -104,7 +104,7 @@ async function requestMemory(
     return { memory, etag, versions: [] };
   }
   const versionsResponse = await fetch(
-    `/api/organizations/${organizationId}/memories/${memoryId}/versions?limit=100`
+    `/api/organizations/${organizationSlug}/memories/${memoryId}/versions?limit=100`
   );
   if (!versionsResponse.ok) {
     throw new Error(await responseError(versionsResponse, fallback));
@@ -125,7 +125,7 @@ function formattedDate(value: string, locale: "en" | "ko") {
 export function MemoryLifecycle({
   memoryId,
   onClose,
-  organizationId
+  organizationSlug
 }: MemoryLifecycleProps) {
   const locale = useLocale();
   const t = useT();
@@ -157,7 +157,7 @@ export function MemoryLifecycle({
     setError(undefined);
     try {
       applyLoaded(await requestMemory(
-        organizationId,
+        organizationSlug,
         memoryId,
         t("memory.requestFailed"),
         t("memory.etagMissing")
@@ -175,7 +175,7 @@ export function MemoryLifecycle({
     let active = true;
     const loadMessages = getLoadMessages();
     requestMemory(
-      organizationId,
+      organizationSlug,
       memoryId,
       loadMessages.requestFailed,
       loadMessages.etagMissing
@@ -199,7 +199,7 @@ export function MemoryLifecycle({
     return () => {
       active = false;
     };
-  }, [memoryId, organizationId]);
+  }, [memoryId, organizationSlug]);
 
   const changed = Boolean(
     loaded &&
@@ -216,7 +216,7 @@ export function MemoryLifecycle({
     setMessage(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationId}/memories/${memoryId}`,
+        `/api/organizations/${organizationSlug}/memories/${memoryId}`,
         {
           method: "PATCH",
           headers: {
@@ -265,7 +265,7 @@ export function MemoryLifecycle({
         ? `?reason=${encodeURIComponent(reason.trim())}`
         : "";
       const response = await fetch(
-        `/api/organizations/${organizationId}/memories/${memoryId}${query}`,
+        `/api/organizations/${organizationSlug}/memories/${memoryId}${query}`,
         { method: "DELETE", headers: { "If-Match": loaded.etag } }
       );
       if (response.status === 409) {

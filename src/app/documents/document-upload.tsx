@@ -26,16 +26,16 @@ interface TeamSummary {
 }
 
 export function DocumentUpload() {
-  const { organizationId } = useOrganization();
-  if (!organizationId) {
+  const { organizationSlug } = useOrganization();
+  if (!organizationSlug) {
     return null;
   }
-  return <DocumentUploadView key={organizationId} />;
+  return <DocumentUploadView key={organizationSlug} />;
 }
 
 function DocumentUploadView() {
   const t = useT();
-  const { organizationId, access } = useOrganization();
+  const { organizationId, organizationSlug, access } = useOrganization();
   const [teams, setTeams] = useState<readonly TeamSummary[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string>();
@@ -45,11 +45,11 @@ function DocumentUploadView() {
   const [documentTeamId, setDocumentTeamId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!organizationId) {
+    if (!organizationSlug) {
       return;
     }
     const controller = new AbortController();
-    fetch(`/api/organizations/${organizationId}/teams`, {
+    fetch(`/api/organizations/${organizationSlug}/teams`, {
       signal: controller.signal
     })
       .then((response) =>
@@ -61,7 +61,7 @@ function DocumentUploadView() {
       .then((body) => setTeams(body.teams))
       .catch(() => undefined);
     return () => controller.abort();
-  }, [organizationId, t]);
+  }, [organizationSlug, t]);
 
   const writableTeams = access
     ? teams.filter((team) =>
@@ -77,7 +77,7 @@ function DocumentUploadView() {
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!organizationId) {
+    if (!organizationId || !organizationSlug) {
       return;
     }
     setUploading(true);
@@ -90,7 +90,7 @@ function DocumentUploadView() {
     }
     try {
       const response = await fetch(
-        `/api/organizations/${organizationId}/documents`,
+        `/api/organizations/${organizationSlug}/documents`,
         { method: "POST", body: form }
       );
       const body = await responseJson<{
@@ -184,7 +184,7 @@ function DocumentUploadView() {
             />
             <Button
               disabled={
-                !organizationId ||
+                !organizationSlug ||
                 (documentScopeKind === "team" && !documentTeamId)
               }
               leftSection={<IconCloudUpload size={17} />}

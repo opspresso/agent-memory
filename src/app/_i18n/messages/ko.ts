@@ -130,7 +130,7 @@ export const ko: Messages = {
   "guide.review.rejectNote": "검토 기록을 남겨 다음 판단에 활용",
   "guide.connect.title": "MCP로 Agent와 Context를 연결합니다.",
   "guide.connect.body":
-    "Agent 연결 탭에서 현재 사이트 주소와 활성 조직 ID가 포함된 전체 Streamable HTTP MCP endpoint를 확인하고 복사합니다. Better Auth 로그인 응답의 set-auth-token 값을 Bearer token으로 전달하세요.",
+    "Agent 연결 탭에서 현재 사이트 주소와 활성 organization slug가 포함된 전체 Streamable HTTP MCP endpoint를 확인하고 복사합니다. Admin 또는 owner는 조직 Agent token을 생성해 Agent Studio의 Bearer credential로 저장할 수 있습니다.",
   "guide.connect.note":
     "실제 연결 주소는 Console에서 활성 조직에 맞게 생성됩니다.",
   "guide.next.title": "이제 실제 Context를 탐색하세요.",
@@ -309,7 +309,24 @@ export const ko: Messages = {
   "workspace.documentFile": "문서 파일",
   "workspace.startIngestion": "수집 시작",
   "workspace.mcpBody":
-    "Better Auth 로그인 응답의 set-auth-token 값을 Bearer token으로 전달하세요.",
+    "이 조직 endpoint를 Streamable HTTP MCP server로 등록합니다.",
+  "workspace.agentTokenTitle": "Agent token",
+  "workspace.agentTokenBody":
+    "Agent Studio에서 사용할 조직 범위 Bearer token을 생성합니다. 이 조직의 MCP endpoint에서만 동작하며 발급 멤버의 현재 권한을 따릅니다.",
+  "workspace.agentTokenGenerate": "Token 생성",
+  "workspace.agentTokenRegenerate": "Token 재생성",
+  "workspace.agentTokenReveal": "Token 보기",
+  "workspace.agentTokenHide": "Token 숨기기",
+  "workspace.agentTokenRevoke": "Token 폐기",
+  "workspace.agentTokenRevokeConfirm":
+    "Agent token을 폐기할까요? 연결된 Agent가 즉시 동작하지 않게 됩니다.",
+  "workspace.agentTokenCopyNow":
+    "지금 token을 복사하거나 나중에 Token 보기로 다시 확인할 수 있습니다.",
+  "workspace.agentTokenRegenerateToReveal":
+    "이 token은 hash만 저장되어 있습니다. 보기를 활성화하려면 한 번 재생성하세요.",
+  "workspace.agentTokenAdminOnly":
+    "조직 admin 또는 owner만 Agent token을 관리할 수 있습니다.",
+  "workspace.agentTokenFailed": "Agent token 요청에 실패했습니다.",
   "workspace.copyEndpoint": "MCP endpoint 복사",
   "workspace.copy": "복사",
   "workspace.copied": "복사됨",

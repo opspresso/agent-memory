@@ -58,16 +58,16 @@ interface TeamMemberView {
 }
 
 export function MemberManagement() {
-  const { organizationId } = useOrganization();
-  if (!organizationId) {
+  const { organizationSlug } = useOrganization();
+  if (!organizationSlug) {
     return null;
   }
-  return <MemberManagementView key={organizationId} />;
+  return <MemberManagementView key={organizationSlug} />;
 }
 
 function MemberManagementView() {
   const t = useT();
-  const { organizationId, access } = useOrganization();
+  const { organizationSlug, access } = useOrganization();
   const [members, setMembers] = useState<readonly MemberView[]>([]);
   const [teams, setTeams] = useState<readonly TeamView[]>([]);
   const [teamMembers, setTeamMembers] = useState<readonly TeamMemberView[]>([]);
@@ -81,18 +81,18 @@ function MemberManagementView() {
   const isOwner = access?.role === "owner";
 
   const load = useCallback(async () => {
-    if (!organizationId) {
+    if (!organizationSlug) {
       return;
     }
     try {
       const [membersBody, teamsBody] = await Promise.all([
-        fetch(`/api/organizations/${organizationId}/members`).then((response) =>
+        fetch(`/api/organizations/${organizationSlug}/members`).then((response) =>
           responseJson<{ members: readonly MemberView[] }>(
             response,
             t("organization.requestFailed")
           )
         ),
-        fetch(`/api/organizations/${organizationId}/teams`).then((response) =>
+        fetch(`/api/organizations/${organizationSlug}/teams`).then((response) =>
           responseJson<{ teams: readonly TeamView[] }>(
             response,
             t("organization.requestFailed")
@@ -102,7 +102,7 @@ function MemberManagementView() {
       const teamMemberships = await Promise.all(
         teamsBody.teams.map(async (team) => {
           const body = await fetch(
-            `/api/organizations/${organizationId}/teams/${team.id}/members`
+            `/api/organizations/${organizationSlug}/teams/${team.id}/members`
           ).then((response) =>
             responseJson<{ members: readonly TeamMemberView[] }>(
               response,
@@ -122,7 +122,7 @@ function MemberManagementView() {
     } finally {
       setLoading(false);
     }
-  }, [organizationId, t]);
+  }, [organizationSlug, t]);
 
   useEffect(() => {
     if (canManage) {
@@ -168,7 +168,7 @@ function MemberManagementView() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     await runMutation(async () => {
-      await requestJson(`/api/organizations/${organizationId}/members`, {
+      await requestJson(`/api/organizations/${organizationSlug}/members`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -184,7 +184,7 @@ function MemberManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationId}/members/${member.userId}`,
+          `/api/organizations/${organizationSlug}/members/${member.userId}`,
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -199,7 +199,7 @@ function MemberManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationId}/members/${member.userId}`,
+          `/api/organizations/${organizationSlug}/members/${member.userId}`,
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -218,7 +218,7 @@ function MemberManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationId}/teams/${teamId}/members`,
+          `/api/organizations/${organizationSlug}/teams/${teamId}/members`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -233,7 +233,7 @@ function MemberManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationId}/teams/${teamId}/members/${member.userId}`,
+          `/api/organizations/${organizationSlug}/teams/${teamId}/members/${member.userId}`,
           { method: "DELETE" }
         ),
       t("members.teamRemoved")
@@ -247,7 +247,7 @@ function MemberManagementView() {
     const target = removeTarget;
     await runMutation(async () => {
       await requestJson(
-        `/api/organizations/${organizationId}/members/${target.userId}`,
+        `/api/organizations/${organizationSlug}/members/${target.userId}`,
         { method: "DELETE" }
       );
       setRemoveTarget(undefined);

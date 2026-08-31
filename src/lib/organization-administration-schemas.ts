@@ -8,7 +8,7 @@ import {
 } from "@/domain/identity/organization-access";
 import { knowledgeOntologyModes } from "@/domain/knowledge/knowledge-ontology";
 
-const slugSchema = z
+export const organizationSlugSchema = z
   .string()
   .trim()
   .toLowerCase()
@@ -17,7 +17,7 @@ const slugSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 
 export const createOrganizationSchema = z.object({
-  slug: slugSchema,
+  slug: organizationSlugSchema,
   name: z.string().trim().min(1).max(200)
 });
 
@@ -27,7 +27,7 @@ export const organizationMemberSchema = z.object({
 });
 
 export const createTeamSchema = z.object({
-  slug: slugSchema,
+  slug: organizationSlugSchema,
   name: z.string().trim().min(1).max(200)
 });
 

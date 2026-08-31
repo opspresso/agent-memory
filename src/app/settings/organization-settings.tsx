@@ -79,11 +79,11 @@ export function OrganizationSettings({
 }: {
   readonly isAdmin: boolean;
 }) {
-  const { organizationId } = useOrganization();
-  if (!organizationId) {
+  const { organizationSlug } = useOrganization();
+  if (!organizationSlug) {
     return null;
   }
-  return <OrganizationSettingsView isAdmin={isAdmin} key={organizationId} />;
+  return <OrganizationSettingsView isAdmin={isAdmin} key={organizationSlug} />;
 }
 
 function OrganizationSettingsView({
@@ -93,7 +93,7 @@ function OrganizationSettingsView({
 }) {
   const t = useT();
   const router = useRouter();
-  const { organizationId, access, activeOrganization } = useOrganization();
+  const { organizationSlug, access, activeOrganization } = useOrganization();
   const [organization, setOrganization] = useState<OrganizationDetail>();
   const [teams, setTeams] = useState<readonly TeamView[]>([]);
   const [name, setName] = useState("");
@@ -132,25 +132,25 @@ function OrganizationSettingsView({
     ) ?? [];
 
   const load = useCallback(async () => {
-    if (!organizationId) {
+    if (!organizationSlug) {
       return;
     }
     try {
       const [detail, teamsBody, recommendationBody] = await Promise.all([
-        fetch(`/api/organizations/${organizationId}`).then((response) =>
+        fetch(`/api/organizations/${organizationSlug}`).then((response) =>
           responseJson<OrganizationDetail>(
             response,
             t("organization.loadFailed")
           )
         ),
-        fetch(`/api/organizations/${organizationId}/teams`).then((response) =>
+        fetch(`/api/organizations/${organizationSlug}/teams`).then((response) =>
           responseJson<{ teams: readonly TeamView[] }>(
             response,
             t("organization.loadFailed")
           )
         ),
         fetch(
-          `/api/organizations/${organizationId}/knowledge/ontology/recommendations`
+          `/api/organizations/${organizationSlug}/knowledge/ontology/recommendations`
         ).then((response) =>
           responseJson<OntologyRecommendation>(
             response,
@@ -175,7 +175,7 @@ function OrganizationSettingsView({
         caught instanceof Error ? caught.message : t("organization.loadFailed")
       );
     }
-  }, [organizationId, t]);
+  }, [organizationSlug, t]);
 
   useEffect(() => {
     void Promise.resolve().then(load);
@@ -186,7 +186,7 @@ function OrganizationSettingsView({
     setError(undefined);
     setMessage(undefined);
     try {
-      const response = await fetch(`/api/organizations/${organizationId}`, {
+      const response = await fetch(`/api/organizations/${organizationSlug}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -220,7 +220,7 @@ function OrganizationSettingsView({
     setError(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationId}/knowledge/ontology/suggestions`,
+        `/api/organizations/${organizationSlug}/knowledge/ontology/suggestions`,
         { method: "POST" }
       );
       const body = await responseJson<OntologySuggestion>(
@@ -243,7 +243,7 @@ function OrganizationSettingsView({
     setPending(true);
     setError(undefined);
     try {
-      const response = await fetch(`/api/organizations/${organizationId}`, {
+      const response = await fetch(`/api/organizations/${organizationSlug}`, {
         method: "DELETE"
       });
       if (!response.ok) {

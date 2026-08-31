@@ -66,12 +66,12 @@ export function OrganizationOnboarding({
     return () => controller.abort();
   }, [t]);
 
-  async function join(organizationId: string) {
-    setJoiningId(organizationId);
+  async function join(organization: OrganizationSummary) {
+    setJoiningId(organization.id);
     setError(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationId}/join`,
+        `/api/organizations/${organization.slug}/join`,
         { method: "POST" }
       );
       const body = await responseJson<{ status?: string }>(
@@ -83,7 +83,7 @@ export function OrganizationOnboarding({
         router.refresh();
         return;
       }
-      setPendingIds((current) => [...current, organizationId]);
+      setPendingIds((current) => [...current, organization.id]);
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : t("onboarding.joinFailed")
@@ -152,7 +152,7 @@ export function OrganizationOnboarding({
               <Button
                 leftSection={<IconLogin2 size={16} />}
                 loading={joiningId === organization.id}
-                onClick={() => void join(organization.id)}
+                onClick={() => void join(organization)}
                 variant="light"
               >
                 {t("onboarding.join")}

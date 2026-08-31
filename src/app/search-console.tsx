@@ -158,16 +158,16 @@ function sameScope(left: unknown, right: unknown): boolean {
 }
 
 export function SearchConsole() {
-  const { organizationId } = useOrganization();
-  if (!organizationId) {
+  const { organizationSlug } = useOrganization();
+  if (!organizationSlug) {
     return null;
   }
-  return <SearchConsoleView key={organizationId} />;
+  return <SearchConsoleView key={organizationSlug} />;
 }
 
 function SearchConsoleView() {
   const t = useT();
-  const { organizationId, access } = useOrganization();
+  const { organizationSlug, access } = useOrganization();
   const [searchKind, setSearchKind] = useState<SearchKind>("context/search");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string>();
@@ -242,7 +242,7 @@ function SearchConsoleView() {
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!organizationId) {
+    if (!organizationSlug) {
       return;
     }
     const form = new FormData(event.currentTarget);
@@ -257,7 +257,7 @@ function SearchConsoleView() {
     setSearchError(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationId}/${searchKind}?q=${encodeURIComponent(query)}`,
+        `/api/organizations/${organizationSlug}/${searchKind}?q=${encodeURIComponent(query)}`,
         { signal: controller.signal }
       );
       const body = await responseJson<SearchResponse>(
@@ -282,7 +282,7 @@ function SearchConsoleView() {
   }
 
   async function exploreKnowledgeNode(nodeId: string) {
-    if (!organizationId) {
+    if (!organizationSlug) {
       return;
     }
     graphRequest.current?.abort();
@@ -292,7 +292,7 @@ function SearchConsoleView() {
     setGraphError(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationId}/knowledge/nodes/${nodeId}/neighborhood?depth=2&limit=100`,
+        `/api/organizations/${organizationSlug}/knowledge/nodes/${nodeId}/neighborhood?depth=2&limit=100`,
         { signal: controller.signal }
       );
       const body = await responseJson<NeighborhoodResponse>(
@@ -321,7 +321,7 @@ function SearchConsoleView() {
   }
 
   async function confirmResourceAction() {
-    if (!organizationId || !pendingResourceAction) {
+    if (!organizationSlug || !pendingResourceAction) {
       return;
     }
     setDeletingResource(true);
@@ -336,7 +336,7 @@ function SearchConsoleView() {
           : `knowledge/${action.kind === "node" ? "nodes" : "edges"}/${action.id}`;
     try {
       const response = await fetch(
-        `/api/organizations/${organizationId}/${path}`,
+        `/api/organizations/${organizationSlug}/${path}`,
         action.kind === "merge"
           ? {
               method: "POST",
@@ -440,7 +440,7 @@ function SearchConsoleView() {
           />
           <form onSubmit={search}>
             <TextInput
-              disabled={!organizationId}
+              disabled={!organizationSlug}
               leftSection={<IconSearch size={17} />}
               name="query"
               placeholder={t("workspace.searchPlaceholder")}
@@ -696,7 +696,7 @@ function SearchConsoleView() {
         <MemoryLifecycle
           memoryId={selectedMemoryId}
           onClose={() => setSelectedMemoryId(undefined)}
-          organizationId={organizationId}
+          organizationSlug={organizationSlug}
         />
       ) : null}
       <Modal

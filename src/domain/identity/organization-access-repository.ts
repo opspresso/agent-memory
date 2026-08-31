@@ -17,4 +17,8 @@ export interface OrganizationAccessRepository {
     organizationId: string,
     userId: string
   ): Promise<OrganizationAccess | null>;
+  findBySlug(
+    organizationSlug: string,
+    userId: string
+  ): Promise<OrganizationAccess | null>;
 }

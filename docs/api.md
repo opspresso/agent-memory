@@ -1,11 +1,11 @@
 # HTTP API와 MCP
 
-모든 예시는 local base URL을 사용한다. `<organizationId>`, `<memoryId>`, `<nodeId>`와 token은 실제 값으로 바꿔라.
+모든 예시는 local base URL을 사용한다. `<organizationSlug>`, `<memoryId>`, `<nodeId>`와 token은 실제 값으로 바꿔라.
 
 ```bash
 export AGENT_MEMORY_URL=http://localhost:3100
-export AGENT_MEMORY_ORGANIZATION_ID=<organizationId>
-export AGENT_MEMORY_TOKEN=<token>
+export AGENT_MEMORY_ORGANIZATION_SLUG=<organizationSlug>
+export AGENT_MEMORY_TOKEN=<better-auth-session-token>
 ```
 
 ## 인증과 요청 경계
@@ -20,7 +20,7 @@ Authorization: Bearer <token>
 
 운영 콘솔의 로그인·가입 요청은 `/api/auth/*` Better Auth endpoint를 사용한다. 브라우저의 POST, PATCH, DELETE 요청은 session cookie뿐 아니라 `BETTER_AUTH_URL`에서 파생한 trusted same-origin 조건을 만족해야 한다.
 
-### Agent Bearer 인증
+### Session Bearer 인증
 
 Password provider가 활성화된 환경에서는 Better Auth email 로그인 응답 header에서 token을 얻을 수 있다.
 
@@ -37,7 +37,7 @@ curl -i \
 
 성공 응답의 `set-auth-token` header 값을 저장하고 이후 요청에 사용하라. Token을 source code, shell history, log 또는 MCP 설정 repository에 넣지 마라. 운영 환경에서는 secret manager를 사용하라.
 
-접근 가능한 조직과 organization ID는 다음 요청으로 확인한다.
+접근 가능한 조직과 organization slug는 다음 요청으로 확인한다.
 
 ```bash
 curl \
@@ -64,9 +64,25 @@ curl \
 
 `status`는 `active`, `pending`, `blocked` 중 하나다. `active` membership만 조직 resource에 접근할 수 있으며, `pending`과 `blocked` 사용자의 조직 요청은 `403`을 반환한다.
 
-현재 role과 team membership은 `GET .../:organizationId/me`로 확인한다.
+현재 role과 team membership은 `GET .../:organizationSlug/me`로 확인한다.
 
-조직 endpoint는 URL의 `organizationId`에 대한 멤버십을 추가로 확인한다. 브라우저 mutation은 trusted same-origin 요청만 허용하며 Bearer 요청에는 origin 검사를 적용하지 않는다.
+조직 endpoint는 URL의 `organizationSlug`를 내부 UUID로 해석한 뒤 멤버십을 추가로 확인한다. 브라우저 mutation은 trusted same-origin 요청만 허용하며 Bearer 요청에는 origin 검사를 적용하지 않는다. Slug는 조직 생성 후 변경되지 않는 public identifier이며 UUID는 응답과 내부 resource scope에서 유지한다.
+
+### 조직 Agent token
+
+Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/organizations/:organizationSlug/agent-token`에서 MCP 전용 token을 생성할 수 있다. DB에는 검증용 SHA-256 hash와 reveal용 AES-256-GCM 암호문을 저장한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF로 용도 분리해 파생한다. 같은 조직에서 다시 생성하면 기존 token은 즉시 무효화되고 `DELETE`로 폐기할 수 있다.
+
+```json
+{
+  "token": "amt_...",
+  "masked": "amt_••••1234",
+  "createdAt": "2026-08-31T00:00:00.000Z"
+}
+```
+
+일상적인 `GET .../agent-token` 응답은 mask와 생성 시각, `revealable` 상태만 반환한다. 원문은 생성 응답과 명시적인 `POST .../agent-token/reveal`에서만 반환하며 두 응답 모두 `Cache-Control: no-store`다. 암호문 column이 없는 기존 hash-only token은 MCP 인증은 유지하지만 reveal할 수 없으므로 한 번 재생성해야 한다.
+
+이 token은 URL의 동일 organization slug에 해당하는 MCP endpoint에서만 인증된다. 일반 HTTP API나 다른 조직에서는 사용할 수 없다. 발급 멤버의 현재 membership과 role을 적용하므로 멤버가 차단·제거되거나 권한이 변경되면 token 권한도 즉시 바뀐다. `BETTER_AUTH_SECRET`을 변경하면 기존 token은 hash 검증으로 계속 인증되지만 원문을 복호화할 수 없으므로 재생성해야 한다.
 
 인증은 `ALLOWED_EMAIL_DOMAINS`에 설정한 email domain으로 제한한다. `POST /api/organizations`는 `ADMIN_EMAILS`에 설정한 사용자만 호출할 수 있으며, 생성자는 새 조직의 owner가 된다. 이 전역 bootstrap 권한은 기존 조직의 멤버십이나 role을 대체하지 않는다.
 
@@ -78,7 +94,7 @@ curl \
 | `401` | Session 또는 Bearer 인증 실패 |
 | `403` | 조직 멤버십 또는 resource action 권한 부족 |
 | `404` | Resource가 없거나 호출자에게 존재를 공개할 수 없음 |
-| `409` | Memory version 또는 candidate review 상태 충돌 |
+| `409` | Memory version, candidate review 상태 충돌 또는 Agent token reveal 불가 |
 | `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
 | `422` | 조직 온톨로지 검증(strict)에서 미등록 kind·predicate를 거부함. 응답에 `violations` 배열 포함 |
 | `428` | Memory mutation에 유효한 `If-Match`가 없음 |
@@ -94,40 +110,42 @@ curl \
 | `GET`, `POST` | `/api/auth/*` | Better Auth 인증 endpoint |
 | `GET`, `POST` | `/api/organizations` | 접근 가능한 조직 조회, 전역 admin의 조직 생성 |
 | `GET` | `/api/organizations/available` | 인증 사용자가 가입할 수 있는 조직 조회 |
-| `GET`, `PATCH`, `DELETE` | `/api/organizations/:organizationId` | 조직 조회, 설정 변경(admin·owner), 조직 삭제(owner) |
-| `POST` | `/api/organizations/:organizationId/join` | 인증 사용자의 조직 가입 |
-| `GET` | `/api/organizations/:organizationId/me` | 현재 멤버십과 팀 역할 조회 |
-| `GET`, `PUT` | `/api/organizations/:organizationId/members` | 조직 멤버 조회·추가·역할 변경 |
-| `PATCH`, `DELETE` | `/api/organizations/:organizationId/members/:userId` | 멤버 role·status 변경, 멤버 제거 |
-| `GET`, `POST` | `/api/organizations/:organizationId/teams` | 팀 조회·생성 |
-| `PATCH`, `DELETE` | `/api/organizations/:organizationId/teams/:teamId` | 팀 이름 변경, 팀 삭제(admin·owner) |
-| `GET`, `PUT` | `/api/organizations/:organizationId/teams/:teamId/members` | 팀 멤버 조회, 기존 조직 멤버를 팀에 추가·역할 변경 |
-| `DELETE` | `/api/organizations/:organizationId/teams/:teamId/members/:userId` | 팀 멤버 제거 |
-| `GET`, `POST` | `/api/organizations/:organizationId/memories` | Memory 검색·생성 |
-| `GET`, `PATCH`, `DELETE` | `/api/organizations/:organizationId/memories/:memoryId` | Memory 조회·수정·archive |
-| `GET` | `/api/organizations/:organizationId/memories/:memoryId/versions` | Memory revision 조회 |
-| `GET`, `POST` | `/api/organizations/:organizationId/documents` | 문서 chunk 검색·원본 업로드 |
-| `GET`, `DELETE` | `/api/organizations/:organizationId/documents/:documentId` | 문서 상태 조회·archive |
-| `POST` | `/api/organizations/:organizationId/documents/:documentId/retry` | 실패한 문서 처리 재시도 |
-| `GET`, `POST` | `/api/organizations/:organizationId/knowledge/nodes` | Knowledge node 검색·생성 |
-| `POST` | `/api/organizations/:organizationId/knowledge/edges` | Knowledge edge 생성 |
-| `DELETE` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId` | Knowledge node와 연결 edge 삭제 |
-| `POST` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId/merge` | 중복 Knowledge node 병합 |
-| `DELETE` | `/api/organizations/:organizationId/knowledge/edges/:edgeId` | Knowledge edge 삭제 |
-| `GET` | `/api/organizations/:organizationId/knowledge/nodes/:nodeId/neighborhood` | 제한된 graph neighborhood 조회 |
-| `GET` | `/api/organizations/:organizationId/knowledge/candidates` | 검토 대기 중인 AI graph 후보 조회 |
-| `GET` | `/api/organizations/:organizationId/knowledge/candidates/:candidateId/duplicates` | 후보 entity와 canonical name·scope가 같은 기존 node 일괄 조회 |
-| `POST` | `/api/organizations/:organizationId/knowledge/candidates/:candidateId/accept` | AI 후보를 Knowledge Graph로 승격 |
-| `GET` | `/api/organizations/:organizationId/knowledge/ontology/recommendations` | 관찰된 용어 기반 온톨로지 추천(admin·owner) |
-| `POST` | `/api/organizations/:organizationId/knowledge/ontology/suggestions` | AI 모델 기반 온톨로지 정제 제안(admin·owner) |
-| `POST` | `/api/organizations/:organizationId/knowledge/candidates/:candidateId/reject` | AI 후보 거절 |
-| `GET` | `/api/organizations/:organizationId/context/search` | 통합 Context 검색 |
-| `GET`, `POST`, `DELETE` | `/api/organizations/:organizationId/mcp` | Streamable HTTP MCP transport |
+| `GET`, `PATCH`, `DELETE` | `/api/organizations/:organizationSlug` | 조직 조회, 설정 변경(admin·owner), 조직 삭제(owner) |
+| `POST` | `/api/organizations/:organizationSlug/join` | 인증 사용자의 조직 가입 |
+| `GET` | `/api/organizations/:organizationSlug/me` | 현재 멤버십과 팀 역할 조회 |
+| `GET`, `POST`, `DELETE` | `/api/organizations/:organizationSlug/agent-token` | MCP 전용 Agent token 상태 조회·생성·폐기(admin·owner) |
+| `POST` | `/api/organizations/:organizationSlug/agent-token/reveal` | 저장된 MCP Agent token 원문 조회(admin·owner) |
+| `GET`, `PUT` | `/api/organizations/:organizationSlug/members` | 조직 멤버 조회·추가·역할 변경 |
+| `PATCH`, `DELETE` | `/api/organizations/:organizationSlug/members/:userId` | 멤버 role·status 변경, 멤버 제거 |
+| `GET`, `POST` | `/api/organizations/:organizationSlug/teams` | 팀 조회·생성 |
+| `PATCH`, `DELETE` | `/api/organizations/:organizationSlug/teams/:teamId` | 팀 이름 변경, 팀 삭제(admin·owner) |
+| `GET`, `PUT` | `/api/organizations/:organizationSlug/teams/:teamId/members` | 팀 멤버 조회, 기존 조직 멤버를 팀에 추가·역할 변경 |
+| `DELETE` | `/api/organizations/:organizationSlug/teams/:teamId/members/:userId` | 팀 멤버 제거 |
+| `GET`, `POST` | `/api/organizations/:organizationSlug/memories` | Memory 검색·생성 |
+| `GET`, `PATCH`, `DELETE` | `/api/organizations/:organizationSlug/memories/:memoryId` | Memory 조회·수정·archive |
+| `GET` | `/api/organizations/:organizationSlug/memories/:memoryId/versions` | Memory revision 조회 |
+| `GET`, `POST` | `/api/organizations/:organizationSlug/documents` | 문서 chunk 검색·원본 업로드 |
+| `GET`, `DELETE` | `/api/organizations/:organizationSlug/documents/:documentId` | 문서 상태 조회·archive |
+| `POST` | `/api/organizations/:organizationSlug/documents/:documentId/retry` | 실패한 문서 처리 재시도 |
+| `GET`, `POST` | `/api/organizations/:organizationSlug/knowledge/nodes` | Knowledge node 검색·생성 |
+| `POST` | `/api/organizations/:organizationSlug/knowledge/edges` | Knowledge edge 생성 |
+| `DELETE` | `/api/organizations/:organizationSlug/knowledge/nodes/:nodeId` | Knowledge node와 연결 edge 삭제 |
+| `POST` | `/api/organizations/:organizationSlug/knowledge/nodes/:nodeId/merge` | 중복 Knowledge node 병합 |
+| `DELETE` | `/api/organizations/:organizationSlug/knowledge/edges/:edgeId` | Knowledge edge 삭제 |
+| `GET` | `/api/organizations/:organizationSlug/knowledge/nodes/:nodeId/neighborhood` | 제한된 graph neighborhood 조회 |
+| `GET` | `/api/organizations/:organizationSlug/knowledge/candidates` | 검토 대기 중인 AI graph 후보 조회 |
+| `GET` | `/api/organizations/:organizationSlug/knowledge/candidates/:candidateId/duplicates` | 후보 entity와 canonical name·scope가 같은 기존 node 일괄 조회 |
+| `POST` | `/api/organizations/:organizationSlug/knowledge/candidates/:candidateId/accept` | AI 후보를 Knowledge Graph로 승격 |
+| `GET` | `/api/organizations/:organizationSlug/knowledge/ontology/recommendations` | 관찰된 용어 기반 온톨로지 추천(admin·owner) |
+| `POST` | `/api/organizations/:organizationSlug/knowledge/ontology/suggestions` | AI 모델 기반 온톨로지 정제 제안(admin·owner) |
+| `POST` | `/api/organizations/:organizationSlug/knowledge/candidates/:candidateId/reject` | AI 후보 거절 |
+| `GET` | `/api/organizations/:organizationSlug/context/search` | 통합 Context 검색 |
+| `GET`, `POST`, `DELETE` | `/api/organizations/:organizationSlug/mcp` | Streamable HTTP MCP transport |
 
 ## 조직 관리 입력
 
 - 조직 생성: `{ "slug": string, "name": string }`
-- 조직 설정 변경(`PATCH .../:organizationId`): `{ "name"?: string, "newMemberStatus"?: "active" | "pending", "defaultTeamId"?: UUID | null, "ontologyMode"?: "off" | "warn" | "strict", "ontology"?: { "nodeKinds": string[], "edgePredicates": string[] } }` — 필드 하나 이상 필요. `ontology`는 두 목록 전체를 치환하며 목록당 최대 200개, 용어당 최대 100자다. 용어는 소문자로 정규화하고 중복을 제거해 저장한다.
+- 조직 설정 변경(`PATCH .../:organizationSlug`): `{ "name"?: string, "newMemberStatus"?: "active" | "pending", "defaultTeamId"?: UUID | null, "ontologyMode"?: "off" | "warn" | "strict", "ontology"?: { "nodeKinds": string[], "edgePredicates": string[] } }` — 필드 하나 이상 필요. `ontology`는 두 목록 전체를 치환하며 목록당 최대 200개, 용어당 최대 100자다. 용어는 소문자로 정규화하고 중복을 제거해 저장한다.
 - 조직 멤버 추가·변경: `{ "email": string, "role": "member" | "admin" | "owner" }`
 - 멤버 변경(`PATCH .../members/:userId`): `{ "role"?: "member" | "admin" | "owner", "status"?: "active" | "pending" | "blocked" }` — 필드 하나 이상 필요
 - 팀 생성: `{ "slug": string, "name": string }`
@@ -138,12 +156,12 @@ curl \
 
 ### 멤버십 status와 가입 흐름
 
-- `POST .../:organizationId/join`은 인증 사용자를 `member` role로 가입시키고 조직의 `newMemberStatus` 설정에 따라 `active` 또는 `pending` status를 부여한다. 기본값은 `pending`이며 즉시 활성화는 조직이 명시적으로 선택한다. 응답은 `{ "status": "active" | "pending" }`이다.
+- `POST .../:organizationSlug/join`은 인증 사용자를 `member` role로 가입시키고 조직의 `newMemberStatus` 설정에 따라 `active` 또는 `pending` status를 부여한다. 기본값은 `pending`이며 즉시 활성화는 조직이 명시적으로 선택한다. 응답은 `{ "status": "active" | "pending" }`이다.
 - 조직에 `defaultTeamId`가 설정되어 있으면 멤버가 `active`가 되는 시점(즉시 가입 또는 pending 승인)에 해당 팀의 `member`로 자동 배정한다.
 - `owner` role 부여와 `owner` 멤버 변경·제거는 `owner`만 수행할 수 있고, 마지막 active `owner`는 강등·차단·제거할 수 없다(`409`).
 - 자기 자신의 role·status 변경과 제거는 허용하지 않는다(`409`).
 - `DELETE .../teams/:teamId`는 팀 소속과 team scope의 memory, 문서 metadata, Knowledge Graph를 함께 삭제한다.
-- `DELETE .../:organizationId`는 조직과 멤버십, 팀, memory, 문서 metadata, Knowledge Graph를 함께 삭제한다.
+- `DELETE .../:organizationSlug`는 조직과 멤버십, 팀, memory, 문서 metadata, Knowledge Graph를 함께 삭제한다.
 
 ## Memory
 
@@ -189,7 +207,7 @@ curl -i \
       "metadata": { "runId": "run-123" }
     }
   }' \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/memories"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/memories"
 ```
 
 성공하면 `201`, resource URL을 담은 `Location`, 현재 version을 담은 `ETag`와 Memory JSON을 반환한다. 공개 Memory 형식은 다음 필드를 가진다.
@@ -223,7 +241,7 @@ curl \
   --get \
   --data-urlencode 'q=rollback policy' \
   --data 'limit=10' \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/memories"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/memories"
 ```
 
 수정할 필드가 하나 이상인 JSON을 `PATCH`로 보내고 현재 응답의 `ETag` version을 `If-Match` header에 전달하라.
@@ -238,7 +256,7 @@ curl -i \
     "content": "Rollback requires three approvers.",
     "changeReason": "Security review"
   }' \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/memories/<memoryId>"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/memories/<memoryId>"
 ```
 
 Archive도 `DELETE`와 `If-Match`를 사용하며 선택형 `reason` query는 1,000자 이하다.
@@ -248,7 +266,7 @@ curl -i \
   -X DELETE \
   -H "Authorization: Bearer $AGENT_MEMORY_TOKEN" \
   -H 'If-Match: "2"' \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/memories/<memoryId>?reason=Superseded%20policy"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/memories/<memoryId>?reason=Superseded%20policy"
 ```
 
 `If-Match`가 없거나 잘못되면 `428`, version이 충돌하면 `409`를 반환한다. `PATCH`로 변경할 수 있는 필드는 `title`, `content`, `source`, `accessGrants`, `expiresAt`이며 `changeReason` 자체는 변경 필드로 계산하지 않는다.
@@ -283,7 +301,7 @@ curl -i \
   -F 'title=Operations handbook' \
   -F 'metadata={"source":"internal"}' \
   -F 'file=@./handbook.md;type=text/markdown' \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/documents"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/documents"
 ```
 
 `202` 응답의 `Location`을 polling하여 `status`가 `ready` 또는 `failed`가 될 때까지 확인한다.
@@ -291,7 +309,7 @@ curl -i \
 ```bash
 curl \
   -H "Authorization: Bearer $AGENT_MEMORY_TOKEN" \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/documents/<documentId>"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/documents/<documentId>"
 ```
 
 `failed` 상태만 retry할 수 있다.
@@ -300,7 +318,7 @@ curl \
 curl -i \
   -X POST \
   -H "Authorization: Bearer $AGENT_MEMORY_TOKEN" \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/documents/<documentId>/retry"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/documents/<documentId>/retry"
 ```
 
 Retry 성공은 `202`와 갱신된 document를 반환한다. `pending`, `processing`, `ready` 문서를 retry하면 `409`를 반환한다.
@@ -326,7 +344,7 @@ curl -X POST \
     "summary": "Processes purchases",
     "source": { "memoryId": "<memoryId>" }
   }' \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/knowledge/nodes"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/knowledge/nodes"
 ```
 
 두 node의 `id`를 사용해 방향성 edge를 생성한다.
@@ -342,7 +360,7 @@ curl -X POST \
     "predicate": "depends_on",
     "source": { "memoryId": "<memoryId>" }
   }' \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/knowledge/edges"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/knowledge/edges"
 ```
 
 Node 응답은 `id`, `scope`, `kind`, `canonicalName`, 선택형 `summary`, `properties`, `sources`, timestamp와 선택형 `embeddingModel`을 포함한다. Edge 응답은 node ID, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
@@ -355,7 +373,7 @@ Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical nam
 
 ### 조직 온톨로지 검증
 
-조직은 허용 node kind·edge predicate 사전(`ontology`)과 검증 모드(`ontologyMode`)를 설정할 수 있다(`PATCH /api/organizations/:organizationId`, admin·owner). 검증은 node 생성, edge 생성, AI 후보 승인에 적용되며 정규화(NFKC·소문자·kind alias)된 용어로 사전과 비교한다. 빈 목록은 해당 축을 검증하지 않는다.
+조직은 허용 node kind·edge predicate 사전(`ontology`)과 검증 모드(`ontologyMode`)를 설정할 수 있다(`PATCH /api/organizations/:organizationSlug`, admin·owner). 검증은 node 생성, edge 생성, AI 후보 승인에 적용되며 정규화(NFKC·소문자·kind alias)된 용어로 사전과 비교한다. 빈 목록은 해당 축을 검증하지 않는다.
 
 신규 조직은 기본 사전과 `warn` 모드로 생성된다. 기본 node kind는 AI 추출 프롬프트의 기본 kind 목록과 동일한 13개(person, organization, product, service, project, technology, location, recognition, certification, role, event, document, concept)이고, 기본 edge predicate는 범용 10개(depends_on, uses, owns, part_of, member_of, works_for, located_in, integrates_with, produces, manages)다. 기존 조직의 설정은 변경되지 않는다.
 
@@ -372,14 +390,14 @@ Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical nam
 - `GET .../knowledge/ontology/recommendations`: 조직의 graph node·edge와 pending 후보에서 관찰된 용어를 집계해, 사전에 없는 상위 용어를 반환한다. 응답은 `{ "nodeKinds": [{ "term": string, "count": number }], "edgePredicates": [...] }`이며 목록당 최대 20개다. AI 호출 없이 결정적으로 동작한다.
 - `POST .../knowledge/ontology/suggestions`: 관찰 용어와 현재 사전을 knowledge extraction 모델에 보내 정제된 용어(동의어 통합·정규화)를 제안받는다. 응답은 `{ "nodeKinds": string[], "edgePredicates": string[] }`이며 사전에 이미 있는 용어는 제외된다. `KNOWLEDGE_EXTRACTION_MODEL`이 설정되지 않았으면 `503`, provider 상한 초과 시 `429`를 반환한다. 요청에는 용어 문자열과 개수만 전달되며 문서 본문은 전송하지 않는다.
 
-추천·제안은 사전에 자동 반영되지 않는다 — admin이 콘솔 설정 화면에서 선택해 `PATCH .../:organizationId`로 저장한다.
+추천·제안은 사전에 자동 반영되지 않는다 — admin이 콘솔 설정 화면에서 선택해 `PATCH .../:organizationSlug`로 저장한다.
 
 검색은 `GET .../knowledge/nodes?q=<query>&limit=<1-100>`을 사용한다. Neighborhood는 `depth=1-5`, `limit=1-200`을 받으며 기본값은 각각 1과 100이다. 두 조회는 호출자가 현재 읽을 수 있고 active·유효한 Memory 또는 ready document chunk 근거가 하나 이상 있는 graph resource만 반환한다.
 
 ```bash
 curl \
   -H "Authorization: Bearer $AGENT_MEMORY_TOKEN" \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/knowledge/nodes/<nodeId>/neighborhood?depth=2&limit=100"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/knowledge/nodes/<nodeId>/neighborhood?depth=2&limit=100"
 ```
 
 Neighborhood 응답은 `{ "nodes": [...], "edges": [...] }` 형식이다. 서버는 조회 시점마다 graph scope뿐 아니라 각 provenance source의 현재 권한과 상태를 다시 확인한다.
@@ -397,13 +415,13 @@ Pending 후보를 조회하고 승인하는 예시는 다음과 같다.
 ```bash
 curl \
   -H "Authorization: Bearer $AGENT_MEMORY_TOKEN" \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/knowledge/candidates?limit=50"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/knowledge/candidates?limit=50"
 
 curl -X POST \
   -H "Authorization: Bearer $AGENT_MEMORY_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{ "reason": "Source와 관계를 확인함" }' \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/knowledge/candidates/<candidateId>/accept"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/knowledge/candidates/<candidateId>/accept"
 ```
 
 승인 응답은 갱신된 `candidate`와 승격·병합된 `nodes`, `edges`를 반환한다. 거절 endpoint는 같은 body를 받고 갱신된 candidate를 반환하며 Graph resource를 만들지 않는다.
@@ -418,7 +436,7 @@ curl \
   --get \
   --data-urlencode 'q=checkout rollback' \
   --data 'limit=10' \
-  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_ID/context/search"
+  "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/context/search"
 ```
 
 응답은 통합 순위의 `hits`, 반환 개수인 `count`, source별 검색 개수인 `counts`를 포함한다.
@@ -447,7 +465,7 @@ curl \
 
 ## MCP
 
-Streamable HTTP endpoint는 `/api/organizations/:organizationId/mcp`다. HTTP API와 같은 Bearer 인증과 조직 권한을 사용한다.
+Streamable HTTP endpoint는 `/api/organizations/:organizationSlug/mcp`다. Better Auth session Bearer token 또는 해당 조직의 Agent token을 인증하고 발급 멤버의 현재 조직 권한을 적용한다.
 
 | Tool | 역할 | 주요 입력 |
 | --- | --- | --- |
@@ -460,20 +478,20 @@ Streamable HTTP endpoint는 `/api/organizations/:organizationId/mcp`다. HTTP AP
 
 검색 query는 1–10,000자, limit은 1–100이며 기본값은 10이다. `knowledge_neighborhood`의 depth와 limit은 HTTP API와 같은 제한을 사용한다.
 
-MCP client에는 endpoint와 Bearer header를 함께 설정하라. 실제 설정 형식은 사용하는 client가 지원하는 Streamable HTTP server 형식을 따른다.
+MCP client에는 endpoint와 Agent token Bearer header를 함께 설정하라. 실제 설정 형식은 사용하는 client가 지원하는 Streamable HTTP server 형식을 따른다.
 
 ```json
 {
   "mcpServers": {
     "agent-memory": {
       "type": "http",
-      "url": "http://localhost:3100/api/organizations/<organizationId>/mcp",
+      "url": "http://localhost:3100/api/organizations/<organizationSlug>/mcp",
       "headers": {
-        "Authorization": "Bearer <token>"
+        "Authorization": "Bearer <amt_token>"
       }
     }
   }
 }
 ```
 
-Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. MCP가 `401`을 반환하면 token을, `403` 또는 `404`를 반환하면 URL의 organization ID와 해당 사용자의 membership을 확인하라.
+Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. Agent Studio에서는 MCP registry entry의 `Authorization` header에 `Bearer amt_...` 값을 저장하라. MCP가 `401`을 반환하면 token을, `403` 또는 `404`를 반환하면 URL의 organization slug와 발급 멤버의 현재 membership을 확인하라.

@@ -13,6 +13,7 @@ import {
   knowledgeNodeMerges
 } from "@/infrastructure/database/schema";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
+import { createOrganizationAgentTokenRepository } from "@/infrastructure/database/repositories/organization-agent-token-repository";
 import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
@@ -286,9 +287,74 @@ describe("PostgreSQL schema", () => {
       role: "admin",
       teams: [{ teamId: team, role: "manager" }]
     });
+    await expect(repository.findBySlug("organization-c", user)).resolves.toEqual({
+      organizationId: organization,
+      userId: user,
+      role: "admin",
+      teams: [{ teamId: team, role: "manager" }]
+    });
     await expect(
       repository.findByUser(organizationB, user)
     ).resolves.toBeNull();
+  });
+
+  it("stores one revocable Agent token per organization", async () => {
+    const organizationId = "00000000-0000-4000-8000-000000000041";
+    const userId = "10000000-0000-4000-8000-000000000041";
+    const createdAt = new Date("2026-08-31T00:00:00.000Z");
+    await pool.query(
+      `INSERT INTO users (id, email, name) VALUES ($1, 'agent-token@example.com', 'Agent Token')`,
+      [userId]
+    );
+    await pool.query(
+      `INSERT INTO organizations (id, slug, name) VALUES ($1, 'agent-token-org', 'Agent Token Org')`,
+      [organizationId]
+    );
+    await pool.query(
+      `INSERT INTO organization_members (organization_id, user_id, role)
+       VALUES ($1, $2, 'admin')`,
+      [organizationId, userId]
+    );
+    const repository = createOrganizationAgentTokenRepository(db);
+    const token = {
+      organizationId,
+      userId,
+      tokenHash: "a".repeat(64),
+      encryptedToken: "enc:v1:ciphertext-a",
+      masked: "amt_••••1234",
+      createdAt
+    };
+
+    await repository.save(token);
+
+    await expect(repository.findByOrganizationId(organizationId)).resolves.toEqual(
+      token
+    );
+    await expect(
+      repository.findByOrganizationSlug("agent-token-org")
+    ).resolves.toEqual(token);
+
+    const rotated = {
+      ...token,
+      tokenHash: "b".repeat(64),
+      encryptedToken: "enc:v1:ciphertext-b",
+      createdAt: new Date("2026-08-31T01:00:00.000Z")
+    };
+    await repository.save(rotated);
+    await expect(repository.findByOrganizationId(organizationId)).resolves.toEqual(
+      rotated
+    );
+
+    await repository.delete(organizationId);
+    await expect(repository.findByOrganizationId(organizationId)).resolves.toBeNull();
+
+    await repository.save(rotated);
+    await pool.query(
+      `DELETE FROM organization_members
+       WHERE organization_id = $1 AND user_id = $2`,
+      [organizationId, userId]
+    );
+    await expect(repository.findByOrganizationId(organizationId)).resolves.toBeNull();
   });
 
   it("bootstraps organizations, members, and teams transactionally", async () => {
@@ -724,10 +790,10 @@ describe("PostgreSQL schema", () => {
       name: "Organization P"
     });
     await expect(
-      administration.joinOrganization(organizationId, joinerId)
+      administration.joinOrganizationBySlug("organization-p", joinerId)
     ).resolves.toEqual({ status: "joined", membershipStatus: "pending" });
     await expect(
-      administration.joinOrganization(organizationId, joinerId)
+      administration.joinOrganizationBySlug("organization-p", joinerId)
     ).resolves.toEqual({ status: "already_member" });
     await expect(
       administration.listJoinableOrganizations(joinerId)

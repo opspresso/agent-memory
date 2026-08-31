@@ -153,16 +153,16 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 
 ## Agent 연결
 
-`Agent 연결`에는 현재 사이트 주소와 활성 조직 ID가 포함된 전체 Streamable HTTP MCP endpoint가 표시된다. `복사`를 선택해 client 설정에 붙여 넣어라.
+`Agent 연결`에는 현재 사이트 주소와 활성 organization slug가 포함된 전체 Streamable HTTP MCP endpoint가 표시된다. `복사`를 선택해 client 설정에 붙여 넣어라.
 
 ```text
-http://localhost:3100/api/organizations/<organizationId>/mcp
+http://localhost:3100/api/organizations/<organizationSlug>/mcp
 ```
 
-Agent는 Better Auth 로그인 응답의 `set-auth-token` 값을 Bearer token으로 전달해야 한다.
+Organization `admin` 또는 `owner`는 같은 화면에서 MCP 전용 Agent token을 생성한다. 생성된 원문을 복사해 Agent Studio MCP registry entry의 header에 저장하라. 이후 `Token 보기`로 원문을 다시 확인하고 `Token 숨기기`로 화면에서 제거할 수 있다.
 
 ```http
-Authorization: Bearer <token>
+Authorization: Bearer <amt_token>
 ```
 
 MCP에서 제공하는 tool은 다음과 같다.
@@ -174,4 +174,4 @@ MCP에서 제공하는 tool은 다음과 같다.
 - `knowledge_search`
 - `knowledge_neighborhood`
 
-Token 획득과 MCP client 설정 예시는 [HTTP API와 MCP](api.md#agent-bearer-인증)를 따른다.
+재생성은 이전 token을 즉시 무효화하며 폐기하면 연결된 Agent가 더 이상 인증되지 않는다. Hash만 저장된 기존 token은 한 번 재생성해야 `Token 보기`를 사용할 수 있다. Token lifecycle과 MCP client 설정 예시는 [HTTP API와 MCP](api.md#조직-agent-token)를 따른다.
