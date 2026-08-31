@@ -40,8 +40,12 @@ interface Dependencies {
   readonly secret: OrganizationAgentTokenSecret;
 }
 
+function canManage(access: OrganizationAccess): boolean {
+  return access.role === "admin" || access.role === "owner";
+}
+
 function assertCanManage(access: OrganizationAccess): void {
-  if (access.role !== "admin" && access.role !== "owner") {
+  if (!canManage(access)) {
     throw new OrganizationAgentTokenAccessDeniedError();
   }
 }
@@ -126,10 +130,11 @@ export function createOrganizationAgentTokenUseCases(
       if (!stored || !dependencies.secret.matches(candidate, stored.tokenHash)) {
         return null;
       }
-      return dependencies.accessRepository.findByUser(
+      const access = await dependencies.accessRepository.findByUser(
         stored.organizationId,
         stored.userId
       );
+      return access && canManage(access) ? access : null;
     }
   };
 }

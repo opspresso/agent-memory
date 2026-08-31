@@ -47,7 +47,7 @@ src/app  ──▶ src/lib ──▶ src/application ──▶ src/domain
 
 브라우저의 unsafe method는 요청 origin이 실제 또는 설정된 application origin과 같아야 한다. Bearer 요청은 Agent 호출로 취급한다.
 
-조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 같은 slug의 MCP route에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자의 현재 active membership을 다시 읽어 credential 폐기를 즉시 반영한다. 유효한 token 요청은 `X-User-Email`을 정규화한 뒤 같은 organization의 active membership을 조회하고, 그 사용자의 role과 team membership으로 MCP operation을 실행한다. 따라서 token은 Agent Studio를 신뢰해 organization 멤버 가운데 실행 주체를 위임하는 service credential이며, 이메일 header만으로는 인증되지 않는다.
+조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 같은 slug의 MCP route에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자가 현재 active `admin` 또는 `owner`인지 다시 확인해 제거·차단·강등을 즉시 반영한다. 유효한 token 요청은 `X-User-Email`을 정규화한 뒤 같은 organization의 active membership을 조회하고, 그 사용자의 role과 team membership으로 MCP operation을 실행한다. 따라서 token은 Agent Studio를 신뢰해 organization 멤버 가운데 실행 주체를 위임하는 service credential이며, 이메일 header만으로는 인증되지 않는다.
 
 Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 전역 admin email은 조직 bootstrap만 허용하며, 생성된 조직 안에서는 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
 

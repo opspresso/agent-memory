@@ -25,6 +25,7 @@ function dependencies() {
   let stored: OrganizationAgentToken | null = null;
   let generated = 0;
   let active = true;
+  let role: "member" | "admin" | "owner" = "admin";
   const repository: OrganizationAgentTokenRepository = {
     async findByOrganizationId(candidateOrganizationId) {
       return stored?.organizationId === candidateOrganizationId ? stored : null;
@@ -47,7 +48,7 @@ function dependencies() {
     },
     async findByUser(candidateOrganizationId, candidateUserId) {
       return active && candidateOrganizationId === organizationId && candidateUserId === userId
-        ? access()
+        ? access(role)
         : null;
     },
     async findBySlug(organizationSlug, candidateUserId) {
@@ -93,6 +94,9 @@ function dependencies() {
     }),
     setActive(value: boolean) {
       active = value;
+    },
+    setRole(value: "member" | "admin" | "owner") {
+      role = value;
     },
     stored() {
       return stored;
@@ -218,6 +222,15 @@ describe("organization Agent token", () => {
     const generated = await useCases.generate(access());
 
     setActive(false);
+
+    await expect(useCases.verify("opspresso", generated.token)).resolves.toBeNull();
+  });
+
+  it("stops authenticating when the issuing member loses token management access", async () => {
+    const { useCases, setRole } = dependencies();
+    const generated = await useCases.generate(access());
+
+    setRole("member");
 
     await expect(useCases.verify("opspresso", generated.token)).resolves.toBeNull();
   });
