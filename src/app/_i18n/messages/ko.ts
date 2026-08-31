@@ -312,7 +312,7 @@ export const ko: Messages = {
     "이 조직 endpoint를 Streamable HTTP MCP server로 등록합니다.",
   "workspace.agentTokenTitle": "Agent token",
   "workspace.agentTokenBody":
-    "Agent Studio에서 사용할 조직 범위 Bearer token을 생성합니다. 이 조직의 MCP endpoint에서만 동작하며 발급 멤버의 현재 권한을 따릅니다.",
+    "Agent Studio에서 사용할 조직 범위 Bearer token을 생성합니다. Agent Studio가 전달하는 실행 사용자 이메일의 현재 조직 권한으로 MCP를 실행합니다.",
   "workspace.agentTokenGenerate": "Token 생성",
   "workspace.agentTokenRegenerate": "Token 재생성",
   "workspace.agentTokenReveal": "Token 보기",

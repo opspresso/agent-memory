@@ -165,6 +165,12 @@ Organization `admin` 또는 `owner`는 같은 화면에서 MCP 전용 Agent toke
 Authorization: Bearer <amt_token>
 ```
 
+Agent Studio는 MCP를 호출할 때 현재 실행 사용자의 email을 `X-User-Email`로 함께 전달한다. Agent Memory는 해당 사용자의 active organization membership, role, team membership으로 각 tool을 실행한다. 다른 MCP client를 사용하면 같은 header를 직접 추가하라.
+
+```http
+X-User-Email: <user@example.com>
+```
+
 MCP에서 제공하는 tool은 다음과 같다.
 
 - `context_search`
