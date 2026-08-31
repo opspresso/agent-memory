@@ -13,7 +13,11 @@ async function responseMessage(response: Response, fallback: string): Promise<st
   return body?.error ?? fallback;
 }
 
-export function OrganizationBootstrap() {
+export function OrganizationBootstrap({
+  redirectTo
+}: {
+  readonly redirectTo?: string;
+}) {
   const t = useT();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
@@ -34,6 +38,10 @@ export function OrganizationBootstrap() {
       });
       if (!response.ok) {
         throw new Error(await responseMessage(response, t("organization.createFailed")));
+      }
+      if (redirectTo) {
+        window.location.assign(redirectTo);
+        return;
       }
       window.location.reload();
     } catch (caught) {

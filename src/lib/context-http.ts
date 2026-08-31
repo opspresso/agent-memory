@@ -32,8 +32,8 @@ export function publicContextSearchResult(
 
   return {
     hits,
-    total: hits.length,
-    totals: {
+    count: hits.length,
+    counts: {
       memories: result.memories.length,
       documents: result.documents.length,
       knowledge: result.knowledge.length

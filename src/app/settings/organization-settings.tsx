@@ -14,7 +14,12 @@ import {
   TextInput,
   Title
 } from "@mantine/core";
-import { IconAlertTriangle, IconDeviceFloppy, IconTrash } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconDeviceFloppy,
+  IconSparkles,
+  IconTrash
+} from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -59,6 +64,16 @@ interface TeamView {
   readonly name: string;
 }
 
+interface OntologyRecommendation {
+  readonly nodeKinds: readonly { term: string; count: number }[];
+  readonly edgePredicates: readonly { term: string; count: number }[];
+}
+
+interface OntologySuggestion {
+  readonly nodeKinds: readonly string[];
+  readonly edgePredicates: readonly string[];
+}
+
 export function OrganizationSettings({
   isAdmin
 }: {
@@ -88,6 +103,10 @@ function OrganizationSettingsView({
   const [ontologyMode, setOntologyMode] = useState<KnowledgeOntologyMode>("off");
   const [nodeKinds, setNodeKinds] = useState<string[]>([]);
   const [edgePredicates, setEdgePredicates] = useState<string[]>([]);
+  const [recommendation, setRecommendation] =
+    useState<OntologyRecommendation>();
+  const [suggestion, setSuggestion] = useState<OntologySuggestion>();
+  const [suggestionPending, setSuggestionPending] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
@@ -97,13 +116,27 @@ function OrganizationSettingsView({
   const canManage = access?.role === "admin" || access?.role === "owner";
   const isOwner = access?.role === "owner";
   const formInitialized = useRef(false);
+  const recommendedKinds =
+    recommendation?.nodeKinds.filter(
+      (entry) => !nodeKinds.includes(entry.term)
+    ) ?? [];
+  const recommendedPredicates =
+    recommendation?.edgePredicates.filter(
+      (entry) => !edgePredicates.includes(entry.term)
+    ) ?? [];
+  const suggestedKinds =
+    suggestion?.nodeKinds.filter((term) => !nodeKinds.includes(term)) ?? [];
+  const suggestedPredicates =
+    suggestion?.edgePredicates.filter(
+      (term) => !edgePredicates.includes(term)
+    ) ?? [];
 
   const load = useCallback(async () => {
     if (!organizationId) {
       return;
     }
     try {
-      const [detail, teamsBody] = await Promise.all([
+      const [detail, teamsBody, recommendationBody] = await Promise.all([
         fetch(`/api/organizations/${organizationId}`).then((response) =>
           responseJson<OrganizationDetail>(
             response,
@@ -115,10 +148,19 @@ function OrganizationSettingsView({
             response,
             t("organization.loadFailed")
           )
+        ),
+        fetch(
+          `/api/organizations/${organizationId}/knowledge/ontology/recommendations`
+        ).then((response) =>
+          responseJson<OntologyRecommendation>(
+            response,
+            t("organization.loadFailed")
+          )
         )
       ]);
       setOrganization(detail);
       setTeams(teamsBody.teams);
+      setRecommendation(recommendationBody);
       if (!formInitialized.current) {
         formInitialized.current = true;
         setName(detail.name);
@@ -170,6 +212,30 @@ function OrganizationSettingsView({
       );
     } finally {
       setPending(false);
+    }
+  }
+
+  async function requestSuggestion() {
+    setSuggestionPending(true);
+    setError(undefined);
+    try {
+      const response = await fetch(
+        `/api/organizations/${organizationId}/knowledge/ontology/suggestions`,
+        { method: "POST" }
+      );
+      const body = await responseJson<OntologySuggestion>(
+        response,
+        t("organization.requestFailed")
+      );
+      setSuggestion(body);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : t("organization.requestFailed")
+      );
+    } finally {
+      setSuggestionPending(false);
     }
   }
 
@@ -319,6 +385,110 @@ function OrganizationSettingsView({
               splitChars={[",", " "]}
               value={edgePredicates}
             />
+            {recommendedKinds.length > 0 || recommendedPredicates.length > 0 ? (
+              <Stack gap={6}>
+                <Text fw={650} size="sm">
+                  {t("settings.ontology.recommend.title")}
+                </Text>
+                <Text c="dimmed" size="xs">
+                  {t("settings.ontology.recommend.body")}
+                </Text>
+                {recommendedKinds.length > 0 ? (
+                  <Group gap={6}>
+                    {recommendedKinds.map((entry) => (
+                      <Button
+                        key={`kind-${entry.term}`}
+                        onClick={() =>
+                          setNodeKinds((current) =>
+                            normalizedOntologyTerms([...current, entry.term])
+                          )
+                        }
+                        size="compact-xs"
+                        variant="light"
+                      >
+                        {entry.term} · {entry.count}
+                      </Button>
+                    ))}
+                  </Group>
+                ) : null}
+                {recommendedPredicates.length > 0 ? (
+                  <Group gap={6}>
+                    {recommendedPredicates.map((entry) => (
+                      <Button
+                        color="grape"
+                        key={`predicate-${entry.term}`}
+                        onClick={() =>
+                          setEdgePredicates((current) =>
+                            normalizedOntologyTerms([...current, entry.term])
+                          )
+                        }
+                        size="compact-xs"
+                        variant="light"
+                      >
+                        {entry.term} · {entry.count}
+                      </Button>
+                    ))}
+                  </Group>
+                ) : null}
+              </Stack>
+            ) : null}
+            <Group gap="xs">
+              <Button
+                leftSection={<IconSparkles size={16} />}
+                loading={suggestionPending}
+                onClick={() => void requestSuggestion()}
+                variant="default"
+              >
+                {t("settings.ontology.suggest.button")}
+              </Button>
+              <Text c="dimmed" size="xs">
+                {t("settings.ontology.suggest.body")}
+              </Text>
+            </Group>
+            {suggestion ? (
+              suggestedKinds.length > 0 || suggestedPredicates.length > 0 ? (
+                <Stack gap={6}>
+                  <Text fw={650} size="sm">
+                    {t("settings.ontology.suggest.title")}
+                  </Text>
+                  <Group gap={6}>
+                    {suggestedKinds.map((term) => (
+                      <Button
+                        key={`suggested-kind-${term}`}
+                        onClick={() =>
+                          setNodeKinds((current) =>
+                            normalizedOntologyTerms([...current, term])
+                          )
+                        }
+                        size="compact-xs"
+                        variant="light"
+                      >
+                        {term}
+                      </Button>
+                    ))}
+                    {suggestedPredicates.map((term) => (
+                      <Button
+                        color="grape"
+                        key={`suggested-predicate-${term}`}
+                        onClick={() =>
+                          setEdgePredicates((current) =>
+                            normalizedOntologyTerms([...current, term])
+                          )
+                        }
+                        size="compact-xs"
+                        variant="light"
+                      >
+                        {term}
+                      </Button>
+                    ))}
+                  </Group>
+                </Stack>
+              ) : (
+                <Text c="dimmed" size="xs">
+                  {t("settings.ontology.suggest.empty")}
+                </Text>
+              )
+            ) : null}
           </Stack>
         </Paper>
       ) : null}

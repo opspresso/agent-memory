@@ -1,4 +1,4 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   memoryErrorResponse,
   parseIfMatch,
@@ -8,7 +8,6 @@ import {
 } from "@/lib/memory-http";
 import {
   memoryIdSchema,
-  organizationIdSchema,
   reviseMemorySchema
 } from "@/lib/memory-schemas";
 import {
@@ -23,18 +22,17 @@ interface RouteContext {
 
 async function routeAccess(request: Request, context: RouteContext) {
   const params = await context.params;
-  const organizationId = organizationIdSchema.safeParse(params.organizationId);
   const memoryId = memoryIdSchema.safeParse(params.memoryId);
-  if (!organizationId.success || !memoryId.success) {
+  if (!memoryId.success) {
     return {
       valid: false as const,
       response: Response.json({ error: "Invalid resource ID" }, { status: 400 })
     };
   }
 
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    organizationId.data
+    params.organizationId
   );
   if (!authorization.authorized) {
     return { valid: false as const, response: authorization.response };

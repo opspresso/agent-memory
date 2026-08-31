@@ -1,5 +1,6 @@
 import {
-  emptyKnowledgeOntology,
+  defaultKnowledgeOntology,
+  defaultKnowledgeOntologyMode,
   type KnowledgeOntology,
   type KnowledgeOntologyMode
 } from "../knowledge/knowledge-ontology";
@@ -98,8 +99,8 @@ export function createOrganization(input: NewOrganization): Organization {
     name: normalizedName(input.name),
     newMemberStatus: "pending" as const,
     defaultTeamId: null,
-    ontologyMode: "off" as const,
-    ontology: emptyKnowledgeOntology,
+    ontologyMode: defaultKnowledgeOntologyMode,
+    ontology: defaultKnowledgeOntology,
     createdAt: new Date(input.now),
     updatedAt: new Date(input.now)
   });

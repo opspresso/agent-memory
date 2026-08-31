@@ -1,4 +1,4 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   knowledgeCandidateErrorResponse,
   publicKnowledgeCandidatePromotion
@@ -9,7 +9,6 @@ import {
   reviewKnowledgeCandidateSchema
 } from "@/lib/knowledge-schemas";
 import { readJsonBody } from "@/lib/memory-http";
-import { organizationIdSchema } from "@/lib/memory-schemas";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string; candidateId: string }>;
@@ -17,14 +16,13 @@ interface RouteContext {
 
 export async function POST(request: Request, context: RouteContext) {
   const { organizationId, candidateId } = await context.params;
-  const parsedOrganizationId = organizationIdSchema.safeParse(organizationId);
   const parsedCandidateId = knowledgeCandidateIdSchema.safeParse(candidateId);
-  if (!parsedOrganizationId.success || !parsedCandidateId.success) {
+  if (!parsedCandidateId.success) {
     return Response.json({ error: "Invalid resource ID" }, { status: 400 });
   }
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    parsedOrganizationId.data
+    organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;

@@ -1,7 +1,4 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
-import { z } from "zod";
-
-const organizationIdSchema = z.uuid();
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string }>;
@@ -9,14 +6,9 @@ interface RouteContext {
 
 export async function GET(request: Request, context: RouteContext) {
   const { organizationId } = await context.params;
-  const parsedOrganizationId = organizationIdSchema.safeParse(organizationId);
-  if (!parsedOrganizationId.success) {
-    return Response.json({ error: "Invalid organization ID" }, { status: 400 });
-  }
-
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    parsedOrganizationId.data
+    organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;

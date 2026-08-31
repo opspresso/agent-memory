@@ -94,8 +94,8 @@ describe("agent memory MCP server", () => {
     expect(searchContext).toHaveBeenCalledWith(access, "incident", 7);
     expect(result.structuredContent).toEqual({
       hits: [],
-      total: 0,
-      totals: { memories: 0, documents: 0, knowledge: 0 }
+      count: 0,
+      counts: { memories: 0, documents: 0, knowledge: 0 }
     });
   });
 });

@@ -3,10 +3,7 @@ import { z } from "zod";
 
 import type { CreateMemoryInput } from "@/application/memory/create-memory";
 import type { ContextSearchResult } from "@/application/context/search-context";
-import type {
-  OrganizationAccess,
-  ScopedResource
-} from "@/domain/identity/organization-access";
+import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import type { DocumentSearchHit } from "@/domain/document/document-repository";
 import type {
   KnowledgeNeighborhood,
@@ -24,6 +21,7 @@ import {
 } from "./knowledge-http";
 import { publicMemory } from "./memory-http";
 import { createMemorySchema } from "./memory-schemas";
+import { resolveScopedResource } from "./scoped-resource";
 
 export interface AgentMemoryMcpOperations {
   searchContext(
@@ -53,30 +51,6 @@ export interface AgentMemoryMcpOperations {
     depth: number,
     limit: number
   ): Promise<KnowledgeNeighborhood>;
-}
-
-function scopeForAccess(
-  access: OrganizationAccess,
-  scope:
-    | Readonly<{ kind: "organization" }>
-    | Readonly<{ kind: "team"; teamId: string }>
-    | Readonly<{ kind: "user"; userId?: string }>
-): ScopedResource {
-  if (scope.kind === "team") {
-    return {
-      kind: "team",
-      organizationId: access.organizationId,
-      teamId: scope.teamId
-    };
-  }
-  if (scope.kind === "user") {
-    return {
-      kind: "user",
-      organizationId: access.organizationId,
-      userId: scope.userId ?? access.userId
-    };
-  }
-  return { kind: "organization", organizationId: access.organizationId };
 }
 
 function jsonResult(payload: Readonly<Record<string, unknown>>) {
@@ -141,7 +115,11 @@ export function createAgentMemoryMcpServer(
       const memory = await operations.createMemory({
         access,
         kind: input.kind,
-        scope: scopeForAccess(access, input.scope),
+        scope: resolveScopedResource(
+          input.scope,
+          access.organizationId,
+          access.userId
+        ),
         title: input.title,
         content: input.content,
         source: input.source,

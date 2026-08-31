@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
@@ -24,6 +24,7 @@ import {
   knowledgeScopeFromRow,
   upsertKnowledgeNode
 } from "./knowledge-node-persistence";
+import { scopedManagePredicate } from "./scope-predicates";
 
 type CandidateRow = typeof knowledgeCandidates.$inferSelect;
 
@@ -48,29 +49,7 @@ function candidateFromRow(
 }
 
 function candidateReviewPredicate(access: OrganizationAccess): SQL {
-  const userScope = and(
-    eq(documents.scopeKind, "user"),
-    eq(documents.userId, access.userId)
-  );
-  if (access.role === "admin" || access.role === "owner") {
-    return or(
-      eq(documents.scopeKind, "organization"),
-      eq(documents.scopeKind, "team"),
-      userScope
-    )!;
-  }
-  const managedTeamIds = access.teams
-    .filter((team) => team.role === "manager")
-    .map((team) => team.teamId);
-  return or(
-    userScope,
-    managedTeamIds.length > 0
-      ? and(
-          eq(documents.scopeKind, "team"),
-          inArray(documents.teamId, managedTeamIds)
-        )
-      : undefined
-  )!;
+  return scopedManagePredicate(access, documents);
 }
 
 export function createKnowledgeCandidateRepository(
@@ -209,20 +188,23 @@ export function createKnowledgeCandidateRepository(
           .for("update")
           .limit(1);
         if (!locked) {
-          return null;
+          return { status: "not_found" } as const;
         }
         const candidate = candidateFromRow(
           locked.candidate,
           knowledgeScopeFromRow(locked.document)
         );
-        if (locked.document.status !== "ready") {
-          return null;
-        }
+        // The idempotent already-accepted return must stay ahead of both the
+        // source-readiness and promotion-completeness checks: callers replay
+        // accepted candidates with empty promotion inputs.
         if (candidate.status === "accepted") {
-          return { candidate, nodes: [], edges: [] };
+          return { status: "promoted", candidate, nodes: [], edges: [] } as const;
         }
         if (candidate.status !== "pending") {
-          return null;
+          return { status: "already_rejected" } as const;
+        }
+        if (locked.document.status !== "ready") {
+          return { status: "source_not_ready" } as const;
         }
         const promotions = new Map(
           input.entityPromotions.map((promotion) => [promotion.key, promotion])
@@ -345,10 +327,11 @@ export function createKnowledgeCandidateRepository(
           throw new Error("knowledge candidate review claim was lost");
         }
         return {
+          status: "promoted",
           candidate: candidateFromRow(reviewed, candidate.scope),
           nodes,
           edges
-        };
+        } as const;
       });
     },
 

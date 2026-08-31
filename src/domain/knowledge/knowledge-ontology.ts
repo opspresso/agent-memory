@@ -17,6 +17,40 @@ export const emptyKnowledgeOntology: KnowledgeOntology = Object.freeze({
   edgePredicates: Object.freeze([]) as readonly string[]
 });
 
+export const defaultKnowledgeOntologyMode: KnowledgeOntologyMode = "warn";
+
+// Seed vocabulary for new organizations. The node kinds double as the default
+// hint in the AI extraction prompt — keep the two in sync by construction.
+export const defaultKnowledgeOntology: KnowledgeOntology = Object.freeze({
+  nodeKinds: Object.freeze([
+    "person",
+    "organization",
+    "product",
+    "service",
+    "project",
+    "technology",
+    "location",
+    "recognition",
+    "certification",
+    "role",
+    "event",
+    "document",
+    "concept"
+  ]) as readonly string[],
+  edgePredicates: Object.freeze([
+    "depends_on",
+    "uses",
+    "owns",
+    "part_of",
+    "member_of",
+    "works_for",
+    "located_in",
+    "integrates_with",
+    "produces",
+    "manages"
+  ]) as readonly string[]
+});
+
 export interface KnowledgeOntologyViolation {
   readonly type: "unknown_kind" | "unknown_predicate";
   readonly term: string;

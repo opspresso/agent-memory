@@ -171,7 +171,7 @@ export function OrganizationOnboarding({
         </Alert>
       ) : null}
 
-      {isAdmin ? <OrganizationBootstrap /> : null}
+      {isAdmin ? <OrganizationBootstrap redirectTo="/" /> : null}
     </Stack>
   );
 }

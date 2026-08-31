@@ -51,6 +51,8 @@ Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경
 
 ## Scope와 권한
 
+검색·조회 SQL의 scope 필터는 `scope-predicates`(infrastructure repository 공용 builder)가 단일 소유하며, domain의 `canAccessScopedResource`와의 동치성을 integration test로 고정한다. user scope 자원은 검색 결과에서도 본인에게만 보인다 — `admin`·`owner`도 다른 사용자의 user scope 자원을 검색으로 열람할 수 없다.
+
 조직 membership은 `active`, `pending`, `blocked` status를 가진다. 조직 접근 조회는 `active` membership만 반환하므로 `pending`·`blocked` 사용자는 모든 조직 API에서 `403`을 받는다. 조직은 신규 가입자의 기본 status(`newMemberStatus`, 기본값 `pending`)와 기본 팀(`defaultTeamId`)을 설정할 수 있으며, 멤버가 `active`가 되는 시점에 기본 팀에 `member`로 배정된다. 조직 온톨로지(`ontology` 사전, `ontologyMode`)를 포함한 조직 설정 변경은 `admin`·`owner`만 수행한다. 마지막 active `owner`는 강등·차단·제거할 수 없고, 자기 자신의 membership 변경은 허용하지 않는다.
 
 모든 memory, document, knowledge node와 edge는 하나의 organization에 속하며 다음 scope 중 하나를 갖는다.
@@ -93,7 +95,7 @@ Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenanc
 
 Node identity는 NFKC·공백·대소문자를 정규화한 canonical name key와 ontology로 정규화한 kind를 사용한다. 동일 scope의 동일 identity 생성은 transaction advisory lock으로 직렬화해 하나의 node와 provenance로 수렴한다. 이름은 같지만 kind가 다른 node는 자동 병합하지 않고 검토 대상으로 남긴다.
 
-조직은 통제 어휘 사전(`ontology`: node kind·edge predicate 목록)과 검증 모드(`ontologyMode`: `off`·`warn`·`strict`)를 가진다. 검증은 application 계층에서 node 생성, edge 생성, AI 후보 승인의 세 쓰기 경로에 일괄 적용된다 — `warn`은 응답에 경고를 싣고, `strict`는 embedding 호출과 영속화 전에 `422`로 거부한다. 검증 모드가 켜져 있고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전을 힌트로 주입하고, `strict`에서는 entity kind를 structured output schema의 enum으로 제약한다. 사전 조회는 `KnowledgeOntologyReader` port를 통해 organizations 행에서 읽는다.
+조직은 통제 어휘 사전(`ontology`: node kind·edge predicate 목록)과 검증 모드(`ontologyMode`: `off`·`warn`·`strict`)를 가진다. 신규 조직은 domain의 `defaultKnowledgeOntology`(추출 프롬프트 기본 kind 목록과 단일 source) + `warn` 모드로 생성된다. 사전 확장은 두 경로로 지원한다 — 조직의 graph·pending 후보에서 관찰된 용어의 결정적 빈도 집계(`KnowledgeTermUsageRepository`), 그리고 관찰 용어를 extraction 모델에 보내 정제·통합을 제안받는 AI 경로(`KnowledgeOntologySuggestionService`, 용어 문자열만 전송). 두 경로 모두 admin·owner 전용이며 저장은 항상 설정 PATCH를 거친다. 검증은 application 계층에서 node 생성, edge 생성, AI 후보 승인의 세 쓰기 경로에 일괄 적용된다 — `warn`은 응답에 경고를 싣고, `strict`는 embedding 호출과 영속화 전에 `422`로 거부한다. 검증 모드가 켜져 있고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전을 힌트로 주입하고, `strict`에서는 entity kind를 structured output schema의 enum으로 제약한다. 사전 조회는 `KnowledgeOntologyReader` port를 통해 organizations 행에서 읽는다.
 
 Graph resource 삭제는 해당 scope의 `manage` 권한을 요구한다. Edge 삭제는 edge와 provenance row만 제거하고, node 삭제는 연결 edge와 각 provenance row를 함께 제거한다. 어느 경우에도 source Memory나 document를 삭제하지 않는다.
 

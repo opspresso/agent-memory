@@ -15,6 +15,12 @@ export interface KnowledgeCandidatePromotionResult {
   readonly edges: readonly KnowledgeEdge[];
 }
 
+export type KnowledgeCandidateAcceptResult =
+  | Readonly<{ status: "promoted" } & KnowledgeCandidatePromotionResult>
+  | Readonly<{ status: "not_found" }>
+  | Readonly<{ status: "source_not_ready" }>
+  | Readonly<{ status: "already_rejected" }>;
+
 export interface KnowledgeCandidateRepository {
   findById(
     organizationId: string,
@@ -37,7 +43,7 @@ export interface KnowledgeCandidateRepository {
     readonly relationshipIds: readonly string[];
     readonly reviewedAt: Date;
     readonly reviewedBy: string;
-  }): Promise<KnowledgeCandidatePromotionResult | null>;
+  }): Promise<KnowledgeCandidateAcceptResult>;
   reject(input: {
     readonly candidateId: string;
     readonly organizationId: string;

@@ -3,6 +3,7 @@ import {
   KnowledgeCandidateNotFoundError,
   KnowledgeCandidateReviewAccessDeniedError,
   KnowledgeCandidateReviewConflictError,
+  KnowledgeCandidateSourceNotReadyError,
   type AcceptKnowledgeCandidateResult
 } from "@/application/knowledge/review-knowledge-candidate";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
@@ -25,7 +26,10 @@ export function knowledgeCandidateErrorResponse(error: unknown): Response | null
       { status: 403 }
     );
   }
-  if (error instanceof KnowledgeCandidateReviewConflictError) {
+  if (
+    error instanceof KnowledgeCandidateReviewConflictError ||
+    error instanceof KnowledgeCandidateSourceNotReadyError
+  ) {
     return Response.json({ error: error.message }, { status: 409 });
   }
   if (error instanceof KnowledgeOntologyViolationError) {

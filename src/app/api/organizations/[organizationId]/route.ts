@@ -1,6 +1,7 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   organizationAdministrationErrorResponse,
+  publicOrganization,
   readOrganizationJsonBody
 } from "@/lib/organization-administration-http";
 import { updateOrganizationSchema } from "@/lib/organization-administration-schemas";
@@ -9,29 +10,17 @@ import {
   getOrganizationRecord,
   updateOrganizationSettingsRecord
 } from "@/lib/organization-administration-service";
-import { organizationIdSchema } from "@/lib/memory-schemas";
 
 interface RouteContext {
   readonly params: Promise<{ organizationId: string }>;
 }
 
-async function routeAccess(request: Request, context: RouteContext) {
-  const { organizationId } = await context.params;
-  const parsed = organizationIdSchema.safeParse(organizationId);
-  if (!parsed.success) {
-    return {
-      authorized: false as const,
-      response: Response.json(
-        { error: "Invalid organization ID" },
-        { status: 400 }
-      )
-    };
-  }
-  return authorizeOrganizationRequest(request, parsed.data);
-}
-
 export async function GET(request: Request, context: RouteContext) {
-  const authorization = await routeAccess(request, context);
+  const { organizationId } = await context.params;
+  const authorization = await authorizeOrganizationRoute(
+    request,
+    organizationId
+  );
   if (!authorization.authorized) {
     return authorization.response;
   }
@@ -40,20 +29,7 @@ export async function GET(request: Request, context: RouteContext) {
     const canManage =
       authorization.access.role === "admin" ||
       authorization.access.role === "owner";
-    return Response.json({
-      id: organization.id,
-      slug: organization.slug,
-      name: organization.name,
-      ...(canManage
-        ? {
-            newMemberStatus: organization.newMemberStatus,
-            defaultTeamId: organization.defaultTeamId,
-            ontologyMode: organization.ontologyMode,
-            ontology: organization.ontology
-          }
-        : {}),
-      createdAt: organization.createdAt
-    });
+    return Response.json(publicOrganization(organization, { canManage }));
   } catch (error) {
     const response = organizationAdministrationErrorResponse(error);
     if (response) {
@@ -64,7 +40,11 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const authorization = await routeAccess(request, context);
+  const { organizationId } = await context.params;
+  const authorization = await authorizeOrganizationRoute(
+    request,
+    organizationId
+  );
   if (!authorization.authorized) {
     return authorization.response;
   }
@@ -84,7 +64,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       authorization.access,
       parsed.data
     );
-    return Response.json(organization);
+    return Response.json(publicOrganization(organization, { canManage: true }));
   } catch (error) {
     const response = organizationAdministrationErrorResponse(error);
     if (response) {
@@ -95,7 +75,11 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
-  const authorization = await routeAccess(request, context);
+  const { organizationId } = await context.params;
+  const authorization = await authorizeOrganizationRoute(
+    request,
+    organizationId
+  );
   if (!authorization.authorized) {
     return authorization.response;
   }

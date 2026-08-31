@@ -3,6 +3,10 @@ import { KnowledgeNodeNotFoundError } from "@/application/knowledge/create-knowl
 import { KnowledgeGraphAccessDeniedError } from "@/application/knowledge/create-knowledge-node";
 import { KnowledgeEdgeNotFoundError } from "@/application/knowledge/delete-knowledge-resource";
 import { InvalidKnowledgeNodeMergeError } from "@/application/knowledge/merge-knowledge-nodes";
+import {
+  KnowledgeOntologyAccessDeniedError,
+  KnowledgeOntologySuggestionUnavailableError
+} from "@/application/knowledge/recommend-ontology";
 import { InvalidKnowledgeSearchError } from "@/application/knowledge/search-knowledge-nodes";
 import {
   InvalidKnowledgeGraphError,
@@ -36,6 +40,12 @@ export function knowledgeErrorResponse(error: unknown): Response | null {
       { error: "Knowledge graph access denied" },
       { status: 403 }
     );
+  }
+  if (error instanceof KnowledgeOntologyAccessDeniedError) {
+    return Response.json({ error: error.message }, { status: 403 });
+  }
+  if (error instanceof KnowledgeOntologySuggestionUnavailableError) {
+    return Response.json({ error: error.message }, { status: 503 });
   }
   if (error instanceof KnowledgeOntologyViolationError) {
     return Response.json(

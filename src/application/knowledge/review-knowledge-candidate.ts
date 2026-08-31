@@ -4,6 +4,7 @@ import {
 } from "@/domain/identity/organization-access";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import type {
+  KnowledgeCandidateAcceptResult,
   KnowledgeCandidatePromotionResult,
   KnowledgeCandidateRepository
 } from "@/domain/knowledge/knowledge-candidate-repository";
@@ -44,6 +45,13 @@ export class InvalidKnowledgeCandidateReviewError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "InvalidKnowledgeCandidateReviewError";
+  }
+}
+
+export class KnowledgeCandidateSourceNotReadyError extends Error {
+  constructor() {
+    super("knowledge candidate source document is not ready");
+    this.name = "KnowledgeCandidateSourceNotReadyError";
   }
 }
 
@@ -190,10 +198,7 @@ export function buildAcceptKnowledgeCandidate(
         reviewedAt: dependencies.clock(),
         reviewedBy: access.userId
       });
-      if (!existing) {
-        throw new KnowledgeCandidateReviewConflictError();
-      }
-      return { ...existing, ontologyWarnings: [] };
+      return { ...promotionFromAcceptResult(existing), ontologyWarnings: [] };
     }
     const settings = await dependencies.ontologyReader.findByOrganization(
       access.organizationId
@@ -238,11 +243,23 @@ export function buildAcceptKnowledgeCandidate(
       reviewedAt: dependencies.clock(),
       reviewedBy: access.userId
     });
-    if (!promoted) {
-      throw new KnowledgeCandidateReviewConflictError();
-    }
-    return { ...promoted, ontologyWarnings };
+    return { ...promotionFromAcceptResult(promoted), ontologyWarnings };
   };
+}
+
+function promotionFromAcceptResult(
+  result: KnowledgeCandidateAcceptResult
+): KnowledgeCandidatePromotionResult {
+  if (result.status === "not_found") {
+    throw new KnowledgeCandidateNotFoundError();
+  }
+  if (result.status === "source_not_ready") {
+    throw new KnowledgeCandidateSourceNotReadyError();
+  }
+  if (result.status === "already_rejected") {
+    throw new KnowledgeCandidateReviewConflictError();
+  }
+  return { candidate: result.candidate, nodes: result.nodes, edges: result.edges };
 }
 
 export function buildRejectKnowledgeCandidate(

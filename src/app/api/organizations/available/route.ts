@@ -9,5 +9,5 @@ export async function GET(request: Request) {
   const organizations = await listJoinableOrganizationRecords(
     authentication.user.id
   );
-  return Response.json({ organizations, total: organizations.length });
+  return Response.json({ organizations, count: organizations.length });
 }

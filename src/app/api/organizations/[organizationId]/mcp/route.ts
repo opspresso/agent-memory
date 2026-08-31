@@ -7,12 +7,11 @@ import {
   searchKnowledgeNodeRecords
 } from "@/lib/knowledge-service";
 import { createAgentMemoryMcpServer } from "@/lib/mcp-server";
-import { organizationIdSchema } from "@/lib/memory-schemas";
 import {
   createMemoryRecord,
   searchMemoryRecords
 } from "@/lib/memory-service";
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 
 export const runtime = "nodejs";
 
@@ -22,13 +21,9 @@ interface RouteContext {
 
 async function handleMcpRequest(request: Request, context: RouteContext) {
   const { organizationId } = await context.params;
-  const parsedOrganizationId = organizationIdSchema.safeParse(organizationId);
-  if (!parsedOrganizationId.success) {
-    return Response.json({ error: "Invalid organization ID" }, { status: 400 });
-  }
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    parsedOrganizationId.data
+    organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;

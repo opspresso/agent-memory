@@ -33,6 +33,7 @@ import {
   memoryVersions
 } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
+import { scopedReadPredicate } from "./scope-predicates";
 
 type MemoryRow = typeof memories.$inferSelect;
 type GrantRow = typeof memoryAccessGrants.$inferSelect;
@@ -186,9 +187,7 @@ function versionValues(
   };
 }
 
-function principalPredicate(
-  access: OrganizationAccess
-): SQL | undefined {
+function principalPredicate(access: OrganizationAccess): SQL {
   const teamIds = access.teams.map((team) => team.teamId);
   const grantPrincipal = or(
     and(
@@ -203,18 +202,9 @@ function principalPredicate(
       : undefined
   );
 
-  return or(
-    eq(memories.scopeKind, "organization"),
-    and(
-      eq(memories.scopeKind, "user"),
-      eq(memories.userId, access.userId)
-    ),
-    teamIds.length > 0
-      ? and(
-          eq(memories.scopeKind, "team"),
-          inArray(memories.teamId, teamIds)
-        )
-      : undefined,
+  return scopedReadPredicate(
+    access,
+    memories,
     sql`EXISTS (
       SELECT 1 FROM ${memoryAccessGrants}
           WHERE ${memoryAccessGrants.organizationId} = ${memories.organizationId}
@@ -398,10 +388,7 @@ export function createMemoryRepository(
 
     async search(input) {
       const score = scoreExpressions(input);
-      const accessPredicate =
-        input.access.role === "admin" || input.access.role === "owner"
-          ? sql`true`
-          : principalPredicate(input.access);
+      const accessPredicate = principalPredicate(input.access);
       const rows = await db
         .select({
           ...getTableColumns(memories),

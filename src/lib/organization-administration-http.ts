@@ -9,10 +9,33 @@ import {
   TeamNotFoundError,
   TeamSlugConflictError
 } from "@/application/identity/manage-organization";
-import { InvalidOrganizationAdministrationError } from "@/domain/identity/organization-administration";
+import {
+  InvalidOrganizationAdministrationError,
+  type Organization
+} from "@/domain/identity/organization-administration";
 import { InvalidKnowledgeOntologyError } from "@/domain/knowledge/knowledge-ontology";
 
 export { readJsonBody as readOrganizationJsonBody } from "./json-body";
+
+export function publicOrganization(
+  organization: Organization,
+  options: Readonly<{ canManage: boolean }>
+) {
+  return {
+    id: organization.id,
+    slug: organization.slug,
+    name: organization.name,
+    ...(options.canManage
+      ? {
+          newMemberStatus: organization.newMemberStatus,
+          defaultTeamId: organization.defaultTeamId,
+          ontologyMode: organization.ontologyMode,
+          ontology: organization.ontology
+        }
+      : {}),
+    createdAt: organization.createdAt
+  };
+}
 
 export function organizationAdministrationErrorResponse(
   error: unknown

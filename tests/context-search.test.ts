@@ -161,8 +161,8 @@ describe("unified context search", () => {
       "memory"
     ]);
     expect(result).toMatchObject({
-      total: 3,
-      totals: { memories: 1, documents: 1, knowledge: 1 }
+      count: 3,
+      counts: { memories: 1, documents: 1, knowledge: 1 }
     });
     expect(result.hits[2]).toMatchObject({
       sourceType: "memory",

@@ -1,11 +1,10 @@
-import { authorizeOrganizationRequest } from "@/lib/organization-authorization";
+import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { organizationAdministrationErrorResponse } from "@/lib/organization-administration-http";
 import {
   memberUserIdSchema,
   teamIdSchema
 } from "@/lib/organization-administration-schemas";
 import { removeTeamMemberRecord } from "@/lib/organization-administration-service";
-import { organizationIdSchema } from "@/lib/memory-schemas";
 
 interface RouteContext {
   readonly params: Promise<{
@@ -17,15 +16,14 @@ interface RouteContext {
 
 export async function DELETE(request: Request, context: RouteContext) {
   const params = await context.params;
-  const organizationId = organizationIdSchema.safeParse(params.organizationId);
   const teamId = teamIdSchema.safeParse(params.teamId);
   const userId = memberUserIdSchema.safeParse(params.userId);
-  if (!organizationId.success || !teamId.success || !userId.success) {
+  if (!teamId.success || !userId.success) {
     return Response.json({ error: "Invalid resource ID" }, { status: 400 });
   }
-  const authorization = await authorizeOrganizationRequest(
+  const authorization = await authorizeOrganizationRoute(
     request,
-    organizationId.data
+    params.organizationId
   );
   if (!authorization.authorized) {
     return authorization.response;
