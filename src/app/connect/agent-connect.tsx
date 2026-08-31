@@ -111,6 +111,7 @@ function AgentConnectionPanels({
     }
     setBusy(true);
     setError(undefined);
+    setGeneratedToken(undefined);
     try {
       const generated = await fetch(
         `/api/organizations/${organizationSlug}/agent-token`,
@@ -145,6 +146,7 @@ function AgentConnectionPanels({
     }
     setBusy(true);
     setError(undefined);
+    setGeneratedToken(undefined);
     try {
       const revealed = await fetch(
         `/api/organizations/${organizationSlug}/agent-token/reveal`,
@@ -176,6 +178,7 @@ function AgentConnectionPanels({
     }
     setBusy(true);
     setError(undefined);
+    setGeneratedToken(undefined);
     try {
       const response = await fetch(
         `/api/organizations/${organizationSlug}/agent-token`,
@@ -184,7 +187,6 @@ function AgentConnectionPanels({
       if (!response.ok) {
         await responseJson(response, t("workspace.agentTokenFailed"));
       }
-      setGeneratedToken(undefined);
       setTokenStatus({ configured: false });
     } catch (caught) {
       setError(

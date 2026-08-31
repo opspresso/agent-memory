@@ -94,7 +94,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 | `401` | Session 또는 Bearer 인증 실패 |
 | `403` | 조직 멤버십 또는 resource action 권한 부족 |
 | `404` | Resource가 없거나 호출자에게 존재를 공개할 수 없음 |
-| `409` | Memory version 또는 candidate review 상태 충돌 |
+| `409` | Memory version, candidate review 상태 충돌 또는 Agent token reveal 불가 |
 | `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
 | `422` | 조직 온톨로지 검증(strict)에서 미등록 kind·predicate를 거부함. 응답에 `violations` 배열 포함 |
 | `428` | Memory mutation에 유효한 `If-Match`가 없음 |

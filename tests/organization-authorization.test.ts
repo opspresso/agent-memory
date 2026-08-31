@@ -90,6 +90,26 @@ describe("organization route authorization", () => {
     expect(mocks.authenticateRequest).not.toHaveBeenCalled();
   });
 
+  it("does not accept an organization Agent token on general HTTP routes", async () => {
+    const unauthenticated = Response.json(
+      { error: "Authentication required" },
+      { status: 401 }
+    );
+    mocks.authenticateRequest.mockResolvedValue({
+      authenticated: false,
+      response: unauthenticated
+    });
+    const request = new Request(
+      "https://memory.example.com/api/organizations/opspresso/me",
+      { headers: { authorization: "Bearer amt_secret" } }
+    );
+
+    const result = await authorizeOrganizationRoute(request, "opspresso");
+
+    expect(result).toEqual({ authorized: false, response: unauthenticated });
+    expect(mocks.verifyAgentToken).not.toHaveBeenCalled();
+  });
+
   it("returns 401 for a revoked or mismatched Agent token", async () => {
     mocks.verifyAgentToken.mockResolvedValue(null);
     const result = await authorizeOrganizationMcpRoute(

@@ -347,6 +347,14 @@ describe("PostgreSQL schema", () => {
 
     await repository.delete(organizationId);
     await expect(repository.findByOrganizationId(organizationId)).resolves.toBeNull();
+
+    await repository.save(rotated);
+    await pool.query(
+      `DELETE FROM organization_members
+       WHERE organization_id = $1 AND user_id = $2`,
+      [organizationId, userId]
+    );
+    await expect(repository.findByOrganizationId(organizationId)).resolves.toBeNull();
   });
 
   it("bootstraps organizations, members, and teams transactionally", async () => {
