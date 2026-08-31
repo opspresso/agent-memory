@@ -1,5 +1,6 @@
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { organizationAgentTokenPrefix } from "@/domain/identity/organization-agent-token-repository";
+import { z } from "zod";
 
 import {
   organizationAccessRepository,
@@ -7,6 +8,9 @@ import {
 } from "./container";
 import { organizationSlugSchema } from "./organization-administration-schemas";
 import { authenticateRequest, type SessionUser } from "./session";
+
+export const organizationMcpUserEmailHeader = "X-User-Email";
+const organizationMcpUserEmailSchema = z.email().trim().toLowerCase();
 
 export type OrganizationAuthorizationResult =
   | Readonly<{
@@ -79,17 +83,44 @@ export async function authorizeOrganizationMcpRoute(
     request.headers.get("authorization") ?? ""
   )?.[1];
   if (bearer?.startsWith(organizationAgentTokenPrefix)) {
-    const access = await organizationAgentTokenUseCases.verify(
+    const tokenAccess = await organizationAgentTokenUseCases.verify(
       parsed.data,
       bearer
+    );
+    if (!tokenAccess) {
+      return {
+        authorized: false,
+        response: Response.json(
+          { error: "Authentication required" },
+          { status: 401 }
+        )
+      };
+    }
+
+    const email = organizationMcpUserEmailSchema.safeParse(
+      request.headers.get(organizationMcpUserEmailHeader)
+    );
+    if (!email.success) {
+      return {
+        authorized: false,
+        response: Response.json(
+          { error: `Invalid ${organizationMcpUserEmailHeader} header` },
+          { status: 400 }
+        )
+      };
+    }
+
+    const access = await organizationAccessRepository.findByEmail(
+      tokenAccess.organizationId,
+      email.data
     );
     return access
       ? { authorized: true, access }
       : {
           authorized: false,
           response: Response.json(
-            { error: "Authentication required" },
-            { status: 401 }
+            { error: "Organization access denied" },
+            { status: 403 }
           )
         };
   }

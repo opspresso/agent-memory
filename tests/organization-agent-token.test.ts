@@ -54,6 +54,9 @@ function dependencies() {
       return organizationSlug === "opspresso" && candidateUserId === userId
         ? access()
         : null;
+    },
+    async findByEmail() {
+      return null;
     }
   };
   const secret: OrganizationAgentTokenSecret = {

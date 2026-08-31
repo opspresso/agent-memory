@@ -294,7 +294,28 @@ describe("PostgreSQL schema", () => {
       teams: [{ teamId: team, role: "manager" }]
     });
     await expect(
+      repository.findByEmail(organization, "user-c@example.com")
+    ).resolves.toEqual({
+      organizationId: organization,
+      userId: user,
+      role: "admin",
+      teams: [{ teamId: team, role: "manager" }]
+    });
+    await expect(
+      repository.findByEmail(organization, "outsider@example.com")
+    ).resolves.toBeNull();
+    await expect(
       repository.findByUser(organizationB, user)
+    ).resolves.toBeNull();
+
+    await pool.query(
+      `UPDATE organization_members
+       SET status = 'blocked'
+       WHERE organization_id = $1 AND user_id = $2`,
+      [organization, user]
+    );
+    await expect(
+      repository.findByEmail(organization, "user-c@example.com")
     ).resolves.toBeNull();
   });
 

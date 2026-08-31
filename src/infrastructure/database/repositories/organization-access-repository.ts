@@ -3,18 +3,24 @@ import { and, asc, eq } from "drizzle-orm";
 import type { OrganizationAccessRepository } from "@/domain/identity/organization-access-repository";
 
 import type { AgentMemoryDatabase } from "../client";
-import { organizationMembers, organizations, teamMembers } from "../schema";
+import {
+  organizationMembers,
+  organizations,
+  teamMembers,
+  users
+} from "../schema";
 
 export function createOrganizationAccessRepository(
   db: AgentMemoryDatabase
 ): OrganizationAccessRepository {
   async function findAccess(
     organizationPredicate: ReturnType<typeof eq>,
-    userId: string
+    userPredicate: ReturnType<typeof eq>
   ) {
     const rows = await db
       .select({
         organizationId: organizations.id,
+        userId: organizationMembers.userId,
         organizationRole: organizationMembers.role,
         teamId: teamMembers.teamId,
         teamRole: teamMembers.role
@@ -24,6 +30,7 @@ export function createOrganizationAccessRepository(
         organizations,
         eq(organizations.id, organizationMembers.organizationId)
       )
+      .innerJoin(users, eq(users.id, organizationMembers.userId))
       .leftJoin(
         teamMembers,
         and(
@@ -34,7 +41,7 @@ export function createOrganizationAccessRepository(
       .where(
         and(
           organizationPredicate,
-          eq(organizationMembers.userId, userId),
+          userPredicate,
           eq(organizationMembers.status, "active")
         )
       );
@@ -46,7 +53,7 @@ export function createOrganizationAccessRepository(
 
     return {
       organizationId: membership.organizationId,
-      userId,
+      userId: membership.userId,
       role: membership.organizationRole,
       teams: rows.flatMap((row) =>
         row.teamId && row.teamRole
@@ -76,11 +83,24 @@ export function createOrganizationAccessRepository(
     },
 
     async findByUser(organizationId, userId) {
-      return findAccess(eq(organizations.id, organizationId), userId);
+      return findAccess(
+        eq(organizations.id, organizationId),
+        eq(organizationMembers.userId, userId)
+      );
     },
 
     async findBySlug(organizationSlug, userId) {
-      return findAccess(eq(organizations.slug, organizationSlug), userId);
+      return findAccess(
+        eq(organizations.slug, organizationSlug),
+        eq(organizationMembers.userId, userId)
+      );
+    },
+
+    async findByEmail(organizationId, email) {
+      return findAccess(
+        eq(organizations.id, organizationId),
+        eq(users.email, email)
+      );
     }
   };
 }
