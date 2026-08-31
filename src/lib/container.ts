@@ -1,5 +1,6 @@
 import { createDatabase } from "@/infrastructure/database/client";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
+import { createOrganizationAgentTokenRepository } from "@/infrastructure/database/repositories/organization-agent-token-repository";
 import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
@@ -21,6 +22,8 @@ import {
 } from "@/infrastructure/object-storage/s3-document-object-storage";
 import { logger } from "@/infrastructure/observability/logger";
 import { createPgBossDocumentIngestionQueue } from "@/infrastructure/queue/document-ingestion-queue";
+import { createOrganizationAgentTokenSecret } from "@/infrastructure/security/organization-agent-token-secret";
+import { createOrganizationAgentTokenUseCases } from "@/application/identity/manage-organization-agent-token";
 
 const defaultDatabaseUrl =
   "postgresql://agent_memory:agent_memory@localhost:5433/agent_memory";
@@ -32,6 +35,18 @@ export const database = createDatabase(
 
 export const organizationAccessRepository =
   createOrganizationAccessRepository(database.db);
+export const organizationAgentTokenRepository =
+  createOrganizationAgentTokenRepository(database.db);
+const organizationAgentTokenSecret = createOrganizationAgentTokenSecret(
+  () => process.env.BETTER_AUTH_SECRET ?? ""
+);
+export const organizationAgentTokenUseCases =
+  createOrganizationAgentTokenUseCases({
+    accessRepository: organizationAccessRepository,
+    clock: () => new Date(),
+    repository: organizationAgentTokenRepository,
+    secret: organizationAgentTokenSecret
+  });
 export const organizationAdministrationRepository =
   createOrganizationAdministrationRepository(database.db);
 

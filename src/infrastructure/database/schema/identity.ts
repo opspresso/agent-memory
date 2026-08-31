@@ -100,6 +100,31 @@ export const organizationMembers = pgTable(
   ]
 );
 
+export const organizationAgentTokens = pgTable(
+  "organization_agent_tokens",
+  {
+    organizationId: uuid()
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: uuid().notNull(),
+    tokenHash: text().notNull(),
+    encryptedToken: text("token"),
+    masked: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [
+        organizationMembers.organizationId,
+        organizationMembers.userId
+      ],
+      name: "organization_agent_tokens_member_fk"
+    }).onDelete("cascade"),
+    uniqueIndex("organization_agent_tokens_hash_unique").on(table.tokenHash)
+  ]
+);
+
 export const teams = pgTable(
   "teams",
   {

@@ -128,7 +128,7 @@ export const en = {
   "guide.review.rejectNote": "Keep the review record for future decisions",
   "guide.connect.title": "Connect Agents to Context through MCP.",
   "guide.connect.body":
-    "The Agent connection tab shows a copyable Streamable HTTP MCP endpoint containing the current site address and active organization ID. Send the set-auth-token value from the Better Auth sign-in response as a Bearer token.",
+    "The Agent connection tab shows a copyable Streamable HTTP MCP endpoint containing the current site address and active organization slug. An admin or owner can generate the organization Agent token to store as its Bearer credential in Agent Studio.",
   "guide.connect.note":
     "The Console generates the connection URL for the active organization.",
   "guide.next.title": "Explore real context now.",
@@ -310,7 +310,24 @@ export const en = {
   "workspace.documentFile": "Document file",
   "workspace.startIngestion": "Start ingestion",
   "workspace.mcpBody":
-    "Send the set-auth-token value from the Better Auth sign-in response as a Bearer token.",
+    "Register this organization endpoint as a Streamable HTTP MCP server.",
+  "workspace.agentTokenTitle": "Agent token",
+  "workspace.agentTokenBody":
+    "Generate an organization-scoped Bearer token for Agent Studio. It works only with this organization's MCP endpoint and follows the issuing member's current access.",
+  "workspace.agentTokenGenerate": "Generate token",
+  "workspace.agentTokenRegenerate": "Regenerate token",
+  "workspace.agentTokenReveal": "View token",
+  "workspace.agentTokenHide": "Hide token",
+  "workspace.agentTokenRevoke": "Revoke token",
+  "workspace.agentTokenRevokeConfirm":
+    "Revoke this Agent token? Connected agents will stop working immediately.",
+  "workspace.agentTokenCopyNow":
+    "Copy this token now or use View token to retrieve it again later.",
+  "workspace.agentTokenRegenerateToReveal":
+    "This existing token was stored as a hash only. Regenerate it once to enable viewing.",
+  "workspace.agentTokenAdminOnly":
+    "An organization admin or owner can manage the Agent token.",
+  "workspace.agentTokenFailed": "The Agent token request failed.",
   "workspace.copyEndpoint": "Copy MCP endpoint",
   "workspace.copy": "Copy",
   "workspace.copied": "Copied",

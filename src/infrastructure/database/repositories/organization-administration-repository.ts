@@ -515,18 +515,19 @@ export function createOrganizationAdministrationRepository(
         .orderBy(asc(organizations.name), asc(organizations.id));
     },
 
-    async joinOrganization(organizationId, userId) {
+    async joinOrganizationBySlug(organizationSlug, userId) {
       return db.transaction(async (transaction) => {
         await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
+          sql`select pg_advisory_xact_lock(hashtextextended(${organizationSlug}, 0))`
         );
         const [organization] = await transaction
           .select({
+            id: organizations.id,
             newMemberStatus: organizations.newMemberStatus,
             defaultTeamId: organizations.defaultTeamId
           })
           .from(organizations)
-          .where(eq(organizations.id, organizationId))
+          .where(eq(organizations.slug, organizationSlug))
           .limit(1);
         if (!organization) {
           return { status: "organization_not_found" } as const;
@@ -534,7 +535,7 @@ export function createOrganizationAdministrationRepository(
         const [inserted] = await transaction
           .insert(organizationMembers)
           .values({
-            organizationId,
+            organizationId: organization.id,
             userId,
             role: "member",
             status: organization.newMemberStatus
@@ -553,7 +554,7 @@ export function createOrganizationAdministrationRepository(
           await transaction
             .insert(teamMembers)
             .values({
-              organizationId,
+              organizationId: organization.id,
               teamId: organization.defaultTeamId,
               userId,
               role: "member"

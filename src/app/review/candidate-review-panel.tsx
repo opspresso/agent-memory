@@ -4,14 +4,14 @@ import { KnowledgeCandidateReview } from "../knowledge-candidate-review";
 import { useOrganization } from "../organization-context";
 
 export function CandidateReviewPanel() {
-  const { organizationId } = useOrganization();
-  if (!organizationId) {
+  const { organizationSlug } = useOrganization();
+  if (!organizationSlug) {
     return null;
   }
   return (
     <KnowledgeCandidateReview
-      key={organizationId}
-      organizationId={organizationId}
+      key={organizationSlug}
+      organizationSlug={organizationSlug}
     />
   );
 }

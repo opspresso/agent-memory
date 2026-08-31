@@ -8,6 +8,54 @@ import { organizationMembers, organizations, teamMembers } from "../schema";
 export function createOrganizationAccessRepository(
   db: AgentMemoryDatabase
 ): OrganizationAccessRepository {
+  async function findAccess(
+    organizationPredicate: ReturnType<typeof eq>,
+    userId: string
+  ) {
+    const rows = await db
+      .select({
+        organizationId: organizations.id,
+        organizationRole: organizationMembers.role,
+        teamId: teamMembers.teamId,
+        teamRole: teamMembers.role
+      })
+      .from(organizationMembers)
+      .innerJoin(
+        organizations,
+        eq(organizations.id, organizationMembers.organizationId)
+      )
+      .leftJoin(
+        teamMembers,
+        and(
+          eq(teamMembers.organizationId, organizationMembers.organizationId),
+          eq(teamMembers.userId, organizationMembers.userId)
+        )
+      )
+      .where(
+        and(
+          organizationPredicate,
+          eq(organizationMembers.userId, userId),
+          eq(organizationMembers.status, "active")
+        )
+      );
+
+    const membership = rows[0];
+    if (!membership) {
+      return null;
+    }
+
+    return {
+      organizationId: membership.organizationId,
+      userId,
+      role: membership.organizationRole,
+      teams: rows.flatMap((row) =>
+        row.teamId && row.teamRole
+          ? [{ teamId: row.teamId, role: row.teamRole }]
+          : []
+      )
+    };
+  }
+
   return {
     async listByUser(userId) {
       return db
@@ -28,43 +76,11 @@ export function createOrganizationAccessRepository(
     },
 
     async findByUser(organizationId, userId) {
-      const rows = await db
-        .select({
-          organizationRole: organizationMembers.role,
-          teamId: teamMembers.teamId,
-          teamRole: teamMembers.role
-        })
-        .from(organizationMembers)
-        .leftJoin(
-          teamMembers,
-          and(
-            eq(teamMembers.organizationId, organizationMembers.organizationId),
-            eq(teamMembers.userId, organizationMembers.userId)
-          )
-        )
-        .where(
-          and(
-            eq(organizationMembers.organizationId, organizationId),
-            eq(organizationMembers.userId, userId),
-            eq(organizationMembers.status, "active")
-          )
-        );
+      return findAccess(eq(organizations.id, organizationId), userId);
+    },
 
-      const membership = rows[0];
-      if (!membership) {
-        return null;
-      }
-
-      return {
-        organizationId,
-        userId,
-        role: membership.organizationRole,
-        teams: rows.flatMap((row) =>
-          row.teamId && row.teamRole
-            ? [{ teamId: row.teamId, role: row.teamRole }]
-            : []
-        )
-      };
+    async findBySlug(organizationSlug, userId) {
+      return findAccess(eq(organizations.slug, organizationSlug), userId);
     }
   };
 }

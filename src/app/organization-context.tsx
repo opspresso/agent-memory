@@ -21,6 +21,7 @@ interface OrganizationContextValue {
   readonly activeOrganizations: readonly OrganizationMembership[];
   readonly activeOrganization: OrganizationMembership | undefined;
   readonly organizationId: string;
+  readonly organizationSlug: string;
   readonly access: OrganizationAccess | undefined;
   readonly selectOrganization: (organizationId: string) => void;
 }
@@ -68,17 +69,21 @@ export function OrganizationProvider({
           (organization) => organization.id === candidate
         )
     ) ?? "";
+  const organizationSlug =
+    activeOrganizations.find(
+      (organization) => organization.id === organizationId
+    )?.slug ?? "";
   const [accessState, setAccessState] = useState<{
     readonly organizationId: string;
     readonly value: OrganizationAccess;
   }>();
 
   useEffect(() => {
-    if (!organizationId) {
+    if (!organizationId || !organizationSlug) {
       return;
     }
     const controller = new AbortController();
-    fetch(`/api/organizations/${organizationId}/me`, {
+    fetch(`/api/organizations/${organizationSlug}/me`, {
       signal: controller.signal
     })
       .then(async (response) => {
@@ -103,7 +108,7 @@ export function OrganizationProvider({
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [organizationId]);
+  }, [organizationId, organizationSlug]);
 
   const access =
     accessState?.organizationId === organizationId
@@ -140,10 +145,18 @@ export function OrganizationProvider({
         (organization) => organization.id === organizationId
       ),
       organizationId,
+      organizationSlug,
       access,
       selectOrganization
     }),
-    [access, activeOrganizations, organizationId, organizations, selectOrganization]
+    [
+      access,
+      activeOrganizations,
+      organizationId,
+      organizationSlug,
+      organizations,
+      selectOrganization
+    ]
   );
 
   return (

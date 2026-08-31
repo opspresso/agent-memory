@@ -50,7 +50,7 @@ function repository(
     upsertTeamMember: vi.fn(),
     removeTeamMember: vi.fn(),
     listJoinableOrganizations: vi.fn(),
-    joinOrganization: vi.fn(),
+    joinOrganizationBySlug: vi.fn(),
     ...overrides
   };
 }
@@ -326,21 +326,26 @@ describe("organization administration", () => {
   });
 
   it("joins an organization with the configured membership status", async () => {
-    const joinOrganization = vi.fn().mockResolvedValue({
+    const joinOrganizationBySlug = vi.fn().mockResolvedValue({
       status: "joined",
       membershipStatus: "pending"
     });
-    const join = buildJoinOrganization(repository({ joinOrganization }));
+    const join = buildJoinOrganization(repository({ joinOrganizationBySlug }));
 
-    await expect(join("user-1", "organization-1")).resolves.toBe("pending");
-    expect(joinOrganization).toHaveBeenCalledWith("organization-1", "user-1");
+    await expect(join("user-1", "organization-p")).resolves.toBe("pending");
+    expect(joinOrganizationBySlug).toHaveBeenCalledWith(
+      "organization-p",
+      "user-1"
+    );
 
     const alreadyMember = buildJoinOrganization(
       repository({
-        joinOrganization: vi.fn().mockResolvedValue({ status: "already_member" })
+        joinOrganizationBySlug: vi
+          .fn()
+          .mockResolvedValue({ status: "already_member" })
       })
     );
-    await expect(alreadyMember("user-1", "organization-1")).rejects.toThrow(
+    await expect(alreadyMember("user-1", "organization-p")).rejects.toThrow(
       "user already belongs to this organization"
     );
   });

@@ -71,7 +71,7 @@ interface OntologyFlagsView {
 }
 
 interface KnowledgeCandidateReviewProps {
-  readonly organizationId: string;
+  readonly organizationSlug: string;
 }
 
 async function responseError(response: Response, fallback: string) {
@@ -81,9 +81,9 @@ async function responseError(response: Response, fallback: string) {
   return body?.error ?? fallback;
 }
 
-async function requestCandidates(organizationId: string, fallback: string) {
+async function requestCandidates(organizationSlug: string, fallback: string) {
   const response = await fetch(
-    `/api/organizations/${organizationId}/knowledge/candidates?limit=100`
+    `/api/organizations/${organizationSlug}/knowledge/candidates?limit=100`
   );
   if (!response.ok) {
     throw new Error(await responseError(response, fallback));
@@ -95,7 +95,7 @@ async function requestCandidates(organizationId: string, fallback: string) {
 }
 
 export function KnowledgeCandidateReview({
-  organizationId
+  organizationSlug
 }: KnowledgeCandidateReviewProps) {
   const t = useT();
   const [candidates, setCandidates] = useState<
@@ -149,7 +149,10 @@ export function KnowledgeCandidateReview({
     setLoading(true);
     setError(undefined);
     try {
-      const next = await requestCandidates(organizationId, t("candidate.requestFailed"));
+      const next = await requestCandidates(
+        organizationSlug,
+        t("candidate.requestFailed")
+      );
       setCandidates(next);
       setSelectedId((current) =>
         next.some((candidate) => candidate.id === current)
@@ -170,7 +173,7 @@ export function KnowledgeCandidateReview({
   useEffect(() => {
     let active = true;
     const loadMessages = getLoadMessages();
-    requestCandidates(organizationId, loadMessages.requestFailed)
+    requestCandidates(organizationSlug, loadMessages.requestFailed)
       .then((next) => {
         if (active) {
           setCandidates(next);
@@ -191,7 +194,7 @@ export function KnowledgeCandidateReview({
     return () => {
       active = false;
     };
-  }, [organizationId]);
+  }, [organizationSlug]);
 
   useEffect(() => {
     if (!selected) {
@@ -200,7 +203,7 @@ export function KnowledgeCandidateReview({
     const controller = new AbortController();
     const loadMessages = getLoadMessages();
     fetch(
-      `/api/organizations/${organizationId}/knowledge/candidates/${selected.id}/duplicates`,
+      `/api/organizations/${organizationSlug}/knowledge/candidates/${selected.id}/duplicates`,
       { signal: controller.signal }
     )
       .then((response) =>
@@ -227,7 +230,7 @@ export function KnowledgeCandidateReview({
         }
       });
     return () => controller.abort();
-  }, [organizationId, selected]);
+  }, [organizationSlug, selected]);
 
   async function review(action: "accept" | "reject") {
     if (!selected) {
@@ -238,7 +241,7 @@ export function KnowledgeCandidateReview({
     setMessage(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationId}/knowledge/candidates/${selected.id}/${action}`,
+        `/api/organizations/${organizationSlug}/knowledge/candidates/${selected.id}/${action}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

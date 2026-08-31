@@ -47,16 +47,16 @@ interface TeamMemberView {
 }
 
 export function TeamManagement() {
-  const { organizationId } = useOrganization();
-  if (!organizationId) {
+  const { organizationSlug } = useOrganization();
+  if (!organizationSlug) {
     return null;
   }
-  return <TeamManagementView key={organizationId} />;
+  return <TeamManagementView key={organizationSlug} />;
 }
 
 function TeamManagementView() {
   const t = useT();
-  const { organizationId, access } = useOrganization();
+  const { organizationSlug, access } = useOrganization();
   const [teams, setTeams] = useState<readonly TeamView[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>();
   const [teamMembers, setTeamMembers] = useState<readonly TeamMemberView[]>([]);
@@ -79,12 +79,12 @@ function TeamManagementView() {
     );
 
   const loadTeams = useCallback(async () => {
-    if (!organizationId) {
+    if (!organizationSlug) {
       return;
     }
     try {
       const body = await fetch(
-        `/api/organizations/${organizationId}/teams`
+        `/api/organizations/${organizationSlug}/teams`
       ).then((response) =>
         responseJson<{ teams: readonly TeamView[] }>(
           response,
@@ -104,15 +104,15 @@ function TeamManagementView() {
     } finally {
       setLoading(false);
     }
-  }, [organizationId, t]);
+  }, [organizationSlug, t]);
 
   const loadTeamMembers = useCallback(async () => {
-    if (!organizationId || !selectedTeamId) {
+    if (!organizationSlug || !selectedTeamId) {
       return;
     }
     try {
       const body = await fetch(
-        `/api/organizations/${organizationId}/teams/${selectedTeamId}/members`
+        `/api/organizations/${organizationSlug}/teams/${selectedTeamId}/members`
       ).then((response) =>
         responseJson<{ members: readonly TeamMemberView[] }>(
           response,
@@ -123,7 +123,7 @@ function TeamManagementView() {
     } catch {
       setTeamMembers([]);
     }
-  }, [organizationId, selectedTeamId, t]);
+  }, [organizationSlug, selectedTeamId, t]);
 
   useEffect(() => {
     void Promise.resolve().then(loadTeams);
@@ -172,7 +172,7 @@ function TeamManagementView() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     await runMutation(async () => {
-      await requestJson(`/api/organizations/${organizationId}/teams`, {
+      await requestJson(`/api/organizations/${organizationSlug}/teams`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -193,7 +193,7 @@ function TeamManagementView() {
     const form = new FormData(formElement);
     await runMutation(async () => {
       await requestJson(
-        `/api/organizations/${organizationId}/teams/${selectedTeamId}/members`,
+        `/api/organizations/${organizationSlug}/teams/${selectedTeamId}/members`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -211,7 +211,7 @@ function TeamManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationId}/teams/${member.teamId}/members`,
+          `/api/organizations/${organizationSlug}/teams/${member.teamId}/members`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -226,7 +226,7 @@ function TeamManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationId}/teams/${member.teamId}/members/${member.userId}`,
+          `/api/organizations/${organizationSlug}/teams/${member.teamId}/members/${member.userId}`,
           { method: "DELETE" }
         ),
       t("members.teamRemoved")
@@ -240,7 +240,7 @@ function TeamManagementView() {
     const target = renameTarget;
     await runMutation(async () => {
       await requestJson(
-        `/api/organizations/${organizationId}/teams/${target.id}`,
+        `/api/organizations/${organizationSlug}/teams/${target.id}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -258,7 +258,7 @@ function TeamManagementView() {
     const target = deleteTarget;
     await runMutation(async () => {
       await requestJson(
-        `/api/organizations/${organizationId}/teams/${target.id}`,
+        `/api/organizations/${organizationSlug}/teams/${target.id}`,
         { method: "DELETE" }
       );
       setDeleteTarget(undefined);
