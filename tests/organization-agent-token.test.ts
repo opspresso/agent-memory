@@ -169,7 +169,7 @@ describe("organization Agent token", () => {
     expect(stored()?.encryptedToken).not.toBe(generated.token);
     await expect(
       useCases.verify("opspresso", generated.token)
-    ).resolves.toEqual(access());
+    ).resolves.toEqual({ organizationId });
     await expect(useCases.reveal(access())).resolves.toEqual({
       token: generated.token,
       createdAt: generated.createdAt
@@ -182,9 +182,9 @@ describe("organization Agent token", () => {
     const second = await useCases.generate(access());
 
     await expect(useCases.verify("opspresso", first.token)).resolves.toBeNull();
-    await expect(useCases.verify("opspresso", second.token)).resolves.toEqual(
-      access()
-    );
+    await expect(useCases.verify("opspresso", second.token)).resolves.toEqual({
+      organizationId
+    });
   });
 
   it("revokes the token idempotently", async () => {
@@ -257,9 +257,9 @@ describe("organization Agent token", () => {
       createdAt: current.createdAt
     });
 
-    await expect(useCases.verify("opspresso", generated.token)).resolves.toEqual(
-      access()
-    );
+    await expect(useCases.verify("opspresso", generated.token)).resolves.toEqual({
+      organizationId
+    });
     await expect(useCases.status(access())).resolves.toMatchObject({
       configured: true,
       revealable: false

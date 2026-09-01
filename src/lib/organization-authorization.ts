@@ -83,11 +83,11 @@ export async function authorizeOrganizationMcpRoute(
     request.headers.get("authorization") ?? ""
   )?.[1];
   if (bearer?.startsWith(organizationAgentTokenPrefix)) {
-    const tokenAccess = await organizationAgentTokenUseCases.verify(
+    const credential = await organizationAgentTokenUseCases.verify(
       parsed.data,
       bearer
     );
-    if (!tokenAccess) {
+    if (!credential) {
       return {
         authorized: false,
         response: Response.json(
@@ -111,7 +111,7 @@ export async function authorizeOrganizationMcpRoute(
     }
 
     const access = await organizationAccessRepository.findByEmail(
-      tokenAccess.organizationId,
+      credential.organizationId,
       email.data
     );
     return access

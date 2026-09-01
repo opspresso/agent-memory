@@ -33,6 +33,10 @@ export interface OrganizationAgentTokenStatus {
   readonly revealable?: boolean;
 }
 
+export interface OrganizationAgentTokenCredential {
+  readonly organizationId: string;
+}
+
 interface Dependencies {
   readonly accessRepository: OrganizationAccessRepository;
   readonly clock: () => Date;
@@ -123,18 +127,20 @@ export function createOrganizationAgentTokenUseCases(
     async verify(
       organizationSlug: string,
       candidate: string
-    ): Promise<OrganizationAccess | null> {
+    ): Promise<OrganizationAgentTokenCredential | null> {
       const stored = await dependencies.repository.findByOrganizationSlug(
         organizationSlug
       );
       if (!stored || !dependencies.secret.matches(candidate, stored.tokenHash)) {
         return null;
       }
-      const access = await dependencies.accessRepository.findByUser(
+      const issuer = await dependencies.accessRepository.findByUser(
         stored.organizationId,
         stored.userId
       );
-      return access && canManage(access) ? access : null;
+      return issuer && canManage(issuer)
+        ? { organizationId: stored.organizationId }
+        : null;
     }
   };
 }

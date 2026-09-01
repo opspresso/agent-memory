@@ -84,7 +84,9 @@ describe("organization route authorization", () => {
       userId: "user-2",
       role: "member" as const
     };
-    mocks.verifyAgentToken.mockResolvedValue(access);
+    mocks.verifyAgentToken.mockResolvedValue({
+      organizationId: access.organizationId
+    });
     mocks.findByEmail.mockResolvedValue(delegatedAccess);
     const request = new Request(
       "https://memory.example.com/api/organizations/opspresso/mcp",
@@ -112,7 +114,9 @@ describe("organization route authorization", () => {
   });
 
   it("requires a valid delegated email for organization Agent tokens", async () => {
-    mocks.verifyAgentToken.mockResolvedValue(access);
+    mocks.verifyAgentToken.mockResolvedValue({
+      organizationId: access.organizationId
+    });
 
     for (const email of [undefined, "not-an-email"]) {
       const headers = new Headers({ authorization: "Bearer amt_secret" });
@@ -136,7 +140,9 @@ describe("organization route authorization", () => {
   });
 
   it("rejects a delegated email without active organization access", async () => {
-    mocks.verifyAgentToken.mockResolvedValue(access);
+    mocks.verifyAgentToken.mockResolvedValue({
+      organizationId: access.organizationId
+    });
     mocks.findByEmail.mockResolvedValue(null);
 
     const result = await authorizeOrganizationMcpRoute(
