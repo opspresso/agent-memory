@@ -33,6 +33,10 @@ export interface OrganizationAgentTokenStatus {
   readonly revealable?: boolean;
 }
 
+export interface OrganizationAgentTokenCredential {
+  readonly organizationId: string;
+}
+
 interface Dependencies {
   readonly accessRepository: OrganizationAccessRepository;
   readonly clock: () => Date;
@@ -40,8 +44,12 @@ interface Dependencies {
   readonly secret: OrganizationAgentTokenSecret;
 }
 
+function canManage(access: OrganizationAccess): boolean {
+  return access.role === "admin" || access.role === "owner";
+}
+
 function assertCanManage(access: OrganizationAccess): void {
-  if (access.role !== "admin" && access.role !== "owner") {
+  if (!canManage(access)) {
     throw new OrganizationAgentTokenAccessDeniedError();
   }
 }
@@ -119,17 +127,20 @@ export function createOrganizationAgentTokenUseCases(
     async verify(
       organizationSlug: string,
       candidate: string
-    ): Promise<OrganizationAccess | null> {
+    ): Promise<OrganizationAgentTokenCredential | null> {
       const stored = await dependencies.repository.findByOrganizationSlug(
         organizationSlug
       );
       if (!stored || !dependencies.secret.matches(candidate, stored.tokenHash)) {
         return null;
       }
-      return dependencies.accessRepository.findByUser(
+      const issuer = await dependencies.accessRepository.findByUser(
         stored.organizationId,
         stored.userId
       );
+      return issuer && canManage(issuer)
+        ? { organizationId: stored.organizationId }
+        : null;
     }
   };
 }

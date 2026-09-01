@@ -21,4 +21,8 @@ export interface OrganizationAccessRepository {
     organizationSlug: string,
     userId: string
   ): Promise<OrganizationAccess | null>;
+  findByEmail(
+    organizationId: string,
+    email: string
+  ): Promise<OrganizationAccess | null>;
 }

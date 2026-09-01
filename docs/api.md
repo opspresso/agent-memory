@@ -82,7 +82,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 
 일상적인 `GET .../agent-token` 응답은 mask와 생성 시각, `revealable` 상태만 반환한다. 원문은 생성 응답과 명시적인 `POST .../agent-token/reveal`에서만 반환하며 두 응답 모두 `Cache-Control: no-store`다. 암호문 column이 없는 기존 hash-only token은 MCP 인증은 유지하지만 reveal할 수 없으므로 한 번 재생성해야 한다.
 
-이 token은 URL의 동일 organization slug에 해당하는 MCP endpoint에서만 인증된다. 일반 HTTP API나 다른 조직에서는 사용할 수 없다. 발급 멤버의 현재 membership과 role을 적용하므로 멤버가 차단·제거되거나 권한이 변경되면 token 권한도 즉시 바뀐다. `BETTER_AUTH_SECRET`을 변경하면 기존 token은 hash 검증으로 계속 인증되지만 원문을 복호화할 수 없으므로 재생성해야 한다.
+이 token은 URL의 동일 organization slug에 해당하는 MCP endpoint에서만 인증된다. 일반 HTTP API나 다른 조직에서는 사용할 수 없다. Agent token 요청은 실행 사용자를 나타내는 `X-User-Email` header를 함께 보내야 한다. Token 발급자가 현재 active `admin` 또는 `owner`인지 확인한 뒤 해당 이메일 사용자의 현재 active organization membership, role, team membership을 MCP 실행 권한으로 적용한다. 발급자가 차단·제거·강등되거나 전달 사용자의 권한이 변경되면 다음 요청부터 즉시 반영된다. `BETTER_AUTH_SECRET`을 변경하면 기존 token은 hash 검증으로 계속 인증되지만 원문을 복호화할 수 없으므로 재생성해야 한다.
 
 인증은 `ALLOWED_EMAIL_DOMAINS`에 설정한 email domain으로 제한한다. `POST /api/organizations`는 `ADMIN_EMAILS`에 설정한 사용자만 호출할 수 있으며, 생성자는 새 조직의 owner가 된다. 이 전역 bootstrap 권한은 기존 조직의 멤버십이나 role을 대체하지 않는다.
 
@@ -465,7 +465,7 @@ curl \
 
 ## MCP
 
-Streamable HTTP endpoint는 `/api/organizations/:organizationSlug/mcp`다. Better Auth session Bearer token 또는 해당 조직의 Agent token을 인증하고 발급 멤버의 현재 조직 권한을 적용한다.
+Streamable HTTP endpoint는 `/api/organizations/:organizationSlug/mcp`다. Better Auth session Bearer token은 session 사용자의 조직 권한을 적용한다. 조직 Agent token은 `X-User-Email`로 전달된 사용자의 현재 조직 권한을 적용한다.
 
 | Tool | 역할 | 주요 입력 |
 | --- | --- | --- |
@@ -487,11 +487,12 @@ MCP client에는 endpoint와 Agent token Bearer header를 함께 설정하라. �
       "type": "http",
       "url": "http://localhost:3100/api/organizations/<organizationSlug>/mcp",
       "headers": {
-        "Authorization": "Bearer <amt_token>"
+        "Authorization": "Bearer <amt_token>",
+        "X-User-Email": "<user@example.com>"
       }
     }
   }
 }
 ```
 
-Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. Agent Studio에서는 MCP registry entry의 `Authorization` header에 `Bearer amt_...` 값을 저장하라. MCP가 `401`을 반환하면 token을, `403` 또는 `404`를 반환하면 URL의 organization slug와 발급 멤버의 현재 membership을 확인하라.
+Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. Agent Studio에서는 MCP registry entry의 `Authorization` header에 `Bearer amt_...` 값을 저장하라. Agent Studio는 실행 주체가 email로 식별되는 run에서 `X-User-Email`을 자동으로 추가하며 registry나 version header가 이 값을 대신 지정할 수 없다. 다른 client는 호출할 사용자의 email을 직접 전달해야 한다. MCP가 `400`을 반환하면 `X-User-Email`을, `401`을 반환하면 token을, `403`을 반환하면 전달 사용자의 active membership을, `404`를 반환하면 URL의 organization slug를 확인하라.

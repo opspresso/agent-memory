@@ -25,6 +25,7 @@ function dependencies() {
   let stored: OrganizationAgentToken | null = null;
   let generated = 0;
   let active = true;
+  let role: "member" | "admin" | "owner" = "admin";
   const repository: OrganizationAgentTokenRepository = {
     async findByOrganizationId(candidateOrganizationId) {
       return stored?.organizationId === candidateOrganizationId ? stored : null;
@@ -47,13 +48,16 @@ function dependencies() {
     },
     async findByUser(candidateOrganizationId, candidateUserId) {
       return active && candidateOrganizationId === organizationId && candidateUserId === userId
-        ? access()
+        ? access(role)
         : null;
     },
     async findBySlug(organizationSlug, candidateUserId) {
       return organizationSlug === "opspresso" && candidateUserId === userId
         ? access()
         : null;
+    },
+    async findByEmail() {
+      return null;
     }
   };
   const secret: OrganizationAgentTokenSecret = {
@@ -90,6 +94,9 @@ function dependencies() {
     }),
     setActive(value: boolean) {
       active = value;
+    },
+    setRole(value: "member" | "admin" | "owner") {
+      role = value;
     },
     stored() {
       return stored;
@@ -162,7 +169,7 @@ describe("organization Agent token", () => {
     expect(stored()?.encryptedToken).not.toBe(generated.token);
     await expect(
       useCases.verify("opspresso", generated.token)
-    ).resolves.toEqual(access());
+    ).resolves.toEqual({ organizationId });
     await expect(useCases.reveal(access())).resolves.toEqual({
       token: generated.token,
       createdAt: generated.createdAt
@@ -175,9 +182,9 @@ describe("organization Agent token", () => {
     const second = await useCases.generate(access());
 
     await expect(useCases.verify("opspresso", first.token)).resolves.toBeNull();
-    await expect(useCases.verify("opspresso", second.token)).resolves.toEqual(
-      access()
-    );
+    await expect(useCases.verify("opspresso", second.token)).resolves.toEqual({
+      organizationId
+    });
   });
 
   it("revokes the token idempotently", async () => {
@@ -219,6 +226,15 @@ describe("organization Agent token", () => {
     await expect(useCases.verify("opspresso", generated.token)).resolves.toBeNull();
   });
 
+  it("stops authenticating when the issuing member loses token management access", async () => {
+    const { useCases, setRole } = dependencies();
+    const generated = await useCases.generate(access());
+
+    setRole("member");
+
+    await expect(useCases.verify("opspresso", generated.token)).resolves.toBeNull();
+  });
+
   it("does not authenticate the right token through another organization slug", async () => {
     const { useCases } = dependencies();
     const generated = await useCases.generate(access());
@@ -241,9 +257,9 @@ describe("organization Agent token", () => {
       createdAt: current.createdAt
     });
 
-    await expect(useCases.verify("opspresso", generated.token)).resolves.toEqual(
-      access()
-    );
+    await expect(useCases.verify("opspresso", generated.token)).resolves.toEqual({
+      organizationId
+    });
     await expect(useCases.status(access())).resolves.toMatchObject({
       configured: true,
       revealable: false
