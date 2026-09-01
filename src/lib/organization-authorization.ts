@@ -9,7 +9,7 @@ import {
 import { organizationSlugSchema } from "./organization-administration-schemas";
 import { authenticateRequest, type SessionUser } from "./session";
 
-export const organizationMcpUserEmailHeader = "X-User-Email";
+const organizationMcpUserEmailHeader = "X-User-Email";
 const organizationMcpUserEmailSchema = z.email().trim().toLowerCase();
 
 export type OrganizationAuthorizationResult =
