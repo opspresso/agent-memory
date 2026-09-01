@@ -67,6 +67,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | 그룹 | 변수 | 역할 |
 | --- | --- | --- |
 | Database | `DATABASE_URL` | PostgreSQL 연결 문자열 |
+| Startup | `NODE_ENV` | `production`이면 운영 필수 변수 검증을 활성화 |
 | Startup | `MIGRATE_ON_START` | Node.js runtime 시작 시 migration 실행 |
 | Worker | `DOCUMENT_WORKER_ENABLED` | 같은 process에서 pg-boss document worker 시작 |
 | Auth | `BETTER_AUTH_SECRET` | Better Auth secret, 32자 이상. 조직 Agent token 암호화 key도 HKDF로 파생하므로 값을 변경하면 기존 token을 reveal할 수 없음 |
@@ -93,7 +94,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Metrics | `METRICS_BEARER_TOKEN` | Prometheus scrape Bearer token. 32자 이상이며 미설정 시 endpoint 비활성화 |
 | Telemetry | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Langfuse 활성화. 두 값을 함께 설정 |
 | Telemetry | `LANGFUSE_BASE_URL` | Self-hosted 또는 cloud endpoint |
-| Telemetry | `LANGFUSE_EXPORT_MODE` | `batched` 또는 `immediate` |
+| Telemetry | `LANGFUSE_EXPORT_MODE` | `batched` 또는 `immediate`. Vercel runtime(`VERCEL` 자동 설정)에서는 기본값 `immediate` |
 | Telemetry | `LANGFUSE_TRACING_ENVIRONMENT` | Trace 환경 이름 |
 
 `ALLOWED_EMAIL_DOMAINS`는 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. 명시적으로 빈 값으로 설정하면 모든 domain을 허용한다. `ADMIN_EMAILS`는 조직 bootstrap 권한만 제어하고 기존 조직의 tenant role을 우회하지 않는다. 빈 값으로 설정하면 누구도 새 조직을 만들 수 없다.

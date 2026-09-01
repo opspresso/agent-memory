@@ -10,7 +10,7 @@ export AGENT_MEMORY_TOKEN=<better-auth-session-token>
 
 ## 인증과 요청 경계
 
-`/api/health`를 제외한 API는 인증이 필요하다. `/api/metrics`는 Better Auth 대신 `METRICS_BEARER_TOKEN`을 사용하며 token이 설정되지 않으면 `404`를 반환한다. 인증되면 Prometheus text exposition format으로 build와 process 수준 지표만 반환한다. 브라우저는 session cookie를 사용하고 Agent는 Better Auth 로그인 응답의 `set-auth-token` header 값을 다음과 같이 전달한다.
+`/api/health`를 제외한 API는 인증이 필요하다. `/api/metrics`는 Better Auth 대신 `METRICS_BEARER_TOKEN`을 사용하며 token이 설정되지 않았거나 Bearer 값이 일치하지 않으면 `404`를 반환한다. 인증되면 Prometheus text exposition format으로 build와 process 수준 지표만 반환한다. 브라우저는 session cookie를 사용하고 Agent는 Better Auth 로그인 응답의 `set-auth-token` header 값을 다음과 같이 전달한다.
 
 ```http
 Authorization: Bearer <token>
@@ -80,7 +80,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 }
 ```
 
-일상적인 `GET .../agent-token` 응답은 mask와 생성 시각, `revealable` 상태만 반환한다. 원문은 생성 응답과 명시적인 `POST .../agent-token/reveal`에서만 반환하며 두 응답 모두 `Cache-Control: no-store`다. 암호문 column이 없는 기존 hash-only token은 MCP 인증은 유지하지만 reveal할 수 없으므로 한 번 재생성해야 한다.
+일상적인 `GET .../agent-token` 응답은 `configured` 여부와 함께 mask, 생성 시각, `revealable` 상태만 반환하며, token이 없으면 `{ "configured": false }`만 반환한다. 원문은 생성 응답과 명시적인 `POST .../agent-token/reveal`에서만 반환하며 두 응답 모두 `Cache-Control: no-store`다. 암호문 column이 없는 기존 hash-only token은 MCP 인증은 유지하지만 reveal할 수 없으므로 한 번 재생성해야 한다.
 
 이 token은 URL의 동일 organization slug에 해당하는 MCP endpoint에서만 인증된다. 일반 HTTP API나 다른 조직에서는 사용할 수 없다. Agent token 요청은 실행 사용자를 나타내는 `X-User-Email` header를 함께 보내야 한다. Token 발급자가 현재 active `admin` 또는 `owner`인지 확인한 뒤 해당 이메일 사용자의 현재 active organization membership, role, team membership을 MCP 실행 권한으로 적용한다. 발급자가 차단·제거·강등되거나 전달 사용자의 권한이 변경되면 다음 요청부터 즉시 반영된다. `BETTER_AUTH_SECRET`을 변경하면 기존 token은 hash 검증으로 계속 인증되지만 원문을 복호화할 수 없으므로 재생성해야 한다.
 
@@ -92,7 +92,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 | --- | --- |
 | `400` | JSON, UUID, query 또는 입력 schema가 잘못됨 |
 | `401` | Session 또는 Bearer 인증 실패 |
-| `403` | 조직 멤버십 또는 resource action 권한 부족 |
+| `403` | 조직 멤버십·resource action 권한 부족 또는 브라우저 mutation의 origin 검증 실패 |
 | `404` | Resource가 없거나 호출자에게 존재를 공개할 수 없음 |
 | `409` | Memory version, candidate review 상태 충돌 또는 Agent token reveal 불가 |
 | `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
@@ -369,7 +369,7 @@ Node 응답은 `id`, `scope`, `kind`, `canonicalName`, 선택형 `summary`, `pro
 
 `POST .../knowledge/nodes/:targetNodeId/merge`는 `{ "sourceNodeId": UUID, "reason": string }`을 받아 source node를 target node로 병합한다. 두 node는 같은 organization과 scope에 있어야 하며 호출자는 둘 다 `manage`할 수 있어야 한다. 병합 transaction은 provenance를 누적하고 incoming·outgoing edge를 target으로 재연결하며, 중복 edge를 합치고 self-edge를 제거한 뒤 source node를 삭제하고 audit을 저장한다.
 
-Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical name과 정규화 kind를 사용한다. `award`, `honor`, `achievement`, `designation`은 `recognition`으로 통합한다. 같은 scope에서 정규화 identity가 같으면 신규 생성과 AI 후보 승인 시 기존 node에 자동 병합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
+Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical name과 정규화 kind를 사용한다. `award`, `honor`, `honour`, `achievement`, `designation`은 `recognition`으로 통합한다. 같은 scope에서 정규화 identity가 같으면 신규 생성과 AI 후보 승인 시 기존 node에 자동 병합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
 
 ### 조직 온톨로지 검증
 
@@ -495,4 +495,4 @@ MCP client에는 endpoint와 Agent token Bearer header를 함께 설정하라. �
 }
 ```
 
-Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. Agent Studio에서는 MCP registry entry의 `Authorization` header에 `Bearer amt_...` 값을 저장하라. Agent Studio는 실행 주체가 email로 식별되는 run에서 `X-User-Email`을 자동으로 추가하며 registry나 version header가 이 값을 대신 지정할 수 없다. 다른 client는 호출할 사용자의 email을 직접 전달해야 한다. MCP가 `400`을 반환하면 `X-User-Email`을, `401`을 반환하면 token을, `403`을 반환하면 전달 사용자의 active membership을, `404`를 반환하면 URL의 organization slug를 확인하라.
+Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. Agent Studio에서는 MCP registry entry의 `Authorization` header에 `Bearer amt_...` 값을 저장하라. Agent Studio는 실행 주체가 email로 식별되는 run에서 `X-User-Email`을 자동으로 추가하며 registry나 version header가 이 값을 대신 지정할 수 없다. 다른 client는 호출할 사용자의 email을 직접 전달해야 한다. MCP가 `400`을 반환하면 URL의 organization slug 형식과 `X-User-Email`을, `401`을 반환하면 token과 URL의 organization slug를, `403`을 반환하면 전달 사용자의 active membership을 확인하라.

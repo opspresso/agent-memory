@@ -65,7 +65,7 @@ curl -i http://localhost:3100/api/health
 정상 상태는 HTTP `200`과 다음 body를 반환한다.
 
 ```json
-{ "status": "ok" }
+{ "status": "ok", "checks": { "database": "ok" } }
 ```
 
 ## 3. 가입과 첫 조직 생성

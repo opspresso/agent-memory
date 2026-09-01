@@ -23,13 +23,14 @@ AI Agent ──▶ HTTP API / MCP ──▶ Next.js application
 
 ```text
 src/app  ──▶ src/lib ──▶ src/application ──▶ src/domain
-                   └──▶ src/infrastructure ──▶ src/domain
+   │               └──▶ src/infrastructure ──▶ src/domain
+   └───────────────────────────────────────▶ src/domain
 ```
 
 - `src/domain`은 entity, 접근 정책, repository port를 소유한다. 다른 내부 계층과 third-party package에 의존하지 않는다.
 - `src/application`은 use case를 조립하며 domain에만 의존한다.
 - `src/infrastructure`는 PostgreSQL, S3, pg-boss, embedding, observability adapter를 구현한다. application과 app에 의존하지 않는다.
-- `src/app`은 UI와 HTTP entry point를 제공하고 infrastructure를 직접 선택하지 않는다.
+- `src/app`은 UI와 HTTP entry point를 제공하고 infrastructure를 직접 선택하지 않는다. 화면이 표시·검증에 쓰는 domain 정책과 type은 직접 import할 수 있다.
 - `src/lib`은 인증·HTTP 변환과 composition root를 제공한다. infrastructure adapter를 application use case에 주입하고 app에 준비된 operation을 노출한다.
 
 `dependency-cruiser.config.cjs`와 `eslint.config.mjs`가 이 방향과 순환 의존성 금지를 검사한다.
@@ -107,9 +108,9 @@ AI candidate는 graph와 분리된 검토 queue다. 거절은 graph를 변경하
 
 통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node를 각각 검색하고 score 순으로 하나의 결과를 만든다. Semantic search가 활성화되어도 query embedding은 한 번만 생성해 세 저장소 검색에 공유한다. API와 MCP는 동일한 application operation을 사용한다.
 
-Embedding과 knowledge extraction adapter는 같은 instance-local request limiter를 공유한다. 동시 실행 수와 분당 합산 호출 수를 넘으면 provider를 호출하지 않으며 HTTP 경계는 `429`와 `Retry-After`를 반환한다. Worker의 제한 초과는 pg-boss retry로 복구한다.
+Embedding, knowledge extraction, 온톨로지 AI 제안 adapter는 같은 instance-local request limiter를 공유한다. 동시 실행 수와 분당 합산 호출 수를 넘으면 provider를 호출하지 않으며 HTTP 경계는 `429`와 `Retry-After`를 반환한다. Worker의 제한 초과는 pg-boss retry로 복구한다.
 
-운영 콘솔의 관계 지도는 search hit의 node ID로 제한된 neighborhood를 요청한다. Client는 반환된 node와 방향성 edge를 SVG에 배치하고 node 선택 상태와 inspector를 관리한다. 같은 node를 다시 선택하면 해당 node를 새 중심으로 neighborhood를 재조회한다. Layout은 표현 계층의 책임이며 접근 가능한 node·edge 결정은 server의 application·repository 계층에 남긴다.
+운영 콘솔의 관계 지도는 search hit의 node ID로 제한된 neighborhood를 요청한다. Client는 반환된 node와 방향성 edge를 SVG에 배치하고 node 선택 상태와 inspector를 관리한다. Inspector의 `이 node 중심으로 탐색`을 실행하면 해당 node를 새 중심으로 neighborhood를 재조회한다. Layout은 표현 계층의 책임이며 접근 가능한 node·edge 결정은 server의 application·repository 계층에 남긴다.
 
 ## 실패 격리와 복구 경계
 

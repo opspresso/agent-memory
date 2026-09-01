@@ -117,7 +117,7 @@ export const ko: Messages = {
     "failed 문서는 오류를 확인한 뒤 다시 처리할 수 있습니다. 관리 가능한 검색 결과는 원본 근거를 버리지 않고 Archive할 수 있습니다.",
   "guide.graph.title": "관계를 따라가되, 근거에서 멀어지지 않습니다.",
   "guide.graph.body":
-    "Graph 검색 결과에서 관계 보기를 누르면 선택 node를 중심으로 방향성 edge와 predicate가 표시됩니다. Node를 선택하면 inspector가 바뀌고, 같은 node를 다시 선택하면 그 node가 새로운 중심이 됩니다.",
+    "Graph 검색 결과에서 관계 보기를 누르면 선택 node를 중심으로 방향성 edge와 predicate가 표시됩니다. Node를 선택하면 inspector가 바뀌고, 이 node 중심으로 탐색을 누르면 그 node가 새로운 중심이 됩니다.",
   "guide.graph.note":
     "각 node와 edge에는 provenance가 있습니다. 관리자는 inspector에서 원본 Memory나 문서를 지우지 않고 관계 또는 node를 삭제할 수 있습니다.",
   "guide.review.title": "AI의 제안을 검토해 지식을 완성합니다.",

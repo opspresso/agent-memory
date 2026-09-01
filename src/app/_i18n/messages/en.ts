@@ -115,7 +115,7 @@ export const en = {
     "A failed document can be processed again after reviewing the error. Manageable search results can be archived without discarding their source evidence.",
   "guide.graph.title": "Follow relationships without losing the evidence.",
   "guide.graph.body":
-    "Select View relationships in a Graph result to see directed edges and predicates around the chosen node. Selecting a node changes the inspector; selecting it again makes it the new center.",
+    "Select View relationships in a Graph result to see directed edges and predicates around the chosen node. Selecting a node changes the inspector; Explore from this node makes it the new center.",
   "guide.graph.note":
     "Every node and edge has provenance. Managers can delete a relationship or node from the inspector without deleting its source memory or document.",
   "guide.review.title": "Review AI proposals to complete the knowledge.",

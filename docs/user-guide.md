@@ -1,10 +1,10 @@
 # 사용자 가이드
 
-운영 콘솔은 조직의 Memory, RAG 문서, Knowledge Graph를 검색하고 관리하는 화면이다. 좌측 메뉴에서 `통합 검색`, `문서 수집`, `AI 후보 검토`, `Agent 연결`으로 이동하고, 조직 `admin`·`owner`에게는 `회원`, `팀`, `설정` 관리 메뉴가 추가로 표시된다. 모든 화면은 로그인 사용자와 활성 조직의 멤버십·scope 권한을 적용한다. 같은 내용을 사이트에서 읽으려면 로그인 전후에 `/guide`를 열거나 좌측 메뉴 하단의 `가이드`를 선택하라.
+운영 콘솔은 조직의 Memory, RAG 문서, Knowledge Graph를 검색하고 관리하는 화면이다. 좌측 메뉴에서 `통합 검색`, `문서 수집`, `AI 후보 검토`, `Agent 연결`으로 이동하고, 조직 `admin`·`owner`에게는 `회원`, `팀`, `설정` 관리 메뉴가, team `manager`에게는 `팀` 메뉴가 추가로 표시된다. 모든 화면은 로그인 사용자와 활성 조직의 멤버십·scope 권한을 적용한다. 같은 내용을 사이트에서 읽으려면 로그인 전후에 `/guide`를 열거나 좌측 메뉴 하단의 `가이드`를 선택하라.
 
 ## 최초 로그인과 조직 가입
 
-active 상태의 조직 membership이 없는 사용자는 로그인하면 조직 선택 화면으로 이동한다. 가입 가능한 조직을 선택하면 조직의 신규 회원 정책에 따라 즉시 활성화되거나 승인 대기 상태가 된다. 승인 대기 중에는 조직 화면과 API를 사용할 수 없으며, 조직 관리자가 `회원`에서 승인하면 활성화된다. 전역 admin(`ADMIN_EMAILS`)은 이 화면에서 새 조직을 만들 수 있다.
+active 상태의 조직 membership이 없는 사용자는 로그인하면 조직 선택 화면으로 이동한다. 가입 가능한 조직을 선택하면 조직의 신규 회원 정책에 따라 즉시 활성화되거나 승인 대기 상태가 된다. 승인 대기 중에는 조직 화면과 API를 사용할 수 없으며, 조직 관리자가 `회원`에서 승인하면 활성화된다. 전역 admin(`ADMIN_EMAILS`)은 이 화면과 `설정` 화면에서 새 조직을 만들 수 있다.
 
 ## 활성 조직과 권한
 
@@ -55,7 +55,7 @@ Memory 검색 결과에서 `Lifecycle`을 선택하면 전체 화면 관리 창�
 
 ### Version 이력
 
-`Version spine`은 최신 version부터 과거 revision을 보여준다. Revision에는 당시의 content, source, 유효기간, access grant, 변경 사용자와 변경 사유가 보존된다. 이력 조회에는 `manage` 권한이 필요하다.
+`Version 이력`은 최신 version부터 과거 revision을 보여준다. Revision에는 당시의 content, source, 유효기간, access grant, 변경 사용자와 변경 사유가 보존된다. 이력 조회에는 `manage` 권한이 필요하다.
 
 ### Archive
 
@@ -80,7 +80,7 @@ upload → pending → processing → ready
                          └──→ failed → retry
 ```
 
-문서가 `pending`에 머물면 document worker가 실행 중인지 확인한다. `failed`이면 공개 처리 오류를 확인하고 `다시 처리`를 실행한다. 원본은 S3 호환 storage에 있고 검색용 chunk와 상태는 PostgreSQL에 저장된다.
+문서 상태 확인과 `failed` 문서의 재처리는 API로 수행한다([HTTP API와 MCP](api.md#문서) 참조). 문서가 `pending`에 머물면 document worker가 실행 중인지 확인한다. 원본은 S3 호환 storage에 있고 검색용 chunk와 상태는 PostgreSQL에 저장된다.
 
 문서 삭제는 원본과 provenance를 보존하는 archive다. Archive된 문서는 검색, 상태 조회, retry, AI 후보 검토에서 제외되며 해당 scope의 `manage` 권한이 필요하다.
 
@@ -147,7 +147,7 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 - Team `manager`: 자신이 관리하는 팀의 이름 변경, 기존 조직 멤버 배정과 team role 변경, 팀 멤버 제거
 - Team `member`: team scope resource 읽기·쓰기
 
-`설정`에서 조직 이름, 신규 회원 정책(즉시 활성화 또는 승인 대기, 기본은 승인 대기), 기본 팀을 관리한다. 기본 팀이 설정되면 신규 회원이 활성화될 때 자동으로 해당 팀에 배정된다. 조직 삭제는 `owner`만 가능하며 조직의 모든 데이터를 함께 제거한다.
+`설정`에서 조직 이름, 신규 회원 정책(즉시 활성화 또는 승인 대기, 기본은 승인 대기), 기본 팀, Knowledge Graph 온톨로지(검증 모드와 node kind·edge predicate 사전, 빈도 추천·AI 제안 반영)를 관리한다. 기본 팀이 설정되면 신규 회원이 활성화될 때 자동으로 해당 팀에 배정된다. 조직 삭제는 `owner`만 가능하며 조직의 모든 데이터를 함께 제거한다.
 
 `ADMIN_EMAILS`의 전역 bootstrap 권한은 새 조직 생성만 허용한다. 기존 조직 안에서는 항상 실제 organization membership과 role을 사용한다.
 
