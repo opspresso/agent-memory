@@ -7,36 +7,42 @@ import { publicMemory, publicMemoryForAccess } from "./memory-http";
 
 export function publicContextSearchResult(
   result: ContextSearchResult,
-  limit: number,
   access?: OrganizationAccess
 ) {
-  const hits = [
-    ...result.memories.map((hit) => ({
-      ...hit,
-      sourceType: "memory" as const,
-      memory: access
-        ? publicMemoryForAccess(hit.memory, access)
-        : publicMemory(hit.memory)
-    })),
-    ...result.documents.map((hit) => ({
-      ...publicDocumentHit(hit),
-      sourceType: "document" as const
-    })),
-    ...result.knowledge.map((hit) => ({
+  const hits = result.hits.map((hit) => {
+    const ranking = {
+      candidateScore: hit.candidateScore,
+      ...(hit.rerankScore !== undefined
+        ? { rerankScore: hit.rerankScore }
+        : {})
+    };
+    if (hit.sourceType === "memory") {
+      return {
+        ...hit,
+        ...ranking,
+        memory: access
+          ? publicMemoryForAccess(hit.memory, access)
+          : publicMemory(hit.memory)
+      };
+    }
+    if (hit.sourceType === "document") {
+      return {
+        ...publicDocumentHit(hit),
+        ...ranking,
+        sourceType: hit.sourceType
+      };
+    }
+    return {
       ...publicKnowledgeHit(hit),
-      sourceType: "knowledge" as const
-    }))
-  ]
-    .toSorted((left, right) => right.score - left.score)
-    .slice(0, limit);
+      ...ranking,
+      sourceType: hit.sourceType
+    };
+  });
 
   return {
     hits,
     count: hits.length,
-    counts: {
-      memories: result.memories.length,
-      documents: result.documents.length,
-      knowledge: result.knowledge.length
-    }
+    counts: result.counts,
+    ranking: result.ranking
   };
 }

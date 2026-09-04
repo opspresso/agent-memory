@@ -116,6 +116,18 @@ EMBEDDING_MODEL=openai/text-embedding-3-small
 
 `EMBEDDING_MODEL`을 설정할 때 `EMBEDDING_BASE_URL`도 반드시 설정해야 한다.
 
+### Context reranking
+
+통합 Context 검색과 MCP `recall`의 1차 후보를 다시 정렬하려면 OpenRouter 또는 vLLM-compatible reranker를 설정하라.
+
+```dotenv
+RERANKER_BASE_URL=https://openrouter.ai/api/v1
+RERANKER_API_KEY=replace-with-provider-key
+RERANKER_MODEL=voyageai/rerank-2.5-lite
+```
+
+Reranker는 권한 필터가 끝난 후보만 받는다. 설정하지 않거나 provider가 실패하면 통합 검색은 기존 hybrid 순위를 사용한다.
+
 ### AI Knowledge extraction
 
 Ready 문서에서 검토 가능한 graph 후보를 만들려면 structured output을 지원하는 OpenAI-compatible chat completions endpoint를 설정하라.

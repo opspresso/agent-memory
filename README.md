@@ -14,7 +14,7 @@ Agent Memory는 여러 AI Agent가 조직 경계 안에서 장기 Memory, RAG �
 - 모든 resource에 organization과 `organization`, `team`, `user` scope를 적용한다.
 - Memory의 출처, revision, 변경 사유, 유효기간, archive 상태, ACL을 보존한다.
 - 원본 문서를 S3 호환 storage에 저장하고 pg-boss worker가 chunk와 선택형 embedding을 생성한다.
-- PostgreSQL Full-Text Search와 선택형 pgvector를 결합해 Memory, 문서 chunk, Knowledge node를 검색한다.
+- PostgreSQL Full-Text Search와 선택형 pgvector를 결합해 후보를 찾고, 선택형 reranker로 Memory, 문서 chunk, Knowledge node의 통합 순위를 정한다.
 - Knowledge node와 edge마다 읽을 수 있는 Memory 또는 document chunk provenance를 요구한다.
 - AI가 추출한 graph 후보는 scope 관리자가 승인하기 전까지 공유 Graph에 반영하지 않는다.
 - 운영 콘솔, HTTP API, Streamable HTTP MCP가 같은 application operation과 권한 정책을 사용한다.
@@ -73,7 +73,7 @@ pnpm dev
 
 - Node.js 24, pnpm 11, Next.js 16 App Router, React 19, TypeScript strict, Mantine 9
 - Better Auth, Drizzle ORM, PostgreSQL 18, pgvector, PostgreSQL Full-Text Search, pg-boss
-- OpenAI-compatible embedding·structured extraction API, S3·MinIO
+- OpenAI-compatible embedding·rerank·structured extraction API, S3·MinIO
 - MCP TypeScript SDK, OpenTelemetry, Pino, Langfuse
 - Vitest, Testcontainers, Playwright, dependency-cruiser, ESLint, Docker Compose
 
