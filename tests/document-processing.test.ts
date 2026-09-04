@@ -376,6 +376,59 @@ describe("document processing", () => {
     );
   });
 
+  it("bounds embedding request batches for large documents", async () => {
+    const document = createDocument({
+      id: "document-1",
+      scope: { kind: "organization", organizationId: "organization-1" },
+      title: "Large handbook",
+      objectKey: "objects/document-1",
+      checksum: "a".repeat(64),
+      mimeType: "text/plain",
+      sizeBytes: 300_000,
+      createdBy: "user-1",
+      now
+    });
+    const completeProcessing = vi.fn<DocumentRepository["completeProcessing"]>();
+    const embedMany = vi.fn(async (texts: readonly string[]) =>
+      texts.map(() => ({ model: "embedding-model", values: [1, 0] }))
+    );
+    let nextChunkId = 0;
+    const process = buildProcessDocument({
+      clock: () => now,
+      embeddingService: { embed: vi.fn(), embedMany },
+      generateId: () => `chunk-${nextChunkId++}`,
+      objectStorage: objectStorage({
+        get: vi.fn().mockResolvedValue(new TextEncoder().encode("content"))
+      }),
+      repository: repository({
+        claimForProcessing: vi.fn().mockResolvedValue({
+          document,
+          leaseId: "lease-1"
+        }),
+        completeProcessing
+      }),
+      textExtractor: {
+        extract: vi
+          .fn()
+          .mockResolvedValue(
+            Array.from({ length: 130 }, () => "x".repeat(2_000)).join("\n")
+          )
+      }
+    });
+
+    await process("organization-1", "document-1");
+
+    expect(embedMany.mock.calls.length).toBeGreaterThan(1);
+    expect(
+      Math.max(...embedMany.mock.calls.map(([texts]) => texts.length))
+    ).toBe(64);
+    const embeddedCount = embedMany.mock.calls.reduce(
+      (total, [texts]) => total + texts.length,
+      0
+    );
+    expect(completeProcessing.mock.calls[0]?.[1]).toHaveLength(embeddedCount);
+  });
+
   it("records a bounded failure when extraction fails", async () => {
     const document = createDocument({
       id: "document-1",

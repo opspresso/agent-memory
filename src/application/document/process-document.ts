@@ -12,6 +12,8 @@ import type { TextEmbeddingService } from "@/domain/shared/text-embedding-servic
 
 import { chunkDocumentText } from "./chunk-text";
 
+const documentEmbeddingBatchSize = 64;
+
 export interface ProcessDocumentDependencies {
   readonly clock: () => Date;
   readonly embeddingService?: TextEmbeddingService;
@@ -25,6 +27,21 @@ function safeErrorMessage(error: unknown): string {
   return error instanceof InvalidDocumentError
     ? error.message.slice(0, 2_000)
     : "document processing failed";
+}
+
+async function embedDocumentParts(
+  embeddingService: TextEmbeddingService,
+  texts: readonly string[]
+) {
+  const embeddings = [];
+  for (let offset = 0; offset < texts.length; offset += documentEmbeddingBatchSize) {
+    embeddings.push(
+      ...(await embeddingService.embedMany(
+        texts.slice(offset, offset + documentEmbeddingBatchSize)
+      ))
+    );
+  }
+  return embeddings;
 }
 
 export function buildProcessDocument(dependencies: ProcessDocumentDependencies) {
@@ -54,7 +71,8 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
         throw new InvalidDocumentError("document contains no extractable text");
       }
       const embeddings = dependencies.embeddingService
-        ? await dependencies.embeddingService.embedMany(
+        ? await embedDocumentParts(
+            dependencies.embeddingService,
             parts.map((part) => part.content)
           )
         : [];
