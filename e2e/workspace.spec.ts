@@ -148,6 +148,16 @@ test("onboards, approves, and manages members through the console", async ({
   await page.getByRole("button", { name: "승인" }).click();
   await expect(page.getByText("회원을 승인했습니다.")).toBeVisible();
   await expect(page.getByText("E2E Default Team").first()).toBeVisible();
+  await page.goto("/teams");
+  const teamSelector = page.getByRole("button", {
+    name: "E2E Default Team",
+    exact: true
+  });
+  await expect(teamSelector).toHaveAttribute("aria-pressed", "true");
+  await teamSelector.focus();
+  await page.keyboard.press("Space");
+  await page.goto("/members");
+  await expect(page.getByText(memberEmail, { exact: true })).toBeVisible();
 
   await memberPage.goto("/");
   await expect(
