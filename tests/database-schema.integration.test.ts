@@ -113,10 +113,18 @@ describe("PostgreSQL schema", () => {
       const boss = await queue.start();
       const organizationId = "00000000-0000-0000-0000-000000000008";
       const documentId = "40000000-0000-0000-0000-000000000008";
-      await queue.enqueue(organizationId, documentId);
-      await queue.enqueue(organizationId, documentId);
-      await queue.enqueueKnowledgeEnrichment(organizationId, documentId);
-      await queue.enqueueKnowledgeEnrichment(organizationId, documentId);
+      await expect(queue.enqueue(organizationId, documentId)).resolves.toBe(
+        "queued"
+      );
+      await expect(queue.enqueue(organizationId, documentId)).resolves.toBe(
+        "already_queued"
+      );
+      await expect(
+        queue.enqueueKnowledgeEnrichment(organizationId, documentId)
+      ).resolves.toBe("queued");
+      await expect(
+        queue.enqueueKnowledgeEnrichment(organizationId, documentId)
+      ).resolves.toBe("already_queued");
 
       const jobs = await boss.findJobs<DocumentIngestionJob>(
         documentIngestionQueueName,

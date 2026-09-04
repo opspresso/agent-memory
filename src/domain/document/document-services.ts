@@ -1,5 +1,7 @@
 export const documentProcessingLeaseMilliseconds = 15 * 60 * 1_000;
 
+export type DocumentQueueEnqueueResult = "queued" | "already_queued";
+
 export interface DocumentObjectStorage {
   put(key: string, content: Uint8Array, contentType: string): Promise<void>;
   get(key: string): Promise<Uint8Array>;
@@ -7,7 +9,10 @@ export interface DocumentObjectStorage {
 }
 
 export interface DocumentIngestionQueue {
-  enqueue(organizationId: string, documentId: string): Promise<void>;
+  enqueue(
+    organizationId: string,
+    documentId: string
+  ): Promise<DocumentQueueEnqueueResult>;
 }
 
 export interface DocumentTextExtractor {

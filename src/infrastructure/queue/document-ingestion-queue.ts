@@ -2,6 +2,7 @@ import { PgBoss } from "pg-boss";
 
 import {
   documentProcessingLeaseMilliseconds,
+  type DocumentQueueEnqueueResult,
   type DocumentIngestionQueue
 } from "@/domain/document/document-services";
 
@@ -23,7 +24,7 @@ export interface PgBossDocumentIngestionQueue
   enqueueKnowledgeEnrichment(
     organizationId: string,
     documentId: string
-  ): Promise<void>;
+  ): Promise<DocumentQueueEnqueueResult>;
   start(): Promise<PgBoss>;
   stop(): Promise<void>;
 }
@@ -32,32 +33,46 @@ export function createPgBossDocumentIngestionQueue(
   connectionString: string,
   onError: (error: Error) => void
 ): PgBossDocumentIngestionQueue {
-  const boss = new PgBoss({
-    application_name: "agent-memory",
-    connectionString,
-    schema: "pgboss"
-  });
-  boss.on("error", onError);
   let started: Promise<PgBoss> | undefined;
 
   async function start() {
     started ??= (async () => {
+      const boss = new PgBoss({
+        application_name: "agent-memory",
+        connectionString,
+        schema: "pgboss"
+      });
+      boss.on("error", onError);
       await boss.start();
-      await boss.createQueue(documentIngestionQueueName, {
-        retryLimit: 3,
-        retryDelay: 5,
-        retryBackoff: true,
-        expireInSeconds: documentJobExpirationSeconds,
-        deleteAfterSeconds: 604_800
-      });
-      await boss.createQueue(documentKnowledgeEnrichmentQueueName, {
-        retryLimit: 5,
-        retryDelay: 15,
-        retryBackoff: true,
-        expireInSeconds: documentJobExpirationSeconds,
-        deleteAfterSeconds: 604_800
-      });
-      return boss;
+      try {
+        await boss.createQueue(documentIngestionQueueName, {
+          policy: "exclusive",
+          retryLimit: 3,
+          retryDelay: 5,
+          retryBackoff: true,
+          expireInSeconds: documentJobExpirationSeconds,
+          deleteAfterSeconds: 604_800
+        });
+        await boss.createQueue(documentKnowledgeEnrichmentQueueName, {
+          policy: "exclusive",
+          retryLimit: 5,
+          retryDelay: 15,
+          retryBackoff: true,
+          expireInSeconds: documentJobExpirationSeconds,
+          deleteAfterSeconds: 604_800
+        });
+        return boss;
+      } catch (error) {
+        try {
+          await boss.stop({ close: true, graceful: true, timeout: 30_000 });
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            "document queue startup and cleanup both failed"
+          );
+        }
+        throw error;
+      }
     })();
     try {
       return await started;
@@ -71,24 +86,28 @@ export function createPgBossDocumentIngestionQueue(
     start,
     async enqueue(organizationId, documentId) {
       const instance = await start();
-      await instance.send(
+      const jobId = await instance.send(
         documentIngestionQueueName,
         { organizationId, documentId } satisfies DocumentIngestionJob,
-        { singletonKey: documentId, singletonSeconds: 60 }
+        { singletonKey: documentId }
       );
+      return jobId ? "queued" : "already_queued";
     },
     async enqueueKnowledgeEnrichment(organizationId, documentId) {
       const instance = await start();
-      await instance.send(
+      const jobId = await instance.send(
         documentKnowledgeEnrichmentQueueName,
         { organizationId, documentId } satisfies DocumentKnowledgeEnrichmentJob,
-        { singletonKey: documentId, singletonSeconds: 60 }
+        { singletonKey: documentId }
       );
+      return jobId ? "queued" : "already_queued";
     },
     async stop() {
-      if (started) {
+      const running = started;
+      started = undefined;
+      if (running) {
+        const boss = await running;
         await boss.stop({ close: true, graceful: true, timeout: 30_000 });
-        started = undefined;
       }
     }
   };
