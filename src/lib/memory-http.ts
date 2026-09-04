@@ -42,7 +42,8 @@ export function versionEtag(version: number): string {
 export function parseIfMatch(request: Request): number | null {
   const value = request.headers.get("if-match")?.trim();
   const match = value?.match(/^"?([1-9]\d*)"?$/);
-  return match ? Number(match[1]) : null;
+  const version = match ? Number(match[1]) : Number.NaN;
+  return Number.isSafeInteger(version) ? version : null;
 }
 
 export function publicMemory(memory: Memory) {

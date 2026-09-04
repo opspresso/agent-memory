@@ -30,10 +30,14 @@ describe("memory HTTP concurrency", () => {
     const zero = new Request("https://memory.example.com/api/memory", {
       headers: { "if-match": '"0"' }
     });
+    const unsafe = new Request("https://memory.example.com/api/memory", {
+      headers: { "if-match": '"9007199254740992"' }
+    });
 
     expect(parseIfMatch(weak)).toBeNull();
     expect(parseIfMatch(wildcard)).toBeNull();
     expect(parseIfMatch(zero)).toBeNull();
+    expect(parseIfMatch(unsafe)).toBeNull();
   });
 
   it("returns a 400 result for malformed JSON", async () => {
