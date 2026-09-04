@@ -165,6 +165,19 @@ describe("document processing", () => {
     expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
   });
 
+  it("updates XML ancestor paths as sequential elements change", () => {
+    const chunks = chunkDocumentText(
+      `<root><first>${"first value ".repeat(220)}</first><second>${"second value ".repeat(220)}</second></root>`,
+      "application/xml"
+    );
+
+    expect(
+      chunks.some((chunk) =>
+        chunk.content.startsWith("XML context: /root/second")
+      )
+    ).toBe(true);
+  });
+
   it("omits oversized XML context instead of exceeding the chunk limit", () => {
     const element = "nested".repeat(80);
     const chunks = chunkDocumentText(

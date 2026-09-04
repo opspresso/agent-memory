@@ -44,14 +44,15 @@ export function chunkText(
     let end = targetEnd;
     if (targetEnd < text.length) {
       const minimumBreak = start + Math.floor(maxCharacters / 2);
+      const boundaryWindow = text.slice(minimumBreak, targetEnd);
       const candidates = [
-        text.lastIndexOf("\n\n", targetEnd),
-        text.lastIndexOf("\n", targetEnd),
-        text.lastIndexOf(" ", targetEnd)
+        boundaryWindow.lastIndexOf("\n\n"),
+        boundaryWindow.lastIndexOf("\n"),
+        boundaryWindow.lastIndexOf(" ")
       ];
-      const boundary = Math.max(...candidates.filter((value) => value >= minimumBreak));
-      if (boundary >= minimumBreak) {
-        end = boundary;
+      const boundary = Math.max(...candidates);
+      if (boundary >= 0) {
+        end = minimumBreak + boundary;
       }
     }
 
@@ -200,28 +201,48 @@ function chunkJson(input: string): readonly TextChunk[] {
   return chunkText(structured);
 }
 
-function activeXmlPath(input: string, offset: number): string | undefined {
+function xmlContexts(
+  input: string,
+  offsets: readonly number[]
+): readonly (string | undefined)[] {
   const stack: string[] = [];
-  const prefix = input.slice(0, offset);
-  for (const match of prefix.matchAll(/<\/?([A-Za-z_][\w:.-]*)\b[^>]*>/g)) {
-    const token = match[0];
-    const name = match[1]!;
-    if (token.startsWith("</")) {
-      if (stack.at(-1) === name) {
-        stack.pop();
+  const pattern = /<\/?([A-Za-z_][\w:.-]*)\b[^>]*>/g;
+  let match = pattern.exec(input);
+  return offsets.map((offset) => {
+    while (
+      match &&
+      match.index + match[0].length <= offset
+    ) {
+      const token = match[0];
+      const name = match[1];
+      if (name) {
+        if (token.startsWith("</")) {
+          if (stack.at(-1) === name) {
+            stack.pop();
+          }
+        } else if (!token.endsWith("/>")) {
+          stack.push(name);
+        }
       }
-    } else if (!token.endsWith("/>")) {
-      stack.push(name);
+      match = pattern.exec(input);
     }
-  }
-  return stack.length > 0 ? `XML context: /${stack.join("/")}` : undefined;
+    return stack.length > 0 ? `XML context: /${stack.join("/")}` : undefined;
+  });
 }
 
 function chunkXml(input: string): readonly TextChunk[] {
   const normalized = input.replace(/\r\n?/g, "\n").trim();
-  return chunkText(normalized, { maxCharacters: 1_900, overlapCharacters: 200 }).map(
-    (chunk) => {
-      const context = activeXmlPath(normalized, chunk.start);
+  const chunks = chunkText(normalized, {
+    maxCharacters: 1_900,
+    overlapCharacters: 200
+  });
+  const contexts = xmlContexts(
+    normalized,
+    chunks.map((chunk) => chunk.start)
+  );
+  return chunks.map(
+    (chunk, index) => {
+      const context = contexts[index];
       const contextualContent = context
         ? `${context}\n${chunk.content}`
         : chunk.content;
