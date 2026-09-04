@@ -1,8 +1,19 @@
 import { expect, test } from "@playwright/test";
 
 test("renders the anonymous memory platform landing page", async ({ page }) => {
-  await page.goto("/");
+  const response = await page.goto("/");
 
+  expect(response?.headers()["content-security-policy"]).toContain(
+    "frame-ancestors 'none'"
+  );
+  expect(response?.headers()["x-frame-options"]).toBe("DENY");
+  expect(response?.headers()["x-content-type-options"]).toBe("nosniff");
+  expect(response?.headers()["referrer-policy"]).toBe(
+    "strict-origin-when-cross-origin"
+  );
+  expect(response?.headers()["permissions-policy"]).toBe(
+    "camera=(), microphone=(), geolocation=(), browsing-topics=()"
+  );
   await expect(
     page.getByRole("heading", { name: /Agents remember/ })
   ).toBeVisible();
