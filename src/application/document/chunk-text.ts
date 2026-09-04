@@ -85,14 +85,26 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
     const sectionEnd = headings[index + 1]?.index ?? normalized.length;
     const heading = match[0].trim();
     const section = normalized.slice(sectionStart, sectionEnd).trimEnd();
-    const sectionChunks = chunkText(section, {
-      maxCharacters: 2_000 - heading.length - 2,
-      overlapCharacters: 200
-    });
+    const headingContextBudget = 2_000 - heading.length - 2;
+    const repeatHeading = headingContextBudget >= 100;
+    const sectionChunks = chunkText(
+      section,
+      repeatHeading
+        ? {
+            maxCharacters: headingContextBudget,
+            overlapCharacters: Math.min(
+              200,
+              Math.floor(headingContextBudget / 10)
+            )
+          }
+        : undefined
+    );
     sectionChunks.forEach((chunk, chunkIndex) => {
       chunks.push({
         content:
-          chunkIndex === 0 ? chunk.content : `${heading}\n\n${chunk.content}`,
+          chunkIndex === 0 || !repeatHeading
+            ? chunk.content
+            : `${heading}\n\n${chunk.content}`,
         start: sectionStart + chunk.start,
         end: sectionStart + chunk.end
       });
