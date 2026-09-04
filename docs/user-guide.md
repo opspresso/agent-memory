@@ -70,7 +70,7 @@ Memory 검색 결과에서 `Lifecycle`을 선택하면 전체 화면 관리 창�
 - organization scope: 조직 `admin`·`owner`만 선택할 수 있다.
 
 - 지원 형식: UTF-8 text, Markdown, CSV, JSON, XML
-- 최대 원본 크기: 10 MiB
+- 최대 원본 크기: 10 MiB, 추출 결과 최대 512 chunks
 - title을 생략하면 파일 이름을 사용한다.
 
 처리 흐름은 다음과 같다.

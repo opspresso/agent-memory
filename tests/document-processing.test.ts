@@ -470,6 +470,54 @@ describe("document processing", () => {
     );
   });
 
+  it("rejects documents that exceed the processing lease chunk budget", async () => {
+    const document = createDocument({
+      id: "document-1",
+      scope: { kind: "organization", organizationId: "organization-1" },
+      title: "Oversized handbook",
+      objectKey: "objects/document-1",
+      checksum: "a".repeat(64),
+      mimeType: "text/plain",
+      sizeBytes: 1_100_000,
+      createdBy: "user-1",
+      now
+    });
+    const embedMany = vi.fn();
+    const failProcessing = vi.fn<DocumentRepository["failProcessing"]>();
+    const process = buildProcessDocument({
+      clock: () => now,
+      embeddingService: { embed: vi.fn(), embedMany },
+      generateId: () => "chunk-1",
+      objectStorage: objectStorage({
+        get: vi.fn().mockResolvedValue(new TextEncoder().encode("content"))
+      }),
+      repository: repository({
+        claimForProcessing: vi.fn().mockResolvedValue({
+          document,
+          leaseId: "lease-1"
+        }),
+        failProcessing
+      }),
+      textExtractor: {
+        extract: vi
+          .fn()
+          .mockResolvedValue(
+            Array.from({ length: 513 }, () => "x".repeat(2_000)).join("\n")
+          )
+      }
+    });
+
+    await expect(process("organization-1", "document-1")).rejects.toThrow(
+      "document exceeds the 512 chunk processing limit"
+    );
+    expect(embedMany).not.toHaveBeenCalled();
+    expect(failProcessing).toHaveBeenCalledWith(
+      { document, leaseId: "lease-1" },
+      "document exceeds the 512 chunk processing limit",
+      now
+    );
+  });
+
   it("treats an already processed job as an idempotent success", async () => {
     const storage = objectStorage();
     const process = buildProcessDocument({

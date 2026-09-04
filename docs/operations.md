@@ -150,6 +150,7 @@ pnpm db:studio
 - Worker는 application과 같은 `DATABASE_URL`, S3 설정, embedding·knowledge extraction 설정을 사용해야 한다.
 - 시작 전에 bucket이 존재하는지 확인하라. Compose에서는 `minio-init`이 `agent-memory` bucket을 만든다.
 - 실패한 문서는 retry API로 다시 처리할 수 있다. 반복 실패는 document의 `processingError`와 application log를 확인하라.
+- 추출 결과가 512 chunks를 넘으면 15분 processing lease를 보장하기 위해 provider 호출 전에 실패한다. 원본을 더 작은 문서로 나눈 뒤 다시 업로드하라.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
 - AI 분석은 candidate만 생성한다. Source scope의 `manage` 권한을 가진 사용자가 운영 콘솔이나 API에서 승인해야 Knowledge Graph에 반영된다.

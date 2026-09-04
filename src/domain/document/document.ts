@@ -18,6 +18,8 @@ export const documentMimeTypes = [
   "text/xml"
 ] as const;
 
+export const maxDocumentChunks = 512;
+
 export type DocumentStatus = (typeof documentStatuses)[number];
 export type DocumentScope = ScopedResource;
 
