@@ -8,11 +8,9 @@ import {
   lt,
   lte,
   or,
-  sql,
-  type SQL
+  sql
 } from "drizzle-orm";
 
-import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import type {
   Memory,
   MemoryAccessGrant,
@@ -33,7 +31,7 @@ import {
   memoryVersions
 } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
-import { scopedReadPredicate } from "./scope-predicates";
+import { memoryReadPredicate } from "./scope-predicates";
 
 type MemoryRow = typeof memories.$inferSelect;
 type GrantRow = typeof memoryAccessGrants.$inferSelect;
@@ -185,33 +183,6 @@ function versionValues(
     changeReason: changeReason ?? null,
     createdAt: memory.updatedAt
   };
-}
-
-function principalPredicate(access: OrganizationAccess): SQL {
-  const teamIds = access.teams.map((team) => team.teamId);
-  const grantPrincipal = or(
-    and(
-      eq(memoryAccessGrants.principalKind, "user"),
-      eq(memoryAccessGrants.userId, access.userId)
-    ),
-    teamIds.length > 0
-      ? and(
-          eq(memoryAccessGrants.principalKind, "team"),
-          inArray(memoryAccessGrants.teamId, teamIds)
-        )
-      : undefined
-  );
-
-  return scopedReadPredicate(
-    access,
-    memories,
-    sql`EXISTS (
-      SELECT 1 FROM ${memoryAccessGrants}
-          WHERE ${memoryAccessGrants.organizationId} = ${memories.organizationId}
-            AND ${memoryAccessGrants.memoryId} = ${memories.id}
-            AND ${grantPrincipal}
-    )`
-  );
 }
 
 async function grantRowsByMemoryIds(
@@ -388,7 +359,7 @@ export function createMemoryRepository(
 
     async search(input) {
       const score = scoreExpressions(input);
-      const accessPredicate = principalPredicate(input.access);
+      const accessPredicate = memoryReadPredicate(input.access);
       const rows = await db
         .select({
           ...getTableColumns(memories),

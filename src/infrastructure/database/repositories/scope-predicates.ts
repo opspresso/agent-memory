@@ -1,7 +1,9 @@
-import { and, eq, inArray, or, type SQL } from "drizzle-orm";
+import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+
+import { memories, memoryAccessGrants } from "../schema";
 
 // Single SQL owner of the tenant scope policy. These builders must stay
 // equivalent to canAccessScopedResource in src/domain/identity — the
@@ -55,4 +57,30 @@ export function scopedManagePredicate(
           )
         : undefined
   )!;
+}
+
+export function memoryReadPredicate(access: OrganizationAccess): SQL {
+  const teamIds = access.teams.map((team) => team.teamId);
+  const grantPrincipal = or(
+    and(
+      eq(memoryAccessGrants.principalKind, "user"),
+      eq(memoryAccessGrants.userId, access.userId)
+    ),
+    teamIds.length > 0
+      ? and(
+          eq(memoryAccessGrants.principalKind, "team"),
+          inArray(memoryAccessGrants.teamId, teamIds)
+        )
+      : undefined
+  );
+  return scopedReadPredicate(
+    access,
+    memories,
+    sql`EXISTS (
+      SELECT 1 FROM ${memoryAccessGrants}
+      WHERE ${memoryAccessGrants.organizationId} = ${memories.organizationId}
+        AND ${memoryAccessGrants.memoryId} = ${memories.id}
+        AND ${grantPrincipal}
+    )`
+  );
 }

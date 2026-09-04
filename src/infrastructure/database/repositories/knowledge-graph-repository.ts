@@ -34,11 +34,13 @@ import {
   knowledgeNodeMerges,
   knowledgeNodes,
   knowledgeNodeSources,
-  memories,
-  memoryAccessGrants
+  memories
 } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
-import { scopedReadPredicate } from "./scope-predicates";
+import {
+  memoryReadPredicate,
+  scopedReadPredicate
+} from "./scope-predicates";
 import {
   knowledgeNodeFromRow,
   knowledgeScopeFromRow,
@@ -78,32 +80,6 @@ function edgeAccessPredicate(access: OrganizationAccess): SQL {
   return scopedReadPredicate(access, knowledgeEdges);
 }
 
-function memorySourceAccessPredicate(access: OrganizationAccess): SQL {
-  const teamIds = access.teams.map((team) => team.teamId);
-  const grantPredicate = or(
-    and(
-      eq(memoryAccessGrants.principalKind, "user"),
-      eq(memoryAccessGrants.userId, access.userId)
-    ),
-    teamIds.length > 0
-      ? and(
-          eq(memoryAccessGrants.principalKind, "team"),
-          inArray(memoryAccessGrants.teamId, teamIds)
-        )
-      : undefined
-  );
-  return scopedReadPredicate(
-    access,
-    memories,
-    sql`EXISTS (
-      SELECT 1 FROM ${memoryAccessGrants}
-      WHERE ${memoryAccessGrants.organizationId} = ${memories.organizationId}
-        AND ${memoryAccessGrants.memoryId} = ${memories.id}
-        AND ${grantPredicate}
-    )`
-  );
-}
-
 function documentSourceAccessPredicate(access: OrganizationAccess): SQL {
   return scopedReadPredicate(access, documents);
 }
@@ -128,7 +104,7 @@ function nodeHasVisibleSource(access: OrganizationAccess): SQL {
           AND ${memories.status} = 'active'
           AND ${memories.validFrom} <= CURRENT_TIMESTAMP
           AND (${memories.expiresAt} IS NULL OR ${memories.expiresAt} > CURRENT_TIMESTAMP)
-          AND ${memorySourceAccessPredicate(access)})
+          AND ${memoryReadPredicate(access)})
         OR
         (${knowledgeNodeSources.chunkId} IS NOT NULL
           AND ${documents.status} = 'ready'
@@ -157,7 +133,7 @@ function edgeHasVisibleSource(access: OrganizationAccess): SQL {
           AND ${memories.status} = 'active'
           AND ${memories.validFrom} <= CURRENT_TIMESTAMP
           AND (${memories.expiresAt} IS NULL OR ${memories.expiresAt} > CURRENT_TIMESTAMP)
-          AND ${memorySourceAccessPredicate(access)})
+          AND ${memoryReadPredicate(access)})
         OR
         (${knowledgeEdgeSources.chunkId} IS NOT NULL
           AND ${documents.status} = 'ready'
