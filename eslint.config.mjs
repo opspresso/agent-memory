@@ -21,12 +21,12 @@ const architectureBoundaries = {
           },
           {
             target: "./src/application",
-            from: ["./src/infrastructure", "./src/app"],
+            from: ["./src/infrastructure", "./src/app", "./src/lib"],
             message: "application may only depend on domain"
           },
           {
             target: "./src/infrastructure",
-            from: ["./src/application", "./src/app"],
+            from: ["./src/application", "./src/app", "./src/lib"],
             message: "infrastructure may only implement domain ports"
           },
           {

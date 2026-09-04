@@ -17,7 +17,7 @@ module.exports = {
       name: "application-dependency-direction",
       severity: "error",
       from: { path: "^src/application" },
-      to: { path: "^src/(infrastructure|app)(/|$)" }
+      to: { path: "^src/(infrastructure|app|lib)(/|$)" }
     },
     {
       name: "application-no-third-party-dependencies",
@@ -29,7 +29,7 @@ module.exports = {
       name: "infrastructure-dependency-direction",
       severity: "error",
       from: { path: "^src/infrastructure" },
-      to: { path: "^src/(application|app)" }
+      to: { path: "^src/(application|app|lib)" }
     },
     {
       name: "app-does-not-import-infrastructure",
