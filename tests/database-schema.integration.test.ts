@@ -1413,13 +1413,14 @@ describe("PostgreSQL schema", () => {
       },
       now: createdAt
     });
-    await expect(candidateRepository.save(candidate)).resolves.toMatchObject({
+    const saveCandidate = candidateRepository.save;
+    await expect(saveCandidate(candidate)).resolves.toMatchObject({
       id: candidate.id,
       scope: document.scope,
       status: "pending"
     });
     await expect(
-      candidateRepository.save({
+      saveCandidate({
         ...candidate,
         id: "80000000-0000-0000-0000-000000000007"
       })

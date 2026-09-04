@@ -181,31 +181,32 @@ export function createKnowledgeCandidateRepository(
       : null;
   }
 
+  async function findByChunkId(organizationId: string, chunkId: string) {
+    const [row] = await db
+      .select({ candidate: knowledgeCandidates, document: documents })
+      .from(knowledgeCandidates)
+      .innerJoin(
+        documents,
+        and(
+          eq(documents.organizationId, knowledgeCandidates.organizationId),
+          eq(documents.id, knowledgeCandidates.documentId)
+        )
+      )
+      .where(
+        and(
+          eq(knowledgeCandidates.organizationId, organizationId),
+          eq(knowledgeCandidates.chunkId, chunkId)
+        )
+      )
+      .limit(1);
+    return row
+      ? candidateFromRow(row.candidate, knowledgeScopeFromRow(row.document))
+      : null;
+  }
+
   return {
     findById,
-
-    async findByChunkId(organizationId, chunkId) {
-      const [row] = await db
-        .select({ candidate: knowledgeCandidates, document: documents })
-        .from(knowledgeCandidates)
-        .innerJoin(
-          documents,
-          and(
-            eq(documents.organizationId, knowledgeCandidates.organizationId),
-            eq(documents.id, knowledgeCandidates.documentId)
-          )
-        )
-        .where(
-          and(
-            eq(knowledgeCandidates.organizationId, organizationId),
-            eq(knowledgeCandidates.chunkId, chunkId)
-          )
-        )
-        .limit(1);
-      return row
-        ? candidateFromRow(row.candidate, knowledgeScopeFromRow(row.document))
-        : null;
-    },
+    findByChunkId,
 
     async save(candidate) {
       const [row] = await db
@@ -231,7 +232,7 @@ export function createKnowledgeCandidateRepository(
       if (row) {
         return candidateFromRow(row, candidate.scope);
       }
-      const existing = await this.findByChunkId(
+      const existing = await findByChunkId(
         candidate.scope.organizationId,
         candidate.chunkId
       );
