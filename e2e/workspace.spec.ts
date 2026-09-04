@@ -187,6 +187,17 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(page.getByText("회원을 차단했습니다.")).toBeVisible();
   await expect(page.getByText("차단됨", { exact: true })).toBeVisible();
 
+  await page.route("**/api/auth/sign-out", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ error: "sign out unavailable" }),
+      status: 503
+    })
+  );
+  await page.getByRole("button", { name: "계정 메뉴" }).click();
+  await page.getByRole("menuitem", { name: "로그아웃" }).click();
+  await expect(page.getByText("로그아웃에 실패했습니다.")).toBeVisible();
+
   await memberContext.close();
 });
 

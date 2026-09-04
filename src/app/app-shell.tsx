@@ -33,7 +33,7 @@ import {
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { signOut } from "@/lib/auth-client";
 import type { SessionUser } from "@/lib/session";
@@ -99,6 +99,7 @@ export function AppShellFrame({
   const router = useRouter();
   const pathname = usePathname();
   const [opened, { toggle, close }] = useDisclosure(false);
+  const [signOutError, setSignOutError] = useState<string>();
   const {
     activeOrganization,
     activeOrganizations,
@@ -130,10 +131,16 @@ export function AppShellFrame({
   );
 
   async function handleSignOut() {
+    setSignOutError(undefined);
     try {
-      await signOut();
-    } finally {
+      const result = await signOut();
+      if (result.error) {
+        setSignOutError(t("workspace.signOutFailed"));
+        return;
+      }
       router.refresh();
+    } catch {
+      setSignOutError(t("workspace.signOutFailed"));
     }
   }
 
@@ -335,6 +342,16 @@ export function AppShellFrame({
 
       <AppShell.Main>
         <main className={classes.main} id="main-content">
+          {signOutError ? (
+            <Alert
+              color="red"
+              m={{ base: "md", md: "lg" }}
+              onClose={() => setSignOutError(undefined)}
+              withCloseButton
+            >
+              {signOutError}
+            </Alert>
+          ) : null}
           {accessStatus === "error" ? (
             <Alert
               color="red"
