@@ -30,6 +30,7 @@ import {
   createDocument,
   createDocumentChunk
 } from "@/domain/document/document";
+import { documentProcessingLeaseMilliseconds } from "@/domain/document/document-services";
 import {
   createKnowledgeEdge,
   createKnowledgeNode
@@ -1254,7 +1255,18 @@ describe("PostgreSQL schema", () => {
     if (!claimed) {
       throw new Error("document was not claimed");
     }
-    const reclaimedAt = new Date(createdAt.getTime() + 21 * 60 * 1_000);
+    await expect(
+      repository.claimForProcessing(
+        organization,
+        documentId,
+        new Date(
+          createdAt.getTime() + documentProcessingLeaseMilliseconds - 1
+        )
+      )
+    ).resolves.toBeNull();
+    const reclaimedAt = new Date(
+      createdAt.getTime() + documentProcessingLeaseMilliseconds + 1
+    );
     const reclaimed = await repository.claimForProcessing(
       organization,
       documentId,

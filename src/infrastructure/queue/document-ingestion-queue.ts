@@ -1,10 +1,15 @@
 import { PgBoss } from "pg-boss";
 
-import type { DocumentIngestionQueue } from "@/domain/document/document-services";
+import {
+  documentProcessingLeaseMilliseconds,
+  type DocumentIngestionQueue
+} from "@/domain/document/document-services";
 
 export const documentIngestionQueueName = "document-ingestion";
 export const documentKnowledgeEnrichmentQueueName =
   "document-knowledge-enrichment";
+const documentJobExpirationSeconds =
+  documentProcessingLeaseMilliseconds / 1_000;
 
 export interface DocumentIngestionJob {
   readonly organizationId: string;
@@ -42,14 +47,14 @@ export function createPgBossDocumentIngestionQueue(
         retryLimit: 3,
         retryDelay: 5,
         retryBackoff: true,
-        expireInSeconds: 900,
+        expireInSeconds: documentJobExpirationSeconds,
         deleteAfterSeconds: 604_800
       });
       await boss.createQueue(documentKnowledgeEnrichmentQueueName, {
         retryLimit: 5,
         retryDelay: 15,
         retryBackoff: true,
-        expireInSeconds: 900,
+        expireInSeconds: documentJobExpirationSeconds,
         deleteAfterSeconds: 604_800
       });
       return boss;

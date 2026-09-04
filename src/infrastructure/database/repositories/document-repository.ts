@@ -23,6 +23,7 @@ import type {
   DocumentSearchHit,
   DocumentSearchInput
 } from "@/domain/document/document-repository";
+import { documentProcessingLeaseMilliseconds } from "@/domain/document/document-services";
 
 import type { AgentMemoryDatabase } from "../client";
 import { documentChunks, documents } from "../schema";
@@ -194,7 +195,9 @@ export function createDocumentRepository(
     },
 
     async claimForProcessing(organizationId, documentId, now) {
-      const staleBefore = new Date(now.getTime() - 20 * 60 * 1_000);
+      const staleBefore = new Date(
+        now.getTime() - documentProcessingLeaseMilliseconds
+      );
       const [row] = await db
         .update(documents)
         .set({

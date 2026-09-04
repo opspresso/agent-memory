@@ -1,3 +1,5 @@
+export const documentProcessingLeaseMilliseconds = 15 * 60 * 1_000;
+
 export interface DocumentObjectStorage {
   put(key: string, content: Uint8Array, contentType: string): Promise<void>;
   get(key: string): Promise<Uint8Array>;
