@@ -1,10 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import type { CreateMemoryInput } from "@/application/memory/create-memory";
+import { contextRecallText } from "@/application/context/context-recall";
 import type { ContextSearchResult } from "@/application/context/search-context";
-import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import type { CreateMemoryInput } from "@/application/memory/create-memory";
 import type { DocumentSearchHit } from "@/domain/document/document-repository";
+import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import type {
   KnowledgeNeighborhood,
   KnowledgeNodeSearchHit
@@ -60,6 +61,13 @@ function jsonResult(payload: Readonly<Record<string, unknown>>) {
   };
 }
 
+function textResult(text: string, payload: Readonly<Record<string, unknown>>) {
+  return {
+    content: [{ type: "text" as const, text }],
+    structuredContent: payload
+  };
+}
+
 const searchInputSchema = {
   query: z.string().trim().min(1).max(10_000),
   limit: z.number().int().min(1).max(100).optional()
@@ -83,6 +91,26 @@ export function createAgentMemoryMcpServer(
     async ({ query, limit }) => {
       const result = await operations.searchContext(access, query, limit ?? 10);
       return jsonResult(publicContextSearchResult(result));
+    }
+  );
+
+  server.registerTool(
+    "recall",
+    {
+      title: "Recall relevant agent context",
+      description:
+        "Recall compact, ranked context for inclusion before an agent run.",
+      inputSchema: searchInputSchema,
+      annotations: { readOnlyHint: true, idempotentHint: true }
+    },
+    async ({ query, limit }) => {
+      const result = await operations.searchContext(access, query, limit ?? 10);
+      const remembered = contextRecallText(result);
+      return textResult(remembered, {
+        remembered,
+        count: result.hits.length,
+        ranking: result.ranking
+      });
     }
   );
 

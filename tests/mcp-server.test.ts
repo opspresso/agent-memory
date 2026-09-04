@@ -63,12 +63,35 @@ describe("agent memory MCP server", () => {
     const tools = await client.listTools();
     expect(tools.tools.map((tool) => tool.name)).toEqual([
       "context_search",
+      "recall",
       "memory_search",
       "memory_create",
       "document_search",
       "knowledge_search",
       "knowledge_neighborhood"
     ]);
+  });
+
+  it("returns compact context through the Agent Studio recall contract", async () => {
+    const searchContext = vi.fn().mockResolvedValue({
+      hits: [],
+      counts: { memories: 0, documents: 0, knowledge: 0 },
+      ranking: "rerank"
+    });
+    const client = await connectedClient(operations({ searchContext }));
+
+    const result = await client.callTool({
+      name: "recall",
+      arguments: { query: "incident" }
+    });
+
+    expect(searchContext).toHaveBeenCalledWith(access, "incident", 10);
+    expect(result.content).toEqual([{ type: "text", text: "" }]);
+    expect(result.structuredContent).toEqual({
+      remembered: "",
+      count: 0,
+      ranking: "rerank"
+    });
   });
 
   it("executes search with the authenticated organization access", async () => {
