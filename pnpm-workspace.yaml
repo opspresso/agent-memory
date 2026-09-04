@@ -25,3 +25,4 @@ minimumReleaseAgeExclude:
   - next@16.3.3
 overrides:
   '@esbuild-kit/core-utils>esbuild': 0.25.12
+  qs: 6.16.0
