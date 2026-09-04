@@ -92,6 +92,8 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_MODEL` | 설정 시 ready 문서에서 reviewable graph candidate 생성 |
 | AI provider | `AI_PROVIDER_MAX_CONCURRENCY` | Instance에서 동시에 실행할 embedding·reranker·extraction 요청 수. 기본값 `8` |
 | AI provider | `AI_PROVIDER_REQUESTS_PER_MINUTE` | Instance가 분당 실행할 embedding·reranker·extraction 요청의 합산 상한. 기본값 `120` |
+| AI provider | `AI_ORGANIZATION_REQUESTS_PER_MINUTE` | PostgreSQL에서 공유하는 organization별 분당 AI 요청 상한. 기본값 `120` |
+| AI provider | `AI_USER_REQUESTS_PER_MINUTE` | PostgreSQL에서 공유하는 organization 내 사용자별 분당 AI 요청 상한. 기본값 `30` |
 | Document quota | `DOCUMENT_STORAGE_QUOTA_BYTES` | Organization별 누적 원본 크기 상한. 기본값 1 GiB(`1073741824`) |
 | Document quota | `DOCUMENT_PENDING_QUOTA` | Organization별 `pending`·`processing` 문서 합산 상한. 기본값 `100` |
 | Document quota | `DOCUMENT_UPLOADS_PER_USER_PER_HOUR` | 사용자별 organization 문서 업로드 시간당 상한. 기본값 `100` |
@@ -262,6 +264,8 @@ Worker가 비활성화된 상태에서 upload한 문서는 자동으로 `ready`�
 - Provider가 OpenAI-compatible embeddings API를 지원하는지 확인한다.
 
 Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node 생성 또는 문서 처리와 semantic query를 실패시킬 수 있다. Provider를 사용하지 않을 계획이면 `EMBEDDING_MODEL`을 비워 lexical-only 모드로 실행하라. Reranker 장애는 통합 검색을 실패시키지 않고 권한 필터가 적용된 hybrid 순위로 복귀한다. 반복 fallback은 `context reranking unavailable` log와 provider 상태를 확인하라.
+
+모든 embedding, reranker, extraction, ontology suggestion 호출은 instance-local concurrency·minute limit를 먼저 거친 뒤 PostgreSQL의 organization·user minute bucket을 소비한다. 여러 replica와 background worker가 같은 durable quota를 공유하며 초과 요청은 `429` 또는 queue retry로 처리한다. Bucket은 입력·본문 없이 organization ID와 내부 principal key, minute, count만 저장하고 하루가 지난 row를 후속 요청에서 정리한다.
 
 ### AI 후보가 생성되지 않음
 

@@ -99,7 +99,11 @@ export function buildSuggestKnowledgeOntology(
     const ontology = settings?.ontology ?? emptyKnowledgeOntology;
     const suggested = await dependencies.suggestionService.suggest({
       usage,
-      ontology
+      ontology,
+      quotaKey: {
+        organizationId: access.organizationId,
+        userId: access.userId
+      }
     });
     const normalized = createKnowledgeOntology({
       nodeKinds: suggested.nodeKinds.slice(0, RECOMMENDATION_LIMIT),

@@ -43,7 +43,10 @@ export function buildSearchMemories(dependencies: SearchMemoriesDependencies) {
     const queryEmbedding =
       providedQueryEmbedding ??
       (dependencies.embeddingService
-        ? await dependencies.embeddingService.embed(normalizedQuery)
+        ? await dependencies.embeddingService.embed(normalizedQuery, {
+            organizationId: access.organizationId,
+            userId: access.userId
+          })
         : undefined);
     const hits = await dependencies.repository.search({
       access,

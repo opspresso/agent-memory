@@ -10,6 +10,7 @@ import type {
   DocumentTextExtractor
 } from "@/domain/document/document-services";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
+import type { AiRequestQuotaKey } from "@/domain/shared/ai-request-limiter";
 
 import { chunkDocumentText } from "./chunk-text";
 
@@ -32,13 +33,15 @@ function safeErrorMessage(error: unknown): string {
 
 async function embedDocumentParts(
   embeddingService: TextEmbeddingService,
-  texts: readonly string[]
+  texts: readonly string[],
+  quotaKey: AiRequestQuotaKey
 ) {
   const embeddings = [];
   for (let offset = 0; offset < texts.length; offset += documentEmbeddingBatchSize) {
     embeddings.push(
       ...(await embeddingService.embedMany(
-        texts.slice(offset, offset + documentEmbeddingBatchSize)
+        texts.slice(offset, offset + documentEmbeddingBatchSize),
+        quotaKey
       ))
     );
   }
@@ -79,7 +82,11 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
       const embeddings = dependencies.embeddingService
         ? await embedDocumentParts(
             dependencies.embeddingService,
-            parts.map((part) => part.content)
+            parts.map((part) => part.content),
+            {
+              organizationId,
+              userId: document.createdBy
+            }
           )
         : [];
       if (

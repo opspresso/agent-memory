@@ -321,7 +321,10 @@ export function createKnowledgeExtractionService(
   return {
     extract(input) {
       return configuration.requestLimiter
-        ? configuration.requestLimiter.run(() => extractGraph(input))
+        ? configuration.requestLimiter.run(
+            () => extractGraph(input),
+            input.quotaKey
+          )
         : extractGraph(input);
     }
   };

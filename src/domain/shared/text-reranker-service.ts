@@ -1,7 +1,10 @@
+import type { AiRequestQuotaKey } from "./ai-request-limiter";
+
 export interface TextRerankInput {
   readonly query: string;
   readonly documents: readonly string[];
   readonly signal?: AbortSignal;
+  readonly quotaKey?: AiRequestQuotaKey;
 }
 
 export interface TextRerankerService {

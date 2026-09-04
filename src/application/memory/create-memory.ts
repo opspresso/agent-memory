@@ -60,7 +60,11 @@ export function buildCreateMemory(dependencies: CreateMemoryDependencies) {
     });
     const embedding = dependencies.embeddingService
       ? await dependencies.embeddingService.embed(
-          `${memoryWithoutEmbedding.title}\n${memoryWithoutEmbedding.content}`
+          `${memoryWithoutEmbedding.title}\n${memoryWithoutEmbedding.content}`,
+          {
+            organizationId: input.access.organizationId,
+            userId: input.access.userId
+          }
         )
       : undefined;
     const memory = embedding

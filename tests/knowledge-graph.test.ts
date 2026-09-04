@@ -281,7 +281,10 @@ describe("knowledge graph", () => {
       embedding: { model: "embedding-model", values: [1, 0] }
     });
     expect(result.ontologyWarnings).toEqual([]);
-    expect(embed).toHaveBeenCalledWith("Checkout API\nHandles purchases");
+    expect(embed).toHaveBeenCalledWith("Checkout API\nHandles purchases", {
+      organizationId: access.organizationId,
+      userId: access.userId
+    });
   });
 
   it("returns ontology warnings for an unknown node kind in warn mode", async () => {

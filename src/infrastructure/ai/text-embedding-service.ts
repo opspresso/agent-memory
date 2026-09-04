@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
-import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
+import type {
+  AiRequestLimiter,
+  AiRequestQuotaKey
+} from "@/domain/shared/ai-request-limiter";
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
 
 interface TextEmbeddingServiceConfiguration {
@@ -79,15 +82,21 @@ export function createTextEmbeddingService(
     return ordered.map(({ embedding }) => ({ model, values: embedding }));
   }
 
-  function embedTexts(texts: readonly string[]) {
+  function embedTexts(
+    texts: readonly string[],
+    quotaKey?: AiRequestQuotaKey
+  ) {
     return configuration.requestLimiter
-      ? configuration.requestLimiter.run(() => requestEmbeddings(texts))
+      ? configuration.requestLimiter.run(
+          () => requestEmbeddings(texts),
+          quotaKey
+        )
       : requestEmbeddings(texts);
   }
 
   return {
-    async embed(text) {
-      const [embedding] = await embedTexts([text]);
+    async embed(text, quotaKey) {
+      const [embedding] = await embedTexts([text], quotaKey);
       if (!embedding) {
         throw new SafeOperationalError("embedding response is empty", {
           code: "EMBEDDING_RESPONSE_EMPTY"
@@ -95,8 +104,8 @@ export function createTextEmbeddingService(
       }
       return embedding;
     },
-    async embedMany(texts) {
-      return texts.length === 0 ? [] : embedTexts(texts);
+    async embedMany(texts, quotaKey) {
+      return texts.length === 0 ? [] : embedTexts(texts, quotaKey);
     }
   };
 }

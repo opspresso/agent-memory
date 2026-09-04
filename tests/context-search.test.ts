@@ -115,7 +115,10 @@ describe("unified context search", () => {
     await search(access, " rollback ", 5);
 
     expect(embed).toHaveBeenCalledOnce();
-    expect(embed).toHaveBeenCalledWith("rollback");
+    expect(embed).toHaveBeenCalledWith("rollback", {
+      organizationId: access.organizationId,
+      userId: access.userId
+    });
     expect(configured.searchMemories).toHaveBeenCalledWith(
       access,
       "rollback",
@@ -172,6 +175,10 @@ describe("unified context search", () => {
     expect(result.ranking).toBe("rerank");
     expect(rerank).toHaveBeenCalledWith({
       query: "rollback",
+      quotaKey: {
+        organizationId: access.organizationId,
+        userId: access.userId
+      },
       documents: [
         "Memory decision\nTitle: Rollback decision\nUse the previous release.",
         "Document: Runbook\nChunk 1\nRollback runbook",

@@ -98,7 +98,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 | `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
 | `422` | 조직 온톨로지 검증(strict)에서 미등록 kind·predicate를 거부함. 응답에 `violations` 배열 포함 |
 | `428` | Memory mutation에 유효한 `If-Match`가 없음 |
-| `429` | AI provider 호출 상한 또는 document storage·processing backlog·사용자 upload rate quota를 초과함 |
+| `429` | Instance 또는 PostgreSQL organization·user AI provider 호출 상한, document storage·processing backlog·사용자 upload rate quota를 초과함 |
 | `503` | Health check에서 Database를 사용할 수 없거나, AI 모델 미구성 상태에서 온톨로지 AI 추천을 호출함 |
 
 ## Endpoint

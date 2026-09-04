@@ -120,7 +120,10 @@ export function createTextRerankerService(
       }
       try {
         return await (configuration.requestLimiter
-          ? configuration.requestLimiter.run(() => requestRerank(input))
+          ? configuration.requestLimiter.run(
+              () => requestRerank(input),
+              input.quotaKey
+            )
           : requestRerank(input));
       } catch (error) {
         input.signal?.throwIfAborted();

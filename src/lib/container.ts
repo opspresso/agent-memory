@@ -16,6 +16,10 @@ import {
   createAiRequestLimiter,
   readAiRequestLimits
 } from "@/infrastructure/ai/request-limiter";
+import {
+  createPostgresAiRequestLimiter,
+  readDurableAiRequestLimits
+} from "@/infrastructure/ai/postgres-request-limiter";
 import { createPlainTextExtractor } from "@/infrastructure/document/plain-text-extractor";
 import {
   createS3Client,
@@ -28,11 +32,26 @@ import { createOrganizationAgentTokenUseCases } from "@/application/identity/man
 
 const defaultDatabaseUrl =
   "postgresql://agent_memory:agent_memory@localhost:5433/agent_memory";
-const aiRequestLimiter = createAiRequestLimiter(readAiRequestLimits());
 
 export const database = createDatabase(
   process.env.DATABASE_URL ?? defaultDatabaseUrl
 );
+const localAiRequestLimiter = createAiRequestLimiter(readAiRequestLimits());
+const durableAiRequestLimiter = createPostgresAiRequestLimiter(
+  database.db,
+  readDurableAiRequestLimits()
+);
+const aiRequestLimiter = {
+  run<T>(
+    operation: () => Promise<T>,
+    quotaKey?: Parameters<typeof durableAiRequestLimiter.run>[1]
+  ) {
+    return localAiRequestLimiter.run(
+      () => durableAiRequestLimiter.run(operation, quotaKey),
+      quotaKey
+    );
+  }
+};
 
 export const organizationAccessRepository =
   createOrganizationAccessRepository(database.db);

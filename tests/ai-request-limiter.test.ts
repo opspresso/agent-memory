@@ -6,6 +6,7 @@ import {
   createAiRequestLimiter,
   readAiRequestLimits
 } from "@/infrastructure/ai/request-limiter";
+import { readDurableAiRequestLimits } from "@/infrastructure/ai/postgres-request-limiter";
 import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
 import { aiErrorResponse } from "@/lib/ai-http";
 
@@ -24,6 +25,19 @@ describe("AI provider request limiter", () => {
     expect(() =>
       readAiRequestLimits({ AI_PROVIDER_MAX_CONCURRENCY: "0" })
     ).toThrow("AI_PROVIDER_MAX_CONCURRENCY must be a positive integer");
+    expect(readDurableAiRequestLimits({})).toEqual({
+      maximumOrganizationRequestsPerMinute: 120,
+      maximumUserRequestsPerMinute: 30
+    });
+    expect(
+      readDurableAiRequestLimits({
+        AI_ORGANIZATION_REQUESTS_PER_MINUTE: "20",
+        AI_USER_REQUESTS_PER_MINUTE: "5"
+      })
+    ).toEqual({
+      maximumOrganizationRequestsPerMinute: 20,
+      maximumUserRequestsPerMinute: 5
+    });
   });
 
   it("rejects excess requests until the fixed window resets", async () => {

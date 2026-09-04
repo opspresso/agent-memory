@@ -1,4 +1,5 @@
 import type { ProposedKnowledgeGraph } from "./knowledge-candidate";
+import type { AiRequestQuotaKey } from "../shared/ai-request-limiter";
 
 export interface KnowledgeExtractionResult {
   readonly model: string;
@@ -17,5 +18,6 @@ export interface KnowledgeExtractionService {
     readonly documentTitle: string;
     readonly mimeType: string;
     readonly ontology?: KnowledgeExtractionOntologyHint;
+    readonly quotaKey?: AiRequestQuotaKey;
   }): Promise<KnowledgeExtractionResult>;
 }

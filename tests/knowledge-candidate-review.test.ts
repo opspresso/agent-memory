@@ -222,7 +222,10 @@ describe("knowledge candidate review", () => {
     await review(admin, candidate.id);
 
     expect(embedMany).toHaveBeenCalledOnce();
-    expect(embedMany).toHaveBeenCalledWith(["Memory API\n", "PostgreSQL\n"]);
+    expect(embedMany).toHaveBeenCalledWith(
+      ["Memory API\n", "PostgreSQL\n"],
+      { organizationId: "organization-1", userId: "admin-1" }
+    );
     expect(accept).toHaveBeenCalledWith(
       expect.objectContaining({
         entityPromotions: [

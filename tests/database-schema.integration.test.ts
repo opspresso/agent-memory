@@ -57,6 +57,7 @@ import {
   type DocumentKnowledgeEnrichmentJob,
   type DocumentIngestionJob
 } from "@/infrastructure/queue/document-ingestion-queue";
+import { createPostgresAiRequestLimiter } from "@/infrastructure/ai/postgres-request-limiter";
 
 const organizationA = "00000000-0000-0000-0000-000000000001";
 const organizationB = "00000000-0000-0000-0000-000000000002";
@@ -157,6 +158,43 @@ describe("PostgreSQL schema", () => {
     } finally {
       await queue.stop();
     }
+  });
+
+  it("shares durable AI request quotas across organization principals", async () => {
+    const organizationId = "00000000-0000-0000-0000-000000000029";
+    await pool.query(
+      `INSERT INTO organizations (id, slug, name)
+       VALUES ($1, 'ai-quota', 'AI Quota')`,
+      [organizationId]
+    );
+    let now = Date.parse("2026-09-04T00:00:10.000Z");
+    let operations = 0;
+    const limiter = createPostgresAiRequestLimiter(db, {
+      clock: () => now,
+      maximumOrganizationRequestsPerMinute: 2,
+      maximumUserRequestsPerMinute: 1
+    });
+    const execute = (userId: string) =>
+      limiter.run(
+        async () => {
+          operations += 1;
+          return operations;
+        },
+        { organizationId, userId }
+      );
+
+    await expect(execute("user-a")).resolves.toBe(1);
+    await expect(execute("user-a")).rejects.toMatchObject({
+      retryAfterSeconds: 50
+    });
+    await expect(execute("user-b")).resolves.toBe(2);
+    await expect(execute("user-c")).rejects.toMatchObject({
+      retryAfterSeconds: 50
+    });
+    expect(operations).toBe(2);
+
+    now += 60_000;
+    await expect(execute("user-a")).resolves.toBe(3);
   });
 
   it("creates a Better Auth session backed by UUID tables", async () => {

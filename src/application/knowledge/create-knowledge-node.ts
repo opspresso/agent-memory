@@ -74,7 +74,11 @@ export function buildCreateKnowledgeNode(
 
     const embedding = dependencies.embeddingService
       ? await dependencies.embeddingService.embed(
-          `${input.canonicalName.trim()}\n${input.summary?.trim() ?? ""}`
+          `${input.canonicalName.trim()}\n${input.summary?.trim() ?? ""}`,
+          {
+            organizationId: input.access.organizationId,
+            userId: input.access.userId
+          }
         )
       : undefined;
     const created = createKnowledgeNode({

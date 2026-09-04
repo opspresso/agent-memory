@@ -55,6 +55,10 @@ export function buildGenerateKnowledgeCandidate(
       content: source.chunk.content,
       documentTitle: source.document.title,
       mimeType: source.document.mimeType,
+      quotaKey: {
+        organizationId,
+        userId: source.document.createdBy
+      },
       ...(ontologyHint ? { ontology: ontologyHint } : {})
     });
     const candidate = createKnowledgeCandidate({

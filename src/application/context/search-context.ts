@@ -4,6 +4,7 @@ import type { KnowledgeNodeSearchHit } from "@/domain/knowledge/knowledge-graph-
 import type { MemoryEmbedding } from "@/domain/memory/memory";
 import type { MemorySearchHit } from "@/domain/memory/memory-repository";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
+import type { AiRequestQuotaKey } from "@/domain/shared/ai-request-limiter";
 import {
   TextRerankerUnavailableError,
   type TextRerankerService
@@ -202,6 +203,7 @@ async function rankCandidates(
   query: string,
   candidates: readonly ContextSearchHit[],
   limit: number,
+  quotaKey: AiRequestQuotaKey,
   signal?: AbortSignal
 ): Promise<
   Readonly<{
@@ -217,6 +219,7 @@ async function rankCandidates(
     const scores = await dependencies.rerankerService.rerank({
       query: boundedText(query, maximumRerankQueryCharacters),
       documents: candidates.map(candidateText),
+      quotaKey,
       ...(signal ? { signal } : {})
     });
     if (scores.length !== candidates.length) {
@@ -265,7 +268,10 @@ export function buildSearchContext(dependencies: ContextSearchDependencies) {
       );
     }
     const queryEmbedding = dependencies.embeddingService
-      ? await dependencies.embeddingService.embed(normalizedQuery)
+      ? await dependencies.embeddingService.embed(normalizedQuery, {
+          organizationId: access.organizationId,
+          userId: access.userId
+        })
       : undefined;
     const limits = candidateLimits(
       limit,
@@ -307,6 +313,7 @@ export function buildSearchContext(dependencies: ContextSearchDependencies) {
       normalizedQuery,
       selected,
       limit,
+      { organizationId: access.organizationId, userId: access.userId },
       signal
     );
     return {

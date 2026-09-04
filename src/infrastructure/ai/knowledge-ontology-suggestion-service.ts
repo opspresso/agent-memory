@@ -148,7 +148,10 @@ export function createKnowledgeOntologySuggestionService(
   return {
     suggest(input) {
       return configuration.requestLimiter
-        ? configuration.requestLimiter.run(() => suggestOntology(input))
+        ? configuration.requestLimiter.run(
+            () => suggestOntology(input),
+            input.quotaKey
+          )
         : suggestOntology(input);
     }
   };

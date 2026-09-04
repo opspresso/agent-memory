@@ -194,7 +194,11 @@ describe("knowledge candidate", () => {
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
       documentTitle: document.title,
-      mimeType: document.mimeType
+      mimeType: document.mimeType,
+      quotaKey: {
+        organizationId: "organization-1",
+        userId: document.createdBy
+      }
     });
     expect(candidates.save).toHaveBeenCalledOnce();
   });
@@ -306,6 +310,10 @@ describe("knowledge candidate", () => {
       content: chunk.content,
       documentTitle: document.title,
       mimeType: document.mimeType,
+      quotaKey: {
+        organizationId: "organization-1",
+        userId: document.createdBy
+      },
       ontology: {
         mode: "warn",
         nodeKinds: ["service"],
@@ -357,7 +365,11 @@ describe("knowledge candidate", () => {
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
       documentTitle: document.title,
-      mimeType: document.mimeType
+      mimeType: document.mimeType,
+      quotaKey: {
+        organizationId: "organization-1",
+        userId: document.createdBy
+      }
     });
   });
 

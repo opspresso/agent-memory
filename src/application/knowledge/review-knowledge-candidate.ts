@@ -216,7 +216,11 @@ export function buildAcceptKnowledgeCandidate(
       ? await dependencies.embeddingService.embedMany(
           candidate.graph.entities.map(
             (entity) => `${entity.canonicalName}\n${entity.summary ?? ""}`
-          )
+          ),
+          {
+            organizationId: access.organizationId,
+            userId: access.userId
+          }
         )
       : [];
     if (

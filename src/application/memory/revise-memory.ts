@@ -60,7 +60,11 @@ export function buildReviseMemory(dependencies: ReviseMemoryDependencies) {
     const embedding = contentChanged
       ? dependencies.embeddingService
         ? await dependencies.embeddingService.embed(
-            `${input.title?.trim() ?? existing.title}\n${input.content?.trim() ?? existing.content}`
+            `${input.title?.trim() ?? existing.title}\n${input.content?.trim() ?? existing.content}`,
+            {
+              organizationId: input.access.organizationId,
+              userId: input.access.userId
+            }
           )
         : null
       : undefined;

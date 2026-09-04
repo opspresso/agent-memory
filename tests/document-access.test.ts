@@ -149,7 +149,10 @@ describe("document access", () => {
     await expect(searchDocuments(memberAccess, "  rollback  ", 5)).resolves.toEqual([
       expect.objectContaining({ document: accessible })
     ]);
-    expect(embed).toHaveBeenCalledWith("rollback");
+    expect(embed).toHaveBeenCalledWith("rollback", {
+      organizationId: "organization-1",
+      userId: "user-1"
+    });
     expect(search).toHaveBeenCalledWith(
       expect.objectContaining({
         access: memberAccess,
