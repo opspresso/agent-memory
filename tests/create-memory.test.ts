@@ -163,4 +163,32 @@ describe("create memory", () => {
       ]
     });
   });
+
+  it("prevents organization Agent principals from assigning access grants", async () => {
+    const save = vi.fn<MemoryRepository["save"]>();
+    const create = buildCreateMemory({
+      clock: () => now,
+      generateId: () => "memory-1",
+      repository: repositoryWithSave(save)
+    });
+
+    await expect(
+      create({
+        access: {
+          ...access,
+          role: "admin",
+          principalKind: "organization-agent"
+        },
+        kind: "decision",
+        scope: { kind: "organization", organizationId: "organization-1" },
+        title: "Shared decision",
+        content: "Organization Agents cannot delegate memory management.",
+        source: { type: "agent" },
+        accessGrants: [
+          { principalKind: "user", userId: "user-2", permission: "manage" }
+        ]
+      })
+    ).rejects.toThrow("memory access denied");
+    expect(save).not.toHaveBeenCalled();
+  });
 });
