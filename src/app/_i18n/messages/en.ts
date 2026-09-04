@@ -214,7 +214,7 @@ export const en = {
   "teams.deleted": "The team was deleted.",
   "teams.deleteTitle": "Delete team",
   "teams.deleteBody":
-    "Delete {name}? Team memberships and all team-scoped memories, documents, and knowledge are permanently deleted.",
+    "Delete {name}? Team memberships and team-scoped database records are permanently deleted. Uploaded source objects remain subject to the storage lifecycle.",
   "settings.title": "Organization settings",
   "settings.lede": "Control the organization profile and how new members join.",
   "settings.general": "General",
@@ -232,11 +232,11 @@ export const en = {
   "settings.newOrganization": "Create a new organization",
   "settings.danger": "Danger zone",
   "settings.deleteBody":
-    "Deleting the organization permanently removes its members, teams, memories, documents, and knowledge graph.",
+    "Deleting the organization permanently removes its database records. Uploaded source objects remain subject to the storage lifecycle.",
   "settings.deleteOrganization": "Delete organization",
   "settings.deleteTitle": "Delete organization",
   "settings.deleteConfirmBody":
-    "This permanently deletes {name} and all of its data. This cannot be undone.",
+    "This permanently deletes the database records for {name}. Uploaded source objects remain until storage lifecycle cleanup. This cannot be undone.",
   "settings.deleteConfirmLabel": "Type {slug} to confirm",
   "settings.ontology.title": "Ontology",
   "settings.ontology.body":

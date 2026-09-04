@@ -215,7 +215,7 @@ export const ko: Messages = {
   "teams.deleted": "팀을 삭제했습니다.",
   "teams.deleteTitle": "팀 삭제",
   "teams.deleteBody":
-    "{name} 팀을 삭제할까요? 팀 소속과 team scope의 Memory·문서·Knowledge Graph가 영구히 삭제됩니다.",
+    "{name} 팀을 삭제할까요? 팀 소속과 team scope의 Database record가 영구히 삭제됩니다. 업로드 원본은 storage lifecycle에 따라 별도로 정리됩니다.",
   "settings.title": "조직 설정",
   "settings.lede": "조직 프로필과 신규 회원 가입 정책을 관리합니다.",
   "settings.general": "일반",
@@ -233,11 +233,11 @@ export const ko: Messages = {
   "settings.newOrganization": "새 조직 만들기",
   "settings.danger": "위험 구역",
   "settings.deleteBody":
-    "조직을 삭제하면 회원, 팀, Memory, 문서, Knowledge Graph가 영구히 제거됩니다.",
+    "조직을 삭제하면 Database record가 영구히 제거됩니다. 업로드 원본은 storage lifecycle에 따라 별도로 정리됩니다.",
   "settings.deleteOrganization": "조직 삭제",
   "settings.deleteTitle": "조직 삭제",
   "settings.deleteConfirmBody":
-    "{name} 조직과 모든 데이터가 영구히 삭제됩니다. 되돌릴 수 없습니다.",
+    "{name} 조직의 Database record가 영구히 삭제됩니다. 업로드 원본은 storage lifecycle 정리 전까지 남으며 이 작업은 되돌릴 수 없습니다.",
   "settings.deleteConfirmLabel": "확인을 위해 {slug} 입력",
   "settings.ontology.title": "온톨로지",
   "settings.ontology.body":
