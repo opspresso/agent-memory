@@ -1514,18 +1514,27 @@ describe("PostgreSQL schema", () => {
       ],
       edges: [{ sources: [{ chunkId: chunk.id }], predicate: "follows" }]
     });
-    await expect(
-      candidateRepository.accept({
-        candidateId: candidate.id,
-        organizationId: organization,
-        entityPromotions: [],
-        relationshipIds: [],
-        reviewedAt: createdAt,
-        reviewedBy: user
-      })
-    ).resolves.toMatchObject({
+    const replayedPromotion = await candidateRepository.accept({
+      candidateId: candidate.id,
+      organizationId: organization,
+      entityPromotions: [],
+      relationshipIds: [],
+      reviewedAt: createdAt,
+      reviewedBy: user
+    });
+    expect(replayedPromotion).toMatchObject({
       status: "promoted",
-      candidate: { status: "accepted" }
+      candidate: { status: "accepted" },
+      nodes: [
+        {
+          sources: expect.arrayContaining([
+            { memoryId: graphSourceMemoryId },
+            { chunkId: chunk.id }
+          ])
+        },
+        { sources: [{ chunkId: chunk.id }] }
+      ],
+      edges: [{ sources: [{ chunkId: chunk.id }], predicate: "follows" }]
     });
     await expect(
       candidateRepository.reject({

@@ -1,4 +1,4 @@
-import { and, asc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
@@ -14,7 +14,9 @@ import {
   documents,
   knowledgeCandidates,
   knowledgeEdges,
-  knowledgeEdgeSources
+  knowledgeEdgeSources,
+  knowledgeNodes,
+  knowledgeNodeSources
 } from "../schema";
 import {
   edgeFromRow,
@@ -22,11 +24,112 @@ import {
 } from "./knowledge-graph-repository";
 import {
   knowledgeScopeFromRow,
+  knowledgeNodeFromRow,
+  knowledgeSourceFromRow,
   upsertKnowledgeNode
 } from "./knowledge-node-persistence";
 import { scopedManagePredicate } from "./scope-predicates";
 
 type CandidateRow = typeof knowledgeCandidates.$inferSelect;
+type AgentMemoryTransaction = Parameters<
+  Parameters<AgentMemoryDatabase["transaction"]>[0]
+>[0];
+
+function sourcesByResourceId<
+  T extends { readonly memoryId: string | null; readonly chunkId: string | null }
+>(rows: readonly T[], resourceIdFor: (row: T) => string) {
+  const result = new Map<string, ReturnType<typeof knowledgeSourceFromRow>[]>();
+  for (const row of rows) {
+    const resourceId = resourceIdFor(row);
+    const sources = result.get(resourceId) ?? [];
+    sources.push(knowledgeSourceFromRow(row));
+    result.set(resourceId, sources);
+  }
+  return result;
+}
+
+async function promotedResourcesForChunk(
+  transaction: AgentMemoryTransaction,
+  organizationId: string,
+  chunkId: string
+) {
+  const [nodeRows, edgeRows] = await Promise.all([
+    transaction
+      .select({ node: knowledgeNodes })
+      .from(knowledgeNodeSources)
+      .innerJoin(
+        knowledgeNodes,
+        and(
+          eq(knowledgeNodes.organizationId, knowledgeNodeSources.organizationId),
+          eq(knowledgeNodes.id, knowledgeNodeSources.nodeId)
+        )
+      )
+      .where(
+        and(
+          eq(knowledgeNodeSources.organizationId, organizationId),
+          eq(knowledgeNodeSources.chunkId, chunkId)
+        )
+      )
+      .orderBy(asc(knowledgeNodes.id)),
+    transaction
+      .select({ edge: knowledgeEdges })
+      .from(knowledgeEdgeSources)
+      .innerJoin(
+        knowledgeEdges,
+        and(
+          eq(knowledgeEdges.organizationId, knowledgeEdgeSources.organizationId),
+          eq(knowledgeEdges.id, knowledgeEdgeSources.edgeId)
+        )
+      )
+      .where(
+        and(
+          eq(knowledgeEdgeSources.organizationId, organizationId),
+          eq(knowledgeEdgeSources.chunkId, chunkId)
+        )
+      )
+      .orderBy(asc(knowledgeEdges.id))
+  ]);
+  const [nodeSourceRows, edgeSourceRows] = await Promise.all([
+    nodeRows.length > 0
+      ? transaction
+          .select()
+          .from(knowledgeNodeSources)
+          .where(
+            and(
+              eq(knowledgeNodeSources.organizationId, organizationId),
+              inArray(
+                knowledgeNodeSources.nodeId,
+                nodeRows.map(({ node }) => node.id)
+              )
+            )
+          )
+      : Promise.resolve([]),
+    edgeRows.length > 0
+      ? transaction
+          .select()
+          .from(knowledgeEdgeSources)
+          .where(
+            and(
+              eq(knowledgeEdgeSources.organizationId, organizationId),
+              inArray(
+                knowledgeEdgeSources.edgeId,
+                edgeRows.map(({ edge }) => edge.id)
+              )
+            )
+          )
+      : Promise.resolve([])
+  ]);
+  const nodeSources = sourcesByResourceId(nodeSourceRows, (row) => row.nodeId);
+  const edgeSources = sourcesByResourceId(edgeSourceRows, (row) => row.edgeId);
+  return {
+    nodes: nodeRows.map(({ node }) =>
+      knowledgeNodeFromRow(node, nodeSources.get(node.id) ?? [])
+    ),
+    edges: edgeRows.map(({ edge }) =>
+      edgeFromRow(edge, edgeSources.get(edge.id) ?? [])
+    )
+  };
+}
 
 function candidateFromRow(
   row: CandidateRow,
@@ -198,7 +301,12 @@ export function createKnowledgeCandidateRepository(
         // source-readiness and promotion-completeness checks: callers replay
         // accepted candidates with empty promotion inputs.
         if (candidate.status === "accepted") {
-          return { status: "promoted", candidate, nodes: [], edges: [] } as const;
+          const promoted = await promotedResourcesForChunk(
+            transaction,
+            input.organizationId,
+            candidate.chunkId
+          );
+          return { status: "promoted", candidate, ...promoted } as const;
         }
         if (candidate.status !== "pending") {
           return { status: "already_rejected" } as const;
