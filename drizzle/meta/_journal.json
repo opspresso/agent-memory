@@ -141,6 +141,20 @@
       "when": 1788511467876,
       "tag": "0019_light_sharon_carter",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788513039130,
+      "tag": "0020_purple_zzzax",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788513076279,
+      "tag": "0021_daily_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

@@ -29,6 +29,8 @@ import type { AgentMemoryDatabase } from "../client";
 import {
   documentChunks,
   documents,
+  knowledgeCandidateEdges,
+  knowledgeCandidateNodes,
   knowledgeEdges,
   knowledgeEdgeSources,
   knowledgeNodeMerges,
@@ -422,6 +424,29 @@ export function createKnowledgeGraphRepository(
                 })
                 .onConflictDoNothing();
             }
+            const candidateEdges = await transaction
+              .select({ candidateId: knowledgeCandidateEdges.candidateId })
+              .from(knowledgeCandidateEdges)
+              .where(
+                and(
+                  eq(
+                    knowledgeCandidateEdges.organizationId,
+                    input.organizationId
+                  ),
+                  eq(knowledgeCandidateEdges.edgeId, edge.id)
+                )
+              );
+            for (const candidateEdge of candidateEdges) {
+              await transaction
+                .insert(knowledgeCandidateEdges)
+                .values({
+                  organizationId: input.organizationId,
+                  candidateId: candidateEdge.candidateId,
+                  edgeId: existingEdge.id,
+                  createdAt: input.now
+                })
+                .onConflictDoNothing();
+            }
             await transaction
               .update(knowledgeEdges)
               .set({
@@ -457,6 +482,29 @@ export function createKnowledgeGraphRepository(
           .returning();
         if (!merged) {
           throw new Error("knowledge node merge target disappeared");
+        }
+        const candidateNodes = await transaction
+          .select({ candidateId: knowledgeCandidateNodes.candidateId })
+          .from(knowledgeCandidateNodes)
+          .where(
+            and(
+              eq(
+                knowledgeCandidateNodes.organizationId,
+                input.organizationId
+              ),
+              eq(knowledgeCandidateNodes.nodeId, source.id)
+            )
+          );
+        for (const candidateNode of candidateNodes) {
+          await transaction
+            .insert(knowledgeCandidateNodes)
+            .values({
+              organizationId: input.organizationId,
+              candidateId: candidateNode.candidateId,
+              nodeId: target.id,
+              createdAt: input.now
+            })
+            .onConflictDoNothing();
         }
         await transaction
           .insert(knowledgeNodeMerges)

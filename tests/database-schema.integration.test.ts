@@ -1526,7 +1526,8 @@ describe("PostgreSQL schema", () => {
         now: createdAt
       })
     );
-    await createKnowledgeGraphRepository(db).saveNode(
+    const graphRepository = createKnowledgeGraphRepository(db);
+    await graphRepository.saveNode(
       createKnowledgeNode({
         id: "60000000-0000-0000-0000-000000000060",
         scope: document.scope,
@@ -1573,6 +1574,19 @@ describe("PostgreSQL schema", () => {
       ],
       edges: [{ sources: [{ chunkId: chunk.id }], predicate: "follows" }]
     });
+    if (promotion.status !== "promoted") {
+      throw new Error("knowledge candidate was not promoted");
+    }
+    await graphRepository.saveNode(
+      createKnowledgeNode({
+        id: "60000000-0000-0000-0000-000000000063",
+        scope: document.scope,
+        kind: "role",
+        canonicalName: "Unrelated role",
+        source: { chunkId: chunk.id },
+        now: createdAt
+      })
+    );
     const replayedPromotion = await candidateRepository.accept({
       candidateId: candidate.id,
       organizationId: organization,
@@ -1594,6 +1608,40 @@ describe("PostgreSQL schema", () => {
         { sources: [{ chunkId: chunk.id }] }
       ],
       edges: [{ sources: [{ chunkId: chunk.id }], predicate: "follows" }]
+    });
+    if (replayedPromotion.status !== "promoted") {
+      throw new Error("accepted knowledge candidate was not replayed");
+    }
+    expect(replayedPromotion.nodes.map((node) => node.id)).toEqual(
+      promotion.nodes.map((node) => node.id).toSorted()
+    );
+    expect(replayedPromotion.edges.map((edge) => edge.id)).toEqual(
+      promotion.edges.map((edge) => edge.id).toSorted()
+    );
+    const otherGraphOrganization =
+      "00000000-0000-0000-0000-000000000026";
+    const otherGraphNode = "60000000-0000-0000-0000-000000000026";
+    await pool.query(
+      `INSERT INTO organizations (id, slug, name)
+       VALUES ($1, 'candidate-other', 'Candidate Other')`,
+      [otherGraphOrganization]
+    );
+    await pool.query(
+      `INSERT INTO knowledge_nodes (
+         id, organization_id, scope_kind, kind, canonical_name
+       ) VALUES ($1, $2, 'organization', 'role', 'Cross tenant')`,
+      [otherGraphNode, otherGraphOrganization]
+    );
+    await expect(
+      pool.query(
+        `INSERT INTO knowledge_candidate_nodes (
+           organization_id, candidate_id, node_id
+         ) VALUES ($1, $2, $3)`,
+        [organization, candidate.id, otherGraphNode]
+      )
+    ).rejects.toMatchObject({
+      code: "23503",
+      constraint: "knowledge_candidate_nodes_organization_node_fk"
     });
     await expect(
       candidateRepository.reject({

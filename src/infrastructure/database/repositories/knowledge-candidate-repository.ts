@@ -12,6 +12,8 @@ import {
 import type { AgentMemoryDatabase } from "../client";
 import {
   documents,
+  knowledgeCandidateEdges,
+  knowledgeCandidateNodes,
   knowledgeCandidates,
   knowledgeEdges,
   knowledgeEdgeSources,
@@ -48,43 +50,43 @@ function sourcesByResourceId<
   return result;
 }
 
-async function promotedResourcesForChunk(
+async function promotedResourcesForCandidate(
   transaction: AgentMemoryTransaction,
   organizationId: string,
-  chunkId: string
+  candidateId: string
 ) {
   const [nodeRows, edgeRows] = await Promise.all([
     transaction
       .select({ node: knowledgeNodes })
-      .from(knowledgeNodeSources)
+      .from(knowledgeCandidateNodes)
       .innerJoin(
         knowledgeNodes,
         and(
-          eq(knowledgeNodes.organizationId, knowledgeNodeSources.organizationId),
-          eq(knowledgeNodes.id, knowledgeNodeSources.nodeId)
+          eq(knowledgeNodes.organizationId, knowledgeCandidateNodes.organizationId),
+          eq(knowledgeNodes.id, knowledgeCandidateNodes.nodeId)
         )
       )
       .where(
         and(
-          eq(knowledgeNodeSources.organizationId, organizationId),
-          eq(knowledgeNodeSources.chunkId, chunkId)
+          eq(knowledgeCandidateNodes.organizationId, organizationId),
+          eq(knowledgeCandidateNodes.candidateId, candidateId)
         )
       )
       .orderBy(asc(knowledgeNodes.id)),
     transaction
       .select({ edge: knowledgeEdges })
-      .from(knowledgeEdgeSources)
+      .from(knowledgeCandidateEdges)
       .innerJoin(
         knowledgeEdges,
         and(
-          eq(knowledgeEdges.organizationId, knowledgeEdgeSources.organizationId),
-          eq(knowledgeEdges.id, knowledgeEdgeSources.edgeId)
+          eq(knowledgeEdges.organizationId, knowledgeCandidateEdges.organizationId),
+          eq(knowledgeEdges.id, knowledgeCandidateEdges.edgeId)
         )
       )
       .where(
         and(
-          eq(knowledgeEdgeSources.organizationId, organizationId),
-          eq(knowledgeEdgeSources.chunkId, chunkId)
+          eq(knowledgeCandidateEdges.organizationId, organizationId),
+          eq(knowledgeCandidateEdges.candidateId, candidateId)
         )
       )
       .orderBy(asc(knowledgeEdges.id))
@@ -302,10 +304,10 @@ export function createKnowledgeCandidateRepository(
         // source-readiness and promotion-completeness checks: callers replay
         // accepted candidates with empty promotion inputs.
         if (candidate.status === "accepted") {
-          const promoted = await promotedResourcesForChunk(
+          const promoted = await promotedResourcesForCandidate(
             transaction,
             input.organizationId,
-            candidate.chunkId
+            candidate.id
           );
           return { status: "promoted", candidate, ...promoted } as const;
         }
@@ -342,6 +344,15 @@ export function createKnowledgeCandidateRepository(
             now: input.reviewedAt
           });
           const node = await upsertKnowledgeNode(transaction, proposedNode);
+          await transaction
+            .insert(knowledgeCandidateNodes)
+            .values({
+              organizationId: input.organizationId,
+              candidateId: candidate.id,
+              nodeId: node.id,
+              createdAt: input.reviewedAt
+            })
+            .onConflictDoNothing();
           nodes.push(node);
           nodeIds.set(entity.key, node.id);
         }
@@ -392,6 +403,15 @@ export function createKnowledgeCandidateRepository(
               organizationId: input.organizationId,
               edgeId: row.id,
               chunkId: candidate.chunkId,
+              createdAt: input.reviewedAt
+            })
+            .onConflictDoNothing();
+          await transaction
+            .insert(knowledgeCandidateEdges)
+            .values({
+              organizationId: input.organizationId,
+              candidateId: candidate.id,
+              edgeId: row.id,
               createdAt: input.reviewedAt
             })
             .onConflictDoNothing();

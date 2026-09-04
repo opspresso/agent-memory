@@ -414,7 +414,7 @@ Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity�
 - `GET .../knowledge/candidates/<candidateId>/duplicates`는 후보의 모든 entity를 한 번에 조회하고 entity key별로 같은 canonical name·scope의 읽기 가능한 기존 node를 반환한다. Semantic embedding을 생성하지 않는다.
 - 후보 조회와 승인은 source scope의 `manage` 권한을 따른다. Organization scope는 `admin`·`owner`, team scope는 team `manager` 이상, user scope는 본인만 검토한다.
 - `POST .../accept`와 `POST .../reject` body는 선택형 `{ "reason": string }`을 받으며 reason은 2,000자 이하다.
-- 승인은 node·edge와 reviewer audit을 하나의 transaction으로 저장한다. 이미 거절된 후보를 승인하거나 승인된 후보를 거절하면 `409`를 반환한다. Source 문서가 archive 등으로 `ready`가 아니면 `409` `{ "error": "knowledge candidate source document is not ready" }`를 반환한다. 이미 승인된 후보의 재승인은 멱등하며 기존 승인 결과를 반환한다.
+- 승인은 node·edge, candidate→resource 관계, reviewer audit을 하나의 transaction으로 저장한다. 이미 거절된 후보를 승인하거나 승인된 후보를 거절하면 `409`를 반환한다. Source 문서가 archive 등으로 `ready`가 아니면 `409` `{ "error": "knowledge candidate source document is not ready" }`를 반환한다. 이미 승인된 후보의 재승인은 멱등하며 현재 surviving resource로 해석한 기존 승인 결과를 반환한다.
 
 Pending 후보를 조회하고 승인하는 예시는 다음과 같다.
 
