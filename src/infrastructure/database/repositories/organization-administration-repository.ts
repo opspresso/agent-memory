@@ -25,6 +25,23 @@ async function lockOrganization(
   );
 }
 
+async function hasAnotherActiveOwner(
+  transaction: AgentMemoryTransaction,
+  organizationId: string
+): Promise<boolean> {
+  const [owners] = await transaction
+    .select({ total: count() })
+    .from(organizationMembers)
+    .where(
+      and(
+        eq(organizationMembers.organizationId, organizationId),
+        eq(organizationMembers.role, "owner"),
+        eq(organizationMembers.status, "active")
+      )
+    );
+  return (owners?.total ?? 0) > 1;
+}
+
 export function createOrganizationAdministrationRepository(
   db: AgentMemoryDatabase
 ): OrganizationAdministrationRepository {
@@ -226,17 +243,7 @@ export function createOrganizationAdministrationRepository(
           update.status !== undefined &&
           update.status !== "active";
         if (demotesActiveOwner || deactivatesActiveOwner) {
-          const [owners] = await transaction
-            .select({ total: count() })
-            .from(organizationMembers)
-            .where(
-              and(
-                eq(organizationMembers.organizationId, organizationId),
-                eq(organizationMembers.role, "owner"),
-                eq(organizationMembers.status, "active")
-              )
-            );
-          if (!owners || owners.total <= 1) {
+          if (!(await hasAnotherActiveOwner(transaction, organizationId))) {
             return { status: "owner_immutable" } as const;
           }
         }
@@ -325,17 +332,7 @@ export function createOrganizationAdministrationRepository(
           return { status: "member_not_found" } as const;
         }
         if (existing.role === "owner" && existing.status === "active") {
-          const [owners] = await transaction
-            .select({ total: count() })
-            .from(organizationMembers)
-            .where(
-              and(
-                eq(organizationMembers.organizationId, organizationId),
-                eq(organizationMembers.role, "owner"),
-                eq(organizationMembers.status, "active")
-              )
-            );
-          if (!owners || owners.total <= 1) {
+          if (!(await hasAnotherActiveOwner(transaction, organizationId))) {
             return { status: "owner_immutable" } as const;
           }
         }
