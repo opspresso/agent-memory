@@ -40,6 +40,12 @@ export class MemoryAccessDeniedError extends Error {
 export function buildCreateMemory(dependencies: CreateMemoryDependencies) {
   return async function execute(input: CreateMemoryInput): Promise<Memory> {
     const now = dependencies.clock();
+    if (
+      input.access.principalKind === "organization-agent" &&
+      input.accessGrants !== undefined
+    ) {
+      throw new MemoryAccessDeniedError();
+    }
     const action = input.accessGrants === undefined ? "write" : "manage";
     if (!canAccessScopedResource(input.access, action, input.scope)) {
       throw new MemoryAccessDeniedError();

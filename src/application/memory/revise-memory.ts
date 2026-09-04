@@ -48,6 +48,12 @@ export function buildReviseMemory(dependencies: ReviseMemoryDependencies) {
     if (!existing || existing.status !== "active") {
       throw new MemoryNotFoundError();
     }
+    if (
+      input.access.principalKind === "organization-agent" &&
+      input.accessGrants !== undefined
+    ) {
+      throw new MemoryAccessDeniedError();
+    }
     const action = input.accessGrants === undefined ? "write" : "manage";
     if (!canAccessMemory(input.access, action, existing)) {
       throw new MemoryAccessDeniedError();

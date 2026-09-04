@@ -343,10 +343,13 @@ function TeamManagementView() {
           <Group gap="xs" wrap="wrap">
             {teams.map((team) => (
               <Badge
+                aria-pressed={team.id === selectedTeamId}
+                component="button"
                 key={team.id}
                 onClick={() => setSelectedTeamId(team.id)}
                 size="lg"
                 style={{ cursor: "pointer" }}
+                type="button"
                 variant={team.id === selectedTeamId ? "filled" : "light"}
               >
                 {team.name}

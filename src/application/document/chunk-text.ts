@@ -44,14 +44,15 @@ export function chunkText(
     let end = targetEnd;
     if (targetEnd < text.length) {
       const minimumBreak = start + Math.floor(maxCharacters / 2);
+      const boundaryWindow = text.slice(minimumBreak, targetEnd);
       const candidates = [
-        text.lastIndexOf("\n\n", targetEnd),
-        text.lastIndexOf("\n", targetEnd),
-        text.lastIndexOf(" ", targetEnd)
+        boundaryWindow.lastIndexOf("\n\n"),
+        boundaryWindow.lastIndexOf("\n"),
+        boundaryWindow.lastIndexOf(" ")
       ];
-      const boundary = Math.max(...candidates.filter((value) => value >= minimumBreak));
-      if (boundary >= minimumBreak) {
-        end = boundary;
+      const boundary = Math.max(...candidates);
+      if (boundary >= 0) {
+        end = minimumBreak + boundary;
       }
     }
 
@@ -85,14 +86,27 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
     const sectionEnd = headings[index + 1]?.index ?? normalized.length;
     const heading = match[0].trim();
     const section = normalized.slice(sectionStart, sectionEnd).trimEnd();
-    const sectionChunks = chunkText(section, {
-      maxCharacters: 2_000 - heading.length - 2,
-      overlapCharacters: 200
-    });
+    const headingContextBudget = 2_000 - heading.length - 2;
+    const repeatHeading =
+      headingContextBudget >= 100 && heading.length <= headingContextBudget;
+    const sectionChunks = chunkText(
+      section,
+      repeatHeading
+        ? {
+            maxCharacters: headingContextBudget,
+            overlapCharacters: Math.min(
+              200,
+              Math.floor(headingContextBudget / 10)
+            )
+          }
+        : undefined
+    );
     sectionChunks.forEach((chunk, chunkIndex) => {
       chunks.push({
         content:
-          chunkIndex === 0 ? chunk.content : `${heading}\n\n${chunk.content}`,
+          chunkIndex === 0 || !repeatHeading
+            ? chunk.content
+            : `${heading}\n\n${chunk.content}`,
         start: sectionStart + chunk.start,
         end: sectionStart + chunk.end
       });
@@ -128,6 +142,14 @@ function chunkCsv(input: string): readonly TextChunk[] {
   if (!header) {
     return [];
   }
+  if (
+    header.length > 2_000 ||
+    records
+      .slice(1)
+      .some((record) => header.length + 1 + record.length > 2_000)
+  ) {
+    return chunkText(input);
+  }
   const chunks: TextChunk[] = [];
   let rows: string[] = [];
   let offset = header.length + 1;
@@ -153,24 +175,45 @@ function jsonPathSegment(key: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(key) ? `.${key}` : `[${JSON.stringify(key)}]`;
 }
 
-function flattenJson(value: unknown, path = "$", lines: string[] = []): string[] {
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      lines.push(`${path} = []`);
-    } else {
-      value.forEach((item, index) => flattenJson(item, `${path}[${index}]`, lines));
+function flattenJson(value: unknown): string[] {
+  const lines: string[] = [];
+  const pending: Array<{ readonly path: string; readonly value: unknown }> = [
+    { path: "$", value }
+  ];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) {
+      break;
     }
-  } else if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value);
-    if (entries.length === 0) {
-      lines.push(`${path} = {}`);
+    if (Array.isArray(current.value)) {
+      if (current.value.length === 0) {
+        lines.push(`${current.path} = []`);
+      } else {
+        for (let index = current.value.length - 1; index >= 0; index -= 1) {
+          pending.push({
+            path: `${current.path}[${index}]`,
+            value: current.value[index]
+          });
+        }
+      }
+    } else if (current.value !== null && typeof current.value === "object") {
+      const entries = Object.entries(current.value);
+      if (entries.length === 0) {
+        lines.push(`${current.path} = {}`);
+      } else {
+        for (let index = entries.length - 1; index >= 0; index -= 1) {
+          const entry = entries[index];
+          if (entry) {
+            pending.push({
+              path: `${current.path}${jsonPathSegment(entry[0])}`,
+              value: entry[1]
+            });
+          }
+        }
+      }
     } else {
-      entries.forEach(([key, item]) =>
-        flattenJson(item, `${path}${jsonPathSegment(key)}`, lines)
-      );
+      lines.push(`${current.path} = ${JSON.stringify(current.value)}`);
     }
-  } else {
-    lines.push(`${path} = ${JSON.stringify(value)}`);
   }
   return lines;
 }
@@ -180,29 +223,62 @@ function chunkJson(input: string): readonly TextChunk[] {
   return chunkText(structured);
 }
 
-function activeXmlPath(input: string, offset: number): string | undefined {
+function xmlContexts(
+  input: string,
+  offsets: readonly number[]
+): readonly (string | undefined)[] {
+  const contextPrefix = "XML context: /";
+  const maximumContextCharacters = 99;
   const stack: string[] = [];
-  const prefix = input.slice(0, offset);
-  for (const match of prefix.matchAll(/<\/?([A-Za-z_][\w:.-]*)\b[^>]*>/g)) {
-    const token = match[0];
-    const name = match[1]!;
-    if (token.startsWith("</")) {
-      if (stack.at(-1) === name) {
-        stack.pop();
+  let pathCharacters = 0;
+  const pattern = /<\/?([A-Za-z_][\w:.-]*)\b[^>]*>/g;
+  let match = pattern.exec(input);
+  return offsets.map((offset) => {
+    while (
+      match &&
+      match.index + match[0].length <= offset
+    ) {
+      const token = match[0];
+      const name = match[1];
+      if (name) {
+        if (token.startsWith("</")) {
+          if (stack.at(-1) === name) {
+            pathCharacters -= name.length + (stack.length > 1 ? 1 : 0);
+            stack.pop();
+          }
+        } else if (!token.endsWith("/>")) {
+          pathCharacters += name.length + (stack.length > 0 ? 1 : 0);
+          stack.push(name);
+        }
       }
-    } else if (!token.endsWith("/>")) {
-      stack.push(name);
+      match = pattern.exec(input);
     }
-  }
-  return stack.length > 0 ? `XML context: /${stack.join("/")}` : undefined;
+    return stack.length > 0 &&
+      contextPrefix.length + pathCharacters <= maximumContextCharacters
+      ? `${contextPrefix}${stack.join("/")}`
+      : undefined;
+  });
 }
 
 function chunkXml(input: string): readonly TextChunk[] {
   const normalized = input.replace(/\r\n?/g, "\n").trim();
-  return chunkText(normalized, { maxCharacters: 1_900, overlapCharacters: 200 }).map(
-    (chunk) => {
-      const context = activeXmlPath(normalized, chunk.start);
-      return context ? { ...chunk, content: `${context}\n${chunk.content}` } : chunk;
+  const chunks = chunkText(normalized, {
+    maxCharacters: 1_900,
+    overlapCharacters: 200
+  });
+  const contexts = xmlContexts(
+    normalized,
+    chunks.map((chunk) => chunk.start)
+  );
+  return chunks.map(
+    (chunk, index) => {
+      const context = contexts[index];
+      const contextualContent = context
+        ? `${context}\n${chunk.content}`
+        : chunk.content;
+      return contextualContent.length <= 2_000
+        ? { ...chunk, content: contextualContent }
+        : chunk;
     }
   );
 }

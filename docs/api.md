@@ -20,6 +20,8 @@ Authorization: Bearer <token>
 
 운영 콘솔의 로그인·가입 요청은 `/api/auth/*` Better Auth endpoint를 사용한다. 브라우저의 POST, PATCH, DELETE 요청은 session cookie뿐 아니라 `BETTER_AUTH_URL`에서 파생한 trusted same-origin 조건을 만족해야 한다.
 
+모든 응답은 `Content-Security-Policy: frame-ancestors 'none'`과 `X-Frame-Options: DENY`로 framing을 금지하며, MIME sniffing 방지, 제한된 referrer, camera·microphone·geolocation 비활성화 header를 함께 반환한다.
+
 ### Session Bearer 인증
 
 Password provider가 활성화된 환경에서는 Better Auth email 로그인 응답 header에서 token을 얻을 수 있다.

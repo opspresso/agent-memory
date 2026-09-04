@@ -9,6 +9,7 @@ import {
   readJsonBody,
   versionEtag
 } from "@/lib/memory-http";
+import { memorySourceSchema } from "@/lib/memory-schemas";
 
 describe("memory HTTP concurrency", () => {
   it("serializes and parses strong version ETags", () => {
@@ -30,10 +31,14 @@ describe("memory HTTP concurrency", () => {
     const zero = new Request("https://memory.example.com/api/memory", {
       headers: { "if-match": '"0"' }
     });
+    const unsafe = new Request("https://memory.example.com/api/memory", {
+      headers: { "if-match": '"9007199254740992"' }
+    });
 
     expect(parseIfMatch(weak)).toBeNull();
     expect(parseIfMatch(wildcard)).toBeNull();
     expect(parseIfMatch(zero)).toBeNull();
+    expect(parseIfMatch(unsafe)).toBeNull();
   });
 
   it("returns a 400 result for malformed JSON", async () => {
@@ -91,6 +96,15 @@ describe("memory HTTP concurrency", () => {
     );
 
     expect(result).toEqual({ valid: true, value: { title: "Runbook" } });
+  });
+
+  it("measures source metadata limits in UTF-8 bytes", () => {
+    expect(
+      memorySourceSchema.safeParse({
+        type: "user",
+        metadata: { value: "한".repeat(11_000) }
+      }).success
+    ).toBe(false);
   });
 
   it("omits raw embeddings and ACL principals from public responses", () => {

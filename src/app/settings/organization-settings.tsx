@@ -206,10 +206,20 @@ function OrganizationSettingsView({
           ontology: { nodeKinds, edgePredicates }
         })
       });
-      await responseOk(response, t("organization.requestFailed"));
+      const detail = await responseJson(
+        response,
+        t("organization.requestFailed"),
+        organizationDetailResponseSchema
+      );
+      setOrganization(detail);
+      setName(detail.name);
+      setNewMemberStatus(detail.newMemberStatus ?? "pending");
+      setDefaultTeamId(detail.defaultTeamId ?? null);
+      setOntologyMode(detail.ontologyMode ?? "off");
+      setNodeKinds([...(detail.ontology?.nodeKinds ?? [])]);
+      setEdgePredicates([...(detail.ontology?.edgePredicates ?? [])]);
       setMessage(t("settings.saved"));
       router.refresh();
-      await load();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : t("organization.requestFailed")

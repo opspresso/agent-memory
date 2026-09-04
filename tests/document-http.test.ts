@@ -46,6 +46,14 @@ describe("document HTTP boundary", () => {
     });
     expect(parseMetadata("[]")).toEqual({ valid: false });
     expect(parseMetadata("invalid")).toEqual({ valid: false });
+    expect(
+      documentUploadFieldsSchema.safeParse({
+        scopeKind: "organization",
+        title: "Runbook",
+        mimeType: "text/plain",
+        metadata: { value: "한".repeat(11_000) }
+      }).success
+    ).toBe(false);
   });
 
   it("bounds the actual multipart stream without trusting Content-Length", async () => {

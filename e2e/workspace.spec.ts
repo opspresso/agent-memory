@@ -101,18 +101,23 @@ test("onboards, approves, and manages members through the console", async ({
   await page.getByRole("option", { name: "경고 · 미등록 용어 표시" }).click();
   await page.getByRole("combobox", { name: "Node kind 사전" }).fill("Service");
   await page.keyboard.press("Enter");
+  await page.getByRole("combobox", { name: "Node kind 사전" }).fill("Award");
+  await page.keyboard.press("Enter");
   await page
     .getByRole("combobox", { name: "Edge predicate 사전" })
     .fill("depends_on");
   await page.keyboard.press("Enter");
   await page.getByRole("button", { name: "설정 저장" }).click();
   await expect(page.getByText("설정을 저장했습니다.")).toBeVisible();
+  await expect(page.getByText("recognition", { exact: true })).toBeVisible();
+  await expect(page.getByText("award", { exact: true })).not.toBeVisible();
 
   await page.reload();
   await expect(
     page.getByRole("combobox", { name: "검증 모드" })
   ).toHaveValue("경고 · 미등록 용어 표시");
   await expect(page.getByText("service", { exact: true })).toBeVisible();
+  await expect(page.getByText("recognition", { exact: true })).toBeVisible();
   await expect(page.getByText("depends_on", { exact: true })).toBeVisible();
 
   const memberContext = await browser.newContext();
@@ -143,6 +148,16 @@ test("onboards, approves, and manages members through the console", async ({
   await page.getByRole("button", { name: "승인" }).click();
   await expect(page.getByText("회원을 승인했습니다.")).toBeVisible();
   await expect(page.getByText("E2E Default Team").first()).toBeVisible();
+  await page.goto("/teams");
+  const teamSelector = page.getByRole("button", {
+    name: "E2E Default Team",
+    exact: true
+  });
+  await expect(teamSelector).toHaveAttribute("aria-pressed", "true");
+  await teamSelector.focus();
+  await page.keyboard.press("Space");
+  await page.goto("/members");
+  await expect(page.getByText(memberEmail, { exact: true })).toBeVisible();
 
   await memberPage.goto("/");
   await expect(
@@ -171,6 +186,17 @@ test("onboards, approves, and manages members through the console", async ({
   await page.getByRole("menuitem", { name: "차단" }).click();
   await expect(page.getByText("회원을 차단했습니다.")).toBeVisible();
   await expect(page.getByText("차단됨", { exact: true })).toBeVisible();
+
+  await page.route("**/api/auth/sign-out", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ error: "sign out unavailable" }),
+      status: 503
+    })
+  );
+  await page.getByRole("button", { name: "계정 메뉴" }).click();
+  await page.getByRole("menuitem", { name: "로그아웃" }).click();
+  await expect(page.getByText("로그아웃에 실패했습니다.")).toBeVisible();
 
   await memberContext.close();
 });

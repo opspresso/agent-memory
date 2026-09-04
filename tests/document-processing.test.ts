@@ -102,6 +102,19 @@ describe("document processing", () => {
     expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
   });
 
+  it("chunks Markdown with a heading that exhausts the context budget", () => {
+    for (const headingLength of [1_800, 1_900]) {
+      const chunks = chunkDocumentText(
+        `# ${"h".repeat(headingLength)}\n\n${"body ".repeat(400)}`,
+        "text/markdown"
+      );
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeLessThanOrEqual(3);
+      expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+    }
+  });
+
   it("preserves CSV headers across record-aligned chunks", () => {
     const chunks = chunkDocumentText(
       ["name,url,description", ...Array.from({ length: 100 }, (_, index) =>
@@ -113,6 +126,16 @@ describe("document processing", () => {
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.every((chunk) => chunk.content.startsWith("name,url,description\n")))
       .toBe(true);
+    expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+  });
+
+  it("bounds CSV chunks when one record exceeds the context budget", () => {
+    const chunks = chunkDocumentText(
+      `name,description\nAgent Memory,${"context ".repeat(400)}`,
+      "text/csv"
+    );
+
+    expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
   });
 
@@ -132,6 +155,17 @@ describe("document processing", () => {
     ]);
   });
 
+  it("flattens deeply nested JSON without recursive stack growth", () => {
+    const depth = 20_000;
+    const chunks = chunkDocumentText(
+      `${'{"value":'.repeat(depth)}0${"}".repeat(depth)}`,
+      "application/json"
+    );
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+  });
+
   it("preserves XML ancestor paths across chunks", () => {
     const chunks = chunkDocumentText(
       `<portfolio><product><name>Agent Studio</name><description>${"AI platform ".repeat(220)}</description></product></portfolio>`,
@@ -141,6 +175,33 @@ describe("document processing", () => {
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks[1]?.content).toContain("XML context: /portfolio/product/description");
     expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+  });
+
+  it("updates XML ancestor paths as sequential elements change", () => {
+    const chunks = chunkDocumentText(
+      `<root><first>${"first value ".repeat(220)}</first><second>${"second value ".repeat(220)}</second></root>`,
+      "application/xml"
+    );
+
+    expect(
+      chunks.some((chunk) =>
+        chunk.content.startsWith("XML context: /root/second")
+      )
+    ).toBe(true);
+  });
+
+  it("omits oversized XML context instead of exceeding the chunk limit", () => {
+    const element = "nested".repeat(80);
+    const chunks = chunkDocumentText(
+      `<${element}><${element}><value>${"context ".repeat(400)}</value></${element}></${element}>`,
+      "application/xml"
+    );
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+    expect(
+      chunks.every((chunk) => !chunk.content.startsWith("XML context:"))
+    ).toBe(true);
   });
 
   it("stores source bytes before persisting and enqueuing metadata", async () => {

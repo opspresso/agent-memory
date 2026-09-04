@@ -202,6 +202,36 @@ describe("memory lifecycle", () => {
     );
   });
 
+  it("prevents organization Agent principals from revising access grants", async () => {
+    const existing = memory({
+      scope: { kind: "organization", organizationId: "organization-1" }
+    });
+    const saveRevision = vi.fn<MemoryRepository["saveRevision"]>();
+    const revise = buildReviseMemory({
+      clock: () => later,
+      repository: repository({
+        findById: vi.fn().mockResolvedValue(existing),
+        saveRevision
+      })
+    });
+
+    await expect(
+      revise({
+        access: {
+          ...access,
+          role: "admin",
+          principalKind: "organization-agent"
+        },
+        memoryId: existing.id,
+        expectedVersion: 1,
+        accessGrants: [
+          { principalKind: "user", userId: "user-2", permission: "manage" }
+        ]
+      })
+    ).rejects.toThrow("memory access denied");
+    expect(saveRevision).not.toHaveBeenCalled();
+  });
+
   it("requires manage permission to archive", async () => {
     const existing = memory();
     const saveRevision = vi.fn<MemoryRepository["saveRevision"]>().mockResolvedValue("saved");
