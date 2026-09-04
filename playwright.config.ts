@@ -35,9 +35,12 @@ export default defineConfig({
     // A production server keeps route responses fast and avoids the dev
     // compiler's memory pressure on shared CI runners.
     command:
-      "./node_modules/.bin/next build && ./node_modules/.bin/next start --hostname 127.0.0.1 --port 3110",
+      "./node_modules/.bin/next build && mkdir -p .next-e2e/standalone/.next-e2e/static .next-e2e/standalone/public && cp -R .next-e2e/static/. .next-e2e/standalone/.next-e2e/static/ && cp -R public/. .next-e2e/standalone/public/ && HOSTNAME=127.0.0.1 PORT=3110 node .next-e2e/standalone/server.js",
     env: {
       NEXT_DIST_DIR: ".next-e2e",
+      DATABASE_URL:
+        process.env.DATABASE_URL ??
+        "postgresql://agent_memory:agent_memory@127.0.0.1:5433/agent_memory",
       AUTH_PASSWORD: "true",
       AUTH_PASSWORD_SIGNUP: "true",
       ADMIN_EMAILS: e2eAdminEmails,
