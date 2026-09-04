@@ -1,7 +1,10 @@
 import { DocumentNotFoundError } from "@/application/document/get-document";
 import { DocumentNotRetryableError } from "@/application/document/retry-document";
 import { InvalidDocumentSearchError } from "@/application/document/search-documents";
-import { DocumentAccessDeniedError } from "@/application/document/upload-document";
+import {
+  DocumentAccessDeniedError,
+  DocumentQuotaExceededError
+} from "@/application/document/upload-document";
 import { InvalidDocumentError, type Document } from "@/domain/document/document";
 import type { DocumentSearchHit } from "@/domain/document/document-repository";
 
@@ -71,6 +74,15 @@ export function documentErrorResponse(error: unknown): Response | null {
   }
   if (error instanceof DocumentAccessDeniedError) {
     return Response.json({ error: "Document access denied" }, { status: 403 });
+  }
+  if (error instanceof DocumentQuotaExceededError) {
+    const message =
+      error.reason === "organization_storage_exceeded"
+        ? "Organization document storage quota exceeded"
+        : error.reason === "pending_documents_exceeded"
+          ? "Organization pending document quota exceeded"
+          : "User document upload rate exceeded";
+    return Response.json({ error: message }, { status: 429 });
   }
   if (error instanceof DocumentNotRetryableError) {
     return Response.json({ error: error.message }, { status: 409 });

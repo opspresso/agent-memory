@@ -71,6 +71,7 @@ Memory 검색 결과에서 `Lifecycle`을 선택하면 전체 화면 관리 창�
 
 - 지원 형식: UTF-8 text, Markdown, CSV, JSON, XML
 - 최대 원본 크기: 10 MiB, 추출 결과 최대 512 chunks
+- 기본 quota: organization 누적 원본 1 GiB, 처리 대기·진행 100건, 사용자별 시간당 업로드 100건(운영 환경변수로 조정)
 - title을 생략하면 파일 이름을 사용한다.
 
 처리 흐름은 다음과 같다.

@@ -1463,7 +1463,38 @@ describe("PostgreSQL schema", () => {
       createdBy: user,
       now: createdAt
     });
-    await repository.save(document);
+    const uploadLimits = {
+      maximumOrganizationStorageBytes: 1_024,
+      maximumPendingDocuments: 10,
+      maximumUserUploadsPerHour: 10
+    } as const;
+    await expect(repository.save(document, uploadLimits)).resolves.toBe("saved");
+    const quotaDocument = createDocument({
+      ...document,
+      id: "40000000-0000-0000-0000-000000000106",
+      title: "Quota probe",
+      objectKey: `organizations/${organization}/documents/quota-probe/source`,
+      sizeBytes: 1,
+      now: createdAt
+    });
+    await expect(
+      repository.save(quotaDocument, {
+        ...uploadLimits,
+        maximumOrganizationStorageBytes: document.sizeBytes
+      })
+    ).resolves.toBe("organization_storage_exceeded");
+    await expect(
+      repository.save(quotaDocument, {
+        ...uploadLimits,
+        maximumPendingDocuments: 1
+      })
+    ).resolves.toBe("pending_documents_exceeded");
+    await expect(
+      repository.save(quotaDocument, {
+        ...uploadLimits,
+        maximumUserUploadsPerHour: 1
+      })
+    ).resolves.toBe("user_rate_exceeded");
 
     const claimed = await repository.claimForProcessing(
       organization,

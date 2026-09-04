@@ -98,7 +98,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 | `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
 | `422` | 조직 온톨로지 검증(strict)에서 미등록 kind·predicate를 거부함. 응답에 `violations` 배열 포함 |
 | `428` | Memory mutation에 유효한 `If-Match`가 없음 |
-| `429` | Application instance의 AI provider 호출 상한을 초과함. `Retry-After` header 이후 재시도 |
+| `429` | AI provider 호출 상한 또는 document storage·processing backlog·사용자 upload rate quota를 초과함 |
 | `503` | Health check에서 Database를 사용할 수 없거나, AI 모델 미구성 상태에서 온톨로지 AI 추천을 호출함 |
 
 ## Endpoint
@@ -292,7 +292,7 @@ Revision은 `GET .../versions?limit=<1-100>&before=<version>`으로 역순 조�
 | `sourceUri` | 아니요 | 원본 URI, 최대 2,048자 |
 | `metadata` | 아니요 | JSON object 문자열, 최대 32 KiB |
 
-지원 MIME type은 `text/plain`, `text/markdown`, `text/csv`, `application/json`, `application/xml`, `text/xml`이다. 서버는 `Content-Length`와 실제 request stream을 모두 10 MiB로 제한하고, 추출 결과는 문서당 최대 512개 chunk로 제한한다. Chunk 제한을 넘으면 provider를 호출하지 않고 문서를 `failed`로 전환한다. 업로드는 `202`와 상태 조회용 `Location`을 반환한다. Queue 등록에 실패해도 저장된 document ID와 `failed` 상태를 반환하므로 같은 ID로 retry할 수 있다. 검색은 `GET .../documents?q=<query>&limit=<1-100>`을 사용하고 `ready` 상태의 접근 가능한 chunk만 반환한다. query는 1–10,000자이며 `failed` 문서만 retry할 수 있다.
+지원 MIME type은 `text/plain`, `text/markdown`, `text/csv`, `application/json`, `application/xml`, `text/xml`이다. 서버는 `Content-Length`와 실제 request stream을 모두 10 MiB로 제한하고, 추출 결과는 문서당 최대 512개 chunk로 제한한다. Chunk 제한을 넘으면 provider를 호출하지 않고 문서를 `failed`로 전환한다. 업로드는 organization 누적 storage, `pending`·`processing` backlog, 사용자별 최근 1시간 업로드 quota를 PostgreSQL transaction에서 검사한다. 한도를 넘으면 저장한 원본을 정리하고 `429`를 반환한다. 정상 업로드는 `202`와 상태 조회용 `Location`을 반환한다. Queue 등록에 실패해도 저장된 document ID와 `failed` 상태를 반환하므로 같은 ID로 retry할 수 있다. 검색은 `GET .../documents?q=<query>&limit=<1-100>`을 사용하고 `ready` 상태의 접근 가능한 chunk만 반환한다. query는 1–10,000자이며 `failed` 문서만 retry할 수 있다.
 
 User scope 문서 업로드 예시는 다음과 같다. `curl`이 파일 MIME type을 올바르게 전송하도록 `type`을 명시하라.
 

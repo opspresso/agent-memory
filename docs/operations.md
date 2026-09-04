@@ -92,6 +92,9 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_MODEL` | 설정 시 ready 문서에서 reviewable graph candidate 생성 |
 | AI provider | `AI_PROVIDER_MAX_CONCURRENCY` | Instance에서 동시에 실행할 embedding·reranker·extraction 요청 수. 기본값 `8` |
 | AI provider | `AI_PROVIDER_REQUESTS_PER_MINUTE` | Instance가 분당 실행할 embedding·reranker·extraction 요청의 합산 상한. 기본값 `120` |
+| Document quota | `DOCUMENT_STORAGE_QUOTA_BYTES` | Organization별 누적 원본 크기 상한. 기본값 1 GiB(`1073741824`) |
+| Document quota | `DOCUMENT_PENDING_QUOTA` | Organization별 `pending`·`processing` 문서 합산 상한. 기본값 `100` |
+| Document quota | `DOCUMENT_UPLOADS_PER_USER_PER_HOUR` | 사용자별 organization 문서 업로드 시간당 상한. 기본값 `100` |
 | Object storage | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | S3 호환 endpoint와 bucket |
 | Object storage | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3 credential |
 | Object storage | `S3_FORCE_PATH_STYLE` | MinIO 같은 path-style endpoint 사용 여부 |
@@ -146,6 +149,8 @@ pnpm db:studio
 ## 문서 worker와 object storage
 
 업로드 API는 원본을 S3 호환 storage에 기록한 뒤 pg-boss job을 queue에 넣고 `202`를 반환한다. Worker가 비활성화되어 있으면 문서는 `pending`에 머무른다.
+
+원본을 저장한 뒤 document row를 만드는 transaction이 organization advisory lock 아래에서 누적 storage, `pending`·`processing` backlog, 사용자별 최근 1시간 업로드 수를 함께 검사한다. 한도를 넘으면 row를 만들지 않고 방금 저장한 object를 제거하며 API는 `429`를 반환한다. 여러 application replica가 같은 PostgreSQL quota를 공유한다.
 
 - Worker는 application과 같은 `DATABASE_URL`, S3 설정, embedding·knowledge extraction 설정을 사용해야 한다.
 - 시작 전에 bucket이 존재하는지 확인하라. Compose에서는 `minio-init`이 `agent-memory` bucket을 만든다.

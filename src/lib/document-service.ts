@@ -15,11 +15,13 @@ import {
   documentRepository,
   textEmbeddingService
 } from "./container";
+import { readDocumentUploadLimits } from "./document-upload-limits";
 
 export const uploadDocumentRecord = buildUploadDocument({
   checksum: (content) => createHash("sha256").update(content).digest("hex"),
   clock: () => new Date(),
   generateId: randomUUID,
+  limits: readDocumentUploadLimits(),
   objectStorage: documentObjectStorage,
   queue: documentIngestionQueue,
   repository: documentRepository

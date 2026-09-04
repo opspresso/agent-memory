@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { createDocument } from "@/domain/document/document";
+import { DocumentQuotaExceededError } from "@/application/document/upload-document";
 import {
   boundedFormData,
+  documentErrorResponse,
   DocumentUploadTooLargeError,
   parseMetadata,
   publicDocument
 } from "@/lib/document-http";
 import { documentUploadFieldsSchema } from "@/lib/document-schemas";
+import { readDocumentUploadLimits } from "@/lib/document-upload-limits";
 
 describe("document HTTP boundary", () => {
   it("validates scope-specific upload fields", () => {
@@ -90,5 +93,30 @@ describe("document HTTP boundary", () => {
 
     expect(publicDocument(document)).not.toHaveProperty("objectKey");
     expect(publicDocument(document)).not.toHaveProperty("processingError");
+  });
+
+  it("validates durable upload limits and reports quota failures", async () => {
+    expect(
+      readDocumentUploadLimits({
+        DOCUMENT_STORAGE_QUOTA_BYTES: "2048",
+        DOCUMENT_PENDING_QUOTA: "3",
+        DOCUMENT_UPLOADS_PER_USER_PER_HOUR: "4"
+      })
+    ).toEqual({
+      maximumOrganizationStorageBytes: 2_048,
+      maximumPendingDocuments: 3,
+      maximumUserUploadsPerHour: 4
+    });
+    expect(() =>
+      readDocumentUploadLimits({ DOCUMENT_PENDING_QUOTA: "0" })
+    ).toThrow("DOCUMENT_PENDING_QUOTA must be a positive safe integer");
+
+    const response = documentErrorResponse(
+      new DocumentQuotaExceededError("pending_documents_exceeded")
+    );
+    expect(response?.status).toBe(429);
+    await expect(response?.json()).resolves.toEqual({
+      error: "Organization pending document quota exceeded"
+    });
   });
 });

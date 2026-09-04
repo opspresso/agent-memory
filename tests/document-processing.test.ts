@@ -5,7 +5,10 @@ import {
   chunkText
 } from "@/application/document/chunk-text";
 import { buildProcessDocument } from "@/application/document/process-document";
-import { buildUploadDocument } from "@/application/document/upload-document";
+import {
+  buildUploadDocument,
+  DocumentQuotaExceededError
+} from "@/application/document/upload-document";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { createDocument } from "@/domain/document/document";
 import type { DocumentRepository } from "@/domain/document/document-repository";
@@ -25,10 +28,15 @@ const access: OrganizationAccess = {
   role: "member",
   teams: [{ teamId: "team-1", role: "member" }]
 };
+const uploadLimits = {
+  maximumOrganizationStorageBytes: 1_000_000,
+  maximumPendingDocuments: 10,
+  maximumUserUploadsPerHour: 10
+} as const;
 
 function repository(overrides: Partial<DocumentRepository> = {}): DocumentRepository {
   return {
-    save: vi.fn(),
+    save: vi.fn().mockResolvedValue("saved"),
     findById: vi.fn(),
     findChunkById: vi.fn(),
     listChunksByDocument: vi.fn(),
@@ -137,12 +145,13 @@ describe("document processing", () => {
 
   it("stores source bytes before persisting and enqueuing metadata", async () => {
     const storage = objectStorage();
-    const save = vi.fn<DocumentRepository["save"]>();
+    const save = vi.fn<DocumentRepository["save"]>().mockResolvedValue("saved");
     const queue: DocumentIngestionQueue = { enqueue: vi.fn() };
     const upload = buildUploadDocument({
       checksum: () => "a".repeat(64),
       clock: () => now,
       generateId: () => "document-1",
+      limits: uploadLimits,
       objectStorage: storage,
       queue,
       repository: repository({ save })
@@ -180,6 +189,7 @@ describe("document processing", () => {
       checksum: () => "a".repeat(64),
       clock: () => now,
       generateId: () => "document-1",
+      limits: uploadLimits,
       objectStorage: storage,
       queue: { enqueue: vi.fn() },
       repository: repository({ save })
@@ -206,6 +216,7 @@ describe("document processing", () => {
       checksum: () => "a".repeat(64),
       clock: () => now,
       generateId: () => "document-1",
+      limits: uploadLimits,
       objectStorage: storage,
       queue: { enqueue },
       repository: repository({
@@ -228,6 +239,43 @@ describe("document processing", () => {
     expect(enqueue).not.toHaveBeenCalled();
   });
 
+  it("removes the source object when a durable upload quota is exceeded", async () => {
+    const storage = objectStorage();
+    const enqueue = vi.fn();
+    const upload = buildUploadDocument({
+      checksum: () => "a".repeat(64),
+      clock: () => now,
+      generateId: () => "document-1",
+      limits: uploadLimits,
+      objectStorage: storage,
+      queue: { enqueue },
+      repository: repository({
+        save: vi.fn().mockResolvedValue("organization_storage_exceeded")
+      })
+    });
+
+    await expect(
+      upload({
+        access,
+        scope: {
+          kind: "user",
+          organizationId: "organization-1",
+          userId: "user-1"
+        },
+        title: "Runbook",
+        mimeType: "text/plain",
+        content: new TextEncoder().encode("Rollback safely")
+      })
+    ).rejects.toMatchObject({
+      name: DocumentQuotaExceededError.name,
+      reason: "organization_storage_exceeded"
+    });
+    expect(storage.delete).toHaveBeenCalledWith(
+      "organizations/organization-1/documents/document-1/source"
+    );
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
   it("preserves persistence and cleanup failures together", async () => {
     const persistenceFailure = new Error("database unavailable");
     const cleanupFailure = new Error("object cleanup unavailable");
@@ -235,6 +283,7 @@ describe("document processing", () => {
       checksum: () => "a".repeat(64),
       clock: () => now,
       generateId: () => "document-1",
+      limits: uploadLimits,
       objectStorage: objectStorage({
         delete: vi.fn().mockRejectedValue(cleanupFailure)
       }),
@@ -267,6 +316,7 @@ describe("document processing", () => {
       checksum: () => "a".repeat(64),
       clock: () => now,
       generateId: () => "document-1",
+      limits: uploadLimits,
       objectStorage: objectStorage(),
       queue: {
         enqueue: vi.fn().mockRejectedValue(new Error("queue unavailable"))
@@ -298,6 +348,7 @@ describe("document processing", () => {
       checksum: () => "a".repeat(64),
       clock: () => now,
       generateId: () => "document-1",
+      limits: uploadLimits,
       objectStorage: objectStorage(),
       queue: { enqueue: vi.fn().mockRejectedValue(enqueueFailure) },
       repository: repository({

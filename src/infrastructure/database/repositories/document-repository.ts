@@ -21,7 +21,9 @@ import type {
   DocumentProcessingClaim,
   DocumentRepository,
   DocumentSearchHit,
-  DocumentSearchInput
+  DocumentSearchInput,
+  DocumentUploadLimits,
+  SaveDocumentResult
 } from "@/domain/document/document-repository";
 import { documentProcessingLeaseMilliseconds } from "@/domain/document/document-services";
 
@@ -107,26 +109,78 @@ function scoreExpressions(input: DocumentSearchInput) {
 export function createDocumentRepository(
   db: AgentMemoryDatabase
 ): DocumentRepository {
+  function documentValues(document: Document) {
+    return {
+      id: document.id,
+      organizationId: document.scope.organizationId,
+      scopeKind: document.scope.kind,
+      teamId: document.scope.kind === "team" ? document.scope.teamId : null,
+      userId: document.scope.kind === "user" ? document.scope.userId : null,
+      title: document.title,
+      sourceUri: document.sourceUri ?? null,
+      objectKey: document.objectKey,
+      checksum: document.checksum,
+      mimeType: document.mimeType,
+      sizeBytes: document.sizeBytes,
+      status: document.status,
+      metadata: document.metadata,
+      createdBy: document.createdBy,
+      createdAt: document.createdAt,
+      updatedAt: document.updatedAt
+    };
+  }
+
+  async function saveWithinLimits(
+    document: Document,
+    limits: DocumentUploadLimits
+  ): Promise<SaveDocumentResult> {
+    return db.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${document.scope.organizationId}, 0))`
+      );
+      const oneHourBefore = new Date(document.createdAt.getTime() - 3_600_000);
+      const [usage] = await transaction
+        .select({
+          storageBytes: sql<string>`coalesce(sum(${documents.sizeBytes}), 0)`,
+          pendingDocuments: sql<number>`count(*) filter (
+            where ${documents.status} in ('pending', 'processing')
+          )::int`,
+          recentUserUploads: sql<number>`count(*) filter (
+            where ${documents.createdBy} = ${document.createdBy}
+              and ${documents.createdAt} >= ${oneHourBefore}
+          )::int`
+        })
+        .from(documents)
+        .where(eq(documents.organizationId, document.scope.organizationId));
+      const storageBytes = Number(usage?.storageBytes ?? 0);
+      if (
+        storageBytes + document.sizeBytes >
+        limits.maximumOrganizationStorageBytes
+      ) {
+        return "organization_storage_exceeded";
+      }
+      if (
+        (usage?.pendingDocuments ?? 0) >= limits.maximumPendingDocuments
+      ) {
+        return "pending_documents_exceeded";
+      }
+      if (
+        (usage?.recentUserUploads ?? 0) >= limits.maximumUserUploadsPerHour
+      ) {
+        return "user_rate_exceeded";
+      }
+      await transaction.insert(documents).values(documentValues(document));
+      return "saved";
+    });
+  }
+
   return {
-    async save(document) {
-      await db.insert(documents).values({
-        id: document.id,
-        organizationId: document.scope.organizationId,
-        scopeKind: document.scope.kind,
-        teamId: document.scope.kind === "team" ? document.scope.teamId : null,
-        userId: document.scope.kind === "user" ? document.scope.userId : null,
-        title: document.title,
-        sourceUri: document.sourceUri ?? null,
-        objectKey: document.objectKey,
-        checksum: document.checksum,
-        mimeType: document.mimeType,
-        sizeBytes: document.sizeBytes,
-        status: document.status,
-        metadata: document.metadata,
-        createdBy: document.createdBy,
-        createdAt: document.createdAt,
-        updatedAt: document.updatedAt
-      });
+    async save(document, limits) {
+      if (limits) {
+        return saveWithinLimits(document, limits);
+      }
+      await db.insert(documents).values(documentValues(document));
+      return "saved";
     },
 
     async findById(organizationId, documentId) {

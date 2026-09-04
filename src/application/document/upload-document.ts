@@ -7,7 +7,11 @@ import {
   type Document,
   type DocumentScope
 } from "@/domain/document/document";
-import type { DocumentRepository } from "@/domain/document/document-repository";
+import type {
+  DocumentRepository,
+  DocumentUploadLimits,
+  SaveDocumentResult
+} from "@/domain/document/document-repository";
 import type {
   DocumentIngestionQueue,
   DocumentObjectStorage
@@ -28,6 +32,7 @@ export interface UploadDocumentDependencies {
   readonly clock: () => Date;
   readonly generateId: () => string;
   readonly objectStorage: DocumentObjectStorage;
+  readonly limits: DocumentUploadLimits;
   readonly queue: DocumentIngestionQueue;
   readonly repository: DocumentRepository;
 }
@@ -36,6 +41,13 @@ export class DocumentAccessDeniedError extends Error {
   constructor() {
     super("document access denied");
     this.name = "DocumentAccessDeniedError";
+  }
+}
+
+export class DocumentQuotaExceededError extends Error {
+  constructor(readonly reason: Exclude<SaveDocumentResult, "saved">) {
+    super(reason);
+    this.name = "DocumentQuotaExceededError";
   }
 }
 
@@ -68,7 +80,13 @@ export function buildUploadDocument(dependencies: UploadDocumentDependencies) {
       document.mimeType
     );
     try {
-      await dependencies.repository.save(document);
+      const saved = await dependencies.repository.save(
+        document,
+        dependencies.limits
+      );
+      if (saved !== "saved") {
+        throw new DocumentQuotaExceededError(saved);
+      }
     } catch (error) {
       try {
         await dependencies.objectStorage.delete(document.objectKey);

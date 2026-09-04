@@ -30,8 +30,23 @@ export interface DocumentProcessingClaim {
   readonly leaseId: string;
 }
 
+export interface DocumentUploadLimits {
+  readonly maximumOrganizationStorageBytes: number;
+  readonly maximumPendingDocuments: number;
+  readonly maximumUserUploadsPerHour: number;
+}
+
+export type SaveDocumentResult =
+  | "saved"
+  | "organization_storage_exceeded"
+  | "pending_documents_exceeded"
+  | "user_rate_exceeded";
+
 export interface DocumentRepository {
-  save(document: Document): Promise<void>;
+  save(
+    document: Document,
+    limits?: DocumentUploadLimits
+  ): Promise<SaveDocumentResult>;
   findById(organizationId: string, documentId: string): Promise<Document | null>;
   findChunkById(
     organizationId: string,
