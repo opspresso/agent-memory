@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import { version as appVersion } from "../../package.json";
+
 import { contextRecallText } from "@/application/context/context-recall";
 import type { ContextSearchResult } from "@/application/context/search-context";
 import type { CreateMemoryInput } from "@/application/memory/create-memory";
@@ -77,7 +79,7 @@ export function createAgentMemoryMcpServer(
   access: OrganizationAccess,
   operations: AgentMemoryMcpOperations
 ) {
-  const server = new McpServer({ name: "agent-memory", version: "1.0.0" });
+  const server = new McpServer({ name: "agent-memory", version: appVersion });
 
   server.registerTool(
     "context_search",

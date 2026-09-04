@@ -2,6 +2,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { version as appVersion } from "../package.json";
+
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import {
   createAgentMemoryMcpServer,
@@ -61,6 +63,10 @@ describe("agent memory MCP server", () => {
     const client = await connectedClient(operations());
 
     const tools = await client.listTools();
+    expect(client.getServerVersion()).toMatchObject({
+      name: "agent-memory",
+      version: appVersion
+    });
     expect(tools.tools.map((tool) => tool.name)).toEqual([
       "context_search",
       "recall",
