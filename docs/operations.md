@@ -82,11 +82,16 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Embedding | `EMBEDDING_BASE_URL` | OpenAI-compatible API base URL. OpenRouter는 `https://openrouter.ai/api/v1` 사용 |
 | Embedding | `EMBEDDING_API_KEY` | Embedding provider의 Bearer credential. 인증 없는 local endpoint에서는 생략 가능 |
 | Embedding | `EMBEDDING_MODEL` | 설정 시 Memory, document chunk, Knowledge node embedding과 semantic search 활성화 |
+| Reranker | `RERANKER_BASE_URL` | `/rerank`를 제공하는 OpenRouter 또는 vLLM-compatible API base URL |
+| Reranker | `RERANKER_API_KEY` | Reranker provider의 선택형 Bearer credential |
+| Reranker | `RERANKER_MODEL` | 설정 시 권한 필터된 통합 Context 후보의 2차 정렬 활성화 |
+| Reranker | `RERANKER_TIMEOUT_MS` | Reranker 요청 timeout. 기본값 `5000` |
+| Reranker | `RERANKER_MIN_SCORE` | 선택형 relevance 하한. `0`부터 `1` 사이이며 미설정 시 순위만 적용 |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_BASE_URL` | OpenAI-compatible chat completions API base URL |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_API_KEY` | Extraction provider의 Bearer credential. 인증 없는 local endpoint에서는 생략 가능 |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_MODEL` | 설정 시 ready 문서에서 reviewable graph candidate 생성 |
-| AI provider | `AI_PROVIDER_MAX_CONCURRENCY` | Instance에서 동시에 실행할 embedding·extraction 요청 수. 기본값 `8` |
-| AI provider | `AI_PROVIDER_REQUESTS_PER_MINUTE` | Instance가 분당 실행할 embedding·extraction 요청의 합산 상한. 기본값 `120` |
+| AI provider | `AI_PROVIDER_MAX_CONCURRENCY` | Instance에서 동시에 실행할 embedding·reranker·extraction 요청 수. 기본값 `8` |
+| AI provider | `AI_PROVIDER_REQUESTS_PER_MINUTE` | Instance가 분당 실행할 embedding·reranker·extraction 요청의 합산 상한. 기본값 `120` |
 | Object storage | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | S3 호환 endpoint와 bucket |
 | Object storage | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3 credential |
 | Object storage | `S3_FORCE_PATH_STYLE` | MinIO 같은 path-style endpoint 사용 여부 |
@@ -101,7 +106,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 `NODE_ENV=production`에서는 `DATABASE_URL`, `ADMIN_EMAILS`, `ALLOWED_EMAIL_DOMAINS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`이 필수다. 하나라도 비어 있으면 서버가 시작 시점에 실패한다 — 개발용 기본값으로의 무경고 fallback은 개발 환경에서만 동작한다.
 
-AI provider limit은 embedding과 knowledge extraction이 공유하며 application instance마다 적용된다. Replica를 늘리면 cluster 전체 상한도 instance 수만큼 늘어나므로 provider account 또는 API gateway의 조직별 예산·quota를 함께 설정하라.
+AI provider limit은 embedding, reranker, knowledge extraction이 공유하며 application instance마다 적용된다. Replica를 늘리면 cluster 전체 상한도 instance 수만큼 늘어나므로 provider account 또는 API gateway의 조직별 예산·quota를 함께 설정하라.
 
 다음 설정은 일부만 제공하면 application 시작 시 실패한다.
 
@@ -109,6 +114,9 @@ AI provider limit은 embedding과 knowledge extraction이 공유하며 applicati
 - Google은 `GOOGLE_CLIENT_ID`와 `GOOGLE_CLIENT_SECRET`을 함께 설정한다.
 - OIDC는 `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`을 함께 설정한다.
 - `EMBEDDING_MODEL`에는 `EMBEDDING_BASE_URL`이 필요하다.
+- `RERANKER_BASE_URL`과 `RERANKER_MODEL`은 함께 설정한다.
+- `RERANKER_TIMEOUT_MS`는 1 이상의 정수여야 한다.
+- `RERANKER_MIN_SCORE`는 `0`부터 `1` 사이여야 한다.
 - `KNOWLEDGE_EXTRACTION_MODEL`에는 `KNOWLEDGE_EXTRACTION_BASE_URL`이 필요하다.
 - AI provider limit은 1 이상의 정수여야 한다.
 - `METRICS_BEARER_TOKEN`을 설정하면 32자 이상이어야 한다.
@@ -155,12 +163,16 @@ OpenRouter를 사용하려면 `.env.local`에 다음 값을 설정하라.
 EMBEDDING_BASE_URL=https://openrouter.ai/api/v1
 EMBEDDING_API_KEY=replace-with-openrouter-key
 EMBEDDING_MODEL=openai/text-embedding-3-small
+RERANKER_BASE_URL=https://openrouter.ai/api/v1
+RERANKER_API_KEY=replace-with-openrouter-key
+RERANKER_MODEL=voyageai/rerank-2.5-lite
+RERANKER_TIMEOUT_MS=5000
 KNOWLEDGE_EXTRACTION_BASE_URL=https://openrouter.ai/api/v1
 KNOWLEDGE_EXTRACTION_API_KEY=replace-with-openrouter-key
 KNOWLEDGE_EXTRACTION_MODEL=provider/structured-output-model
 ```
 
-OpenAI-compatible local endpoint를 사용하려면 embedding과 knowledge extraction base URL을 해당 server의 `/v1` base URL로 바꾸고 provider가 요구하는 model ID를 지정하라. 인증이 필요하지 않으면 대응 API key를 비워 둬도 된다. Extraction endpoint는 JSON Schema structured output을 지원해야 한다.
+OpenAI-compatible local endpoint를 사용하려면 embedding, reranker, knowledge extraction base URL을 해당 server의 `/v1` base URL로 바꾸고 provider가 요구하는 model ID를 지정하라. Reranker endpoint는 OpenRouter 또는 vLLM의 `documents`, `query`, `top_n` 요청과 `index`, `relevance_score` 응답 계약을 지원해야 한다. 인증이 필요하지 않으면 대응 API key를 비워 둬도 된다. Extraction endpoint는 JSON Schema structured output을 지원해야 한다.
 
 ## 상태 확인과 관측성
 
@@ -236,7 +248,7 @@ Worker가 비활성화된 상태에서 upload한 문서는 자동으로 `ready`�
 - 저장된 resource와 query가 같은 embedding model을 사용하는지 확인한다.
 - Provider가 OpenAI-compatible embeddings API를 지원하는지 확인한다.
 
-Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node 생성 또는 문서 처리와 semantic query를 실패시킬 수 있다. Provider를 사용하지 않을 계획이면 `EMBEDDING_MODEL`을 비워 lexical-only 모드로 실행하라.
+Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node 생성 또는 문서 처리와 semantic query를 실패시킬 수 있다. Provider를 사용하지 않을 계획이면 `EMBEDDING_MODEL`을 비워 lexical-only 모드로 실행하라. Reranker 장애는 통합 검색을 실패시키지 않고 권한 필터가 적용된 hybrid 순위로 복귀한다. 반복 fallback은 `context reranking unavailable` log와 provider 상태를 확인하라.
 
 ### AI 후보가 생성되지 않음
 
@@ -277,6 +289,7 @@ pnpm verify
 - Google/OIDC callback URL과 `BETTER_AUTH_URL`을 실제 origin에 맞춘다.
 - Migration을 어떤 job 또는 instance가 한 번 적용할지 결정한다.
 - Web과 worker process의 `DATABASE_URL`, S3, AI provider 설정을 일치시킨다.
+- 외부 reranker를 사용하면 권한 필터된 query와 후보 본문이 provider에 전달되므로 조직의 data retention 정책과 맞는지 확인한다.
 - PostgreSQL과 object storage의 백업·복원 절차를 검증한다.
 - `/api/health`와 stdout JSON log 수집을 배포 환경에 연결한다.
-- Token, password, 본문, 검색어, embedding 입력·출력이 log에 포함되지 않는지 확인한다.
+- Token, password, 본문, 검색어, embedding·reranker 입력과 출력이 log에 포함되지 않는지 확인한다.

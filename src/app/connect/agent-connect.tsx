@@ -227,8 +227,8 @@ function AgentConnectionPanels({
             </CopyButton>
           </Group>
           <Text c="dimmed" size="sm">
-            context_search · memory_search · memory_create · document_search ·
-            knowledge_search · knowledge_neighborhood
+            context_search · recall · memory_search · memory_create ·
+            document_search · knowledge_search · knowledge_neighborhood
           </Text>
         </Stack>
       </Paper>

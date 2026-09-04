@@ -39,7 +39,7 @@ Resource scope는 다음과 같이 동작한다.
 - lexical score
 - embedding이 활성화된 경우 vector score
 
-상대 관련도는 현재 결과 집합에서 가장 높은 score를 100%로 정규화한 표시다. 서로 다른 검색 요청의 절대 품질을 비교하는 값으로 사용하지 마라.
+상대 관련도는 현재 결과 집합에서 가장 높은 최종 score를 100%로 정규화한 표시다. Reranker가 설정되면 reranker relevance, 그렇지 않거나 provider fallback이 발생하면 hybrid score를 사용한다. 서로 다른 검색 요청이나 model 사이의 절대 품질을 비교하는 값으로 사용하지 마라.
 
 ## Memory lifecycle
 
@@ -174,10 +174,13 @@ X-User-Email: <user@example.com>
 MCP에서 제공하는 tool은 다음과 같다.
 
 - `context_search`
+- `recall`
 - `memory_search`
 - `memory_create`
 - `document_search`
 - `knowledge_search`
 - `knowledge_neighborhood`
+
+Agent Studio에서 version의 `memoryRecall`을 켜면 실행 전 `recall`을 호출해 관련 Context를 system prompt에 넣는다. 이 응답은 전체 4,000자로 제한되며 reranker가 활성화된 배포에서는 통합 순위를 사용한다. Reranker가 실패해도 권한이 적용된 hybrid 결과로 복귀한다.
 
 재생성은 이전 token을 즉시 무효화하며 폐기하면 연결된 Agent가 더 이상 인증되지 않는다. Hash만 저장된 기존 token은 한 번 재생성해야 `Token 보기`를 사용할 수 있다. Token lifecycle과 MCP client 설정 예시는 [HTTP API와 MCP](api.md#조직-agent-token)를 따른다.

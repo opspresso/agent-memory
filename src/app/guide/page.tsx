@@ -245,6 +245,7 @@ export default async function GuidePage() {
                 <div className={classes.toolList}>
                   {[
                     "context_search",
+                    "recall",
                     "memory_search",
                     "memory_create",
                     "document_search",

@@ -439,7 +439,7 @@ curl \
   "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/context/search"
 ```
 
-응답은 통합 순위의 `hits`, 반환 개수인 `count`, source별 검색 개수인 `counts`를 포함한다.
+응답은 통합 순위의 `hits`, 반환 개수인 `count`, source별 후보 개수인 `counts`, 최종 순위 방식인 `ranking`을 포함한다. `ranking`은 reranker가 성공하면 `rerank`, 미설정이거나 provider fallback이 발생하면 `hybrid`다.
 
 ```json
 {
@@ -449,7 +449,9 @@ curl \
       "memory": { "id": "...", "title": "Checkout rollback policy" },
       "lexicalScore": 0.09,
       "vectorScore": 0.78,
-      "score": 0.44
+      "candidateScore": 0.44,
+      "rerankScore": 0.91,
+      "score": 0.91
     }
   ],
   "count": 1,
@@ -457,11 +459,12 @@ curl \
     "memories": 1,
     "documents": 0,
     "knowledge": 0
-  }
+  },
+  "ranking": "rerank"
 }
 ```
 
-각 hit의 구체적인 payload는 `sourceType`에 따라 `memory`, `document`와 `chunk`, `node` 중 하나를 포함한다. `vectorScore`는 embedding을 사용하지 않을 때 생략될 수 있다.
+각 hit의 구체적인 payload는 `sourceType`에 따라 `memory`, `document`와 `chunk`, `node` 중 하나를 포함한다. `candidateScore`는 1차 hybrid 점수다. Reranker가 성공하면 `rerankScore`와 최종 `score`가 같고, hybrid fallback에서는 `rerankScore`를 생략하고 `score`가 `candidateScore`와 같다. `vectorScore`는 embedding을 사용하지 않을 때 `0`이다.
 
 ## MCP
 
@@ -470,13 +473,14 @@ Streamable HTTP endpoint는 `/api/organizations/:organizationSlug/mcp`다. Bette
 | Tool | 역할 | 주요 입력 |
 | --- | --- | --- |
 | `context_search` | 전체 Context 통합 검색 | `query`, `limit?` |
+| `recall` | Agent 실행 전 prompt에 넣을 compact Context 회상 | `query`, `limit?` |
 | `memory_search` | Memory 검색 | `query`, `limit?` |
 | `memory_create` | Scoped memory 생성 | Memory 생성 입력 |
 | `document_search` | 처리된 문서 chunk 검색 | `query`, `limit?` |
 | `knowledge_search` | Knowledge node 검색 | `query`, `limit?` |
 | `knowledge_neighborhood` | Graph neighborhood 조회 | `nodeId`, `depth?`, `limit?` |
 
-검색 query는 1–10,000자, limit은 1–100이며 기본값은 10이다. `knowledge_neighborhood`의 depth와 limit은 HTTP API와 같은 제한을 사용한다.
+검색 query는 1–10,000자, limit은 1–100이며 기본값은 10이다. `recall`은 통합 Context 검색을 사용하되 결과 하나를 최대 1,200자, 전체 text를 최대 4,000자로 제한하고 `{ remembered, count, ranking }` structured content를 함께 반환한다. `knowledge_neighborhood`의 depth와 limit은 HTTP API와 같은 제한을 사용한다.
 
 MCP client에는 endpoint와 Agent token Bearer header를 함께 설정하라. 실제 설정 형식은 사용하는 client가 지원하는 Streamable HTTP server 형식을 따른다.
 

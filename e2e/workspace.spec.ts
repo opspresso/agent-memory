@@ -14,6 +14,7 @@ test("explains the product workflow in the public guide", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Follow relationships without losing the evidence." })
   ).toBeVisible();
+  await expect(page.getByText("recall", { exact: true })).toBeVisible();
   await expect(page.getByText("knowledge_neighborhood", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Open Console" })).toHaveAttribute(
     "href",
