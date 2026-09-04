@@ -1,7 +1,9 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   foreignKey,
+  ForeignKeyBuilder,
   index,
   jsonb,
   pgEnum,
@@ -11,7 +13,8 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
-  type AnyPgColumn
+  type AnyPgColumn,
+  type PgTableExtraConfigValue
 } from "drizzle-orm/pg-core";
 
 import {
@@ -50,9 +53,7 @@ export const organizations = pgTable(
       .$type<NewMemberStatus>()
       .notNull()
       .default("pending"),
-    defaultTeamId: uuid().references((): AnyPgColumn => teams.id, {
-      onDelete: "set null"
-    }),
+    defaultTeamId: uuid(),
     ontologyMode: knowledgeOntologyMode()
       .$type<KnowledgeOntologyMode>()
       .notNull()
@@ -64,7 +65,21 @@ export const organizations = pgTable(
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
-  (table) => [uniqueIndex("organizations_slug_unique").on(table.slug)]
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex("organizations_slug_unique").on(table.slug),
+    check(
+      "organizations_new_member_status_check",
+      sql`${table.newMemberStatus} IN ('active', 'pending')`
+    ),
+    new ForeignKeyBuilder(() => ({
+      columns: [table.id, table.defaultTeamId],
+      foreignColumns: [
+        teams.organizationId as AnyPgColumn,
+        teams.id as AnyPgColumn
+      ],
+      name: "organizations_default_team_fk"
+    }))
+  ]
 );
 
 export const users = pgTable(
@@ -86,7 +101,7 @@ export const organizationMembers = pgTable(
   {
     organizationId: uuid()
       .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+      .references((): AnyPgColumn => organizations.id, { onDelete: "cascade" }),
     userId: uuid()
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

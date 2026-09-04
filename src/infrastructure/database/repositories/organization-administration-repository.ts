@@ -364,13 +364,24 @@ export function createOrganizationAdministrationRepository(
     },
 
     async deleteTeam(organizationId, teamId) {
-      const deleted = await db
-        .delete(teams)
-        .where(
-          and(eq(teams.organizationId, organizationId), eq(teams.id, teamId))
-        )
-        .returning({ id: teams.id });
-      return deleted.length > 0;
+      return db.transaction(async (transaction) => {
+        await transaction
+          .update(organizations)
+          .set({ defaultTeamId: null })
+          .where(
+            and(
+              eq(organizations.id, organizationId),
+              eq(organizations.defaultTeamId, teamId)
+            )
+          );
+        const deleted = await transaction
+          .delete(teams)
+          .where(
+            and(eq(teams.organizationId, organizationId), eq(teams.id, teamId))
+          )
+          .returning({ id: teams.id });
+        return deleted.length > 0;
+      });
     },
 
     async listTeamMembers(organizationId, teamId) {

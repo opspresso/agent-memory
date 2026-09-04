@@ -806,12 +806,16 @@ describe("PostgreSQL schema", () => {
     const ownerId = "10000000-0000-0000-0000-000000000021";
     const joinerId = "10000000-0000-0000-0000-000000000022";
     const teamId = "20000000-0000-0000-0000-000000000021";
+    const otherOrganizationId = "00000000-0000-0000-0000-000000000023";
+    const otherOwnerId = "10000000-0000-0000-0000-000000000023";
+    const otherTeamId = "20000000-0000-0000-0000-000000000023";
     const createdAt = new Date("2026-08-26T00:00:00.000Z");
     await pool.query(
       `INSERT INTO users (id, email, name)
        VALUES ($1, 'owner-p@example.com', 'Owner P'),
-              ($2, 'joiner-p@example.com', 'Joiner P')`,
-      [ownerId, joinerId]
+              ($2, 'joiner-p@example.com', 'Joiner P'),
+              ($3, 'other-owner-p@example.com', 'Other Owner P')`,
+      [ownerId, joinerId, otherOwnerId]
     );
     const administration = createOrganizationAdministrationRepository(db);
     const access = createOrganizationAccessRepository(db);
@@ -833,6 +837,38 @@ describe("PostgreSQL schema", () => {
         now: createdAt
       })
     );
+    await administration.createOrganization(
+      createOrganization({
+        id: otherOrganizationId,
+        slug: "other-organization-p",
+        name: "Other Organization P",
+        now: createdAt
+      }),
+      otherOwnerId
+    );
+    await administration.createTeam(
+      createTeam({
+        id: otherTeamId,
+        organizationId: otherOrganizationId,
+        slug: "other-team-p",
+        name: "Other Team P",
+        now: createdAt
+      })
+    );
+    await expect(
+      pool.query(
+        `UPDATE organizations SET default_team_id = $1 WHERE id = $2`,
+        [otherTeamId, organizationId]
+      )
+    ).rejects.toMatchObject({ constraint: "organizations_default_team_fk" });
+    await expect(
+      pool.query(
+        `UPDATE organizations SET new_member_status = 'blocked' WHERE id = $1`,
+        [organizationId]
+      )
+    ).rejects.toMatchObject({
+      constraint: "organizations_new_member_status_check"
+    });
     await expect(
       administration.updateOrganizationSettings(organizationId, {
         newMemberStatus: "pending",
@@ -908,6 +944,13 @@ describe("PostgreSQL schema", () => {
     await expect(
       administration.removeOrganizationMember(organizationId, joinerId)
     ).resolves.toEqual({ status: "removed" });
+
+    await expect(administration.deleteTeam(organizationId, teamId)).resolves.toBe(
+      true
+    );
+    await expect(
+      administration.findOrganization(organizationId)
+    ).resolves.toMatchObject({ defaultTeamId: null });
 
     await expect(
       administration.deleteOrganization(organizationId)

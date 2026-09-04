@@ -134,6 +134,13 @@
       "when": 1788510326124,
       "tag": "0018_petite_omega_flight",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788511467876,
+      "tag": "0019_light_sharon_carter",
+      "breakpoints": true
     }
   ]
 }
