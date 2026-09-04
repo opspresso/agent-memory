@@ -37,6 +37,8 @@ function DocumentUploadView() {
   const t = useT();
   const { organizationId, organizationSlug, access } = useOrganization();
   const [teams, setTeams] = useState<readonly TeamSummary[]>([]);
+  const [teamLoadError, setTeamLoadError] = useState(false);
+  const [teamRequestVersion, setTeamRequestVersion] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string>();
   const [documentScopeKind, setDocumentScopeKind] = useState<
@@ -59,9 +61,13 @@ function DocumentUploadView() {
         )
       )
       .then((body) => setTeams(body.teams))
-      .catch(() => undefined);
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setTeamLoadError(true);
+        }
+      });
     return () => controller.abort();
-  }, [organizationSlug, t]);
+  }, [organizationSlug, t, teamRequestVersion]);
 
   const writableTeams = access
     ? teams.filter((team) =>
@@ -74,6 +80,11 @@ function DocumentUploadView() {
     : [];
   const canManageOrganization =
     access?.role === "admin" || access?.role === "owner";
+
+  function reloadTeams() {
+    setTeamLoadError(false);
+    setTeamRequestVersion((current) => current + 1);
+  }
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,6 +138,17 @@ function DocumentUploadView() {
             <Text c="dimmed" size="sm">
               {t("workspace.uploadFormats")}
             </Text>
+            {teamLoadError ? (
+              <Alert color="red" title={t("organization.loadFailed")}>
+                <Button
+                  onClick={reloadTeams}
+                  size="xs"
+                  variant="light"
+                >
+                  {t("organization.refresh")}
+                </Button>
+              </Alert>
+            ) : null}
             <Select
               allowDeselect={false}
               data={[

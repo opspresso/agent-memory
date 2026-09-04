@@ -138,7 +138,7 @@ export const ko: Messages = {
     "운영 Console에서 검색을 시작하거나 Agent에 MCP endpoint를 연결합니다.",
   "guide.next.action": "Console 열기",
   "organization.requestFailed": "요청을 처리하지 못했습니다.",
-  "organization.loadFailed": "관리 정보를 불러오지 못했습니다.",
+  "organization.loadFailed": "조직 정보를 불러오지 못했습니다.",
   "organization.memberSaved": "조직 멤버를 저장했습니다.",
   "organization.teamCreated": "팀을 만들었습니다.",
   "organization.teamMemberSaved": "팀 멤버를 저장했습니다.",

@@ -23,8 +23,18 @@ interface OrganizationContextValue {
   readonly organizationId: string;
   readonly organizationSlug: string;
   readonly access: OrganizationAccess | undefined;
+  readonly accessStatus: "idle" | "loading" | "ready" | "error";
+  readonly reloadAccess: () => void;
   readonly selectOrganization: (organizationId: string) => void;
 }
+
+type OrganizationAccessState =
+  | Readonly<{ organizationId: string; status: "loading" | "error" }>
+  | Readonly<{
+      organizationId: string;
+      status: "ready";
+      value: OrganizationAccess;
+    }>;
 
 const OrganizationContext = createContext<OrganizationContextValue | null>(
   null
@@ -73,10 +83,8 @@ export function OrganizationProvider({
     activeOrganizations.find(
       (organization) => organization.id === organizationId
     )?.slug ?? "";
-  const [accessState, setAccessState] = useState<{
-    readonly organizationId: string;
-    readonly value: OrganizationAccess;
-  }>();
+  const [accessState, setAccessState] = useState<OrganizationAccessState>();
+  const [accessRequestVersion, setAccessRequestVersion] = useState(0);
 
   useEffect(() => {
     if (!organizationId || !organizationSlug) {
@@ -88,7 +96,7 @@ export function OrganizationProvider({
     })
       .then(async (response) => {
         if (!response.ok) {
-          return;
+          throw new Error("organization access request failed");
         }
         const body = (await response.json()) as {
           organizationId: string;
@@ -96,8 +104,12 @@ export function OrganizationProvider({
           teams: OrganizationAccess["teams"];
           user: { id: string };
         };
+        if (body.organizationId !== organizationId) {
+          throw new Error("organization access response does not match request");
+        }
         setAccessState({
           organizationId: body.organizationId,
+          status: "ready",
           value: {
             organizationId: body.organizationId,
             userId: body.user.id,
@@ -106,14 +118,33 @@ export function OrganizationProvider({
           }
         });
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setAccessState({ organizationId, status: "error" });
+      });
     return () => controller.abort();
-  }, [organizationId, organizationSlug]);
+  }, [accessRequestVersion, organizationId, organizationSlug]);
 
   const access =
-    accessState?.organizationId === organizationId
+    accessState?.organizationId === organizationId &&
+    accessState.status === "ready"
       ? accessState.value
       : undefined;
+  const accessStatus =
+    !organizationId || !organizationSlug
+      ? "idle"
+      : accessState?.organizationId === organizationId
+        ? accessState.status
+        : "loading";
+
+  const reloadAccess = useCallback(() => {
+    if (organizationId) {
+      setAccessState({ organizationId, status: "loading" });
+    }
+    setAccessRequestVersion((current) => current + 1);
+  }, [organizationId]);
 
   const selectOrganization = useCallback(
     (nextOrganizationId: string) => {
@@ -147,14 +178,18 @@ export function OrganizationProvider({
       organizationId,
       organizationSlug,
       access,
+      accessStatus,
+      reloadAccess,
       selectOrganization
     }),
     [
       access,
+      accessStatus,
       activeOrganizations,
       organizationId,
       organizationSlug,
       organizations,
+      reloadAccess,
       selectOrganization
     ]
   );

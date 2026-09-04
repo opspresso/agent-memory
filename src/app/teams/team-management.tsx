@@ -64,6 +64,7 @@ function TeamManagementView() {
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
+  const [teamMembersError, setTeamMembersError] = useState<string>();
   const [renameTarget, setRenameTarget] = useState<TeamView>();
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<TeamView>();
@@ -108,6 +109,8 @@ function TeamManagementView() {
 
   const loadTeamMembers = useCallback(async () => {
     if (!organizationSlug || !selectedTeamId) {
+      setTeamMembers([]);
+      setTeamMembersError(undefined);
       return;
     }
     try {
@@ -120,8 +123,12 @@ function TeamManagementView() {
         )
       );
       setTeamMembers(body.members);
-    } catch {
+      setTeamMembersError(undefined);
+    } catch (caught) {
       setTeamMembers([]);
+      setTeamMembersError(
+        caught instanceof Error ? caught.message : t("organization.loadFailed")
+      );
     }
   }, [organizationSlug, selectedTeamId, t]);
 
@@ -136,7 +143,8 @@ function TeamManagementView() {
   function refresh() {
     setLoading(true);
     setError(undefined);
-    void loadTeams();
+    setTeamMembersError(undefined);
+    void Promise.all([loadTeams(), loadTeamMembers()]);
   }
 
   async function runMutation(execute: () => Promise<void>, success: string) {
@@ -294,6 +302,9 @@ function TeamManagementView() {
         </Button>
       </Group>
       {error ? <Alert color="red">{error}</Alert> : null}
+      {teamMembersError ? (
+        <Alert color="red">{teamMembersError}</Alert>
+      ) : null}
       {message ? <Alert color="teal">{message}</Alert> : null}
 
       {canManageOrganization ? (

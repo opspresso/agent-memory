@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Alert,
   AppShell,
   Avatar,
   Badge,
@@ -103,6 +104,8 @@ export function AppShellFrame({
     activeOrganizations,
     organizationId,
     access,
+    accessStatus,
+    reloadAccess,
     selectOrganization
   } = useOrganization();
 
@@ -332,6 +335,17 @@ export function AppShellFrame({
 
       <AppShell.Main>
         <main className={classes.main} id="main-content">
+          {accessStatus === "error" ? (
+            <Alert
+              color="red"
+              m={{ base: "md", md: "lg" }}
+              title={t("organization.loadFailed")}
+            >
+              <Button onClick={reloadAccess} size="xs" variant="light">
+                {t("organization.refresh")}
+              </Button>
+            </Alert>
+          ) : null}
           {children}
         </main>
       </AppShell.Main>

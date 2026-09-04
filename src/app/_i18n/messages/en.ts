@@ -136,7 +136,7 @@ export const en = {
     "Start a search in the Console or connect an Agent to the MCP endpoint.",
   "guide.next.action": "Open Console",
   "organization.requestFailed": "The request could not be completed.",
-  "organization.loadFailed": "Organization settings could not be loaded.",
+  "organization.loadFailed": "Organization data could not be loaded.",
   "organization.memberSaved": "Organization member saved.",
   "organization.teamCreated": "Team created.",
   "organization.teamMemberSaved": "Team member saved.",
