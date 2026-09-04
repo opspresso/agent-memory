@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
       postgres:
@@ -41,11 +41,6 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - name: Reuse persistent Next.js build cache
-        run: |
-          cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/github-actions/${GITHUB_REPOSITORY}/next"
-          mkdir -p "$cache_dir" .next
-          ln -s "$cache_dir" .next/cache
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm db:migrate
