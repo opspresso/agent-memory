@@ -42,6 +42,28 @@ async function hasAnotherActiveOwner(
   return (owners?.total ?? 0) > 1;
 }
 
+async function addMemberToDefaultTeam(
+  transaction: AgentMemoryTransaction,
+  organizationId: string,
+  userId: string,
+  defaultTeamId: string | null
+): Promise<void> {
+  if (!defaultTeamId) {
+    return;
+  }
+  await transaction
+    .insert(teamMembers)
+    .values({
+      organizationId,
+      teamId: defaultTeamId,
+      userId,
+      role: "member"
+    })
+    .onConflictDoNothing({
+      target: [teamMembers.teamId, teamMembers.userId]
+    });
+}
+
 export function createOrganizationAdministrationRepository(
   db: AgentMemoryDatabase
 ): OrganizationAdministrationRepository {
@@ -175,6 +197,7 @@ export function createOrganizationAdministrationRepository(
 
     async addOrganizationMember(organizationId, email, role) {
       return db.transaction(async (transaction) => {
+        await lockOrganization(transaction, organizationId);
         const [user] = await transaction
           .select({ id: users.id, email: users.email, name: users.name })
           .from(users)
@@ -202,6 +225,17 @@ export function createOrganizationAdministrationRepository(
         if (!saved) {
           return { status: "already_member" } as const;
         }
+        const [organization] = await transaction
+          .select({ defaultTeamId: organizations.defaultTeamId })
+          .from(organizations)
+          .where(eq(organizations.id, organizationId))
+          .limit(1);
+        await addMemberToDefaultTeam(
+          transaction,
+          organizationId,
+          user.id,
+          organization?.defaultTeamId ?? null
+        );
         return {
           status: "added",
           member: {
@@ -278,17 +312,12 @@ export function createOrganizationAdministrationRepository(
             .where(eq(organizations.id, organizationId))
             .limit(1);
           if (organization?.defaultTeamId) {
-            await transaction
-              .insert(teamMembers)
-              .values({
-                organizationId,
-                teamId: organization.defaultTeamId,
-                userId,
-                role: "member"
-              })
-              .onConflictDoNothing({
-                target: [teamMembers.teamId, teamMembers.userId]
-              });
+            await addMemberToDefaultTeam(
+              transaction,
+              organizationId,
+              userId,
+              organization.defaultTeamId
+            );
           }
         }
 
@@ -603,17 +632,12 @@ export function createOrganizationAdministrationRepository(
           throw new Error("organization membership join claim was lost");
         }
         if (saved.status === "active" && organization.defaultTeamId) {
-          await transaction
-            .insert(teamMembers)
-            .values({
-              organizationId: organization.id,
-              teamId: organization.defaultTeamId,
-              userId,
-              role: "member"
-            })
-            .onConflictDoNothing({
-              target: [teamMembers.teamId, teamMembers.userId]
-            });
+          await addMemberToDefaultTeam(
+            transaction,
+            organization.id,
+            userId,
+            organization.defaultTeamId
+          );
         }
         return {
           status: "joined",

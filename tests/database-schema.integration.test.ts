@@ -854,6 +854,7 @@ describe("PostgreSQL schema", () => {
     const organizationId = "00000000-0000-0000-0000-000000000021";
     const ownerId = "10000000-0000-0000-0000-000000000021";
     const joinerId = "10000000-0000-0000-0000-000000000022";
+    const addedMemberId = "10000000-0000-0000-0000-000000000024";
     const teamId = "20000000-0000-0000-0000-000000000021";
     const otherOrganizationId = "00000000-0000-0000-0000-000000000023";
     const otherOwnerId = "10000000-0000-0000-0000-000000000023";
@@ -863,8 +864,9 @@ describe("PostgreSQL schema", () => {
       `INSERT INTO users (id, email, name)
        VALUES ($1, 'owner-p@example.com', 'Owner P'),
               ($2, 'joiner-p@example.com', 'Joiner P'),
-              ($3, 'other-owner-p@example.com', 'Other Owner P')`,
-      [ownerId, joinerId, otherOwnerId]
+              ($3, 'other-owner-p@example.com', 'Other Owner P'),
+              ($4, 'added-member-p@example.com', 'Added Member P')`,
+      [ownerId, joinerId, otherOwnerId, addedMemberId]
     );
     const administration = createOrganizationAdministrationRepository(db);
     const access = createOrganizationAccessRepository(db);
@@ -930,6 +932,20 @@ describe("PostgreSQL schema", () => {
     ).resolves.toMatchObject({
       status: "updated",
       organization: { newMemberStatus: "pending", defaultTeamId: teamId }
+    });
+
+    await expect(
+      administration.addOrganizationMember(
+        organizationId,
+        "added-member-p@example.com",
+        "member"
+      )
+    ).resolves.toMatchObject({ status: "added" });
+    await expect(
+      access.findByUser(organizationId, addedMemberId)
+    ).resolves.toMatchObject({
+      role: "member",
+      teams: [{ teamId, role: "member" }]
     });
 
     await expect(
