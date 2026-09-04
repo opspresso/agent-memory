@@ -48,11 +48,6 @@ export interface KnowledgeCandidate {
   readonly updatedAt: Date;
 }
 
-export type KnowledgeCandidateReviewStatus = Exclude<
-  KnowledgeCandidateStatus,
-  "pending"
->;
-
 interface NewKnowledgeCandidate {
   readonly id: string;
   readonly scope: ScopedResource;

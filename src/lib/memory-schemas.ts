@@ -13,7 +13,6 @@ const metadataSchema = z
     "source metadata must not exceed 32 KiB"
   );
 
-export const organizationIdSchema = z.uuid();
 export const memoryIdSchema = z.uuid();
 
 export const memorySourceSchema = z.object({
