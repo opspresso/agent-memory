@@ -175,24 +175,45 @@ function jsonPathSegment(key: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(key) ? `.${key}` : `[${JSON.stringify(key)}]`;
 }
 
-function flattenJson(value: unknown, path = "$", lines: string[] = []): string[] {
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      lines.push(`${path} = []`);
-    } else {
-      value.forEach((item, index) => flattenJson(item, `${path}[${index}]`, lines));
+function flattenJson(value: unknown): string[] {
+  const lines: string[] = [];
+  const pending: Array<{ readonly path: string; readonly value: unknown }> = [
+    { path: "$", value }
+  ];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) {
+      break;
     }
-  } else if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value);
-    if (entries.length === 0) {
-      lines.push(`${path} = {}`);
+    if (Array.isArray(current.value)) {
+      if (current.value.length === 0) {
+        lines.push(`${current.path} = []`);
+      } else {
+        for (let index = current.value.length - 1; index >= 0; index -= 1) {
+          pending.push({
+            path: `${current.path}[${index}]`,
+            value: current.value[index]
+          });
+        }
+      }
+    } else if (current.value !== null && typeof current.value === "object") {
+      const entries = Object.entries(current.value);
+      if (entries.length === 0) {
+        lines.push(`${current.path} = {}`);
+      } else {
+        for (let index = entries.length - 1; index >= 0; index -= 1) {
+          const entry = entries[index];
+          if (entry) {
+            pending.push({
+              path: `${current.path}${jsonPathSegment(entry[0])}`,
+              value: entry[1]
+            });
+          }
+        }
+      }
     } else {
-      entries.forEach(([key, item]) =>
-        flattenJson(item, `${path}${jsonPathSegment(key)}`, lines)
-      );
+      lines.push(`${current.path} = ${JSON.stringify(current.value)}`);
     }
-  } else {
-    lines.push(`${path} = ${JSON.stringify(value)}`);
   }
   return lines;
 }
@@ -206,7 +227,10 @@ function xmlContexts(
   input: string,
   offsets: readonly number[]
 ): readonly (string | undefined)[] {
+  const contextPrefix = "XML context: /";
+  const maximumContextCharacters = 99;
   const stack: string[] = [];
+  let pathCharacters = 0;
   const pattern = /<\/?([A-Za-z_][\w:.-]*)\b[^>]*>/g;
   let match = pattern.exec(input);
   return offsets.map((offset) => {
@@ -219,15 +243,20 @@ function xmlContexts(
       if (name) {
         if (token.startsWith("</")) {
           if (stack.at(-1) === name) {
+            pathCharacters -= name.length + (stack.length > 1 ? 1 : 0);
             stack.pop();
           }
         } else if (!token.endsWith("/>")) {
+          pathCharacters += name.length + (stack.length > 0 ? 1 : 0);
           stack.push(name);
         }
       }
       match = pattern.exec(input);
     }
-    return stack.length > 0 ? `XML context: /${stack.join("/")}` : undefined;
+    return stack.length > 0 &&
+      contextPrefix.length + pathCharacters <= maximumContextCharacters
+      ? `${contextPrefix}${stack.join("/")}`
+      : undefined;
   });
 }
 

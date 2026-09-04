@@ -155,6 +155,17 @@ describe("document processing", () => {
     ]);
   });
 
+  it("flattens deeply nested JSON without recursive stack growth", () => {
+    const depth = 20_000;
+    const chunks = chunkDocumentText(
+      `${'{"value":'.repeat(depth)}0${"}".repeat(depth)}`,
+      "application/json"
+    );
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+  });
+
   it("preserves XML ancestor paths across chunks", () => {
     const chunks = chunkDocumentText(
       `<portfolio><product><name>Agent Studio</name><description>${"AI platform ".repeat(220)}</description></product></portfolio>`,
@@ -188,6 +199,9 @@ describe("document processing", () => {
 
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+    expect(
+      chunks.every((chunk) => !chunk.content.startsWith("XML context:"))
+    ).toBe(true);
   });
 
   it("stores source bytes before persisting and enqueuing metadata", async () => {
