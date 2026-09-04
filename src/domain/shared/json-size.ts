@@ -1,8 +1,12 @@
 const textEncoder = new TextEncoder();
 
 export function serializedJsonByteLength(value: unknown): number {
-  const serialized = JSON.stringify(value);
-  return serialized === undefined
-    ? 0
-    : textEncoder.encode(serialized).byteLength;
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized === undefined
+      ? Number.POSITIVE_INFINITY
+      : textEncoder.encode(serialized).byteLength;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
 }
