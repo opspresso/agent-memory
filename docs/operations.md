@@ -71,9 +71,9 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Startup | `MIGRATE_ON_START` | Node.js runtime 시작 시 migration 실행 |
 | Worker | `DOCUMENT_WORKER_ENABLED` | 같은 process에서 pg-boss document worker 시작 |
 | Auth | `BETTER_AUTH_SECRET` | Better Auth secret, 32자 이상. 조직 Agent token 암호화 key도 HKDF로 파생하므로 값을 변경하면 기존 token을 reveal할 수 없음 |
-| Auth | `BETTER_AUTH_URL` | Application base URL과 trusted origin |
+| Auth | `BETTER_AUTH_URL` | Application base URL과 trusted origin. Public production origin은 HTTPS 필수 |
 | Auth | `AUTH_PASSWORD` | Email/password 로그인 활성화 |
-| Auth | `AUTH_PASSWORD_SIGNUP` | Self-signup 활성화. `AUTH_PASSWORD=true`가 함께 필요 |
+| Auth | `AUTH_PASSWORD_SIGNUP` | Self-signup 활성화. `AUTH_PASSWORD=true`가 함께 필요하며 loopback 이외의 production에서는 허용하지 않음 |
 | Auth | `ALLOWED_EMAIL_DOMAINS` | 로그인 허용 email domain의 comma-separated 목록. 기본값 `nalbam.com` |
 | Auth | `ADMIN_EMAILS` | 첫 조직을 만들 수 있는 email의 comma-separated 목록. 기본값 `me@nalbam.com` |
 | Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google provider. 두 값을 함께 설정 |
@@ -104,13 +104,14 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 `ALLOWED_EMAIL_DOMAINS`는 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. 명시적으로 빈 값으로 설정하면 모든 domain을 허용한다. `ADMIN_EMAILS`는 조직 bootstrap 권한만 제어하고 기존 조직의 tenant role을 우회하지 않는다. 빈 값으로 설정하면 누구도 새 조직을 만들 수 없다.
 
-`NODE_ENV=production`에서는 `DATABASE_URL`, `ADMIN_EMAILS`, `ALLOWED_EMAIL_DOMAINS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`이 필수다. 하나라도 비어 있으면 서버가 시작 시점에 실패한다 — 개발용 기본값으로의 무경고 fallback은 개발 환경에서만 동작한다.
+`NODE_ENV=production`에서는 `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `ALLOWED_EMAIL_DOMAINS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`이 필수다. `BETTER_AUTH_SECRET`은 32자 이상이어야 하고 public `BETTER_AUTH_URL`은 HTTPS를 사용해야 한다. 하나라도 유효하지 않으면 서버가 시작 시점에 실패한다 — 개발용 기본값으로의 무경고 fallback은 개발 환경에서만 동작한다.
 
 AI provider limit은 embedding, reranker, knowledge extraction이 공유하며 application instance마다 적용된다. Replica를 늘리면 cluster 전체 상한도 instance 수만큼 늘어나므로 provider account 또는 API gateway의 조직별 예산·quota를 함께 설정하라.
 
 다음 설정은 일부만 제공하면 application 시작 시 실패한다.
 
 - `AUTH_PASSWORD_SIGNUP=true`에는 `AUTH_PASSWORD=true`가 필요하다.
+- Email verification delivery를 제공하지 않으므로 loopback 이외의 production origin에서는 `AUTH_PASSWORD_SIGNUP=true`를 허용하지 않는다. 운영 사용자는 검증된 Google·OIDC provider 또는 사전 생성한 password 계정을 사용한다.
 - Google은 `GOOGLE_CLIENT_ID`와 `GOOGLE_CLIENT_SECRET`을 함께 설정한다.
 - OIDC는 `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`을 함께 설정한다.
 - `EMBEDDING_MODEL`에는 `EMBEDDING_BASE_URL`이 필요하다.
