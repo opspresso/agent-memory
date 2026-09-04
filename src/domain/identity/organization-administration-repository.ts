@@ -87,7 +87,8 @@ export interface OrganizationAdministrationRepository {
   findOrganization(organizationId: string): Promise<Organization | null>;
   updateOrganizationSettings(
     organizationId: string,
-    update: OrganizationSettingsUpdate
+    update: OrganizationSettingsUpdate,
+    now: Date
   ): Promise<UpdateOrganizationSettingsResult>;
   deleteOrganization(organizationId: string): Promise<boolean>;
   listOrganizationMembers(
@@ -116,7 +117,8 @@ export interface OrganizationAdministrationRepository {
   updateTeam(
     organizationId: string,
     teamId: string,
-    name: string
+    name: string,
+    now: Date
   ): Promise<UpdateTeamResult>;
   deleteTeam(organizationId: string, teamId: string): Promise<boolean>;
   listTeamMembers(

@@ -34,7 +34,7 @@ export const getOrganizationRecord = buildGetOrganization(
   organizationAdministrationRepository
 );
 export const updateOrganizationSettingsRecord = buildUpdateOrganizationSettings(
-  organizationAdministrationRepository
+  createDependencies
 );
 export const deleteOrganizationRecord = buildDeleteOrganization(
   organizationAdministrationRepository
@@ -56,7 +56,7 @@ export const listTeamRecords = buildListTeams(
   organizationAdministrationRepository
 );
 export const updateTeamRecord = buildUpdateTeam(
-  organizationAdministrationRepository
+  createDependencies
 );
 export const deleteTeamRecord = buildDeleteTeam(
   organizationAdministrationRepository

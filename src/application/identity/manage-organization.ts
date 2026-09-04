@@ -89,6 +89,11 @@ interface CreateDependencies {
   readonly repository: OrganizationAdministrationRepository;
 }
 
+interface TimedDependencies {
+  readonly clock: () => Date;
+  readonly repository: OrganizationAdministrationRepository;
+}
+
 function canManageOrganization(access: OrganizationAccess): boolean {
   return access.role === "admin" || access.role === "owner";
 }
@@ -142,7 +147,7 @@ export function buildGetOrganization(
 }
 
 export function buildUpdateOrganizationSettings(
-  repository: OrganizationAdministrationRepository
+  dependencies: TimedDependencies
 ) {
   return async function execute(
     access: OrganizationAccess,
@@ -151,7 +156,7 @@ export function buildUpdateOrganizationSettings(
     if (!canManageOrganization(access)) {
       throw new OrganizationAdministrationAccessDeniedError();
     }
-    const result = await repository.updateOrganizationSettings(
+    const result = await dependencies.repository.updateOrganizationSettings(
       access.organizationId,
       {
         ...update,
@@ -161,7 +166,8 @@ export function buildUpdateOrganizationSettings(
         ...(update.ontology === undefined
           ? {}
           : { ontology: createKnowledgeOntology(update.ontology) })
-      }
+      },
+      dependencies.clock()
     );
     if (result.status === "organization_not_found") {
       throw new OrganizationNotFoundError();
@@ -340,7 +346,7 @@ export function buildListTeams(repository: OrganizationAdministrationRepository)
 }
 
 export function buildUpdateTeam(
-  repository: OrganizationAdministrationRepository
+  dependencies: TimedDependencies
 ) {
   return async function execute(
     access: OrganizationAccess,
@@ -350,10 +356,11 @@ export function buildUpdateTeam(
     if (!canManageTeam(access, teamId)) {
       throw new OrganizationAdministrationAccessDeniedError();
     }
-    const result = await repository.updateTeam(
+    const result = await dependencies.repository.updateTeam(
       access.organizationId,
       teamId,
-      normalizedOrganizationName(name)
+      normalizedOrganizationName(name),
+      dependencies.clock()
     );
     if (result.status === "team_not_found") {
       throw new TeamNotFoundError();

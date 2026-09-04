@@ -12,6 +12,7 @@ import {
   buildRemoveOrganizationMember,
   buildUpdateOrganizationMember,
   buildUpdateOrganizationSettings,
+  buildUpdateTeam,
   buildUpsertTeamMember
 } from "@/application/identity/manage-organization";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
@@ -180,9 +181,10 @@ describe("organization administration", () => {
         }
       })
     );
-    const update = buildUpdateOrganizationSettings(
-      repository({ updateOrganizationSettings })
-    );
+    const update = buildUpdateOrganizationSettings({
+      clock: () => now,
+      repository: repository({ updateOrganizationSettings })
+    });
 
     await expect(
       update({ ...ownerAccess, role: "member" }, { newMemberStatus: "pending" })
@@ -195,7 +197,8 @@ describe("organization administration", () => {
     });
     expect(updateOrganizationSettings).toHaveBeenCalledWith(
       "organization-1",
-      expect.objectContaining({ name: "Platform Guild" })
+      expect.objectContaining({ name: "Platform Guild" }),
+      now
     );
   });
 
@@ -206,9 +209,10 @@ describe("organization administration", () => {
         organization: { id: "organization-1", ...update }
       })
     );
-    const update = buildUpdateOrganizationSettings(
-      repository({ updateOrganizationSettings })
-    );
+    const update = buildUpdateOrganizationSettings({
+      clock: () => now,
+      repository: repository({ updateOrganizationSettings })
+    });
 
     await update(ownerAccess, {
       ontologyMode: "warn",
@@ -218,17 +222,24 @@ describe("organization administration", () => {
       }
     });
 
-    expect(updateOrganizationSettings).toHaveBeenCalledWith("organization-1", {
-      ontologyMode: "warn",
-      ontology: {
-        nodeKinds: ["service", "recognition"],
-        edgePredicates: ["depends_on"]
-      }
-    });
+    expect(updateOrganizationSettings).toHaveBeenCalledWith(
+      "organization-1",
+      {
+        ontologyMode: "warn",
+        ontology: {
+          nodeKinds: ["service", "recognition"],
+          edgePredicates: ["depends_on"]
+        }
+      },
+      now
+    );
   });
 
   it("rejects an ontology dictionary above the term limit", async () => {
-    const update = buildUpdateOrganizationSettings(repository());
+    const update = buildUpdateOrganizationSettings({
+      clock: () => now,
+      repository: repository()
+    });
 
     await expect(
       update(ownerAccess, {
@@ -328,6 +339,34 @@ describe("organization administration", () => {
       "organization administration access denied"
     );
     await expect(remove(ownerAccess, "team-1")).resolves.toBeUndefined();
+  });
+
+  it("updates team names with the application clock", async () => {
+    const updateTeam = vi.fn().mockResolvedValue({
+      status: "updated",
+      team: {
+        id: "team-1",
+        organizationId: "organization-1",
+        slug: "platform",
+        name: "Platform Guild",
+        createdAt: now,
+        updatedAt: now
+      }
+    });
+    const update = buildUpdateTeam({
+      clock: () => now,
+      repository: repository({ updateTeam })
+    });
+
+    await expect(
+      update(ownerAccess, "team-1", " Platform Guild ")
+    ).resolves.toMatchObject({ name: "Platform Guild" });
+    expect(updateTeam).toHaveBeenCalledWith(
+      "organization-1",
+      "team-1",
+      "Platform Guild",
+      now
+    );
   });
 
   it("joins an organization with the configured membership status", async () => {

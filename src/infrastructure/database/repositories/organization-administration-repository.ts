@@ -45,7 +45,7 @@ export function createOrganizationAdministrationRepository(
       return organization ?? null;
     },
 
-    async updateOrganizationSettings(organizationId, update) {
+    async updateOrganizationSettings(organizationId, update, now) {
       return db.transaction(async (transaction) => {
         if (update.defaultTeamId) {
           const [team] = await transaction
@@ -78,7 +78,7 @@ export function createOrganizationAdministrationRepository(
             ...(update.ontology === undefined
               ? {}
               : { ontology: update.ontology }),
-            updatedAt: new Date()
+            updatedAt: now
           })
           .where(eq(organizations.id, organizationId))
           .returning();
@@ -350,10 +350,10 @@ export function createOrganizationAdministrationRepository(
         .orderBy(asc(teams.name), asc(teams.id));
     },
 
-    async updateTeam(organizationId, teamId, name) {
+    async updateTeam(organizationId, teamId, name, now) {
       const [team] = await db
         .update(teams)
-        .set({ name, updatedAt: new Date() })
+        .set({ name, updatedAt: now })
         .where(
           and(eq(teams.organizationId, organizationId), eq(teams.id, teamId))
         )

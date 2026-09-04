@@ -552,13 +552,17 @@ describe("PostgreSQL schema", () => {
     });
 
     await expect(
-      administration.updateOrganizationSettings(organizationId, {
-        ontologyMode: "strict",
-        ontology: {
-          nodeKinds: ["service", "database"],
-          edgePredicates: ["depends_on"]
-        }
-      })
+      administration.updateOrganizationSettings(
+        organizationId,
+        {
+          ontologyMode: "strict",
+          ontology: {
+            nodeKinds: ["service", "database"],
+            edgePredicates: ["depends_on"]
+          }
+        },
+        createdAt
+      )
     ).resolves.toMatchObject({
       status: "updated",
       organization: {
@@ -870,10 +874,14 @@ describe("PostgreSQL schema", () => {
       constraint: "organizations_new_member_status_check"
     });
     await expect(
-      administration.updateOrganizationSettings(organizationId, {
-        newMemberStatus: "pending",
-        defaultTeamId: teamId
-      })
+      administration.updateOrganizationSettings(
+        organizationId,
+        {
+          newMemberStatus: "pending",
+          defaultTeamId: teamId
+        },
+        createdAt
+      )
     ).resolves.toMatchObject({
       status: "updated",
       organization: { newMemberStatus: "pending", defaultTeamId: teamId }
