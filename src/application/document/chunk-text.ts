@@ -87,7 +87,8 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
     const heading = match[0].trim();
     const section = normalized.slice(sectionStart, sectionEnd).trimEnd();
     const headingContextBudget = 2_000 - heading.length - 2;
-    const repeatHeading = headingContextBudget >= 100;
+    const repeatHeading =
+      headingContextBudget >= 100 && heading.length <= headingContextBudget;
     const sectionChunks = chunkText(
       section,
       repeatHeading

@@ -105,11 +105,12 @@ describe("document processing", () => {
   it("chunks Markdown with a heading that exhausts the context budget", () => {
     for (const headingLength of [1_800, 1_900]) {
       const chunks = chunkDocumentText(
-        `# ${"h".repeat(headingLength)}\n\n${"body ".repeat(100)}`,
+        `# ${"h".repeat(headingLength)}\n\n${"body ".repeat(400)}`,
         "text/markdown"
       );
 
       expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeLessThanOrEqual(3);
       expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
     }
   });
