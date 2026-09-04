@@ -25,7 +25,7 @@ Compose: postgres, MinIO ─────┘      └── pg-boss
 
 IDC와 EKS에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
 
-`v*` tag를 push하면 release workflow가 self-hosted Linux runner에서 `pnpm verify`와 PostgreSQL integration test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 immutable tag를 배포한다.
+`v*` tag를 push하면 release workflow가 self-hosted Linux runner에서 `pnpm verify`, PostgreSQL integration test, 인증 E2E test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 immutable tag를 배포한다.
 
 Release 완료 조건은 tag와 GitHub Release만 만드는 것이 아니다. Workflow 성공, ECR·GHCR image 게시, GitOps dispatch와 Argo CD sync를 확인한 뒤 container image, health endpoint, 공개 화면의 version을 검증하라. IDC rollout과 관측성은 `../dockpad`, EKS rollout은 `../argocd-env-demo`에서 확인한다.
 
@@ -148,7 +148,7 @@ pnpm db:studio
 
 - Worker는 application과 같은 `DATABASE_URL`, S3 설정, embedding·knowledge extraction 설정을 사용해야 한다.
 - 시작 전에 bucket이 존재하는지 확인하라. Compose에서는 `minio-init`이 `agent-memory` bucket을 만든다.
-- 실패한 문서는 API나 console에서 retry할 수 있다. 반복 실패는 document의 `processingError`와 application log를 확인하라.
+- 실패한 문서는 retry API로 다시 처리할 수 있다. 반복 실패는 document의 `processingError`와 application log를 확인하라.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
 - AI 분석은 candidate만 생성한다. Source scope의 `manage` 권한을 가진 사용자가 운영 콘솔이나 API에서 승인해야 Knowledge Graph에 반영된다.
@@ -207,6 +207,8 @@ worker instance: MIGRATE_ON_START=false, DOCUMENT_WORKER_ENABLED=true
 
 Database만 복원하고 object storage를 복원하지 않으면 document metadata는 남지만 원본 재처리가 실패할 수 있다. Object storage만 복원하면 권한·상태·chunk·provenance를 복구할 수 없다. 두 저장소의 보존 시점과 복원 절차를 함께 관리하라.
 
+조직 또는 팀 삭제는 PostgreSQL resource만 cascade 삭제하고 S3 호환 storage의 문서 원본 object는 제거하지 않는다. PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 object storage lifecycle로 제거하라.
+
 ## 장애 대응
 
 ### `column ... does not exist` 또는 `relation ... does not exist`
@@ -237,7 +239,7 @@ Worker가 비활성화된 상태에서 upload한 문서는 자동으로 `ready`�
 1. 응답의 `processingError`와 같은 시각의 application log를 확인한다.
 2. `S3_ENDPOINT`, bucket, credential과 network 연결을 확인한다.
 3. 파일 MIME type과 UTF-8 text 추출 가능 여부를 확인한다.
-4. 원인을 해결한 뒤 retry endpoint나 운영 콘솔의 `다시 처리`를 사용한다.
+4. 원인을 해결한 뒤 retry endpoint를 사용한다.
 
 `pending`, `processing`, `ready` 문서는 retry할 수 없으며 `409`를 반환한다.
 
@@ -269,9 +271,11 @@ Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지
 | `403` | 조직 membership, organization/team role, resource action |
 | `404` | ID와 organization 일치 여부, source를 읽을 수 있는지 여부 |
 | `409` | 최신 Memory version, document retry 가능 상태, candidate review 상태 |
-| `413` | request와 원본 파일의 10 MiB 제한 |
+| `413` | JSON body의 1 MiB 제한 또는 문서 upload request·원본 파일 제한 |
+| `422` | strict ontology의 미등록 node kind·edge predicate |
 | `428` | Memory PATCH·DELETE의 `If-Match` header |
-| `503` | PostgreSQL 연결과 migration 상태 |
+| `429` | AI provider instance limit과 `Retry-After` header |
+| `503` | PostgreSQL 연결·migration 상태 또는 온톨로지 AI 제안 model 설정 |
 
 ## 배포 전 확인
 

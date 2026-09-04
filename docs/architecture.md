@@ -98,7 +98,7 @@ Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenanc
 
 Node identity는 NFKC·공백·대소문자를 정규화한 canonical name key와 ontology로 정규화한 kind를 사용한다. 동일 scope의 동일 identity 생성은 transaction advisory lock으로 직렬화해 하나의 node와 provenance로 수렴한다. 이름은 같지만 kind가 다른 node는 자동 병합하지 않고 검토 대상으로 남긴다.
 
-조직은 통제 어휘 사전(`ontology`: node kind·edge predicate 목록)과 검증 모드(`ontologyMode`: `off`·`warn`·`strict`)를 가진다. 신규 조직은 domain의 `defaultKnowledgeOntology`(추출 프롬프트 기본 kind 목록과 단일 source) + `warn` 모드로 생성된다. 사전 확장은 두 경로로 지원한다 — 조직의 graph·pending 후보에서 관찰된 용어의 결정적 빈도 집계(`KnowledgeTermUsageRepository`), 그리고 관찰 용어를 extraction 모델에 보내 정제·통합을 제안받는 AI 경로(`KnowledgeOntologySuggestionService`, 용어 문자열만 전송). 두 경로 모두 admin·owner 전용이며 저장은 항상 설정 PATCH를 거친다. 검증은 application 계층에서 node 생성, edge 생성, AI 후보 승인의 세 쓰기 경로에 일괄 적용된다 — `warn`은 응답에 경고를 싣고, `strict`는 embedding 호출과 영속화 전에 `422`로 거부한다. 검증 모드가 켜져 있고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전을 힌트로 주입하고, `strict`에서는 entity kind를 structured output schema의 enum으로 제약한다. 사전 조회는 `KnowledgeOntologyReader` port를 통해 organizations 행에서 읽는다.
+조직은 통제 어휘 사전(`ontology`: node kind·edge predicate 목록)과 검증 모드(`ontologyMode`: `off`·`warn`·`strict`)를 가진다. 신규 조직은 추출 프롬프트의 기본 kind 목록과 범용 edge predicate 목록으로 구성된 domain의 `defaultKnowledgeOntology` + `warn` 모드로 생성된다. 사전 확장은 두 경로로 지원한다 — 조직의 graph·pending 후보에서 관찰된 용어의 결정적 빈도 집계(`KnowledgeTermUsageRepository`), 그리고 관찰 용어를 extraction 모델에 보내 정제·통합을 제안받는 AI 경로(`KnowledgeOntologySuggestionService`, 용어 문자열만 전송). 두 경로 모두 admin·owner 전용이며 저장은 항상 설정 PATCH를 거친다. 검증은 application 계층에서 node 생성, edge 생성, AI 후보 승인의 세 쓰기 경로에 일괄 적용된다 — `warn`은 응답에 경고를 싣고, `strict`는 embedding 호출과 영속화 전에 `422`로 거부한다. 검증 모드가 켜져 있고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전을 힌트로 주입하고, `strict`에서는 entity kind를 structured output schema의 enum으로 제약한다. 사전 조회는 `KnowledgeOntologyReader` port를 통해 organizations 행에서 읽는다.
 
 Graph resource 삭제는 해당 scope의 `manage` 권한을 요구한다. Edge 삭제는 edge와 provenance row만 제거하고, node 삭제는 연결 edge와 각 provenance row를 함께 제거한다. 어느 경우에도 source Memory나 document를 삭제하지 않는다.
 
@@ -122,6 +122,7 @@ Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같
 - AI candidate 승인만 node·edge와 reviewer audit을 하나의 transaction으로 저장한다.
 - Memory mutation은 `If-Match` version 충돌을 감지하고 덮어쓰기를 거부한다.
 - Source를 읽을 수 없게 되면 graph 검색과 neighborhood에서 해당 provenance를 다시 제외한다.
+- 조직·팀 삭제는 PostgreSQL의 tenant resource를 cascade 삭제하지만 S3 호환 storage의 문서 원본 object는 제거하지 않는다. 삭제 전 식별과 object lifecycle은 운영 경계에서 담당한다.
 
 ## 관측성과 민감정보
 

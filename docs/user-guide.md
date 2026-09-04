@@ -143,11 +143,13 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 
 `팀`에서 팀을 관리한다.
 
-- 조직 `admin`, `owner`: 팀 생성·이름 변경·삭제, 팀 멤버 관리. 팀 삭제는 team scope의 Memory·문서·Knowledge Graph를 함께 삭제한다.
+- 조직 `admin`, `owner`: 팀 생성·이름 변경·삭제, 팀 멤버 관리. 팀 삭제는 team scope의 Memory·문서 record·chunk·Knowledge Graph를 PostgreSQL에서 함께 삭제한다.
 - Team `manager`: 자신이 관리하는 팀의 이름 변경, 기존 조직 멤버 배정과 team role 변경, 팀 멤버 제거
 - Team `member`: team scope resource 읽기·쓰기
 
-`설정`에서 조직 이름, 신규 회원 정책(즉시 활성화 또는 승인 대기, 기본은 승인 대기), 기본 팀, Knowledge Graph 온톨로지(검증 모드와 node kind·edge predicate 사전, 빈도 추천·AI 제안 반영)를 관리한다. 기본 팀이 설정되면 신규 회원이 활성화될 때 자동으로 해당 팀에 배정된다. 조직 삭제는 `owner`만 가능하며 조직의 모든 데이터를 함께 제거한다.
+`설정`에서 조직 이름, 신규 회원 정책(즉시 활성화 또는 승인 대기, 기본은 승인 대기), 기본 팀, Knowledge Graph 온톨로지(검증 모드와 node kind·edge predicate 사전, 빈도 추천·AI 제안 반영)를 관리한다. 기본 팀이 설정되면 신규 회원이 활성화될 때 자동으로 해당 팀에 배정된다. 조직 삭제는 `owner`만 가능하며 조직의 멤버십, 팀, Memory, 문서 record·chunk, Knowledge Graph를 PostgreSQL에서 함께 제거한다.
+
+팀과 조직을 삭제해도 S3 호환 storage의 문서 원본 object는 자동으로 제거되지 않는다. 원본 삭제가 필요하면 PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 운영 환경의 object lifecycle을 따른다.
 
 `ADMIN_EMAILS`의 전역 bootstrap 권한은 새 조직 생성만 허용한다. 기존 조직 안에서는 항상 실제 organization membership과 role을 사용한다.
 

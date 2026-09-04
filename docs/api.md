@@ -10,7 +10,7 @@ export AGENT_MEMORY_TOKEN=<better-auth-session-token>
 
 ## 인증과 요청 경계
 
-`/api/health`를 제외한 API는 인증이 필요하다. `/api/metrics`는 Better Auth 대신 `METRICS_BEARER_TOKEN`을 사용하며 token이 설정되지 않았거나 Bearer 값이 일치하지 않으면 `404`를 반환한다. 인증되면 Prometheus text exposition format으로 build와 process 수준 지표만 반환한다. 브라우저는 session cookie를 사용하고 Agent는 Better Auth 로그인 응답의 `set-auth-token` header 값을 다음과 같이 전달한다.
+조직 API는 인증이 필요하다. `/api/health`는 인증 없이 readiness를 제공하고, `/api/auth/*`는 Better Auth의 로그인·가입·provider 흐름을 처리한다. `/api/metrics`는 Better Auth 대신 `METRICS_BEARER_TOKEN`을 사용하며 token이 설정되지 않았거나 Bearer 값이 일치하지 않으면 `404`를 반환한다. 인증되면 Prometheus text exposition format으로 build와 process 수준 지표만 반환한다. 브라우저는 session cookie를 사용하고 Agent는 Better Auth 로그인 응답의 `set-auth-token` header 값을 다음과 같이 전달한다.
 
 ```http
 Authorization: Bearer <token>
@@ -152,7 +152,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 - 팀 이름 변경(`PATCH .../teams/:teamId`): `{ "name": string }`
 - 팀 멤버 추가·변경: `{ "email": string, "role": "member" | "manager" }`
 
-`slug`는 63자 이하의 소문자 영숫자와 단일 hyphen 구분 형식을 사용한다. 멤버·팀 관리는 organization `admin` 또는 `owner`가 수행하고, team `manager`는 자신이 관리하는 팀에 기존 조직 멤버를 배정하거나 팀 이름을 변경할 수 있다. 팀 삭제와 조직 설정 변경은 `admin`·`owner`, 조직 삭제는 `owner`만 가능하다.
+`slug`는 63자 이하의 소문자 영숫자와 단일 hyphen 구분 형식을 사용한다. 조직과 팀의 `name`은 1–200자다. 멤버·팀 관리는 organization `admin` 또는 `owner`가 수행하고, team `manager`는 자신이 관리하는 팀에 기존 조직 멤버를 배정하거나 팀 이름을 변경할 수 있다. 팀 삭제와 조직 설정 변경은 `admin`·`owner`, 조직 삭제는 `owner`만 가능하다.
 
 ### 멤버십 status와 가입 흐름
 
@@ -162,6 +162,8 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 - 자기 자신의 role·status 변경과 제거는 허용하지 않는다(`409`).
 - `DELETE .../teams/:teamId`는 팀 소속과 team scope의 memory, 문서 metadata, Knowledge Graph를 함께 삭제한다.
 - `DELETE .../:organizationSlug`는 조직과 멤버십, 팀, memory, 문서 metadata, Knowledge Graph를 함께 삭제한다.
+
+두 삭제는 PostgreSQL resource만 제거하며 S3 호환 storage의 문서 원본 object는 삭제하지 않는다. 운영 환경은 삭제 전에 대상 object를 식별하거나 별도 lifecycle로 관리해야 한다.
 
 ## Memory
 
@@ -233,7 +235,7 @@ curl -i \
 
 `expiresAt`, `embeddingModel`, `accessGrants`는 해당 값과 호출자 권한에 따라 생략될 수 있다.
 
-검색은 `GET .../memories?q=<query>&limit=<1-100>`을 사용하며 기본 limit은 10이다.
+검색은 `GET .../memories?q=<query>&limit=<1-100>`을 사용하며 query는 1–10,000자, 기본 limit은 10이다.
 
 ```bash
 curl \
@@ -269,7 +271,7 @@ curl -i \
   "$AGENT_MEMORY_URL/api/organizations/$AGENT_MEMORY_ORGANIZATION_SLUG/memories/<memoryId>?reason=Superseded%20policy"
 ```
 
-`If-Match`가 없거나 잘못되면 `428`, version이 충돌하면 `409`를 반환한다. `PATCH`로 변경할 수 있는 필드는 `title`, `content`, `source`, `accessGrants`, `expiresAt`이며 `changeReason` 자체는 변경 필드로 계산하지 않는다.
+`If-Match`가 없거나 잘못되면 `428`, version이 충돌하면 `409`를 반환한다. `PATCH`로 변경할 수 있는 필드는 `title`, `content`, `source`, `accessGrants`, `expiresAt`이며 `changeReason` 자체는 변경 필드로 계산하지 않는다. 선택형 `changeReason`은 1–1,000자다.
 
 HTTP의 Memory 조회·검색 응답은 호출자 기준 `capabilities.write`와 `capabilities.manage`를 포함한다. `accessGrants`는 `manage` 권한이 있는 호출자에게만 노출한다.
 
@@ -289,7 +291,7 @@ Revision은 `GET .../versions?limit=<1-100>&before=<version>`으로 역순 조�
 | `sourceUri` | 아니요 | 원본 URI, 최대 2,048자 |
 | `metadata` | 아니요 | JSON object 문자열, 최대 32 KiB |
 
-지원 MIME type은 `text/plain`, `text/markdown`, `text/csv`, `application/json`, `application/xml`, `text/xml`이다. 서버는 `Content-Length`와 실제 request stream을 모두 제한한다. 업로드는 `202`와 상태 조회용 `Location`을 반환한다. Queue 등록에 실패해도 저장된 document ID와 `failed` 상태를 반환하므로 같은 ID로 retry할 수 있다. 검색은 `GET .../documents?q=<query>&limit=<1-100>`을 사용하고 `ready` 상태의 접근 가능한 chunk만 반환한다. `failed` 문서만 retry할 수 있다.
+지원 MIME type은 `text/plain`, `text/markdown`, `text/csv`, `application/json`, `application/xml`, `text/xml`이다. 서버는 `Content-Length`와 실제 request stream을 모두 제한한다. 업로드는 `202`와 상태 조회용 `Location`을 반환한다. Queue 등록에 실패해도 저장된 document ID와 `failed` 상태를 반환하므로 같은 ID로 retry할 수 있다. 검색은 `GET .../documents?q=<query>&limit=<1-100>`을 사용하고 `ready` 상태의 접근 가능한 chunk만 반환한다. query는 1–10,000자이며 `failed` 문서만 retry할 수 있다.
 
 User scope 문서 업로드 예시는 다음과 같다. `curl`이 파일 MIME type을 올바르게 전송하도록 `type`을 명시하라.
 
@@ -329,6 +331,10 @@ Retry 성공은 `202`와 갱신된 document를 반환한다. `pending`, `process
 
 Node 생성 입력은 `scope`, `kind`, `canonicalName`, `source`와 선택형 `summary`, `properties`다. Edge 생성 입력은 `scope`, `sourceNodeId`, `targetNodeId`, `predicate`, `source`와 선택형 `properties`다.
 
+- Node의 `kind`는 1–100자, `canonicalName`은 1–500자, `summary`는 1–10,000자다.
+- Edge의 `predicate`는 1–100자다.
+- Node와 edge의 `properties`는 선택형 JSON object이며 직렬화 기준 최대 32 KiB다.
+
 생성 요청의 `source`는 `{ "memoryId": UUID }` 또는 `{ "chunkId": UUID }` 중 정확히 하나만 포함한다. 호출자는 source를 읽을 수 있어야 하며 graph resource를 source보다 넓은 scope로 만들 수 없다. Canonical node·edge는 여러 근거를 누적하며 응답의 `sources` 배열로 반환한다. 각 배열 항목은 정확히 하나의 Memory 또는 document chunk를 참조한다.
 
 Memory를 근거로 두 node와 edge를 만드는 흐름은 다음과 같다.
@@ -367,7 +373,7 @@ Node 응답은 `id`, `scope`, `kind`, `canonicalName`, 선택형 `summary`, `pro
 
 `DELETE .../knowledge/nodes/:nodeId`와 `DELETE .../knowledge/edges/:edgeId`는 해당 graph resource scope의 `manage` 권한을 요구하며 성공 시 `204`를 반환한다. Node 삭제는 연결된 edge도 함께 삭제하지만 provenance source인 Memory나 document는 삭제하지 않는다.
 
-`POST .../knowledge/nodes/:targetNodeId/merge`는 `{ "sourceNodeId": UUID, "reason": string }`을 받아 source node를 target node로 병합한다. 두 node는 같은 organization과 scope에 있어야 하며 호출자는 둘 다 `manage`할 수 있어야 한다. 병합 transaction은 provenance를 누적하고 incoming·outgoing edge를 target으로 재연결하며, 중복 edge를 합치고 self-edge를 제거한 뒤 source node를 삭제하고 audit을 저장한다.
+`POST .../knowledge/nodes/:targetNodeId/merge`는 `{ "sourceNodeId": UUID, "reason": string }`을 받아 source node를 target node로 병합한다. `reason`은 1–2,000자다. 두 node는 같은 organization과 scope에 있어야 하며 호출자는 둘 다 `manage`할 수 있어야 한다. 병합 transaction은 provenance를 누적하고 incoming·outgoing edge를 target으로 재연결하며, 중복 edge를 합치고 self-edge를 제거한 뒤 source node를 삭제하고 audit을 저장한다.
 
 Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical name과 정규화 kind를 사용한다. `award`, `honor`, `honour`, `achievement`, `designation`은 `recognition`으로 통합한다. 같은 scope에서 정규화 identity가 같으면 신규 생성과 AI 후보 승인 시 기존 node에 자동 병합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
 
@@ -392,7 +398,7 @@ Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical nam
 
 추천·제안은 사전에 자동 반영되지 않는다 — admin이 콘솔 설정 화면에서 선택해 `PATCH .../:organizationSlug`로 저장한다.
 
-검색은 `GET .../knowledge/nodes?q=<query>&limit=<1-100>`을 사용한다. Neighborhood는 `depth=1-5`, `limit=1-200`을 받으며 기본값은 각각 1과 100이다. 두 조회는 호출자가 현재 읽을 수 있고 active·유효한 Memory 또는 ready document chunk 근거가 하나 이상 있는 graph resource만 반환한다.
+검색은 `GET .../knowledge/nodes?q=<query>&limit=<1-100>`을 사용하며 query는 1–10,000자다. Neighborhood는 `depth=1-5`, `limit=1-200`을 받으며 기본값은 각각 1과 100이다. 두 조회는 호출자가 현재 읽을 수 있고 active·유효한 Memory 또는 ready document chunk 근거가 하나 이상 있는 graph resource만 반환한다.
 
 ```bash
 curl \
@@ -428,7 +434,7 @@ curl -X POST \
 
 ## 통합 Context 검색
 
-`GET .../context/search?q=<query>&limit=<1-100>`은 접근 가능한 memory, document chunk, knowledge node를 검색해 하나의 순위 결과로 반환한다. 기본 limit은 10이다.
+`GET .../context/search?q=<query>&limit=<1-100>`은 접근 가능한 memory, document chunk, knowledge node를 검색해 하나의 순위 결과로 반환한다. query는 1–10,000자이며 기본 limit은 10이다.
 
 ```bash
 curl \
