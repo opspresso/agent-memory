@@ -128,4 +128,4 @@ Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같
 
 ## 관측성과 민감정보
 
-Pino는 작업명, organization ID, 결과 수, 처리 시간을 구조화해 기록한다. Reranker가 실패하면 본문 없이 fallback을 기록한다. 검색어와 본문은 retrieval log에 포함하지 않는다. Langfuse key가 모두 설정되면 OpenTelemetry trace를 내보내며 token과 secret을 마스킹하고 media upload를 비활성화한다. Embedding과 reranker 입력·출력은 telemetry 대상이 아니다.
+Pino는 작업명, organization ID, 결과 수, 처리 시간을 구조화해 기록한다. Error는 안전한 type·code·stack frame만 직렬화하고 message와 cause는 기록하지 않는다. Reranker가 실패하면 본문 없이 fallback을 기록한다. 검색어와 본문은 retrieval log에 포함하지 않는다. Langfuse key가 모두 설정되면 OpenTelemetry trace를 내보내며 token과 secret을 마스킹하고 media upload를 비활성화한다. Embedding과 reranker 입력·출력은 telemetry 대상이 아니다.
