@@ -128,6 +128,16 @@ describe("document processing", () => {
     expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
   });
 
+  it("bounds CSV chunks when one record exceeds the context budget", () => {
+    const chunks = chunkDocumentText(
+      `name,description\nAgent Memory,${"context ".repeat(400)}`,
+      "text/csv"
+    );
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+  });
+
   it("preserves JSON paths as extraction context", () => {
     const chunks = chunkDocumentText(
       JSON.stringify({ products: [{ name: "Agent Studio", url: "https://studio.opspresso.com" }] }),
@@ -152,6 +162,17 @@ describe("document processing", () => {
 
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks[1]?.content).toContain("XML context: /portfolio/product/description");
+    expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
+  });
+
+  it("omits oversized XML context instead of exceeding the chunk limit", () => {
+    const element = "nested".repeat(80);
+    const chunks = chunkDocumentText(
+      `<${element}><${element}><value>${"context ".repeat(400)}</value></${element}></${element}>`,
+      "application/xml"
+    );
+
+    expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.every((chunk) => chunk.content.length <= 2_000)).toBe(true);
   });
 

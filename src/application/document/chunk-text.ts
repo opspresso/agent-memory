@@ -140,6 +140,14 @@ function chunkCsv(input: string): readonly TextChunk[] {
   if (!header) {
     return [];
   }
+  if (
+    header.length > 2_000 ||
+    records
+      .slice(1)
+      .some((record) => header.length + 1 + record.length > 2_000)
+  ) {
+    return chunkText(input);
+  }
   const chunks: TextChunk[] = [];
   let rows: string[] = [];
   let offset = header.length + 1;
@@ -214,7 +222,12 @@ function chunkXml(input: string): readonly TextChunk[] {
   return chunkText(normalized, { maxCharacters: 1_900, overlapCharacters: 200 }).map(
     (chunk) => {
       const context = activeXmlPath(normalized, chunk.start);
-      return context ? { ...chunk, content: `${context}\n${chunk.content}` } : chunk;
+      const contextualContent = context
+        ? `${context}\n${chunk.content}`
+        : chunk.content;
+      return contextualContent.length <= 2_000
+        ? { ...chunk, content: contextualContent }
+        : chunk;
     }
   );
 }
