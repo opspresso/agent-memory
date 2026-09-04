@@ -5,6 +5,7 @@ import {
   TextRerankerUnavailableError,
   type TextRerankerService
 } from "@/domain/shared/text-reranker-service";
+import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
 
 interface TextRerankerServiceConfiguration {
   readonly apiKey?: string;
@@ -77,12 +78,18 @@ export function createTextRerankerService(
       signal
     });
     if (!response.ok) {
-      throw new Error(`reranker request failed with status ${response.status}`);
+      throw new SafeOperationalError(
+        `reranker request failed with status ${response.status}`,
+        { code: "RERANKER_HTTP_ERROR" }
+      );
     }
 
     const parsed = rerankResponseSchema.safeParse(await response.json());
     if (!parsed.success || parsed.data.results.length !== input.documents.length) {
-      throw new Error("reranker response count does not match inputs");
+      throw new SafeOperationalError(
+        "reranker response count does not match inputs",
+        { code: "RERANKER_RESPONSE_COUNT_MISMATCH" }
+      );
     }
     const scores: Array<number | undefined> = new Array(input.documents.length);
     for (const result of parsed.data.results) {
@@ -90,12 +97,18 @@ export function createTextRerankerService(
         result.index >= input.documents.length ||
         scores[result.index] !== undefined
       ) {
-        throw new Error("reranker response contains an invalid index");
+        throw new SafeOperationalError(
+          "reranker response contains an invalid index",
+          { code: "RERANKER_RESPONSE_INDEX_INVALID" }
+        );
       }
       scores[result.index] = result.relevance_score;
     }
     if (scores.some((score) => score === undefined)) {
-      throw new Error("reranker response does not cover every input");
+      throw new SafeOperationalError(
+        "reranker response does not cover every input",
+        { code: "RERANKER_RESPONSE_INCOMPLETE" }
+      );
     }
     return scores as number[];
   }

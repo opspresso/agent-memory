@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
+import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
 
 interface TextEmbeddingServiceConfiguration {
   readonly apiKey?: string;
@@ -51,12 +52,17 @@ export function createTextEmbeddingService(
       signal: AbortSignal.timeout(60_000)
     });
     if (!response.ok) {
-      throw new Error(`embedding request failed with status ${response.status}`);
+      throw new SafeOperationalError(
+        `embedding request failed with status ${response.status}`,
+        { code: "EMBEDDING_HTTP_ERROR" }
+      );
     }
 
     const parsed = embeddingResponseSchema.safeParse(await response.json());
     if (!parsed.success) {
-      throw new Error("embedding response is invalid");
+      throw new SafeOperationalError("embedding response is invalid", {
+        code: "EMBEDDING_RESPONSE_INVALID"
+      });
     }
     const ordered = parsed.data.data.toSorted((left, right) =>
       left.index - right.index
@@ -65,7 +71,10 @@ export function createTextEmbeddingService(
       ordered.length !== texts.length ||
       ordered.some((item, index) => item.index !== index)
     ) {
-      throw new Error("embedding response count does not match inputs");
+      throw new SafeOperationalError(
+        "embedding response count does not match inputs",
+        { code: "EMBEDDING_RESPONSE_COUNT_MISMATCH" }
+      );
     }
     return ordered.map(({ embedding }) => ({ model, values: embedding }));
   }
@@ -80,7 +89,9 @@ export function createTextEmbeddingService(
     async embed(text) {
       const [embedding] = await embedTexts([text]);
       if (!embedding) {
-        throw new Error("embedding response is empty");
+        throw new SafeOperationalError("embedding response is empty", {
+          code: "EMBEDDING_RESPONSE_EMPTY"
+        });
       }
       return embedding;
     },

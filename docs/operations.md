@@ -189,7 +189,7 @@ curl -i http://localhost:3100/api/health
 
 Health endpoint는 database에 `select 1`을 실행한다. 정상은 `200`과 `status: "ok"`, database 연결 실패는 `503`과 `status: "unavailable"`을 반환하며 응답은 cache하지 않는다.
 
-Pino log는 stdout에 JSON으로 기록한다. Retrieval log에는 operation, organization ID, result count, duration만 포함하고 query와 본문은 기록하지 않는다.
+Pino log는 stdout에 JSON으로 기록한다. 일반 예외의 message는 버리고 type·code만 기록한다. Provider·storage adapter의 고정 operational error는 안전한 message·code와 message 없는 bounded cause type chain을 기록해 HTTP status, 실패 operation, 외부 예외 종류를 구분한다. Retrieval log에는 operation, organization ID, result count, duration만 포함하고 query와 본문은 기록하지 않는다.
 
 Langfuse는 public key와 secret key를 모두 설정할 때 활성화된다. `LANGFUSE_EXPORT_MODE` 기본값은 일반 runtime에서 `batched`, Vercel에서 `immediate`다.
 

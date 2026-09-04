@@ -6,6 +6,10 @@ import {
 } from "@aws-sdk/client-s3";
 
 import type { DocumentObjectStorage } from "@/domain/document/document-services";
+import {
+  isSafeOperationalError,
+  SafeOperationalError
+} from "@/infrastructure/observability/safe-operational-error";
 
 export interface S3DocumentObjectStorageOptions {
   readonly bucket: string;
@@ -22,29 +26,56 @@ export function createS3DocumentObjectStorage(
 
   return {
     async put(key, content, contentType) {
-      await options.client.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: content,
-          ContentLength: content.byteLength,
-          ContentType: contentType
-        })
-      );
+      try {
+        await options.client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: content,
+            ContentLength: content.byteLength,
+            ContentType: contentType
+          })
+        );
+      } catch (error) {
+        throw new SafeOperationalError("S3 object upload failed", {
+          cause: error,
+          code: "S3_PUT_FAILED"
+        });
+      }
     },
     async get(key) {
-      const response = await options.client.send(
-        new GetObjectCommand({ Bucket: bucket, Key: key })
-      );
-      if (!response.Body) {
-        throw new Error("S3 object response did not contain a body");
+      try {
+        const response = await options.client.send(
+          new GetObjectCommand({ Bucket: bucket, Key: key })
+        );
+        if (!response.Body) {
+          throw new SafeOperationalError(
+            "S3 object response did not contain a body",
+            { code: "S3_BODY_MISSING" }
+          );
+        }
+        return response.Body.transformToByteArray();
+      } catch (error) {
+        if (error instanceof Error && isSafeOperationalError(error)) {
+          throw error;
+        }
+        throw new SafeOperationalError("S3 object download failed", {
+          cause: error,
+          code: "S3_GET_FAILED"
+        });
       }
-      return response.Body.transformToByteArray();
     },
     async delete(key) {
-      await options.client.send(
-        new DeleteObjectCommand({ Bucket: bucket, Key: key })
-      );
+      try {
+        await options.client.send(
+          new DeleteObjectCommand({ Bucket: bucket, Key: key })
+        );
+      } catch (error) {
+        throw new SafeOperationalError("S3 object deletion failed", {
+          cause: error,
+          code: "S3_DELETE_FAILED"
+        });
+      }
     }
   };
 }

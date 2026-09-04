@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { serializeErrorForLog } from "@/infrastructure/observability/logger";
+import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
 import { readTelemetryConfiguration } from "@/infrastructure/observability/telemetry";
 
 describe("structured error logging", () => {
-  it("keeps diagnostics without serializing messages or causes", () => {
+  it("keeps type and code diagnostics without serializing untrusted messages", () => {
     const cause = new Error("Bearer secret-document-content");
     const error = Object.assign(
       new SyntaxError("Unexpected token 'private-customer-data'", { cause }),
@@ -16,10 +17,31 @@ describe("structured error logging", () => {
 
     expect(serialized).toMatchObject({
       type: "SyntaxError",
-      code: "INVALID_DOCUMENT"
+      code: "INVALID_DOCUMENT",
+      cause: { type: "Error" }
     });
     expect(output).not.toContain("private-customer-data");
     expect(output).not.toContain("secret-document-content");
+  });
+
+  it("preserves allowlisted operational messages and bounded cause types", () => {
+    const error = new SafeOperationalError(
+      "embedding request failed with status 503",
+      {
+        cause: new Error("private provider response"),
+        code: "EMBEDDING_HTTP_ERROR"
+      }
+    );
+
+    expect(serializeErrorForLog(error)).toEqual({
+      type: "SafeOperationalError",
+      code: "EMBEDDING_HTTP_ERROR",
+      message: "embedding request failed with status 503",
+      cause: { type: "Error" }
+    });
+    expect(JSON.stringify(serializeErrorForLog(error))).not.toContain(
+      "private provider response"
+    );
   });
 
   it("rejects untrusted error metadata", () => {

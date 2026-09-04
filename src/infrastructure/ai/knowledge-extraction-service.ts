@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
+
 import type {
   KnowledgeExtractionOntologyHint,
   KnowledgeExtractionService
@@ -281,25 +283,34 @@ export function createKnowledgeExtractionService(
       signal: AbortSignal.timeout(60_000)
     });
     if (!response.ok) {
-      throw new Error(
-        `knowledge extraction request failed with status ${response.status}`
+      throw new SafeOperationalError(
+        `knowledge extraction request failed with status ${response.status}`,
+        { code: "KNOWLEDGE_EXTRACTION_HTTP_ERROR" }
       );
     }
     const completion = completionResponseSchema.safeParse(
       await response.json()
     );
     if (!completion.success) {
-      throw new Error("knowledge extraction response is invalid");
+      throw new SafeOperationalError(
+        "knowledge extraction response is invalid",
+        { code: "KNOWLEDGE_EXTRACTION_RESPONSE_INVALID" }
+      );
     }
     let content: unknown;
     try {
       content = JSON.parse(completion.data.choices[0]!.message.content);
     } catch {
-      throw new Error("knowledge extraction response content is not JSON");
+      throw new SafeOperationalError(
+        "knowledge extraction response content is not JSON",
+        { code: "KNOWLEDGE_EXTRACTION_RESPONSE_NOT_JSON" }
+      );
     }
     const graph = proposedGraphSchema.safeParse(content);
     if (!graph.success) {
-      throw new Error("knowledge extraction graph is invalid");
+      throw new SafeOperationalError("knowledge extraction graph is invalid", {
+        code: "KNOWLEDGE_EXTRACTION_GRAPH_INVALID"
+      });
     }
     return {
       model,
