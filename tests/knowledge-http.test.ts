@@ -80,6 +80,7 @@ describe("knowledge HTTP boundary", () => {
       kind: "service",
       canonicalName: "Checkout API",
       embedding: { model: "test-embedding", values: [1, 0, 0] },
+      source: { memoryId: "30000000-0000-4000-8000-000000000009" },
       now: new Date("2026-08-26T00:00:00.000Z")
     });
 

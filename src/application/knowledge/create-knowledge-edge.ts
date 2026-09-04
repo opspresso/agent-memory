@@ -30,7 +30,7 @@ export interface CreateKnowledgeEdgeInput {
   readonly targetNodeId: string;
   readonly predicate: string;
   readonly properties?: Readonly<Record<string, unknown>>;
-  readonly source?: KnowledgeSource;
+  readonly source: KnowledgeSource;
 }
 
 export interface CreateKnowledgeEdgeDependencies {
@@ -82,13 +82,7 @@ export function buildCreateKnowledgeEdge(
       throw new KnowledgeGraphAccessDeniedError();
     }
 
-    if (input.source) {
-      await dependencies.authorizeSource(
-        input.access,
-        input.source,
-        input.scope
-      );
-    }
+    await dependencies.authorizeSource(input.access, input.source, input.scope);
 
     const [sourceNode, targetNode] = await Promise.all([
       dependencies.repository.findNodeById(
@@ -145,7 +139,7 @@ export function buildCreateKnowledgeEdge(
         targetNodeId: targetNode.id,
         predicate: input.predicate,
         ...(input.properties ? { properties: input.properties } : {}),
-        ...(input.source ? { source: input.source } : {}),
+        source: input.source,
         now: dependencies.clock()
       })
     );

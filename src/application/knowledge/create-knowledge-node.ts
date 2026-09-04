@@ -26,7 +26,7 @@ export interface CreateKnowledgeNodeInput {
   readonly canonicalName: string;
   readonly summary?: string;
   readonly properties?: Readonly<Record<string, unknown>>;
-  readonly source?: KnowledgeSource;
+  readonly source: KnowledgeSource;
 }
 
 export interface CreateKnowledgeNodeDependencies {
@@ -60,13 +60,7 @@ export function buildCreateKnowledgeNode(
       throw new KnowledgeGraphAccessDeniedError();
     }
 
-    if (input.source) {
-      await dependencies.authorizeSource(
-        input.access,
-        input.source,
-        input.scope
-      );
-    }
+    await dependencies.authorizeSource(input.access, input.source, input.scope);
 
     const settings = await dependencies.ontologyReader.findByOrganization(
       input.access.organizationId
@@ -91,7 +85,7 @@ export function buildCreateKnowledgeNode(
       ...(input.summary ? { summary: input.summary } : {}),
       ...(embedding ? { embedding } : {}),
       ...(input.properties ? { properties: input.properties } : {}),
-      ...(input.source ? { source: input.source } : {}),
+      source: input.source,
       now: dependencies.clock()
     });
     const node = await dependencies.repository.saveNode(created);

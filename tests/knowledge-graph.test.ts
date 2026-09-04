@@ -41,6 +41,7 @@ const access: OrganizationAccess = {
   role: "member",
   teams: [{ teamId: "team-1", role: "member" }]
 };
+const evidence = { memoryId: "memory-1" };
 
 function node(id: string, teamId = "team-1"): KnowledgeNode {
   return createKnowledgeNode({
@@ -269,7 +270,8 @@ describe("knowledge graph", () => {
       },
       kind: " Service ",
       canonicalName: " Checkout API ",
-      summary: " Handles purchases "
+      summary: " Handles purchases ",
+      source: evidence
     });
 
     expect(result.node).toMatchObject({
@@ -299,7 +301,8 @@ describe("knowledge graph", () => {
       access,
       scope: node("scope").scope,
       kind: "Gadget",
-      canonicalName: "Checkout API"
+      canonicalName: "Checkout API",
+      source: evidence
     });
 
     expect(result.ontologyWarnings).toEqual([
@@ -328,7 +331,8 @@ describe("knowledge graph", () => {
         access,
         scope: node("scope").scope,
         kind: "gadget",
-        canonicalName: "Checkout API"
+        canonicalName: "Checkout API",
+        source: evidence
       })
     ).rejects.toBeInstanceOf(KnowledgeOntologyViolationError);
     expect(embed).not.toHaveBeenCalled();
@@ -362,7 +366,8 @@ describe("knowledge graph", () => {
         scope: sourceNode.scope,
         sourceNodeId: sourceNode.id,
         targetNodeId: targetNode.id,
-        predicate: "loves"
+        predicate: "loves",
+        source: evidence
       })
     ).rejects.toBeInstanceOf(KnowledgeOntologyViolationError);
     expect(saveEdge).not.toHaveBeenCalled();
@@ -394,7 +399,8 @@ describe("knowledge graph", () => {
       scope: sourceNode.scope,
       sourceNodeId: sourceNode.id,
       targetNodeId: targetNode.id,
-      predicate: " ＤＥＰＥＮＤＳ＿ＯＮ "
+      predicate: " ＤＥＰＥＮＤＳ＿ＯＮ ",
+      source: evidence
     });
 
     expect(result.edge.predicate).toBe("depends_on");
@@ -414,7 +420,8 @@ describe("knowledge graph", () => {
         access,
         scope: { kind: "organization", organizationId: "organization-1" },
         kind: "service",
-        canonicalName: "Checkout API"
+        canonicalName: "Checkout API",
+        source: evidence
       })
     ).rejects.toBeInstanceOf(KnowledgeGraphAccessDeniedError);
   });
@@ -471,7 +478,8 @@ describe("knowledge graph", () => {
         scope: source.scope,
         sourceNodeId: source.id,
         targetNodeId: target.id,
-        predicate: "depends_on"
+        predicate: "depends_on",
+        source: evidence
       })
     ).rejects.toBeInstanceOf(KnowledgeNodeNotFoundError);
   });

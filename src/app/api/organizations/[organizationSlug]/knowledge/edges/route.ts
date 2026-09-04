@@ -47,7 +47,7 @@ export async function POST(request: Request, context: RouteContext) {
       targetNodeId: parsed.data.targetNodeId,
       predicate: parsed.data.predicate,
       ...(parsed.data.properties ? { properties: parsed.data.properties } : {}),
-      ...(parsed.data.source ? { source: parsed.data.source } : {})
+      source: parsed.data.source
     });
     return Response.json({
       ...publicKnowledgeEdge(edge),

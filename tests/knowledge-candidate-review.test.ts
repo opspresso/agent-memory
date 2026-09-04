@@ -100,6 +100,7 @@ describe("knowledge candidate review", () => {
       scope: candidate.scope,
       kind: "service",
       canonicalName: "Memory API",
+      source: { chunkId: candidate.chunkId },
       now
     });
     const postgres = createKnowledgeNode({
@@ -107,6 +108,7 @@ describe("knowledge candidate review", () => {
       scope: candidate.scope,
       kind: "database",
       canonicalName: "PostgreSQL",
+      source: { chunkId: candidate.chunkId },
       now
     });
     const findNodesByCanonicalNames = vi

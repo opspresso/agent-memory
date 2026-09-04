@@ -59,6 +59,7 @@ const node = createKnowledgeNode({
   scope,
   kind: "system",
   canonicalName: "Release service",
+  source: { memoryId: memory.id },
   now
 });
 

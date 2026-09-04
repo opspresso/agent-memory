@@ -51,7 +51,7 @@ export async function POST(request: Request, context: RouteContext) {
       canonicalName: parsed.data.canonicalName,
       ...(parsed.data.summary ? { summary: parsed.data.summary } : {}),
       ...(parsed.data.properties ? { properties: parsed.data.properties } : {}),
-      ...(parsed.data.source ? { source: parsed.data.source } : {})
+      source: parsed.data.source
     });
     return Response.json(
       {

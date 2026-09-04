@@ -49,7 +49,7 @@ export interface NewKnowledgeNode {
   readonly summary?: string;
   readonly embedding?: KnowledgeEmbedding;
   readonly properties?: Readonly<Record<string, unknown>>;
-  readonly source?: KnowledgeSource;
+  readonly source: KnowledgeSource;
   readonly now: Date;
 }
 
@@ -61,7 +61,7 @@ export interface NewKnowledgeEdge {
   readonly targetNodeId: string;
   readonly predicate: string;
   readonly properties?: Readonly<Record<string, unknown>>;
-  readonly source?: KnowledgeSource;
+  readonly source: KnowledgeSource;
   readonly now: Date;
 }
 
@@ -99,7 +99,9 @@ function validatedProperties(
 
 function validatedSource(source: KnowledgeSource | undefined) {
   if (!source) {
-    return undefined;
+    throw new InvalidKnowledgeGraphError(
+      "knowledge source must reference exactly one memory or document chunk"
+    );
   }
   const referenceCount =
     Number(source.memoryId !== undefined) + Number(source.chunkId !== undefined);
@@ -160,7 +162,7 @@ export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNode {
     ...(summary ? { summary } : {}),
     ...(embedding ? { embedding } : {}),
     properties: validatedProperties(input.properties),
-    sources: Object.freeze(source ? [source] : []),
+    sources: Object.freeze([source]),
     createdAt: new Date(input.now),
     updatedAt: new Date(input.now)
   });
@@ -201,7 +203,7 @@ export function createKnowledgeEdge(input: NewKnowledgeEdge): KnowledgeEdge {
       100
     ),
     properties: validatedProperties(input.properties),
-    sources: Object.freeze(source ? [source] : []),
+    sources: Object.freeze([source]),
     createdAt: new Date(input.now)
   });
 }
