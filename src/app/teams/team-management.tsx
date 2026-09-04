@@ -29,7 +29,11 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { TeamRole } from "@/domain/identity/organization-access";
 
 import { useT } from "../_i18n/provider";
-import { responseJson } from "../http-response";
+import {
+  teamMembersResponseSchema,
+  teamsResponseSchema
+} from "../api-response-schemas";
+import { responseJson, responseOk } from "../http-response";
 import { useOrganization } from "../organization-context";
 
 interface TeamView {
@@ -87,9 +91,10 @@ function TeamManagementView() {
       const body = await fetch(
         `/api/organizations/${organizationSlug}/teams`
       ).then((response) =>
-        responseJson<{ teams: readonly TeamView[] }>(
+        responseJson(
           response,
-          t("organization.requestFailed")
+          t("organization.requestFailed"),
+          teamsResponseSchema
         )
       );
       setTeams(body.teams);
@@ -117,9 +122,10 @@ function TeamManagementView() {
       const body = await fetch(
         `/api/organizations/${organizationSlug}/teams/${selectedTeamId}/members`
       ).then((response) =>
-        responseJson<{ members: readonly TeamMemberView[] }>(
+        responseJson(
           response,
-          t("organization.requestFailed")
+          t("organization.requestFailed"),
+          teamMembersResponseSchema
         )
       );
       setTeamMembers(body.members);
@@ -167,12 +173,7 @@ function TeamManagementView() {
 
   async function requestJson(url: string, init: RequestInit) {
     const response = await fetch(url, init);
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as {
-        error?: string;
-      } | null;
-      throw new Error(body?.error ?? t("organization.requestFailed"));
-    }
+    await responseOk(response, t("organization.requestFailed"));
   }
 
   async function createTeam(event: FormEvent<HTMLFormElement>) {

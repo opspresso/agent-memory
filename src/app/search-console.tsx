@@ -17,11 +17,7 @@ import {
 } from "@mantine/core";
 import {
   IconArchive,
-  IconBrain,
-  IconFileText,
-  IconHistory,
   IconSearch,
-  IconTopologyStar3,
   IconTrash
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -30,15 +26,14 @@ import {
   canAccessScopedResource,
   type ScopedResource
 } from "@/domain/identity/organization-access";
-import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
-
 import { useT } from "./_i18n/provider";
 import {
-  contextResultPresentation,
-  relativeRelevance
-} from "./context-result-presentation";
-import { responseJson } from "./http-response";
-import classes from "./page.module.css";
+  neighborhoodResponseSchema,
+  scopeResponseSchema,
+  searchResponseSchema,
+  type SearchHitResponse
+} from "./api-response-schemas";
+import { responseJson, responseOk } from "./http-response";
 import {
   KnowledgeGraph,
   type KnowledgeGraphEdgeView,
@@ -46,6 +41,7 @@ import {
 } from "./knowledge-graph";
 import { MemoryLifecycle } from "./memory-lifecycle";
 import { useOrganization } from "./organization-context";
+import { SearchResultCard, searchResultKey } from "./search-result-card";
 
 type PendingResourceAction =
   | Readonly<{ kind: "document"; id: string; name: string }>
@@ -64,97 +60,9 @@ type SearchKind =
   | "knowledge/nodes"
   | "memories";
 
-interface SearchResponse {
-  readonly hits?: readonly Record<string, unknown>[];
-  readonly error?: string;
-}
-
-interface NeighborhoodResponse {
-  readonly nodes?: readonly KnowledgeGraphNodeView[];
-  readonly edges?: readonly KnowledgeGraphEdgeView[];
-  readonly error?: string;
-}
-
-function nestedRecord(
-  hit: Record<string, unknown>,
-  key: "chunk" | "document" | "memory" | "node"
-): Record<string, unknown> | undefined {
-  const value = hit[key];
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function resultTitle(hit: Record<string, unknown>, fallback: string): string {
-  const memory = nestedRecord(hit, "memory");
-  const document = nestedRecord(hit, "document");
-  const node = nestedRecord(hit, "node");
-  return String(
-    memory?.title ?? document?.title ?? node?.canonicalName ?? fallback
-  );
-}
-
-function resultSummary(hit: Record<string, unknown>): string {
-  const memory = nestedRecord(hit, "memory");
-  const chunk = nestedRecord(hit, "chunk");
-  const node = nestedRecord(hit, "node");
-  return String(
-    memory?.content ?? chunk?.content ?? node?.summary ?? node?.kind ?? ""
-  );
-}
-
-function resultKey(hit: Record<string, unknown>): string {
-  const source =
-    nestedRecord(hit, "memory") ??
-    nestedRecord(hit, "document") ??
-    nestedRecord(hit, "node");
-  const chunk = nestedRecord(hit, "chunk");
-  return `${String(source?.id ?? "result")}:${String(chunk?.id ?? "root")}`;
-}
-
 function scopedResource(value: unknown): ScopedResource | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const scope = value as Record<string, unknown>;
-  if (typeof scope.organizationId !== "string") {
-    return undefined;
-  }
-  if (scope.kind === "organization") {
-    return { kind: "organization", organizationId: scope.organizationId };
-  }
-  if (scope.kind === "team" && typeof scope.teamId === "string") {
-    return {
-      kind: "team",
-      organizationId: scope.organizationId,
-      teamId: scope.teamId
-    };
-  }
-  if (scope.kind === "user" && typeof scope.userId === "string") {
-    return {
-      kind: "user",
-      organizationId: scope.organizationId,
-      userId: scope.userId
-    };
-  }
-  return undefined;
-}
-
-function sameScope(left: unknown, right: unknown): boolean {
-  const leftScope = scopedResource(left);
-  const rightScope = scopedResource(right);
-  return Boolean(
-    leftScope &&
-      rightScope &&
-      leftScope.kind === rightScope.kind &&
-      leftScope.organizationId === rightScope.organizationId &&
-      (leftScope.kind !== "team" ||
-        (rightScope.kind === "team" &&
-          leftScope.teamId === rightScope.teamId)) &&
-      (leftScope.kind !== "user" ||
-        (rightScope.kind === "user" &&
-          leftScope.userId === rightScope.userId))
-  );
+  const parsed = scopeResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export function SearchConsole() {
@@ -171,7 +79,7 @@ function SearchConsoleView() {
   const [searchKind, setSearchKind] = useState<SearchKind>("context/search");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string>();
-  const [hits, setHits] = useState<readonly Record<string, unknown>[]>([]);
+  const [hits, setHits] = useState<readonly SearchHitResponse[]>([]);
   const [selectedMemoryId, setSelectedMemoryId] = useState<string>();
   const [graphCenterNodeId, setGraphCenterNodeId] = useState<string>();
   const [graphSelectedNodeId, setGraphSelectedNodeId] = useState<string>();
@@ -214,13 +122,21 @@ function SearchConsoleView() {
   );
 
   function selectSearchKind(value: string) {
+    if (
+      value !== "context/search" &&
+      value !== "documents" &&
+      value !== "knowledge/nodes" &&
+      value !== "memories"
+    ) {
+      return;
+    }
     graphRequest.current?.abort();
     graphRequest.current = undefined;
     searchRequest.current?.abort();
     searchRequest.current = undefined;
     setSearching(false);
     setLoadingGraph(false);
-    setSearchKind(value as SearchKind);
+    setSearchKind(value);
     setHits([]);
     setSearchError(undefined);
     setGraphCenterNodeId(undefined);
@@ -260,11 +176,12 @@ function SearchConsoleView() {
         `/api/organizations/${organizationSlug}/${searchKind}?q=${encodeURIComponent(query)}`,
         { signal: controller.signal }
       );
-      const body = await responseJson<SearchResponse>(
+      const body = await responseJson(
         response,
-        t("workspace.searchFailed")
+        t("workspace.searchFailed"),
+        searchResponseSchema
       );
-      setHits(body.hits ?? []);
+      setHits(body.hits);
     } catch (caught) {
       if (controller.signal.aborted) {
         return;
@@ -295,14 +212,15 @@ function SearchConsoleView() {
         `/api/organizations/${organizationSlug}/knowledge/nodes/${nodeId}/neighborhood?depth=2&limit=100`,
         { signal: controller.signal }
       );
-      const body = await responseJson<NeighborhoodResponse>(
+      const body = await responseJson(
         response,
-        t("workspace.graphFailed")
+        t("workspace.graphFailed"),
+        neighborhoodResponseSchema
       );
       setGraphCenterNodeId(nodeId);
       setGraphSelectedNodeId(nodeId);
-      setGraphNodes(body.nodes ?? []);
-      setGraphEdges(body.edges ?? []);
+      setGraphNodes(body.nodes);
+      setGraphEdges(body.edges);
     } catch (caught) {
       if (controller.signal.aborted) {
         return;
@@ -348,16 +266,11 @@ function SearchConsoleView() {
             }
           : { method: "DELETE" }
       );
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({})) as {
-          error?: string;
-        };
-        throw new Error(body.error ?? t("resource.deleteFailed"));
-      }
+      await responseOk(response, t("resource.deleteFailed"));
       if (action.kind === "merge") {
         setHits((current) =>
           current.filter(
-            (hit) => nestedRecord(hit, "node")?.id !== action.sourceNodeId
+            (hit) => hit.node?.id !== action.sourceNodeId
           )
         );
         setGraphCenterNodeId(undefined);
@@ -368,7 +281,7 @@ function SearchConsoleView() {
       } else if (action.kind === "document") {
         setHits((current) =>
           current.filter(
-            (hit) => nestedRecord(hit, "document")?.id !== action.id
+            (hit) => hit.document?.id !== action.id
           )
         );
         setGraphCenterNodeId(undefined);
@@ -381,7 +294,7 @@ function SearchConsoleView() {
         );
       } else {
         setHits((current) =>
-          current.filter((hit) => nestedRecord(hit, "node")?.id !== action.id)
+          current.filter((hit) => hit.node?.id !== action.id)
         );
         setGraphNodes((current) =>
           current.filter((node) => node.id !== action.id)
@@ -458,188 +371,31 @@ function SearchConsoleView() {
             <Alert color="green">{resourceActionMessage}</Alert>
           ) : null}
           <SimpleGrid cols={{ base: 1, md: 2 }}>
-            {hits.map((hit) => {
-              const node = nestedRecord(hit, "node");
-              const document = nestedRecord(hit, "document");
-              const memory = nestedRecord(hit, "memory");
-              const presentation = contextResultPresentation(hit, t);
-              const relevance = relativeRelevance(
-                presentation.score,
-                peakScore
-              );
-              const capabilities = memory?.capabilities;
-              const canManageMemory =
-                capabilities && typeof capabilities === "object"
-                  ? Boolean(
-                      (capabilities as Record<string, unknown>).write ||
-                        (capabilities as Record<string, unknown>).manage
-                    )
-                  : false;
-              const canManageDocument = canManage(document?.scope);
-              const duplicateNode =
-                typeof node?.id === "string" &&
-                typeof node.canonicalName === "string"
-                  ? hits
-                      .map((candidate) => nestedRecord(candidate, "node"))
-                      .find(
-                        (candidate) =>
-                          typeof candidate?.id === "string" &&
-                          candidate.id !== node.id &&
-                          typeof candidate.canonicalName === "string" &&
-                          knowledgeCanonicalNameKey(
-                            candidate.canonicalName
-                          ) ===
-                            knowledgeCanonicalNameKey(
-                              node.canonicalName as string
-                            ) &&
-                          sameScope(candidate.scope, node.scope) &&
-                          canManage(candidate.scope)
-                      )
-                  : undefined;
-              return (
-                <Paper
-                  className={classes.resultCard}
-                  data-source={presentation.sourceType}
-                  key={resultKey(hit)}
-                  p="md"
-                  withBorder
-                >
-                  <Stack gap="xs">
-                  <Group justify="space-between">
-                    <Group gap="xs">
-                      {presentation.sourceType === "memory" ? (
-                        <IconBrain aria-hidden size={17} />
-                      ) : presentation.sourceType === "document" ? (
-                        <IconFileText aria-hidden size={17} />
-                      ) : (
-                        <IconTopologyStar3 aria-hidden size={17} />
-                      )}
-                      <Badge color="gray" variant="light">
-                        {presentation.sourceLabel}
-                      </Badge>
-                      <Badge color="gray" variant="outline">
-                        {presentation.scopeLabel}
-                      </Badge>
-                    </Group>
-                    {presentation.score !== undefined ? (
-                      <Text c="dimmed" ff="monospace" size="xs">
-                        {presentation.score.toFixed(3)}
-                      </Text>
-                    ) : null}
-                  </Group>
-                  <Text fw={650}>{resultTitle(hit, t("workspace.resultFallback"))}</Text>
-                  {typeof node?.kind === "string" ? (
-                    <Group gap="xs">
-                      <Badge size="xs" variant="dot">{node.kind}</Badge>
-                      <Text c="dimmed" size="xs">
-                        {t("workspace.nodeSources", {
-                          count: Array.isArray(node.sources)
-                            ? node.sources.length
-                            : 0
-                        })}
-                      </Text>
-                    </Group>
-                  ) : null}
-                  <Text c="dimmed" lineClamp={4} size="sm">
-                    {resultSummary(hit)}
-                  </Text>
-                  <div className={classes.evidenceRail}>
-                    <Group justify="space-between" wrap="nowrap">
-                      <Text c="dimmed" lineClamp={1} size="xs">
-                        {presentation.evidenceLabel}
-                      </Text>
-                      <Text fw={700} size="xs">
-                        {t("workspace.relativeRelevance", { value: relevance })}
-                      </Text>
-                    </Group>
-                    <div
-                      aria-label={t("workspace.relativeRelevance", { value: relevance })}
-                      aria-valuemax={100}
-                      aria-valuemin={0}
-                      aria-valuenow={relevance}
-                      className={classes.relevanceTrack}
-                      role="meter"
-                    >
-                      <span style={{ width: `${relevance}%` }} />
-                    </div>
-                    <Group gap="lg">
-                      {presentation.lexicalScore !== undefined ? (
-                        <Text c="dimmed" ff="monospace" size="xs">
-                          lexical {presentation.lexicalScore.toFixed(3)}
-                        </Text>
-                      ) : null}
-                      {presentation.vectorScore !== undefined ? (
-                        <Text c="dimmed" ff="monospace" size="xs">
-                          vector {presentation.vectorScore.toFixed(3)}
-                        </Text>
-                      ) : null}
-                    </Group>
-                  </div>
-                  {searchKind === "knowledge/nodes" &&
-                  typeof node?.id === "string" ? (
-                    <Button
-                      leftSection={<IconTopologyStar3 size={16} />}
-                      loading={loadingGraph}
-                      onClick={() =>
-                        void exploreKnowledgeNode(node.id as string)
-                      }
-                      size="compact-sm"
-                      variant="light"
-                    >
-                      {t("workspace.viewRelationships")}
-                    </Button>
-                  ) : null}
-                  {typeof node?.id === "string" &&
-                  typeof duplicateNode?.id === "string" &&
-                  canManage(node.scope) ? (
-                    <Button
-                      color="orange"
-                      onClick={() => {
-                        setMergeReason("");
-                        setPendingResourceAction({
-                          kind: "merge",
-                          targetNodeId: node.id as string,
-                          sourceNodeId: duplicateNode.id as string,
-                          name: String(node.canonicalName)
-                        });
-                      }}
-                      size="compact-sm"
-                      variant="light"
-                    >
-                      {t("resource.mergeDuplicate")}
-                    </Button>
-                  ) : null}
-                  {typeof memory?.id === "string" && canManageMemory ? (
-                    <Button
-                      leftSection={<IconHistory size={16} />}
-                      onClick={() => setSelectedMemoryId(memory.id as string)}
-                      size="compact-sm"
-                      variant="light"
-                    >
-                      Lifecycle
-                    </Button>
-                  ) : null}
-                  {typeof document?.id === "string" && canManageDocument ? (
-                    <Button
-                      color="red"
-                      leftSection={<IconArchive size={16} />}
-                      onClick={() =>
-                        setPendingResourceAction({
-                          kind: "document",
-                          id: document.id as string,
-                          name: String(document.title ?? t("workspace.resultFallback"))
-                        })
-                      }
-                      size="compact-sm"
-                      variant="subtle"
-                    >
-                      {t("resource.archiveDocument")}
-                    </Button>
-                  ) : null}
-                  </Stack>
-                </Paper>
-              );
-            })}
+            {hits.map((hit) => (
+              <SearchResultCard
+                canManage={canManage}
+                hit={hit}
+                hits={hits}
+                key={searchResultKey(hit)}
+                loadingGraph={loadingGraph}
+                onArchiveDocument={(id, name) =>
+                  setPendingResourceAction({ kind: "document", id, name })
+                }
+                onExploreNode={(nodeId) => void exploreKnowledgeNode(nodeId)}
+                onMergeNodes={(targetNodeId, sourceNodeId, name) => {
+                  setMergeReason("");
+                  setPendingResourceAction({
+                    kind: "merge",
+                    targetNodeId,
+                    sourceNodeId,
+                    name
+                  });
+                }}
+                onSelectMemory={setSelectedMemoryId}
+                peakScore={peakScore}
+                showGraphAction={searchKind === "knowledge/nodes"}
+              />
+            ))}
           </SimpleGrid>
           {!searching && hits.length === 0 && !searchError ? (
             <Text c="dimmed" ta="center">

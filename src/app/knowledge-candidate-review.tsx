@@ -21,7 +21,11 @@ import {
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { useT } from "./_i18n/provider";
-import { responseJson } from "./http-response";
+import {
+  candidateDuplicatesResponseSchema,
+  knowledgeCandidatesResponseSchema
+} from "./api-response-schemas";
+import { responseJson, responseOk } from "./http-response";
 import classes from "./knowledge-candidate-review.module.css";
 
 interface ProposedEntityView {
@@ -74,24 +78,16 @@ interface KnowledgeCandidateReviewProps {
   readonly organizationSlug: string;
 }
 
-async function responseError(response: Response, fallback: string) {
-  const body = (await response.json().catch(() => null)) as {
-    error?: string;
-  } | null;
-  return body?.error ?? fallback;
-}
-
 async function requestCandidates(organizationSlug: string, fallback: string) {
   const response = await fetch(
     `/api/organizations/${organizationSlug}/knowledge/candidates?limit=100`
   );
-  if (!response.ok) {
-    throw new Error(await responseError(response, fallback));
-  }
-  const body = (await response.json()) as {
-    candidates?: readonly KnowledgeCandidateView[];
-  };
-  return body.candidates ?? [];
+  const body = await responseJson(
+    response,
+    fallback,
+    knowledgeCandidatesResponseSchema
+  );
+  return body.candidates;
 }
 
 export function KnowledgeCandidateReview({
@@ -207,10 +203,11 @@ export function KnowledgeCandidateReview({
       { signal: controller.signal }
     )
       .then((response) =>
-        responseJson<{
-          duplicates?: Readonly<Record<string, readonly SimilarNodeView[]>>;
-          ontology?: OntologyFlagsView;
-        }>(response, loadMessages.requestFailed)
+        responseJson(
+          response,
+          loadMessages.requestFailed,
+          candidateDuplicatesResponseSchema
+        )
       )
       .then((body) =>
         setDuplicateState({
@@ -250,9 +247,7 @@ export function KnowledgeCandidateReview({
           })
         }
       );
-      if (!response.ok) {
-        throw new Error(await responseError(response, t("candidate.requestFailed")));
-      }
+      await responseOk(response, t("candidate.requestFailed"));
       setMessage(
         action === "accept"
           ? t("candidate.accepted")

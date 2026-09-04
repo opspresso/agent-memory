@@ -46,6 +46,8 @@ src/app  ──▶ src/lib ──▶ src/application ──▶ src/domain
 5. Repository가 모든 조회와 변경을 `organizationId`로 제한한다.
 6. 공개 응답 변환기가 권한에 따라 ACL과 내부 필드를 제거한다.
 
+운영 콘솔은 `api-response-schemas`의 endpoint별 Zod schema로 성공 응답을 decode한 뒤 상태와 mutation target에 사용한다. JSON이더라도 계약과 다른 응답은 화면의 operation fallback 오류로 처리하며 caller가 지정한 generic type으로 단언하지 않는다.
+
 브라우저의 unsafe method는 요청 origin이 실제 또는 설정된 application origin과 같아야 한다. Bearer 요청은 Agent 호출로 취급한다.
 
 조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 같은 slug의 MCP route에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자가 현재 active `admin` 또는 `owner`인지 다시 확인해 제거·차단·강등을 즉시 반영한다. 유효한 token 요청은 발급자에게 귀속되는 organization service principal로 실행하며 organization scope만 허용한다. User scope, team scope, 개별 access grant는 domain 정책과 SQL predicate 모두에서 제외하고 호출자가 지정한 identity header를 신뢰하지 않는다.

@@ -5,13 +5,7 @@ import { IconBuildingPlus } from "@tabler/icons-react";
 import { useState, type FormEvent } from "react";
 
 import { useT } from "./_i18n/provider";
-
-async function responseMessage(response: Response, fallback: string): Promise<string> {
-  const body = (await response.json().catch(() => null)) as {
-    error?: string;
-  } | null;
-  return body?.error ?? fallback;
-}
+import { responseOk } from "./http-response";
 
 export function OrganizationBootstrap({
   redirectTo
@@ -36,9 +30,7 @@ export function OrganizationBootstrap({
           slug: form.get("slug")
         })
       });
-      if (!response.ok) {
-        throw new Error(await responseMessage(response, t("organization.createFailed")));
-      }
+      await responseOk(response, t("organization.createFailed"));
       if (redirectTo) {
         window.location.assign(redirectTo);
         return;

@@ -27,7 +27,13 @@ import type { NewMemberStatus } from "@/domain/identity/organization-access";
 import type { KnowledgeOntologyMode } from "@/domain/knowledge/knowledge-ontology";
 
 import { useT } from "../_i18n/provider";
-import { responseJson } from "../http-response";
+import {
+  ontologyRecommendationResponseSchema,
+  ontologyResponseSchema,
+  organizationDetailResponseSchema,
+  teamsResponseSchema
+} from "../api-response-schemas";
+import { responseJson, responseOk } from "../http-response";
 import { OrganizationBootstrap } from "../organization-bootstrap";
 import { useOrganization } from "../organization-context";
 
@@ -138,23 +144,26 @@ function OrganizationSettingsView({
     try {
       const [detail, teamsBody, recommendationBody] = await Promise.all([
         fetch(`/api/organizations/${organizationSlug}`).then((response) =>
-          responseJson<OrganizationDetail>(
+          responseJson(
             response,
-            t("organization.loadFailed")
+            t("organization.loadFailed"),
+            organizationDetailResponseSchema
           )
         ),
         fetch(`/api/organizations/${organizationSlug}/teams`).then((response) =>
-          responseJson<{ teams: readonly TeamView[] }>(
+          responseJson(
             response,
-            t("organization.loadFailed")
+            t("organization.loadFailed"),
+            teamsResponseSchema
           )
         ),
         fetch(
           `/api/organizations/${organizationSlug}/knowledge/ontology/recommendations`
         ).then((response) =>
-          responseJson<OntologyRecommendation>(
+          responseJson(
             response,
-            t("organization.loadFailed")
+            t("organization.loadFailed"),
+            ontologyRecommendationResponseSchema
           )
         )
       ]);
@@ -197,12 +206,7 @@ function OrganizationSettingsView({
           ontology: { nodeKinds, edgePredicates }
         })
       });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(body?.error ?? t("organization.requestFailed"));
-      }
+      await responseOk(response, t("organization.requestFailed"));
       setMessage(t("settings.saved"));
       router.refresh();
       await load();
@@ -223,9 +227,10 @@ function OrganizationSettingsView({
         `/api/organizations/${organizationSlug}/knowledge/ontology/suggestions`,
         { method: "POST" }
       );
-      const body = await responseJson<OntologySuggestion>(
+      const body = await responseJson(
         response,
-        t("organization.requestFailed")
+        t("organization.requestFailed"),
+        ontologyResponseSchema
       );
       setSuggestion(body);
     } catch (caught) {
@@ -246,12 +251,7 @@ function OrganizationSettingsView({
       const response = await fetch(`/api/organizations/${organizationSlug}`, {
         method: "DELETE"
       });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(body?.error ?? t("organization.requestFailed"));
-      }
+      await responseOk(response, t("organization.requestFailed"));
       setDeleteOpened(false);
       router.push("/");
       router.refresh();

@@ -16,6 +16,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 
 import { useT } from "../_i18n/provider";
+import {
+  documentUploadResponseSchema,
+  teamsResponseSchema
+} from "../api-response-schemas";
 import { responseJson } from "../http-response";
 import { useOrganization } from "../organization-context";
 
@@ -55,9 +59,10 @@ function DocumentUploadView() {
       signal: controller.signal
     })
       .then((response) =>
-        responseJson<{ teams: readonly TeamSummary[] }>(
+        responseJson(
           response,
-          t("organization.requestFailed")
+          t("organization.requestFailed"),
+          teamsResponseSchema
         )
       )
       .then((body) => setTeams(body.teams))
@@ -104,15 +109,15 @@ function DocumentUploadView() {
         `/api/organizations/${organizationSlug}/documents`,
         { method: "POST", body: form }
       );
-      const body = await responseJson<{
-        id?: string;
-        error?: string;
-        status?: string;
-      }>(response, t("workspace.uploadFailed"));
+      const body = await responseJson(
+        response,
+        t("workspace.uploadFailed"),
+        documentUploadResponseSchema
+      );
       setUploadMessage(
         body.status === "failed"
-          ? t("workspace.uploadQueueFailed", { id: body.id ?? "" })
-          : t("workspace.uploadQueued", { id: body.id ?? "" })
+          ? t("workspace.uploadQueueFailed", { id: body.id })
+          : t("workspace.uploadQueued", { id: body.id })
       );
       formElement.reset();
     } catch (caught) {

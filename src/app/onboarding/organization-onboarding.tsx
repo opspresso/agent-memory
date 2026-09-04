@@ -20,6 +20,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useT } from "../_i18n/provider";
+import {
+  joinOrganizationResponseSchema,
+  organizationsResponseSchema
+} from "../api-response-schemas";
 import { responseJson } from "../http-response";
 import { OrganizationBootstrap } from "../organization-bootstrap";
 
@@ -47,9 +51,10 @@ export function OrganizationOnboarding({
     const controller = new AbortController();
     fetch("/api/organizations/available", { signal: controller.signal })
       .then((response) =>
-        responseJson<{ organizations: readonly OrganizationSummary[] }>(
+        responseJson(
           response,
-          t("onboarding.loadFailed")
+          t("onboarding.loadFailed"),
+          organizationsResponseSchema
         )
       )
       .then((body) => setAvailable(body.organizations))
@@ -74,9 +79,10 @@ export function OrganizationOnboarding({
         `/api/organizations/${organization.slug}/join`,
         { method: "POST" }
       );
-      const body = await responseJson<{ status?: string }>(
+      const body = await responseJson(
         response,
-        t("onboarding.joinFailed")
+        t("onboarding.joinFailed"),
+        joinOrganizationResponseSchema
       );
       if (body.status === "active") {
         router.push("/");

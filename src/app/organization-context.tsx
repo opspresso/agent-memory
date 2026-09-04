@@ -14,6 +14,9 @@ import {
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import type { OrganizationMembership } from "@/domain/identity/organization-access-repository";
 
+import { organizationAccessResponseSchema } from "./api-response-schemas";
+import { responseJson } from "./http-response";
+
 const ACTIVE_ORGANIZATION_STORAGE_KEY = "agent-memory-active-organization";
 
 interface OrganizationContextValue {
@@ -95,15 +98,11 @@ export function OrganizationProvider({
       signal: controller.signal
     })
       .then(async (response) => {
-        if (!response.ok) {
-          throw new Error("organization access request failed");
-        }
-        const body = (await response.json()) as {
-          organizationId: string;
-          role: OrganizationAccess["role"];
-          teams: OrganizationAccess["teams"];
-          user: { id: string };
-        };
+        const body = await responseJson(
+          response,
+          "organization access request failed",
+          organizationAccessResponseSchema
+        );
         if (body.organizationId !== organizationId) {
           throw new Error("organization access response does not match request");
         }

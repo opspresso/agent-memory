@@ -20,23 +20,14 @@ import {
 import { useState, type FormEvent } from "react";
 
 import { useT } from "./_i18n/provider";
+import { authenticationRedirectResponseSchema } from "./api-response-schemas";
+import { responseJson, responseOk } from "./http-response";
 
 interface LoginPanelProps {
   readonly googleEnabled: boolean;
   readonly oidcEnabled: boolean;
   readonly passwordEnabled: boolean;
   readonly signUpEnabled: boolean;
-}
-
-async function responseMessage(
-  response: Response,
-  fallback: string
-): Promise<string> {
-  const body = (await response.json().catch(() => null)) as {
-    message?: string;
-    error?: string;
-  } | null;
-  return body?.message ?? body?.error ?? fallback;
 }
 
 export function LoginPanel({
@@ -61,13 +52,13 @@ export function LoginPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider, callbackURL: "/" })
       });
-      if (!response.ok) {
-        throw new Error(await responseMessage(response, t("login.requestFailed")));
-      }
-      const result = (await response.json()) as { url?: string };
-      if (!result.url) {
-        throw new Error(t("login.providerUrlMissing"));
-      }
+      const result = await responseJson(
+        response,
+        response.ok
+          ? t("login.providerUrlMissing")
+          : t("login.requestFailed"),
+        authenticationRedirectResponseSchema
+      );
       window.location.assign(result.url);
     } catch (caught) {
       setError(
@@ -97,9 +88,7 @@ export function LoginPanel({
           })
         }
       );
-      if (!response.ok) {
-        throw new Error(await responseMessage(response, t("login.requestFailed")));
-      }
+      await responseOk(response, t("login.requestFailed"));
       window.location.reload();
     } catch (caught) {
       setError(

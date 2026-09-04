@@ -15,6 +15,11 @@ import { IconCheck, IconCopy } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 
 import { useT } from "../_i18n/provider";
+import {
+  agentTokenStatusResponseSchema,
+  generatedAgentTokenResponseSchema,
+  revealedAgentTokenResponseSchema
+} from "../api-response-schemas";
 import { responseJson } from "../http-response";
 import { useOrganization } from "../organization-context";
 
@@ -23,17 +28,6 @@ interface AgentTokenStatus {
   readonly masked?: string;
   readonly createdAt?: string;
   readonly revealable?: boolean;
-}
-
-interface GeneratedAgentToken {
-  readonly token: string;
-  readonly masked: string;
-  readonly createdAt: string;
-}
-
-interface RevealedAgentToken {
-  readonly token: string;
-  readonly createdAt: string;
 }
 
 export function AgentConnect({ origin }: { readonly origin: string }) {
@@ -90,7 +84,11 @@ function AgentConnectionPanels({
       signal: controller.signal
     })
       .then((response) =>
-        responseJson<AgentTokenStatus>(response, t("workspace.agentTokenFailed"))
+        responseJson(
+          response,
+          t("workspace.agentTokenFailed"),
+          agentTokenStatusResponseSchema
+        )
       )
       .then(setTokenStatus)
       .catch((caught) => {
@@ -117,9 +115,10 @@ function AgentConnectionPanels({
         `/api/organizations/${organizationSlug}/agent-token`,
         { method: "POST" }
       ).then((response) =>
-        responseJson<GeneratedAgentToken>(
+        responseJson(
           response,
-          t("workspace.agentTokenFailed")
+          t("workspace.agentTokenFailed"),
+          generatedAgentTokenResponseSchema
         )
       );
       setGeneratedToken(generated.token);
@@ -152,9 +151,10 @@ function AgentConnectionPanels({
         `/api/organizations/${organizationSlug}/agent-token/reveal`,
         { method: "POST" }
       ).then((response) =>
-        responseJson<RevealedAgentToken>(
+        responseJson(
           response,
-          t("workspace.agentTokenFailed")
+          t("workspace.agentTokenFailed"),
+          revealedAgentTokenResponseSchema
         )
       );
       setGeneratedToken(revealed.token);
@@ -185,7 +185,11 @@ function AgentConnectionPanels({
         { method: "DELETE" }
       );
       if (!response.ok) {
-        await responseJson(response, t("workspace.agentTokenFailed"));
+        await responseJson(
+          response,
+          t("workspace.agentTokenFailed"),
+          agentTokenStatusResponseSchema
+        );
       }
       setTokenStatus({ configured: false });
     } catch (caught) {

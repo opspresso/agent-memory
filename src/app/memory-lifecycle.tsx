@@ -23,6 +23,11 @@ import {
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { useLocale, useT } from "./_i18n/provider";
+import {
+  memoryDetailResponseSchema,
+  memoryVersionsResponseSchema
+} from "./api-response-schemas";
+import { responseJson, responseOk } from "./http-response";
 import classes from "./memory-lifecycle.module.css";
 
 interface MemoryCapabilitiesView {
@@ -76,13 +81,6 @@ interface LoadedMemory {
   readonly versions: readonly MemoryVersionView[];
 }
 
-async function responseError(response: Response, fallback: string) {
-  const body = (await response.json().catch(() => null)) as {
-    error?: string;
-  } | null;
-  return body?.error ?? fallback;
-}
-
 async function requestMemory(
   organizationSlug: string,
   memoryId: string,
@@ -92,10 +90,11 @@ async function requestMemory(
   const response = await fetch(
     `/api/organizations/${organizationSlug}/memories/${memoryId}`
   );
-  if (!response.ok) {
-    throw new Error(await responseError(response, fallback));
-  }
-  const memory = (await response.json()) as MemoryDetailView;
+  const memory = await responseJson(
+    response,
+    fallback,
+    memoryDetailResponseSchema
+  );
   const etag = response.headers.get("etag");
   if (!etag) {
     throw new Error(etagMissing);
@@ -106,13 +105,12 @@ async function requestMemory(
   const versionsResponse = await fetch(
     `/api/organizations/${organizationSlug}/memories/${memoryId}/versions?limit=100`
   );
-  if (!versionsResponse.ok) {
-    throw new Error(await responseError(versionsResponse, fallback));
-  }
-  const versionsBody = (await versionsResponse.json()) as {
-    versions?: readonly MemoryVersionView[];
-  };
-  return { memory, etag, versions: versionsBody.versions ?? [] };
+  const versionsBody = await responseJson(
+    versionsResponse,
+    fallback,
+    memoryVersionsResponseSchema
+  );
+  return { memory, etag, versions: versionsBody.versions };
 }
 
 function formattedDate(value: string, locale: "en" | "ko") {
@@ -239,9 +237,7 @@ export function MemoryLifecycle({
           t("memory.conflict")
         );
       }
-      if (!response.ok) {
-        throw new Error(await responseError(response, t("memory.requestFailed")));
-      }
+      await responseOk(response, t("memory.requestFailed"));
       setMessage(t("memory.revisionSaved"));
       await loadMemory();
     } catch (caught) {
@@ -273,9 +269,7 @@ export function MemoryLifecycle({
           t("memory.conflict")
         );
       }
-      if (!response.ok) {
-        throw new Error(await responseError(response, t("memory.requestFailed")));
-      }
+      await responseOk(response, t("memory.requestFailed"));
       setMessage(t("memory.archived"));
       setConfirmArchive(false);
       onClose();

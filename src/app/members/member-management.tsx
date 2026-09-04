@@ -35,7 +35,12 @@ import type {
 } from "@/domain/identity/organization-access";
 
 import { useT } from "../_i18n/provider";
-import { responseJson } from "../http-response";
+import {
+  organizationMembersResponseSchema,
+  teamMembersResponseSchema,
+  teamsResponseSchema
+} from "../api-response-schemas";
+import { responseJson, responseOk } from "../http-response";
 import { useOrganization } from "../organization-context";
 
 interface MemberView {
@@ -88,15 +93,17 @@ function MemberManagementView() {
     try {
       const [membersBody, teamsBody] = await Promise.all([
         fetch(`/api/organizations/${organizationSlug}/members`).then((response) =>
-          responseJson<{ members: readonly MemberView[] }>(
+          responseJson(
             response,
-            t("organization.requestFailed")
+            t("organization.requestFailed"),
+            organizationMembersResponseSchema
           )
         ),
         fetch(`/api/organizations/${organizationSlug}/teams`).then((response) =>
-          responseJson<{ teams: readonly TeamView[] }>(
+          responseJson(
             response,
-            t("organization.requestFailed")
+            t("organization.requestFailed"),
+            teamsResponseSchema
           )
         )
       ]);
@@ -105,9 +112,10 @@ function MemberManagementView() {
           const body = await fetch(
             `/api/organizations/${organizationSlug}/teams/${team.id}/members`
           ).then((response) =>
-            responseJson<{ members: readonly TeamMemberView[] }>(
+            responseJson(
               response,
-              t("organization.requestFailed")
+              t("organization.requestFailed"),
+              teamMembersResponseSchema
             )
           );
           return body.members.map((member) => ({ ...member, teamId: team.id }));
@@ -156,12 +164,7 @@ function MemberManagementView() {
 
   async function requestJson(url: string, init: RequestInit) {
     const response = await fetch(url, init);
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as {
-        error?: string;
-      } | null;
-      throw new Error(body?.error ?? t("organization.requestFailed"));
-    }
+    await responseOk(response, t("organization.requestFailed"));
   }
 
   async function addMember(event: FormEvent<HTMLFormElement>) {
