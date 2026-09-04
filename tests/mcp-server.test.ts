@@ -29,7 +29,11 @@ function operations(
   return {
     searchContext: vi
       .fn()
-      .mockResolvedValue({ memories: [], documents: [], knowledge: [] }),
+      .mockResolvedValue({
+        hits: [],
+        counts: { memories: 0, documents: 0, knowledge: 0 },
+        ranking: "hybrid"
+      }),
     createMemory: vi.fn(),
     searchMemories: vi.fn().mockResolvedValue([]),
     searchDocuments: vi.fn().mockResolvedValue([]),
@@ -83,7 +87,11 @@ describe("agent memory MCP server", () => {
   it("executes unified context search", async () => {
     const searchContext = vi
       .fn()
-      .mockResolvedValue({ memories: [], documents: [], knowledge: [] });
+      .mockResolvedValue({
+        hits: [],
+        counts: { memories: 0, documents: 0, knowledge: 0 },
+        ranking: "hybrid"
+      });
     const client = await connectedClient(operations({ searchContext }));
 
     const result = await client.callTool({
@@ -95,7 +103,8 @@ describe("agent memory MCP server", () => {
     expect(result.structuredContent).toEqual({
       hits: [],
       count: 0,
-      counts: { memories: 0, documents: 0, knowledge: 0 }
+      counts: { memories: 0, documents: 0, knowledge: 0 },
+      ranking: "hybrid"
     });
   });
 });

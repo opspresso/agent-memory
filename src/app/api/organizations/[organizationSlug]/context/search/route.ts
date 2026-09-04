@@ -32,15 +32,10 @@ export async function GET(request: Request, context: RouteContext) {
     const result = await searchContextRecords(
       authorization.access,
       parsedQuery.data.query,
-      parsedQuery.data.limit
+      parsedQuery.data.limit,
+      request.signal
     );
-    return Response.json(
-      publicContextSearchResult(
-        result,
-        parsedQuery.data.limit,
-        authorization.access
-      )
-    );
+    return Response.json(publicContextSearchResult(result, authorization.access));
   } catch (error) {
     const response = aiErrorResponse(error);
     if (response) {

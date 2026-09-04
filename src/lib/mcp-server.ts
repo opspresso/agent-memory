@@ -82,7 +82,7 @@ export function createAgentMemoryMcpServer(
     },
     async ({ query, limit }) => {
       const result = await operations.searchContext(access, query, limit ?? 10);
-      return jsonResult(publicContextSearchResult(result, limit ?? 10));
+      return jsonResult(publicContextSearchResult(result));
     }
   );
 

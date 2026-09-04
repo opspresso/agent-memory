@@ -10,6 +10,7 @@ import { createKnowledgeTermUsageRepository } from "@/infrastructure/database/re
 import { createKnowledgeOntologySuggestionService } from "@/infrastructure/ai/knowledge-ontology-suggestion-service";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
+import { createTextRerankerService } from "@/infrastructure/ai/text-reranker-service";
 import { createKnowledgeExtractionService } from "@/infrastructure/ai/knowledge-extraction-service";
 import {
   createAiRequestLimiter,
@@ -81,6 +82,43 @@ function createConfiguredTextEmbeddingService() {
   });
 }
 export const textEmbeddingService = createConfiguredTextEmbeddingService();
+
+const rerankerModel = process.env.RERANKER_MODEL?.trim();
+const rerankerBaseUrl = process.env.RERANKER_BASE_URL?.trim();
+function createConfiguredTextRerankerService() {
+  if (!rerankerModel && !rerankerBaseUrl) {
+    return undefined;
+  }
+  if (!rerankerModel || !rerankerBaseUrl) {
+    throw new Error(
+      "RERANKER_BASE_URL and RERANKER_MODEL must be set together"
+    );
+  }
+  const configuredTimeout = process.env.RERANKER_TIMEOUT_MS?.trim();
+  return createTextRerankerService({
+    apiKey: process.env.RERANKER_API_KEY,
+    baseUrl: rerankerBaseUrl,
+    model: rerankerModel,
+    requestLimiter: aiRequestLimiter,
+    ...(configuredTimeout
+      ? { timeoutMilliseconds: Number(configuredTimeout) }
+      : {})
+  });
+}
+export const textRerankerService = createConfiguredTextRerankerService();
+
+function configuredRerankerMinimumScore() {
+  const raw = process.env.RERANKER_MIN_SCORE?.trim();
+  if (!raw) {
+    return undefined;
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error("RERANKER_MIN_SCORE must be between 0 and 1");
+  }
+  return value;
+}
+export const rerankerMinimumScore = configuredRerankerMinimumScore();
 
 const knowledgeExtractionModel = process.env.KNOWLEDGE_EXTRACTION_MODEL?.trim();
 const knowledgeExtractionBaseUrl =
