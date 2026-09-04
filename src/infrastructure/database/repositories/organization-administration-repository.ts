@@ -11,6 +11,19 @@ import {
   users
 } from "../schema";
 
+type AgentMemoryTransaction = Parameters<
+  Parameters<AgentMemoryDatabase["transaction"]>[0]
+>[0];
+
+async function lockOrganization(
+  transaction: AgentMemoryTransaction,
+  organizationId: string
+): Promise<void> {
+  await transaction.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
+  );
+}
+
 export function createOrganizationAdministrationRepository(
   db: AgentMemoryDatabase
 ): OrganizationAdministrationRepository {
@@ -47,6 +60,7 @@ export function createOrganizationAdministrationRepository(
 
     async updateOrganizationSettings(organizationId, update, now) {
       return db.transaction(async (transaction) => {
+        await lockOrganization(transaction, organizationId);
         if (update.defaultTeamId) {
           const [team] = await transaction
             .select({ id: teams.id })
@@ -173,9 +187,7 @@ export function createOrganizationAdministrationRepository(
 
     async updateOrganizationMember(organizationId, userId, update) {
       return db.transaction(async (transaction) => {
-        await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
-        );
+        await lockOrganization(transaction, organizationId);
         const [existing] = await transaction
           .select({
             role: organizationMembers.role,
@@ -283,9 +295,7 @@ export function createOrganizationAdministrationRepository(
 
     async removeOrganizationMember(organizationId, userId) {
       return db.transaction(async (transaction) => {
-        await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
-        );
+        await lockOrganization(transaction, organizationId);
         const [existing] = await transaction
           .select({
             role: organizationMembers.role,
@@ -365,6 +375,7 @@ export function createOrganizationAdministrationRepository(
 
     async deleteTeam(organizationId, teamId) {
       return db.transaction(async (transaction) => {
+        await lockOrganization(transaction, organizationId);
         await transaction
           .update(organizations)
           .set({ defaultTeamId: null })
@@ -502,9 +513,15 @@ export function createOrganizationAdministrationRepository(
 
     async joinOrganizationBySlug(organizationSlug, userId) {
       return db.transaction(async (transaction) => {
-        await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${organizationSlug}, 0))`
-        );
+        const [candidate] = await transaction
+          .select({ id: organizations.id })
+          .from(organizations)
+          .where(eq(organizations.slug, organizationSlug))
+          .limit(1);
+        if (!candidate) {
+          return { status: "organization_not_found" } as const;
+        }
+        await lockOrganization(transaction, candidate.id);
         const [organization] = await transaction
           .select({
             id: organizations.id,
@@ -512,7 +529,7 @@ export function createOrganizationAdministrationRepository(
             defaultTeamId: organizations.defaultTeamId
           })
           .from(organizations)
-          .where(eq(organizations.slug, organizationSlug))
+          .where(eq(organizations.id, candidate.id))
           .limit(1);
         if (!organization) {
           return { status: "organization_not_found" } as const;
