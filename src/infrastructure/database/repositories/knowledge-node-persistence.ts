@@ -22,17 +22,6 @@ export function knowledgeSourceFromRow(row: {
   return row.memoryId ? { memoryId: row.memoryId } : { chunkId: row.chunkId! };
 }
 
-export function legacyKnowledgeSources(row: {
-  sourceMemoryId: string | null;
-  sourceChunkId: string | null;
-}): readonly KnowledgeSource[] {
-  return row.sourceMemoryId
-    ? [{ memoryId: row.sourceMemoryId }]
-    : row.sourceChunkId
-      ? [{ chunkId: row.sourceChunkId }]
-      : [];
-}
-
 export function knowledgeScopeFromRow(row: {
   organizationId: string;
   scopeKind: "organization" | "team" | "user";
@@ -58,8 +47,11 @@ export function knowledgeScopeFromRow(row: {
 
 export function knowledgeNodeFromRow(
   row: NodeRow,
-  sources: readonly KnowledgeSource[] = legacyKnowledgeSources(row)
+  sources: readonly KnowledgeSource[]
 ): KnowledgeNode {
+  if (sources.length === 0) {
+    throw new Error("knowledge node has no provenance");
+  }
   return {
     id: row.id,
     scope: knowledgeScopeFromRow(row),
@@ -77,7 +69,6 @@ export function knowledgeNodeFromRow(
 }
 
 export function knowledgeNodeValues(node: KnowledgeNode) {
-  const source = node.sources[0];
   return {
     id: node.id,
     organizationId: node.scope.organizationId,
@@ -90,8 +81,6 @@ export function knowledgeNodeValues(node: KnowledgeNode) {
     embedding: node.embedding?.values ?? null,
     embeddingModel: node.embedding?.model ?? null,
     properties: node.properties,
-    sourceMemoryId: source?.memoryId ?? null,
-    sourceChunkId: source?.chunkId ?? null,
     createdAt: node.createdAt,
     updatedAt: node.updatedAt
   };
@@ -194,8 +183,6 @@ export async function upsertKnowledgeNode(
     );
   return knowledgeNodeFromRow(
     row,
-    sourceRows.length > 0
-      ? sourceRows.map(knowledgeSourceFromRow)
-      : legacyKnowledgeSources(row)
+    sourceRows.map(knowledgeSourceFromRow)
   );
 }

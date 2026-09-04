@@ -42,8 +42,6 @@ export const knowledgeNodes = pgTable(
     embedding: unconstrainedVector(),
     embeddingModel: text(),
     properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
-    sourceMemoryId: uuid(),
-    sourceChunkId: uuid(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
@@ -91,19 +89,7 @@ export const knowledgeNodes = pgTable(
       table.kind,
       table.canonicalNameKey
     ),
-    foreignKey({
-      columns: [table.organizationId, table.sourceMemoryId],
-      foreignColumns: [memories.organizationId, memories.id],
-      name: "knowledge_nodes_organization_memory_fk"
-    }).onDelete("restrict"),
-    foreignKey({
-      columns: [table.organizationId, table.sourceChunkId],
-      foreignColumns: [documentChunks.organizationId, documentChunks.id],
-      name: "knowledge_nodes_organization_chunk_fk"
-    }).onDelete("restrict"),
-    index("knowledge_nodes_search_idx").using("gin", table.search),
-    index("knowledge_nodes_source_memory_idx").on(table.sourceMemoryId),
-    index("knowledge_nodes_source_chunk_idx").on(table.sourceChunkId)
+    index("knowledge_nodes_search_idx").using("gin", table.search)
   ]
 );
 
@@ -121,8 +107,6 @@ export const knowledgeEdges = pgTable(
     targetNodeId: uuid().notNull(),
     predicate: text().notNull(),
     properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
-    sourceMemoryId: uuid(),
-    sourceChunkId: uuid(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
@@ -172,22 +156,10 @@ export const knowledgeEdges = pgTable(
       foreignColumns: [knowledgeNodes.organizationId, knowledgeNodes.id],
       name: "knowledge_edges_organization_target_node_fk"
     }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.organizationId, table.sourceMemoryId],
-      foreignColumns: [memories.organizationId, memories.id],
-      name: "knowledge_edges_organization_memory_fk"
-    }).onDelete("restrict"),
-    foreignKey({
-      columns: [table.organizationId, table.sourceChunkId],
-      foreignColumns: [documentChunks.organizationId, documentChunks.id],
-      name: "knowledge_edges_organization_chunk_fk"
-    }).onDelete("restrict"),
     index("knowledge_edges_target_idx").on(
       table.organizationId,
       table.targetNodeId
-    ),
-    index("knowledge_edges_source_memory_idx").on(table.sourceMemoryId),
-    index("knowledge_edges_source_chunk_idx").on(table.sourceChunkId)
+    )
   ]
 );
 

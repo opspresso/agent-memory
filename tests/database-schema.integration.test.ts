@@ -100,6 +100,15 @@ describe("PostgreSQL schema", () => {
 
     expect(result.rows[0]?.postgresVersion).toMatch(/^18\./);
     expect(result.rows[0]?.vectorVersion).toBe("0.8.6");
+
+    const legacyProvenanceColumns = await pool.query(
+      `SELECT table_name, column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name IN ('knowledge_nodes', 'knowledge_edges')
+         AND column_name IN ('source_memory_id', 'source_chunk_id')`
+    );
+    expect(legacyProvenanceColumns.rows).toEqual([]);
   });
 
   it("deduplicates document ingestion jobs in pg-boss", async () => {

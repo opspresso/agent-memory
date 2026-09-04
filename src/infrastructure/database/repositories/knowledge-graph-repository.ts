@@ -43,7 +43,6 @@ import {
   knowledgeNodeFromRow,
   knowledgeScopeFromRow,
   knowledgeSourceFromRow,
-  legacyKnowledgeSources,
   upsertKnowledgeNode
 } from "./knowledge-node-persistence";
 
@@ -53,8 +52,11 @@ type EdgeSourceRow = typeof knowledgeEdgeSources.$inferSelect;
 
 export function edgeFromRow(
   row: EdgeRow,
-  sources: readonly KnowledgeSource[] = legacyKnowledgeSources(row)
+  sources: readonly KnowledgeSource[]
 ): KnowledgeEdge {
+  if (sources.length === 0) {
+    throw new Error("knowledge edge has no provenance");
+  }
   return {
     id: row.id,
     organizationId: row.organizationId,
@@ -165,7 +167,6 @@ function edgeHasVisibleSource(access: OrganizationAccess): SQL {
 }
 
 export function edgeValues(edge: KnowledgeEdge) {
-  const source = edge.sources[0];
   return {
     id: edge.id,
     organizationId: edge.organizationId,
@@ -176,8 +177,6 @@ export function edgeValues(edge: KnowledgeEdge) {
     targetNodeId: edge.targetNodeId,
     predicate: edge.predicate,
     properties: edge.properties,
-    sourceMemoryId: source?.memoryId ?? null,
-    sourceChunkId: source?.chunkId ?? null,
     createdAt: edge.createdAt
   };
 }
@@ -271,7 +270,7 @@ export function createKnowledgeGraphRepository(
       return rows.map((row) =>
         knowledgeNodeFromRow(
           row,
-          sources.get(row.id) ?? legacyKnowledgeSources(row)
+          sources.get(row.id) ?? []
         )
       );
     },
@@ -301,9 +300,7 @@ export function createKnowledgeGraphRepository(
         );
       return knowledgeNodeFromRow(
         row,
-        sourceRows.length > 0
-          ? sourceRows.map(knowledgeSourceFromRow)
-          : legacyKnowledgeSources(row)
+        sourceRows.map(knowledgeSourceFromRow)
       );
     },
 
@@ -358,10 +355,10 @@ export function createKnowledgeGraphRepository(
               eq(knowledgeNodeSources.nodeId, source.id)
             )
           );
-        const sourcesToMove =
-          sourceNodeSourceRows.length > 0
-            ? sourceNodeSourceRows.map(knowledgeSourceFromRow)
-            : legacyKnowledgeSources(source);
+        const sourcesToMove = knowledgeNodeFromRow(
+          source,
+          sourceNodeSourceRows.map(knowledgeSourceFromRow)
+        ).sources;
         for (const sourceReference of sourcesToMove) {
           await transaction
             .insert(knowledgeNodeSources)
@@ -433,10 +430,10 @@ export function createKnowledgeGraphRepository(
                   eq(knowledgeEdgeSources.edgeId, edge.id)
                 )
               );
-            const edgeSources =
-              sourceRows.length > 0
-                ? sourceRows.map(knowledgeSourceFromRow)
-                : legacyKnowledgeSources(edge);
+            const edgeSources = edgeFromRow(
+              edge,
+              sourceRows.map(knowledgeSourceFromRow)
+            ).sources;
             for (const sourceReference of edgeSources) {
               await transaction
                 .insert(knowledgeEdgeSources)
@@ -512,9 +509,7 @@ export function createKnowledgeGraphRepository(
           );
         return knowledgeNodeFromRow(
           merged,
-          targetSources.length > 0
-            ? targetSources.map(knowledgeSourceFromRow)
-            : legacyKnowledgeSources(merged)
+          targetSources.map(knowledgeSourceFromRow)
         );
       });
     },
@@ -566,9 +561,7 @@ export function createKnowledgeGraphRepository(
           );
         return edgeFromRow(
           row,
-          sourceRows.length > 0
-            ? sourceRows.map(knowledgeSourceFromRow)
-            : legacyKnowledgeSources(row)
+          sourceRows.map(knowledgeSourceFromRow)
         );
       });
     },
@@ -598,9 +591,7 @@ export function createKnowledgeGraphRepository(
         );
       return edgeFromRow(
         row,
-        sourceRows.length > 0
-          ? sourceRows.map(knowledgeSourceFromRow)
-          : legacyKnowledgeSources(row)
+        sourceRows.map(knowledgeSourceFromRow)
       );
     },
 
@@ -658,7 +649,7 @@ export function createKnowledgeGraphRepository(
       return rows.map((row) => ({
         node: knowledgeNodeFromRow(
           row.node,
-          sources.get(row.node.id) ?? legacyKnowledgeSources(row.node)
+          sources.get(row.node.id) ?? []
         ),
         lexicalScore: row.lexicalScore,
         vectorScore: row.vectorScore,
@@ -775,14 +766,14 @@ export function createKnowledgeGraphRepository(
         nodes: nodeRows.map((row) =>
           knowledgeNodeFromRow(
             row,
-            nodeSources.get(row.id) ?? legacyKnowledgeSources(row)
+            nodeSources.get(row.id) ?? []
           )
         ),
         edges: edgeRows
           .map((row) =>
             edgeFromRow(
               row,
-              edgeSources.get(row.id) ?? legacyKnowledgeSources(row)
+              edgeSources.get(row.id) ?? []
             )
           )
       };
