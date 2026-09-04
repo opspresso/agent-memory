@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  buildGenerateDocumentKnowledgeCandidates,
   buildGenerateKnowledgeCandidate,
   KnowledgeCandidateSourceNotFoundError
 } from "@/application/knowledge/generate-knowledge-candidate";
@@ -362,57 +361,4 @@ describe("knowledge candidate", () => {
     });
   });
 
-  it("enriches every ready document chunk and remains idempotent per chunk", async () => {
-    const document = {
-      ...createDocument({
-        id: "document-1",
-        scope,
-        title: "Architecture",
-        objectKey: "document-1/source",
-        checksum: "a".repeat(64),
-        mimeType: "text/plain",
-        sizeBytes: 10,
-        createdBy: "user-1",
-        now
-      }),
-      status: "ready" as const
-    };
-    const chunks = [0, 1].map((ordinal) =>
-      createDocumentChunk({
-        id: `chunk-${ordinal + 1}`,
-        organizationId: "organization-1",
-        documentId: "document-1",
-        ordinal,
-        content: `chunk ${ordinal + 1}`,
-        now
-      })
-    );
-    const documents = documentRepository(
-      vi.fn(async (_organizationId, chunkId) => ({
-        document,
-        chunk: chunks.find((chunk) => chunk.id === chunkId)!
-      }))
-    );
-    vi.mocked(documents.findById).mockResolvedValue(document);
-    vi.mocked(documents.listChunksByDocument).mockResolvedValue(chunks);
-    const candidates = candidateRepository();
-    const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
-    const enrich = buildGenerateDocumentKnowledgeCandidates({
-      ontologyReader: ontologyReader(),
-      candidateRepository: candidates,
-      clock: () => now,
-      documentRepository: documents,
-      extractionService: { extract },
-      generateId: vi
-        .fn()
-        .mockReturnValueOnce("candidate-1")
-        .mockReturnValueOnce("candidate-2")
-    });
-
-    await expect(enrich("organization-1", "document-1")).resolves.toHaveLength(
-      2
-    );
-    expect(extract).toHaveBeenCalledTimes(2);
-    expect(candidates.save).toHaveBeenCalledTimes(2);
-  });
 });

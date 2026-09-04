@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  candidateFindByChunkId: vi.fn(),
+  documentClaim: vi.fn(),
+  documentFindChunk: vi.fn(),
+  documentListChunks: vi.fn(),
+  enqueueKnowledgeEnrichment: vi.fn(),
+  knowledgeExtractionService: undefined as
+    | undefined
+    | { extract: ReturnType<typeof vi.fn> },
   loggerInfo: vi.fn(),
   queueStart: vi.fn(),
   queueStop: vi.fn(),
@@ -13,14 +21,23 @@ vi.mock("@/infrastructure/observability/logger", () => ({
 
 vi.mock("@/lib/container", () => ({
   documentIngestionQueue: {
-    enqueueKnowledgeEnrichment: vi.fn(),
+    enqueueKnowledgeEnrichment: mocks.enqueueKnowledgeEnrichment,
     start: mocks.queueStart,
     stop: mocks.queueStop
   },
-  knowledgeCandidateRepository: {},
-  knowledgeExtractionService: undefined,
+  knowledgeCandidateRepository: {
+    findByChunkId: mocks.candidateFindByChunkId
+  },
+  get knowledgeExtractionService() {
+    return mocks.knowledgeExtractionService;
+  },
+  knowledgeOntologyReader: {},
   documentObjectStorage: {},
-  documentRepository: {},
+  documentRepository: {
+    claimForProcessing: mocks.documentClaim,
+    findChunkById: mocks.documentFindChunk,
+    listChunksByDocument: mocks.documentListChunks
+  },
   documentTextExtractor: {},
   textEmbeddingService: undefined
 }));
@@ -29,6 +46,12 @@ describe("document worker startup", () => {
   beforeEach(() => {
     vi.resetModules();
     mocks.loggerInfo.mockReset();
+    mocks.candidateFindByChunkId.mockReset();
+    mocks.documentClaim.mockReset();
+    mocks.documentFindChunk.mockReset();
+    mocks.documentListChunks.mockReset();
+    mocks.enqueueKnowledgeEnrichment.mockReset();
+    mocks.knowledgeExtractionService = undefined;
     mocks.queueStart.mockReset();
     mocks.queueStop.mockReset();
     mocks.work.mockReset();
@@ -64,5 +87,62 @@ describe("document worker startup", () => {
       message: "document worker startup and queue cleanup both failed",
       errors: [registrationFailure, cleanupFailure]
     });
+  });
+
+  it("enqueues and processes one independent job per document chunk", async () => {
+    mocks.knowledgeExtractionService = { extract: vi.fn() };
+    mocks.work
+      .mockResolvedValueOnce("ingestion-worker")
+      .mockResolvedValueOnce("enrichment-worker");
+    mocks.documentClaim.mockResolvedValue(null);
+    mocks.documentListChunks.mockResolvedValue([
+      { id: "50000000-0000-4000-8000-000000000001" },
+      { id: "50000000-0000-4000-8000-000000000002" }
+    ]);
+    mocks.candidateFindByChunkId.mockResolvedValue({ id: "candidate-1" });
+    const { startDocumentWorker } = await import("@/lib/document-worker");
+
+    await startDocumentWorker();
+
+    const ingestionHandler = mocks.work.mock.calls[0]?.[2];
+    const enrichmentHandler = mocks.work.mock.calls[1]?.[2];
+    if (
+      typeof ingestionHandler !== "function" ||
+      typeof enrichmentHandler !== "function"
+    ) {
+      throw new Error("document workers were not registered");
+    }
+    await ingestionHandler([
+      {
+        data: {
+          organizationId: "00000000-0000-4000-8000-000000000001",
+          documentId: "40000000-0000-4000-8000-000000000001"
+        }
+      }
+    ]);
+    expect(mocks.enqueueKnowledgeEnrichment.mock.calls).toEqual([
+      [
+        "00000000-0000-4000-8000-000000000001",
+        "50000000-0000-4000-8000-000000000001"
+      ],
+      [
+        "00000000-0000-4000-8000-000000000001",
+        "50000000-0000-4000-8000-000000000002"
+      ]
+    ]);
+
+    await enrichmentHandler([
+      {
+        data: {
+          organizationId: "00000000-0000-4000-8000-000000000001",
+          chunkId: "50000000-0000-4000-8000-000000000001"
+        }
+      }
+    ]);
+    expect(mocks.candidateFindByChunkId).toHaveBeenCalledWith(
+      "00000000-0000-4000-8000-000000000001",
+      "50000000-0000-4000-8000-000000000001"
+    );
+    expect(mocks.documentFindChunk).not.toHaveBeenCalled();
   });
 });

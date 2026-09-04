@@ -113,6 +113,7 @@ describe("PostgreSQL schema", () => {
       const boss = await queue.start();
       const organizationId = "00000000-0000-0000-0000-000000000008";
       const documentId = "40000000-0000-0000-0000-000000000008";
+      const chunkId = "50000000-0000-4000-8000-000000000008";
       await expect(queue.enqueue(organizationId, documentId)).resolves.toBe(
         "queued"
       );
@@ -120,10 +121,10 @@ describe("PostgreSQL schema", () => {
         "already_queued"
       );
       await expect(
-        queue.enqueueKnowledgeEnrichment(organizationId, documentId)
+        queue.enqueueKnowledgeEnrichment(organizationId, chunkId)
       ).resolves.toBe("queued");
       await expect(
-        queue.enqueueKnowledgeEnrichment(organizationId, documentId)
+        queue.enqueueKnowledgeEnrichment(organizationId, chunkId)
       ).resolves.toBe("already_queued");
 
       const jobs = await boss.findJobs<DocumentIngestionJob>(
@@ -135,7 +136,12 @@ describe("PostgreSQL schema", () => {
       const enrichmentJobs =
         await boss.findJobs<DocumentKnowledgeEnrichmentJob>(
           documentKnowledgeEnrichmentQueueName,
-          { data: { organizationId, documentId } }
+          {
+            data: {
+              organizationId,
+              chunkId
+            }
+          }
         );
       expect(enrichmentJobs).toHaveLength(1);
       expect(errors).toEqual([]);

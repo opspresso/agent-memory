@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { buildProcessDocument } from "@/application/document/process-document";
-import { buildGenerateDocumentKnowledgeCandidates } from "@/application/knowledge/generate-knowledge-candidate";
+import { buildGenerateKnowledgeCandidate } from "@/application/knowledge/generate-knowledge-candidate";
 import { logger } from "@/infrastructure/observability/logger";
 import {
   documentIngestionQueueName,
@@ -23,9 +23,14 @@ import {
   textEmbeddingService
 } from "./container";
 
-const jobSchema = z.object({
+const ingestionJobSchema = z.object({
   organizationId: z.uuid(),
   documentId: z.uuid()
+});
+
+const enrichmentJobSchema = z.object({
+  organizationId: z.uuid(),
+  chunkId: z.uuid()
 });
 
 const processDocument = buildProcessDocument({
@@ -37,8 +42,8 @@ const processDocument = buildProcessDocument({
   ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
 });
 
-const generateDocumentKnowledgeCandidates = knowledgeExtractionService
-  ? buildGenerateDocumentKnowledgeCandidates({
+const generateKnowledgeCandidate = knowledgeExtractionService
+  ? buildGenerateKnowledgeCandidate({
       candidateRepository: knowledgeCandidateRepository,
       clock: () => new Date(),
       documentRepository,
@@ -62,22 +67,22 @@ export async function startDocumentWorker(): Promise<void> {
       },
       async (jobs) => {
         for (const job of jobs) {
-          const data = jobSchema.parse(job.data);
+          const data = ingestionJobSchema.parse(job.data);
           logger.info(
             { documentId: data.documentId, organizationId: data.organizationId },
             "processing document ingestion job"
           );
           try {
             await processDocument(data.organizationId, data.documentId);
-            if (generateDocumentKnowledgeCandidates) {
-              const document = await documentRepository.findById(
+            if (generateKnowledgeCandidate) {
+              const chunks = await documentRepository.listChunksByDocument(
                 data.organizationId,
                 data.documentId
               );
-              if (document?.status === "ready") {
+              for (const chunk of chunks) {
                 await documentIngestionQueue.enqueueKnowledgeEnrichment(
                   data.organizationId,
-                  data.documentId
+                  chunk.id
                 );
               }
             }
@@ -95,7 +100,7 @@ export async function startDocumentWorker(): Promise<void> {
         }
       }
     );
-    const enrichmentWorker = generateDocumentKnowledgeCandidates
+    const enrichmentWorker = generateKnowledgeCandidate
       ? boss.work<DocumentKnowledgeEnrichmentJob>(
           documentKnowledgeEnrichmentQueueName,
           {
@@ -105,24 +110,24 @@ export async function startDocumentWorker(): Promise<void> {
           },
           async (jobs) => {
             for (const job of jobs) {
-              const data = jobSchema.parse(job.data);
+              const data = enrichmentJobSchema.parse(job.data);
               logger.info(
                 {
-                  documentId: data.documentId,
+                  chunkId: data.chunkId,
                   organizationId: data.organizationId
                 },
                 "generating document knowledge candidates"
               );
               try {
-                await generateDocumentKnowledgeCandidates(
+                await generateKnowledgeCandidate(
                   data.organizationId,
-                  data.documentId
+                  data.chunkId
                 );
               } catch (error) {
                 logger.error(
                   {
                     err: error,
-                    documentId: data.documentId,
+                    chunkId: data.chunkId,
                     organizationId: data.organizationId
                   },
                   "document knowledge enrichment job failed"

@@ -17,13 +17,16 @@ export interface DocumentIngestionJob {
   readonly documentId: string;
 }
 
-export type DocumentKnowledgeEnrichmentJob = DocumentIngestionJob;
+export interface DocumentKnowledgeEnrichmentJob {
+  readonly organizationId: string;
+  readonly chunkId: string;
+}
 
 export interface PgBossDocumentIngestionQueue
   extends DocumentIngestionQueue {
   enqueueKnowledgeEnrichment(
     organizationId: string,
-    documentId: string
+    chunkId: string
   ): Promise<DocumentQueueEnqueueResult>;
   start(): Promise<PgBoss>;
   stop(): Promise<void>;
@@ -93,12 +96,12 @@ export function createPgBossDocumentIngestionQueue(
       );
       return jobId ? "queued" : "already_queued";
     },
-    async enqueueKnowledgeEnrichment(organizationId, documentId) {
+    async enqueueKnowledgeEnrichment(organizationId, chunkId) {
       const instance = await start();
       const jobId = await instance.send(
         documentKnowledgeEnrichmentQueueName,
-        { organizationId, documentId } satisfies DocumentKnowledgeEnrichmentJob,
-        { singletonKey: documentId }
+        { organizationId, chunkId } satisfies DocumentKnowledgeEnrichmentJob,
+        { singletonKey: chunkId }
       );
       return jobId ? "queued" : "already_queued";
     },

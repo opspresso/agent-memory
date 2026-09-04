@@ -69,27 +69,3 @@ export function buildGenerateKnowledgeCandidate(
     return dependencies.candidateRepository.save(candidate);
   };
 }
-
-export function buildGenerateDocumentKnowledgeCandidates(
-  dependencies: GenerateKnowledgeCandidateDependencies
-) {
-  const generateCandidate = buildGenerateKnowledgeCandidate(dependencies);
-  return async function execute(organizationId: string, documentId: string) {
-    const document = await dependencies.documentRepository.findById(
-      organizationId,
-      documentId
-    );
-    if (!document || document.status !== "ready") {
-      throw new KnowledgeCandidateSourceNotFoundError();
-    }
-    const chunks = await dependencies.documentRepository.listChunksByDocument(
-      organizationId,
-      documentId
-    );
-    const candidates = [];
-    for (const chunk of chunks) {
-      candidates.push(await generateCandidate(organizationId, chunk.id));
-    }
-    return candidates;
-  };
-}
