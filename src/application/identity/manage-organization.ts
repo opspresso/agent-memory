@@ -200,7 +200,7 @@ export function buildListOrganizationMembers(
   };
 }
 
-export function buildUpsertOrganizationMember(
+export function buildAddOrganizationMember(
   repository: OrganizationAdministrationRepository
 ) {
   return async function execute(
@@ -214,7 +214,7 @@ export function buildUpsertOrganizationMember(
     ) {
       throw new OrganizationAdministrationAccessDeniedError();
     }
-    const result = await repository.upsertOrganizationMember(
+    const result = await repository.addOrganizationMember(
       access.organizationId,
       email.trim().toLowerCase(),
       role
@@ -222,8 +222,8 @@ export function buildUpsertOrganizationMember(
     if (result.status === "user_not_found") {
       throw new OrganizationMemberNotFoundError();
     }
-    if (result.status === "owner_immutable") {
-      throw new OrganizationOwnerImmutableError();
+    if (result.status === "already_member") {
+      throw new AlreadyOrganizationMemberError();
     }
     return result.member;
   };

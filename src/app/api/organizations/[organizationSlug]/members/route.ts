@@ -5,8 +5,8 @@ import {
 } from "@/lib/organization-administration-http";
 import { organizationMemberSchema } from "@/lib/organization-administration-schemas";
 import {
-  listOrganizationMemberRecords,
-  upsertOrganizationMemberRecord
+  addOrganizationMemberRecord,
+  listOrganizationMemberRecords
 } from "@/lib/organization-administration-service";
 
 interface RouteContext {
@@ -34,7 +34,7 @@ export async function GET(request: Request, context: RouteContext) {
   }
 }
 
-export async function PUT(request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   const { organizationSlug } = await context.params;
   const authorization = await authorizeOrganizationRoute(
     request,
@@ -55,12 +55,12 @@ export async function PUT(request: Request, context: RouteContext) {
     );
   }
   try {
-    const member = await upsertOrganizationMemberRecord(
+    const member = await addOrganizationMemberRecord(
       authorization.access,
       parsed.data.email,
       parsed.data.role
     );
-    return Response.json(member);
+    return Response.json(member, { status: 201 });
   } catch (error) {
     const response = organizationAdministrationErrorResponse(error);
     if (response) {

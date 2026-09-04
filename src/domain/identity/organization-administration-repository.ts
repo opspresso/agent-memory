@@ -32,10 +32,10 @@ export type UpdateOrganizationSettingsResult =
   | Readonly<{ status: "organization_not_found" }>
   | Readonly<{ status: "team_not_found" }>;
 
-export type UpsertOrganizationMemberResult =
-  | Readonly<{ status: "saved"; member: OrganizationMember }>
+export type AddOrganizationMemberResult =
+  | Readonly<{ status: "added"; member: OrganizationMember }>
   | Readonly<{ status: "user_not_found" }>
-  | Readonly<{ status: "owner_immutable" }>;
+  | Readonly<{ status: "already_member" }>;
 
 export interface OrganizationMemberUpdate {
   readonly role?: OrganizationRole;
@@ -97,11 +97,11 @@ export interface OrganizationAdministrationRepository {
     organizationId: string,
     userId: string
   ): Promise<OrganizationMember | null>;
-  upsertOrganizationMember(
+  addOrganizationMember(
     organizationId: string,
     email: string,
     role: OrganizationRole
-  ): Promise<UpsertOrganizationMemberResult>;
+  ): Promise<AddOrganizationMemberResult>;
   updateOrganizationMember(
     organizationId: string,
     userId: string,

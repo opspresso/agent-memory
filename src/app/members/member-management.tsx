@@ -169,7 +169,7 @@ function MemberManagementView() {
     const form = new FormData(formElement);
     await runMutation(async () => {
       await requestJson(`/api/organizations/${organizationSlug}/members`, {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: form.get("email"),

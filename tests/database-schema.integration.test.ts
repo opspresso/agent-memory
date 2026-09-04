@@ -405,12 +405,12 @@ describe("PostgreSQL schema", () => {
       administration.createOrganization(organization, ownerId)
     ).resolves.toEqual({ status: "slug_conflict" });
     await expect(
-      administration.upsertOrganizationMember(
+      administration.addOrganizationMember(
         organizationId,
         "member-k@example.com",
         "member"
       )
-    ).resolves.toMatchObject({ status: "saved", member: { userId: memberId } });
+    ).resolves.toMatchObject({ status: "added", member: { userId: memberId } });
     const team = createTeam({
       id: teamId,
       organizationId,
@@ -445,31 +445,25 @@ describe("PostgreSQL schema", () => {
       teams: [{ teamId, role: "manager" }]
     });
     await expect(
-      administration.upsertOrganizationMember(
+      administration.addOrganizationMember(
         organizationId,
         "owner-k@example.com",
         "member"
       )
-    ).resolves.toEqual({ status: "owner_immutable" });
+    ).resolves.toEqual({ status: "already_member" });
 
     await expect(
-      administration.upsertOrganizationMember(
-        organizationId,
-        "member-k@example.com",
-        "owner"
-      )
+      administration.updateOrganizationMember(organizationId, memberId, {
+        role: "owner"
+      })
     ).resolves.toMatchObject({ status: "saved", member: { role: "owner" } });
     const concurrentDemotions = await Promise.all([
-      administration.upsertOrganizationMember(
-        organizationId,
-        "owner-k@example.com",
-        "member"
-      ),
-      administration.upsertOrganizationMember(
-        organizationId,
-        "member-k@example.com",
-        "member"
-      )
+      administration.updateOrganizationMember(organizationId, ownerId, {
+        role: "member"
+      }),
+      administration.updateOrganizationMember(organizationId, memberId, {
+        role: "member"
+      })
     ]);
     expect(concurrentDemotions.map((result) => result.status).sort()).toEqual([
       "owner_immutable",
@@ -478,10 +472,32 @@ describe("PostgreSQL schema", () => {
     const ownerCount = await pool.query<{ total: number }>(
       `SELECT count(*)::int AS total
        FROM organization_members
-       WHERE organization_id = $1 AND role = 'owner'`,
+       WHERE organization_id = $1 AND role = 'owner' AND status = 'active'`,
       [organizationId]
     );
     expect(ownerCount.rows[0]?.total).toBe(1);
+
+    await administration.updateOrganizationMember(organizationId, ownerId, {
+      role: "owner"
+    });
+    await administration.updateOrganizationMember(organizationId, memberId, {
+      role: "owner"
+    });
+    await expect(
+      administration.updateOrganizationMember(organizationId, memberId, {
+        status: "blocked"
+      })
+    ).resolves.toMatchObject({ status: "saved" });
+    await expect(
+      administration.updateOrganizationMember(organizationId, ownerId, {
+        role: "member"
+      })
+    ).resolves.toEqual({ status: "owner_immutable" });
+    await expect(
+      administration.updateOrganizationMember(organizationId, memberId, {
+        role: "member"
+      })
+    ).resolves.toMatchObject({ status: "saved" });
   });
 
   it("stores and reads the organization ontology dictionary and mode", async () => {
@@ -850,15 +866,12 @@ describe("PostgreSQL schema", () => {
       access.findByUser(organizationId, joinerId)
     ).resolves.toBeNull();
     await expect(
-      administration.upsertOrganizationMember(
+      administration.addOrganizationMember(
         organizationId,
         "joiner-p@example.com",
         "admin"
       )
-    ).resolves.toMatchObject({
-      status: "saved",
-      member: { role: "admin", status: "blocked" }
-    });
+    ).resolves.toEqual({ status: "already_member" });
 
     await expect(
       administration.updateOrganizationMember(organizationId, ownerId, {

@@ -135,11 +135,8 @@ export function createOrganizationAdministrationRepository(
       return member ?? null;
     },
 
-    async upsertOrganizationMember(organizationId, email, role) {
+    async addOrganizationMember(organizationId, email, role) {
       return db.transaction(async (transaction) => {
-        await transaction.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
-        );
         const [user] = await transaction
           .select({ id: users.id, email: users.email, name: users.name })
           .from(users)
@@ -148,40 +145,11 @@ export function createOrganizationAdministrationRepository(
         if (!user) {
           return { status: "user_not_found" } as const;
         }
-        const [existing] = await transaction
-          .select({ role: organizationMembers.role })
-          .from(organizationMembers)
-          .where(
-            and(
-              eq(organizationMembers.organizationId, organizationId),
-              eq(organizationMembers.userId, user.id)
-            )
-          )
-          .limit(1);
-        if (existing?.role === "owner" && role !== "owner") {
-          const [owners] = await transaction
-            .select({ total: count() })
-            .from(organizationMembers)
-            .where(
-              and(
-                eq(organizationMembers.organizationId, organizationId),
-                eq(organizationMembers.role, "owner")
-              )
-            );
-          if (!owners || owners.total <= 1) {
-            return { status: "owner_immutable" } as const;
-          }
-        }
-
         const [saved] = await transaction
           .insert(organizationMembers)
           .values({ organizationId, userId: user.id, role, status: "active" })
-          .onConflictDoUpdate({
-            target: [
-              organizationMembers.organizationId,
-              organizationMembers.userId
-            ],
-            set: { role }
+          .onConflictDoNothing({
+            target: [organizationMembers.organizationId, organizationMembers.userId]
           })
           .returning({
             role: organizationMembers.role,
@@ -189,10 +157,10 @@ export function createOrganizationAdministrationRepository(
             createdAt: organizationMembers.createdAt
           });
         if (!saved) {
-          throw new Error("organization member upsert returned no row");
+          return { status: "already_member" } as const;
         }
         return {
-          status: "saved",
+          status: "added",
           member: {
             userId: user.id,
             email: user.email,
@@ -224,14 +192,16 @@ export function createOrganizationAdministrationRepository(
         if (!existing) {
           return { status: "member_not_found" } as const;
         }
-        const demotesOwner =
+        const demotesActiveOwner =
           existing.role === "owner" &&
+          existing.status === "active" &&
           (update.role !== undefined && update.role !== "owner");
-        const deactivatesOwner =
+        const deactivatesActiveOwner =
           existing.role === "owner" &&
+          existing.status === "active" &&
           update.status !== undefined &&
           update.status !== "active";
-        if (demotesOwner || deactivatesOwner) {
+        if (demotesActiveOwner || deactivatesActiveOwner) {
           const [owners] = await transaction
             .select({ total: count() })
             .from(organizationMembers)
@@ -317,7 +287,10 @@ export function createOrganizationAdministrationRepository(
           sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 0))`
         );
         const [existing] = await transaction
-          .select({ role: organizationMembers.role })
+          .select({
+            role: organizationMembers.role,
+            status: organizationMembers.status
+          })
           .from(organizationMembers)
           .where(
             and(
@@ -329,14 +302,15 @@ export function createOrganizationAdministrationRepository(
         if (!existing) {
           return { status: "member_not_found" } as const;
         }
-        if (existing.role === "owner") {
+        if (existing.role === "owner" && existing.status === "active") {
           const [owners] = await transaction
             .select({ total: count() })
             .from(organizationMembers)
             .where(
               and(
                 eq(organizationMembers.organizationId, organizationId),
-                eq(organizationMembers.role, "owner")
+                eq(organizationMembers.role, "owner"),
+                eq(organizationMembers.status, "active")
               )
             );
           if (!owners || owners.total <= 1) {

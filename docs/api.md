@@ -115,7 +115,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 | `GET` | `/api/organizations/:organizationSlug/me` | 현재 멤버십과 팀 역할 조회 |
 | `GET`, `POST`, `DELETE` | `/api/organizations/:organizationSlug/agent-token` | MCP 전용 Agent token 상태 조회·생성·폐기(admin·owner) |
 | `POST` | `/api/organizations/:organizationSlug/agent-token/reveal` | 저장된 MCP Agent token 원문 조회(admin·owner) |
-| `GET`, `PUT` | `/api/organizations/:organizationSlug/members` | 조직 멤버 조회·추가·역할 변경 |
+| `GET`, `POST` | `/api/organizations/:organizationSlug/members` | 조직 멤버 조회·추가 |
 | `PATCH`, `DELETE` | `/api/organizations/:organizationSlug/members/:userId` | 멤버 role·status 변경, 멤버 제거 |
 | `GET`, `POST` | `/api/organizations/:organizationSlug/teams` | 팀 조회·생성 |
 | `PATCH`, `DELETE` | `/api/organizations/:organizationSlug/teams/:teamId` | 팀 이름 변경, 팀 삭제(admin·owner) |
@@ -146,7 +146,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 
 - 조직 생성: `{ "slug": string, "name": string }`
 - 조직 설정 변경(`PATCH .../:organizationSlug`): `{ "name"?: string, "newMemberStatus"?: "active" | "pending", "defaultTeamId"?: UUID | null, "ontologyMode"?: "off" | "warn" | "strict", "ontology"?: { "nodeKinds": string[], "edgePredicates": string[] } }` — 필드 하나 이상 필요. `ontology`는 두 목록 전체를 치환하며 목록당 최대 200개, 용어당 최대 100자다. 용어는 소문자로 정규화하고 중복을 제거해 저장한다.
-- 조직 멤버 추가·변경: `{ "email": string, "role": "member" | "admin" | "owner" }`
+- 조직 멤버 추가: `{ "email": string, "role": "member" | "admin" | "owner" }` — 이미 가입한 사용자는 `409`. 기존 멤버의 role은 `PATCH .../members/:userId`로 변경한다.
 - 멤버 변경(`PATCH .../members/:userId`): `{ "role"?: "member" | "admin" | "owner", "status"?: "active" | "pending" | "blocked" }` — 필드 하나 이상 필요
 - 팀 생성: `{ "slug": string, "name": string }`
 - 팀 이름 변경(`PATCH .../teams/:teamId`): `{ "name": string }`

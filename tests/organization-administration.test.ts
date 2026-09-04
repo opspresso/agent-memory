@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildAddOrganizationMember,
   buildCreateOrganization,
   buildCreateTeam,
   buildDeleteOrganization,
@@ -11,7 +12,6 @@ import {
   buildRemoveOrganizationMember,
   buildUpdateOrganizationMember,
   buildUpdateOrganizationSettings,
-  buildUpsertOrganizationMember,
   buildUpsertTeamMember
 } from "@/application/identity/manage-organization";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
@@ -39,7 +39,7 @@ function repository(
     deleteOrganization: vi.fn(),
     listOrganizationMembers: vi.fn(),
     findOrganizationMember: vi.fn(),
-    upsertOrganizationMember: vi.fn(),
+    addOrganizationMember: vi.fn(),
     updateOrganizationMember: vi.fn(),
     removeOrganizationMember: vi.fn(),
     createTeam: vi.fn(),
@@ -89,7 +89,7 @@ describe("organization administration", () => {
     ).rejects.toThrow("organization administration access denied");
 
     const save = vi.fn().mockResolvedValue({
-      status: "saved",
+      status: "added",
       member: {
         userId: "user-2",
         email: "member@example.com",
@@ -99,24 +99,29 @@ describe("organization administration", () => {
         createdAt: now
       }
     });
-    const upsert = buildUpsertOrganizationMember(
-      repository({ upsertOrganizationMember: save })
+    const add = buildAddOrganizationMember(
+      repository({ addOrganizationMember: save })
     );
     await expect(
-      upsert(
+      add(
         { ...ownerAccess, role: "admin" },
         "member@example.com",
         "owner"
       )
     ).rejects.toThrow("organization administration access denied");
     await expect(
-      upsert(ownerAccess, " MEMBER@example.com ", "owner")
+      add(ownerAccess, " MEMBER@example.com ", "owner")
     ).resolves.toMatchObject({ role: "owner" });
     expect(save).toHaveBeenCalledWith(
       "organization-1",
       "member@example.com",
       "owner"
     );
+
+    save.mockResolvedValueOnce({ status: "already_member" });
+    await expect(
+      add(ownerAccess, "member@example.com", "member")
+    ).rejects.toThrow("user already belongs to this organization");
   });
 
   it("lets team managers assign existing organization members", async () => {

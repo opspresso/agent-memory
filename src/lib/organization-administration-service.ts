@@ -16,7 +16,7 @@ import {
   buildUpdateOrganizationMember,
   buildUpdateOrganizationSettings,
   buildUpdateTeam,
-  buildUpsertOrganizationMember,
+  buildAddOrganizationMember,
   buildUpsertTeamMember
 } from "@/application/identity/manage-organization";
 
@@ -42,7 +42,7 @@ export const deleteOrganizationRecord = buildDeleteOrganization(
 export const listOrganizationMemberRecords = buildListOrganizationMembers(
   organizationAdministrationRepository
 );
-export const upsertOrganizationMemberRecord = buildUpsertOrganizationMember(
+export const addOrganizationMemberRecord = buildAddOrganizationMember(
   organizationAdministrationRepository
 );
 export const updateOrganizationMemberRecord = buildUpdateOrganizationMember(
