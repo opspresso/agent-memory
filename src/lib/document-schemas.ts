@@ -1,11 +1,12 @@
 import { z } from "zod";
 
 import { documentMimeTypes } from "@/domain/document/document";
+import { serializedJsonByteLength } from "@/domain/shared/json-size";
 
 const metadataSchema = z
   .record(z.string(), z.unknown())
   .refine(
-    (metadata) => JSON.stringify(metadata).length <= 32_768,
+    (metadata) => serializedJsonByteLength(metadata) <= 32_768,
     "document metadata must not exceed 32 KiB"
   );
 

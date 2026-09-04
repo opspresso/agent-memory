@@ -9,6 +9,7 @@ import {
   readJsonBody,
   versionEtag
 } from "@/lib/memory-http";
+import { memorySourceSchema } from "@/lib/memory-schemas";
 
 describe("memory HTTP concurrency", () => {
   it("serializes and parses strong version ETags", () => {
@@ -95,6 +96,15 @@ describe("memory HTTP concurrency", () => {
     );
 
     expect(result).toEqual({ valid: true, value: { title: "Runbook" } });
+  });
+
+  it("measures source metadata limits in UTF-8 bytes", () => {
+    expect(
+      memorySourceSchema.safeParse({
+        type: "user",
+        metadata: { value: "한".repeat(11_000) }
+      }).success
+    ).toBe(false);
   });
 
   it("omits raw embeddings and ACL principals from public responses", () => {

@@ -1,11 +1,13 @@
 import { z } from "zod";
 
+import { serializedJsonByteLength } from "@/domain/shared/json-size";
+
 import { memoryScopeSchema } from "./memory-schemas";
 
 const propertiesSchema = z
   .record(z.string(), z.unknown())
   .refine(
-    (properties) => JSON.stringify(properties).length <= 32_768,
+    (properties) => serializedJsonByteLength(properties) <= 32_768,
     "knowledge properties must not exceed 32 KiB"
   );
 

@@ -1,4 +1,5 @@
 import type { ScopedResource } from "@/domain/identity/organization-access";
+import { serializedJsonByteLength } from "@/domain/shared/json-size";
 
 import {
   normalizeKnowledgeKind,
@@ -89,7 +90,7 @@ function validatedProperties(
   properties: Readonly<Record<string, unknown>> | undefined
 ) {
   const value = properties ?? {};
-  if (JSON.stringify(value).length > 32_768) {
+  if (serializedJsonByteLength(value) > 32_768) {
     throw new InvalidKnowledgeGraphError(
       "knowledge properties must not exceed 32 KiB"
     );

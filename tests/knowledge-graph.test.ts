@@ -247,6 +247,20 @@ describe("knowledge graph", () => {
     ).toThrow(InvalidKnowledgeGraphError);
   });
 
+  it("measures knowledge properties in UTF-8 bytes", () => {
+    expect(() =>
+      createKnowledgeNode({
+        id: "node-1",
+        scope: node("scope").scope,
+        kind: "service",
+        canonicalName: "Checkout API",
+        properties: { value: "한".repeat(11_000) },
+        source: { memoryId: "memory-1" },
+        now
+      })
+    ).toThrow("knowledge properties must not exceed 32 KiB");
+  });
+
   it("normalizes and embeds a node before persistence", async () => {
     const saveNode = vi.fn(async (value: KnowledgeNode) => value);
     const embed = vi

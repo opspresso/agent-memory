@@ -5,11 +5,12 @@ import {
   memoryPermissions,
   memorySourceTypes
 } from "@/domain/memory/memory";
+import { serializedJsonByteLength } from "@/domain/shared/json-size";
 
 const metadataSchema = z
   .record(z.string(), z.unknown())
   .refine(
-    (metadata) => JSON.stringify(metadata).length <= 32_768,
+    (metadata) => serializedJsonByteLength(metadata) <= 32_768,
     "source metadata must not exceed 32 KiB"
   );
 
