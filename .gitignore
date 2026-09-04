@@ -11,10 +11,8 @@ out/
 build/
 
 # env
-.env
-.env.local
-.env.local.*
-.env.*.local
+.env*
+!.env.example
 deploy/**/.env
 deploy/**/.env.aws
 deploy/**/.env.secrets
