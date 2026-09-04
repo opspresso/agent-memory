@@ -1,6 +1,5 @@
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { organizationAgentTokenPrefix } from "@/domain/identity/organization-agent-token-repository";
-import { z } from "zod";
 
 import {
   organizationAccessRepository,
@@ -8,9 +7,6 @@ import {
 } from "./container";
 import { organizationSlugSchema } from "./organization-administration-schemas";
 import { authenticateRequest, type SessionUser } from "./session";
-
-const organizationMcpUserEmailHeader = "X-User-Email";
-const organizationMcpUserEmailSchema = z.email().trim().toLowerCase();
 
 export type OrganizationAuthorizationResult =
   | Readonly<{
@@ -97,32 +93,16 @@ export async function authorizeOrganizationMcpRoute(
       };
     }
 
-    const email = organizationMcpUserEmailSchema.safeParse(
-      request.headers.get(organizationMcpUserEmailHeader)
-    );
-    if (!email.success) {
-      return {
-        authorized: false,
-        response: Response.json(
-          { error: `Invalid ${organizationMcpUserEmailHeader} header` },
-          { status: 400 }
-        )
-      };
-    }
-
-    const access = await organizationAccessRepository.findByEmail(
-      credential.organizationId,
-      email.data
-    );
-    return access
-      ? { authorized: true, access }
-      : {
-          authorized: false,
-          response: Response.json(
-            { error: "Organization access denied" },
-            { status: 403 }
-          )
-        };
+    return {
+      authorized: true,
+      access: {
+        organizationId: credential.organizationId,
+        userId: credential.userId,
+        role: credential.role,
+        teams: [],
+        principalKind: "organization-agent"
+      }
+    };
   }
 
   const authorization = await authorizeOrganizationRequest(request, parsed.data);

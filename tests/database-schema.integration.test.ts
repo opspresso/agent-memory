@@ -779,7 +779,14 @@ describe("PostgreSQL schema", () => {
         teams: [{ teamId: teamA, role: "manager" }]
       },
       { organizationId: organization, userId: user, role: "admin", teams: [] },
-      { organizationId: organization, userId: user, role: "owner", teams: [] }
+      { organizationId: organization, userId: user, role: "owner", teams: [] },
+      {
+        organizationId: organization,
+        userId: user,
+        role: "admin",
+        teams: [],
+        principalKind: "organization-agent"
+      }
     ];
     for (const access of accessVariants) {
       for (const action of ["read", "manage"] as const) {
@@ -799,7 +806,7 @@ describe("PostgreSQL schema", () => {
           .toSorted();
         expect(
           rows.map((row) => row.id).toSorted(),
-          `${access.role} teams=${JSON.stringify(access.teams)} action=${action}`
+          `${access.principalKind ?? "user"}:${access.role} teams=${JSON.stringify(access.teams)} action=${action}`
         ).toEqual(expected);
       }
     }

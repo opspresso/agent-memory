@@ -90,6 +90,13 @@ describe("memory lifecycle", () => {
     expect(canAccessMemory(access, "read", granted)).toBe(true);
     expect(canAccessMemory(access, "write", granted)).toBe(true);
     expect(canAccessMemory(access, "manage", granted)).toBe(false);
+    expect(
+      canAccessMemory(
+        { ...access, principalKind: "organization-agent" },
+        "read",
+        granted
+      )
+    ).toBe(false);
   });
 
   it("persists a revision with optimistic concurrency", async () => {

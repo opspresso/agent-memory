@@ -23,6 +23,9 @@ export function scopedReadPredicate(
   columns: ScopeColumns,
   additional?: SQL
 ): SQL {
+  if (access.principalKind === "organization-agent") {
+    return eq(columns.scopeKind, "organization");
+  }
   const teamIds = access.teams.map((team) => team.teamId);
   return or(
     eq(columns.scopeKind, "organization"),
@@ -40,6 +43,11 @@ export function scopedManagePredicate(
   access: OrganizationAccess,
   columns: ScopeColumns
 ): SQL {
+  if (access.principalKind === "organization-agent") {
+    return isOrganizationManager(access)
+      ? eq(columns.scopeKind, "organization")
+      : sql`false`;
+  }
   const managedTeamIds = access.teams
     .filter((team) => team.role === "manager")
     .map((team) => team.teamId);
@@ -60,6 +68,9 @@ export function scopedManagePredicate(
 }
 
 export function memoryReadPredicate(access: OrganizationAccess): SQL {
+  if (access.principalKind === "organization-agent") {
+    return scopedReadPredicate(access, memories);
+  }
   const teamIds = access.teams.map((team) => team.teamId);
   const grantPrincipal = or(
     and(

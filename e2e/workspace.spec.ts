@@ -297,8 +297,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     headers: {
       Accept: "application/json, text/event-stream",
       Authorization: authorization!,
-      "Content-Type": "application/json",
-      "X-User-Email": email
+      "Content-Type": "application/json"
     }
   });
   expect(initializeResponse.ok()).toBe(true);

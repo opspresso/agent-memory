@@ -169,7 +169,7 @@ describe("organization Agent token", () => {
     expect(stored()?.encryptedToken).not.toBe(generated.token);
     await expect(
       useCases.verify("opspresso", generated.token)
-    ).resolves.toEqual({ organizationId });
+    ).resolves.toEqual({ organizationId, userId, role: "admin" });
     await expect(useCases.reveal(access())).resolves.toEqual({
       token: generated.token,
       createdAt: generated.createdAt
@@ -183,7 +183,9 @@ describe("organization Agent token", () => {
 
     await expect(useCases.verify("opspresso", first.token)).resolves.toBeNull();
     await expect(useCases.verify("opspresso", second.token)).resolves.toEqual({
-      organizationId
+      organizationId,
+      userId,
+      role: "admin"
     });
   });
 
@@ -258,7 +260,9 @@ describe("organization Agent token", () => {
     });
 
     await expect(useCases.verify("opspresso", generated.token)).resolves.toEqual({
-      organizationId
+      organizationId,
+      userId,
+      role: "admin"
     });
     await expect(useCases.status(access())).resolves.toMatchObject({
       configured: true,

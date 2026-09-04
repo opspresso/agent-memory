@@ -25,6 +25,7 @@ export interface OrganizationAccess {
   readonly userId: string;
   readonly role: OrganizationRole;
   readonly teams: readonly TeamAccess[];
+  readonly principalKind?: "user" | "organization-agent";
 }
 
 export type MemoryAccessAction = "read" | "write" | "manage";
@@ -41,6 +42,13 @@ export function canAccessScopedResource(
 ): boolean {
   if (access.organizationId !== scope.organizationId) {
     return false;
+  }
+
+  if (access.principalKind === "organization-agent") {
+    return (
+      scope.kind === "organization" &&
+      (action === "read" || access.role === "admin" || access.role === "owner")
+    );
   }
 
   if (scope.kind === "organization") {

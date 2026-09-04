@@ -161,17 +161,13 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 http://localhost:3100/api/organizations/<organizationSlug>/mcp
 ```
 
-Organization `admin` 또는 `owner`는 같은 화면에서 MCP 전용 Agent token을 생성한다. 생성된 원문을 복사해 Agent Studio MCP registry entry의 header에 저장하라. 이후 `Token 보기`로 원문을 다시 확인하고 `Token 숨기기`로 화면에서 제거할 수 있다.
+Organization `admin` 또는 `owner`는 같은 화면에서 MCP 전용 Agent token을 생성한다. 생성된 원문을 복사해 Agent Studio MCP registry entry의 `Authorization` header에 저장하라. 이후 `Token 보기`로 원문을 다시 확인하고 `Token 숨기기`로 화면에서 제거할 수 있다.
 
 ```http
 Authorization: Bearer <amt_token>
 ```
 
-Agent Studio는 MCP를 호출할 때 현재 실행 사용자의 email을 `X-User-Email`로 함께 전달한다. Agent Memory는 해당 사용자의 active organization membership, role, team membership으로 각 tool을 실행한다. 다른 MCP client를 사용하면 같은 header를 직접 추가하라.
-
-```http
-X-User-Email: <user@example.com>
-```
+Agent token은 발급자에게 귀속되는 organization service principal로 동작한다. Organization scope만 검색·변경할 수 있으며 user scope, team scope, 개별 access grant에는 접근하지 못한다. 사용자·팀 범위가 필요한 MCP client는 해당 사용자의 Better Auth Bearer token을 사용하라.
 
 MCP에서 제공하는 tool은 다음과 같다.
 

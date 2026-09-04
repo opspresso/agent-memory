@@ -68,4 +68,33 @@ describe("organization access policy", () => {
       )
     ).toBe(false);
   });
+
+  it("restricts organization Agent tokens to organization scope", () => {
+    const agentAccess = {
+      ...memberAccess,
+      role: "admin" as const,
+      principalKind: "organization-agent" as const
+    };
+
+    expect(
+      canAccessScopedResource(agentAccess, "write", {
+        kind: "organization",
+        organizationId: "organization-a"
+      })
+    ).toBe(true);
+    expect(
+      canAccessScopedResource(agentAccess, "read", {
+        kind: "team",
+        organizationId: "organization-a",
+        teamId: "team-member"
+      })
+    ).toBe(false);
+    expect(
+      canAccessScopedResource(agentAccess, "read", {
+        kind: "user",
+        organizationId: "organization-a",
+        userId: "user-a"
+      })
+    ).toBe(false);
+  });
 });

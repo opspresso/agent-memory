@@ -35,6 +35,8 @@ export interface OrganizationAgentTokenStatus {
 
 export interface OrganizationAgentTokenCredential {
   readonly organizationId: string;
+  readonly userId: string;
+  readonly role: "admin" | "owner";
 }
 
 interface Dependencies {
@@ -139,7 +141,11 @@ export function createOrganizationAgentTokenUseCases(
         stored.userId
       );
       return issuer && canManage(issuer)
-        ? { organizationId: stored.organizationId }
+        ? {
+            organizationId: stored.organizationId,
+            userId: issuer.userId,
+            role: issuer.role as "admin" | "owner"
+          }
         : null;
     }
   };

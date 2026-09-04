@@ -23,6 +23,9 @@ export function canAccessMemory(
   if (access.organizationId !== memory.scope.organizationId) {
     return false;
   }
+  if (access.principalKind === "organization-agent") {
+    return false;
+  }
 
   return memory.accessGrants.some((grant) => {
     if (permissionLevel[grant.permission] < permissionLevel[action]) {
