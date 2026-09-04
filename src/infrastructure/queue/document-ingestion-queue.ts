@@ -6,9 +6,9 @@ import {
   type DocumentIngestionQueue
 } from "@/domain/document/document-services";
 
-export const documentIngestionQueueName = "document-ingestion";
+export const documentIngestionQueueName = "document-ingestion-v2";
 export const documentKnowledgeEnrichmentQueueName =
-  "document-knowledge-enrichment";
+  "document-knowledge-enrichment-v2";
 const documentJobExpirationSeconds =
   documentProcessingLeaseMilliseconds / 1_000;
 

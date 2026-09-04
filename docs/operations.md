@@ -151,7 +151,7 @@ pnpm db:studio
 - 시작 전에 bucket이 존재하는지 확인하라. Compose에서는 `minio-init`이 `agent-memory` bucket을 만든다.
 - 실패한 문서는 retry API로 다시 처리할 수 있다. 반복 실패는 document의 `processingError`와 application log를 확인하라.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
-- `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
+- `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
 - AI 분석은 candidate만 생성한다. Source scope의 `manage` 권한을 가진 사용자가 운영 콘솔이나 API에서 승인해야 Knowledge Graph에 반영된다.
 
 Process가 `SIGTERM` 또는 `SIGINT`를 받으면 새 document job 수신을 중단하고 진행 중인 job을 최대 30초 동안 drain한 뒤 Database pool과 telemetry exporter를 순서대로 종료한다. Cleanup 일부가 실패해도 나머지 단계는 계속 실행하며 process는 실패 exit code를 반환한다.
@@ -200,6 +200,8 @@ worker instance: MIGRATE_ON_START=false, DOCUMENT_WORKER_ENABLED=true
 ```
 
 현재 Docker image의 기본 command는 Next.js server이므로 전용 worker도 HTTP server와 같은 process에서 시작된다. 완전히 분리된 worker-only entry point는 제공하지 않는다. 여러 worker가 같은 pg-boss queue를 처리할 수 있으며 document processing lease가 stale worker의 늦은 상태 변경을 차단한다.
+
+현재 worker는 `document-ingestion-v2`와 `document-knowledge-enrichment-v2`만 소비한다. 이전 이름의 queue는 서로 다른 policy·payload 계약이므로 자동으로 삭제하거나 실행하지 않는다. 업그레이드 후 이전 queue에 남은 ingestion job이 있으면 해당 document의 retry API로 새 queue에 등록하고, 운영자가 잔존 job을 확인한 뒤 pg-boss 보존 정책에 따라 정리하라.
 
 백업은 다음 두 저장 영역을 함께 다뤄야 한다.
 
@@ -258,7 +260,7 @@ Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node �
 1. 문서가 `ready`인지 확인한다.
 2. `KNOWLEDGE_EXTRACTION_MODEL`과 `KNOWLEDGE_EXTRACTION_BASE_URL`을 확인한다.
 3. Provider가 JSON Schema structured output을 지원하는지 확인한다.
-4. `document-knowledge-enrichment` queue 오류를 application log에서 확인한다.
+4. `document-knowledge-enrichment-v2` queue 오류를 application log에서 확인한다.
 5. 후보 조회 사용자에게 source scope의 `manage` 권한이 있는지 확인한다.
 
 Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지 않는다.

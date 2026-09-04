@@ -59,5 +59,13 @@ describe("document ingestion queue", () => {
     await expect(queue.enqueue("organization-1", "document-1")).resolves.toBe(
       "already_queued"
     );
+    expect(mocks.createQueue).toHaveBeenCalledWith(
+      "document-ingestion-v2",
+      expect.objectContaining({ policy: "exclusive" })
+    );
+    expect(mocks.createQueue).toHaveBeenCalledWith(
+      "document-knowledge-enrichment-v2",
+      expect.objectContaining({ policy: "exclusive" })
+    );
   });
 });
