@@ -58,6 +58,8 @@ Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경
 
 조직 membership은 `active`, `pending`, `blocked` status를 가진다. 조직 접근 조회는 `active` membership만 반환하므로 `pending`·`blocked` 사용자는 모든 조직 API에서 `403`을 받는다. 조직은 신규 가입자의 기본 status(`newMemberStatus`, 기본값 `pending`)와 기본 팀(`defaultTeamId`)을 설정할 수 있으며, 멤버가 `active`가 되는 시점에 기본 팀에 `member`로 배정된다. 조직 온톨로지(`ontology` 사전, `ontologyMode`)를 포함한 조직 설정 변경은 `admin`·`owner`만 수행한다. 마지막 active `owner`는 강등·차단·제거할 수 없고, 자기 자신의 membership 변경은 허용하지 않는다.
 
+Membership은 현재 접근권한만 나타낸다. `createdBy`, `changedBy`, `grantedBy`, `reviewedBy`, `mergedBy` 같은 audit actor는 stable global user를 참조하므로, 활동 이력이 있는 사용자의 membership을 제거해도 감사 기록과 organization·team scope resource를 보존한다.
+
 모든 memory, document, knowledge node와 edge는 하나의 organization에 속하며 다음 scope 중 하나를 갖는다.
 
 | Scope | 읽기 | 쓰기 | 관리 |

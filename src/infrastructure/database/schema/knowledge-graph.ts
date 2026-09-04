@@ -12,7 +12,7 @@ import {
   uuid
 } from "drizzle-orm/pg-core";
 
-import { organizationMembers, organizations, teams } from "./identity";
+import { organizationMembers, organizations, teams, users } from "./identity";
 import { documentChunks } from "./documents";
 import { memories, memoryScopeKind } from "./memories";
 import { tsvector, unconstrainedVector } from "./custom-types";
@@ -290,19 +290,13 @@ export const knowledgeNodeMerges = pgTable(
     targetNodeId: uuid().notNull(),
     sourceKind: text().notNull(),
     sourceCanonicalName: text().notNull(),
-    mergedBy: uuid().notNull(),
+    mergedBy: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
     reason: text().notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
-    foreignKey({
-      columns: [table.organizationId, table.mergedBy],
-      foreignColumns: [
-        organizationMembers.organizationId,
-        organizationMembers.userId
-      ],
-      name: "knowledge_node_merges_organization_reviewer_fk"
-    }).onDelete("restrict"),
     index("knowledge_node_merges_source_idx").on(
       table.organizationId,
       table.sourceNodeId

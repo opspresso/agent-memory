@@ -1079,6 +1079,42 @@ describe("PostgreSQL schema", () => {
         ]
       }
     ]);
+
+    const administration = createOrganizationAdministrationRepository(db);
+    await expect(
+      administration.removeOrganizationMember(organization, user)
+    ).resolves.toEqual({ status: "removed" });
+    await expect(repository.findById(organization, memoryId)).resolves.toMatchObject({
+      id: memoryId,
+      createdBy: user
+    });
+
+    const actorForeignKeys = await pool.query<{
+      constraintName: string;
+      referencedTable: string;
+    }>(
+      `SELECT tc.constraint_name AS "constraintName",
+              ccu.table_name AS "referencedTable"
+       FROM information_schema.table_constraints tc
+       JOIN information_schema.constraint_column_usage ccu
+         ON ccu.constraint_schema = tc.constraint_schema
+        AND ccu.constraint_name = tc.constraint_name
+       WHERE tc.constraint_type = 'FOREIGN KEY'
+         AND tc.constraint_name = ANY($1::text[])
+       ORDER BY tc.constraint_name`,
+      [[
+        "documents_created_by_users_id_fk",
+        "knowledge_candidates_reviewed_by_users_id_fk",
+        "knowledge_node_merges_merged_by_users_id_fk",
+        "memories_created_by_users_id_fk",
+        "memory_access_grants_granted_by_users_id_fk",
+        "memory_versions_changed_by_users_id_fk"
+      ]]
+    );
+    expect(actorForeignKeys.rows).toHaveLength(6);
+    expect(
+      actorForeignKeys.rows.every((foreignKey) => foreignKey.referencedTable === "users")
+    ).toBe(true);
   });
 
   it("excludes expired and not-yet-valid memory from search", async () => {

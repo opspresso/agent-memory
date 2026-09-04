@@ -25,7 +25,8 @@ import {
 import {
   organizationMembers,
   organizations,
-  teams
+  teams,
+  users
 } from "./identity";
 import { tsvector, unconstrainedVector } from "./custom-types";
 
@@ -71,7 +72,9 @@ export const memories = pgTable(
     sourceMetadata: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
     embedding: unconstrainedVector(),
     embeddingModel: text(),
-    createdBy: uuid().notNull(),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
     validFrom: timestamp({ withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp({ withTimezone: true }),
     status: memoryStatus().notNull().default("active"),
@@ -99,14 +102,6 @@ export const memories = pgTable(
       ],
       name: "memories_organization_user_fk"
     }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.organizationId, table.createdBy],
-      foreignColumns: [
-        organizationMembers.organizationId,
-        organizationMembers.userId
-      ],
-      name: "memories_organization_creator_fk"
-    }).onDelete("restrict"),
     uniqueIndex("memories_organization_id_id_unique").on(
       table.organizationId,
       table.id
@@ -158,7 +153,9 @@ export const memoryVersions = pgTable(
     validFrom: timestamp({ withTimezone: true }).notNull(),
     expiresAt: timestamp({ withTimezone: true }),
     status: memoryStatus().notNull(),
-    changedBy: uuid().notNull(),
+    changedBy: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
     changeReason: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
@@ -169,14 +166,6 @@ export const memoryVersions = pgTable(
       foreignColumns: [memories.organizationId, memories.id],
       name: "memory_versions_organization_memory_fk"
     }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.organizationId, table.changedBy],
-      foreignColumns: [
-        organizationMembers.organizationId,
-        organizationMembers.userId
-      ],
-      name: "memory_versions_organization_changer_fk"
-    }).onDelete("restrict"),
     check("memory_versions_positive_version_check", sql`${table.version} > 0`),
     check(
       "memory_versions_expiry_check",
@@ -201,7 +190,9 @@ export const memoryAccessGrants = pgTable(
     teamId: uuid(),
     userId: uuid(),
     permission: memoryPermission().notNull(),
-    grantedBy: uuid().notNull(),
+    grantedBy: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
@@ -228,14 +219,6 @@ export const memoryAccessGrants = pgTable(
       ],
       name: "memory_access_grants_organization_user_fk"
     }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.organizationId, table.grantedBy],
-      foreignColumns: [
-        organizationMembers.organizationId,
-        organizationMembers.userId
-      ],
-      name: "memory_access_grants_organization_granter_fk"
-    }).onDelete("restrict"),
     uniqueIndex("memory_access_grants_team_unique")
       .on(table.memoryId, table.teamId)
       .where(sql`${table.teamId} IS NOT NULL`),

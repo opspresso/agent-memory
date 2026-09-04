@@ -13,7 +13,7 @@ import {
   uuid
 } from "drizzle-orm/pg-core";
 
-import { organizationMembers, organizations, teams } from "./identity";
+import { organizationMembers, organizations, teams, users } from "./identity";
 import { memoryScopeKind } from "./memories";
 import { tsvector, unconstrainedVector } from "./custom-types";
 import { documentStatuses } from "@/domain/document/document";
@@ -43,7 +43,9 @@ export const documents = pgTable(
     processingStartedAt: timestamp({ withTimezone: true }),
     processedAt: timestamp({ withTimezone: true }),
     metadata: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
-    createdBy: uuid().notNull(),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
@@ -67,14 +69,6 @@ export const documents = pgTable(
       ],
       name: "documents_organization_user_fk"
     }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.organizationId, table.createdBy],
-      foreignColumns: [
-        organizationMembers.organizationId,
-        organizationMembers.userId
-      ],
-      name: "documents_organization_creator_fk"
-    }).onDelete("restrict"),
     uniqueIndex("documents_organization_id_id_unique").on(
       table.organizationId,
       table.id

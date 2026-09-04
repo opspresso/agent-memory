@@ -18,7 +18,7 @@ import {
 } from "@/domain/knowledge/knowledge-candidate";
 
 import { documentChunks, documents } from "./documents";
-import { organizationMembers, organizations } from "./identity";
+import { organizations, users } from "./identity";
 
 export const knowledgeCandidateStatus = pgEnum(
   "knowledge_candidate_status",
@@ -37,7 +37,7 @@ export const knowledgeCandidates = pgTable(
     model: text().notNull(),
     graph: jsonb().$type<ProposedKnowledgeGraph>().notNull(),
     status: knowledgeCandidateStatus().notNull().default("pending"),
-    reviewedBy: uuid(),
+    reviewedBy: uuid().references(() => users.id, { onDelete: "restrict" }),
     reviewReason: text(),
     reviewedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -49,14 +49,6 @@ export const knowledgeCandidates = pgTable(
       foreignColumns: [documents.organizationId, documents.id],
       name: "knowledge_candidates_organization_document_fk"
     }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.organizationId, table.reviewedBy],
-      foreignColumns: [
-        organizationMembers.organizationId,
-        organizationMembers.userId
-      ],
-      name: "knowledge_candidates_organization_reviewer_fk"
-    }).onDelete("restrict"),
     check(
       "knowledge_candidates_review_state_check",
       sql`(${table.status} = 'pending' AND ${table.reviewedBy} IS NULL AND ${table.reviewedAt} IS NULL)
