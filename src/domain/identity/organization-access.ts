@@ -4,10 +4,19 @@ export type OrganizationRole = (typeof organizationRoles)[number];
 export const organizationMemberStatuses = [
   "active",
   "pending",
-  "blocked"
+  "blocked",
+  "removed"
 ] as const;
 export type OrganizationMemberStatus =
   (typeof organizationMemberStatuses)[number];
+
+export const manageableOrganizationMemberStatuses = [
+  "active",
+  "pending",
+  "blocked"
+] as const;
+export type ManageableOrganizationMemberStatus =
+  (typeof manageableOrganizationMemberStatuses)[number];
 
 export const newMemberStatuses = ["active", "pending"] as const;
 export type NewMemberStatus = (typeof newMemberStatuses)[number];

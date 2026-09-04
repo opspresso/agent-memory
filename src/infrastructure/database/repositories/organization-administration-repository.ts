@@ -1,9 +1,10 @@
-import { and, asc, count, eq, notInArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, ne, notInArray, sql } from "drizzle-orm";
 
 import type { OrganizationAdministrationRepository } from "@/domain/identity/organization-administration-repository";
 
 import type { AgentMemoryDatabase } from "../client";
 import {
+  organizationAgentTokens,
   organizationMembers,
   organizations,
   teamMembers,
@@ -123,7 +124,12 @@ export function createOrganizationAdministrationRepository(
         })
         .from(organizationMembers)
         .innerJoin(users, eq(users.id, organizationMembers.userId))
-        .where(eq(organizationMembers.organizationId, organizationId))
+        .where(
+          and(
+            eq(organizationMembers.organizationId, organizationId),
+            ne(organizationMembers.status, "removed")
+          )
+        )
         .orderBy(asc(users.name), asc(users.id));
     },
 
@@ -142,7 +148,8 @@ export function createOrganizationAdministrationRepository(
         .where(
           and(
             eq(organizationMembers.organizationId, organizationId),
-            eq(organizationMembers.userId, userId)
+            eq(organizationMembers.userId, userId),
+            ne(organizationMembers.status, "removed")
           )
         )
         .limit(1);
@@ -162,8 +169,13 @@ export function createOrganizationAdministrationRepository(
         const [saved] = await transaction
           .insert(organizationMembers)
           .values({ organizationId, userId: user.id, role, status: "active" })
-          .onConflictDoNothing({
-            target: [organizationMembers.organizationId, organizationMembers.userId]
+          .onConflictDoUpdate({
+            target: [
+              organizationMembers.organizationId,
+              organizationMembers.userId
+            ],
+            set: { role, status: "active" },
+            setWhere: eq(organizationMembers.status, "removed")
           })
           .returning({
             role: organizationMembers.role,
@@ -328,7 +340,24 @@ export function createOrganizationAdministrationRepository(
           }
         }
         await transaction
-          .delete(organizationMembers)
+          .delete(teamMembers)
+          .where(
+            and(
+              eq(teamMembers.organizationId, organizationId),
+              eq(teamMembers.userId, userId)
+            )
+          );
+        await transaction
+          .delete(organizationAgentTokens)
+          .where(
+            and(
+              eq(organizationAgentTokens.organizationId, organizationId),
+              eq(organizationAgentTokens.userId, userId)
+            )
+          );
+        await transaction
+          .update(organizationMembers)
+          .set({ status: "removed" })
           .where(
             and(
               eq(organizationMembers.organizationId, organizationId),
@@ -499,7 +528,12 @@ export function createOrganizationAdministrationRepository(
       const memberships = db
         .select({ organizationId: organizationMembers.organizationId })
         .from(organizationMembers)
-        .where(eq(organizationMembers.userId, userId));
+        .where(
+          and(
+            eq(organizationMembers.userId, userId),
+            ne(organizationMembers.status, "removed")
+          )
+        );
       return db
         .select({
           id: organizations.id,
@@ -534,25 +568,44 @@ export function createOrganizationAdministrationRepository(
         if (!organization) {
           return { status: "organization_not_found" } as const;
         }
-        const [inserted] = await transaction
-          .insert(organizationMembers)
-          .values({
-            organizationId: organization.id,
-            userId,
-            role: "member",
-            status: organization.newMemberStatus
-          })
-          .onConflictDoNothing({
-            target: [
-              organizationMembers.organizationId,
-              organizationMembers.userId
-            ]
-          })
-          .returning({ status: organizationMembers.status });
-        if (!inserted) {
+        const [existing] = await transaction
+          .select({ status: organizationMembers.status })
+          .from(organizationMembers)
+          .where(
+            and(
+              eq(organizationMembers.organizationId, organization.id),
+              eq(organizationMembers.userId, userId)
+            )
+          )
+          .limit(1);
+        if (existing && existing.status !== "removed") {
           return { status: "already_member" } as const;
         }
-        if (inserted.status === "active" && organization.defaultTeamId) {
+        const [saved] = existing
+          ? await transaction
+              .update(organizationMembers)
+              .set({ role: "member", status: organization.newMemberStatus })
+              .where(
+                and(
+                  eq(organizationMembers.organizationId, organization.id),
+                  eq(organizationMembers.userId, userId),
+                  eq(organizationMembers.status, "removed")
+                )
+              )
+              .returning({ status: organizationMembers.status })
+          : await transaction
+              .insert(organizationMembers)
+              .values({
+                organizationId: organization.id,
+                userId,
+                role: "member",
+                status: organization.newMemberStatus
+              })
+              .returning({ status: organizationMembers.status });
+        if (!saved) {
+          throw new Error("organization membership join claim was lost");
+        }
+        if (saved.status === "active" && organization.defaultTeamId) {
           await transaction
             .insert(teamMembers)
             .values({
@@ -567,7 +620,7 @@ export function createOrganizationAdministrationRepository(
         }
         return {
           status: "joined",
-          membershipStatus: inserted.status
+          membershipStatus: saved.status
         } as const;
       });
     }

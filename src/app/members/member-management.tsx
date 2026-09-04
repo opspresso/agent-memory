@@ -29,6 +29,7 @@ import {
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import type {
+  ManageableOrganizationMemberStatus,
   OrganizationMemberStatus,
   OrganizationRole
 } from "@/domain/identity/organization-access";
@@ -195,7 +196,10 @@ function MemberManagementView() {
     );
   }
 
-  function changeStatus(member: MemberView, status: OrganizationMemberStatus) {
+  function changeStatus(
+    member: MemberView,
+    status: ManageableOrganizationMemberStatus
+  ) {
     void runMutation(
       () =>
         requestJson(

@@ -199,7 +199,7 @@ export const ko: Messages = {
   "members.removed": "회원을 제거했습니다.",
   "members.removeTitle": "회원 제거",
   "members.removeBody":
-    "{email}을(를) 조직에서 제거할까요? 팀 소속도 함께 제거됩니다.",
+    "{email}을(를) 조직에서 제거할까요? 팀 소속과 접근 권한은 제거되지만 user scope 데이터는 재가입을 위해 보존됩니다.",
   "members.assignTeam": "{email}을(를) 팀에 배정",
   "members.addTeam": "팀 추가",
   "members.removeFromTeam": "{team}에서 제거",

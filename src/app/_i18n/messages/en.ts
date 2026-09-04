@@ -198,7 +198,7 @@ export const en = {
   "members.removed": "The member was removed.",
   "members.removeTitle": "Remove member",
   "members.removeBody":
-    "Remove {email} from this organization? Their team memberships are removed as well.",
+    "Remove {email} from this organization? Team memberships and access are removed, while user-scoped data is retained for a future rejoin.",
   "members.assignTeam": "Assign {email} to a team",
   "members.addTeam": "Add team",
   "members.removeFromTeam": "Remove from {team}",

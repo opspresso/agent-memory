@@ -140,6 +140,7 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 
 - 조직 `admin`, `owner`: 멤버 추가, 조직 role 변경, 승인 대기 멤버 승인, 차단·차단 해제, 조직에서 제거, 팀 배정·해제
 - `owner` role 부여와 `owner` 멤버 변경·제거는 `owner`만 가능하다. 마지막 owner와 자기 자신은 변경할 수 없다.
+- 조직에서 제거하면 팀 소속과 접근 권한은 즉시 해제되지만 user scope의 Memory, Document, Knowledge resource는 보존된다. 같은 사용자가 다시 가입하면 기존 user scope를 다시 사용할 수 있다.
 
 `팀`에서 팀을 관리한다.
 

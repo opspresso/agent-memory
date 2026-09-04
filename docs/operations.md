@@ -212,6 +212,8 @@ Database만 복원하고 object storage를 복원하지 않으면 document metad
 
 조직 또는 팀 삭제는 PostgreSQL resource만 cascade 삭제하고 S3 호환 storage의 문서 원본 object는 제거하지 않는다. PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 object storage lifecycle로 제거하라.
 
+회원 제거는 membership을 `removed` tombstone으로 전환해 user scope의 document metadata와 원본 object key를 보존하므로 storage orphan을 만들지 않는다. 제거된 사용자는 active membership으로 다시 가입하기 전까지 해당 resource에 접근할 수 없다.
+
 ## 장애 대응
 
 ### `column ... does not exist` 또는 `relation ... does not exist`

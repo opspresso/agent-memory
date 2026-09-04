@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 
 import type { OrganizationAccessRepository } from "@/domain/identity/organization-access-repository";
 
@@ -78,7 +78,12 @@ export function createOrganizationAccessRepository(
           organizations,
           eq(organizations.id, organizationMembers.organizationId)
         )
-        .where(eq(organizationMembers.userId, userId))
+        .where(
+          and(
+            eq(organizationMembers.userId, userId),
+            ne(organizationMembers.status, "removed")
+          )
+        )
         .orderBy(asc(organizations.name), asc(organizations.id));
     },
 

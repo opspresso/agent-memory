@@ -4,6 +4,7 @@ import type {
 } from "../knowledge/knowledge-ontology";
 import type {
   NewMemberStatus,
+  ManageableOrganizationMemberStatus,
   OrganizationMemberStatus,
   OrganizationRole,
   TeamRole
@@ -39,7 +40,7 @@ export type AddOrganizationMemberResult =
 
 export interface OrganizationMemberUpdate {
   readonly role?: OrganizationRole;
-  readonly status?: OrganizationMemberStatus;
+  readonly status?: ManageableOrganizationMemberStatus;
 }
 
 export type UpdateOrganizationMemberResult =

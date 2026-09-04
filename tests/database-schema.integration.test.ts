@@ -959,6 +959,14 @@ describe("PostgreSQL schema", () => {
     await expect(
       administration.removeOrganizationMember(organizationId, joinerId)
     ).resolves.toEqual({ status: "removed" });
+    await expect(
+      administration.listJoinableOrganizations(joinerId)
+    ).resolves.toContainEqual(
+      expect.objectContaining({ id: organizationId })
+    );
+    await expect(
+      administration.joinOrganizationBySlug("organization-p", joinerId)
+    ).resolves.toEqual({ status: "joined", membershipStatus: "pending" });
 
     await expect(administration.deleteTeam(organizationId, teamId)).resolves.toBe(
       true
@@ -976,6 +984,142 @@ describe("PostgreSQL schema", () => {
       [organizationId]
     );
     expect(remaining.rows[0]?.total).toBe(0);
+  });
+
+  it("preserves user-scoped data when organization access is removed", async () => {
+    const organizationId = "00000000-0000-0000-0000-000000000027";
+    const ownerId = "10000000-0000-0000-0000-000000000027";
+    const memberId = "10000000-0000-0000-0000-000000000028";
+    const teamId = "20000000-0000-0000-0000-000000000027";
+    const memoryId = "30000000-0000-0000-0000-000000000027";
+    const documentId = "40000000-0000-0000-0000-000000000027";
+    const sourceNodeId = "60000000-0000-0000-0000-000000000027";
+    const targetNodeId = "60000000-0000-0000-0000-000000000028";
+    const edgeId = "70000000-0000-0000-0000-000000000027";
+    await pool.query(
+      `INSERT INTO organizations (id, slug, name)
+       VALUES ($1, 'membership-retention', 'Membership Retention')`,
+      [organizationId]
+    );
+    await pool.query(
+      `INSERT INTO users (id, email, name)
+       VALUES ($1, 'retention-owner@example.com', 'Retention Owner'),
+              ($2, 'retention-member@example.com', 'Retention Member')`,
+      [ownerId, memberId]
+    );
+    await pool.query(
+      `INSERT INTO organization_members (organization_id, user_id, role)
+       VALUES ($1, $2, 'owner'), ($1, $3, 'member')`,
+      [organizationId, ownerId, memberId]
+    );
+    await pool.query(
+      `INSERT INTO teams (id, organization_id, slug, name)
+       VALUES ($1, $2, 'retention-team', 'Retention Team')`,
+      [teamId, organizationId]
+    );
+    await pool.query(
+      `INSERT INTO team_members (organization_id, team_id, user_id)
+       VALUES ($1, $2, $3)`,
+      [organizationId, teamId, memberId]
+    );
+    await pool.query(
+      `INSERT INTO organization_agent_tokens (
+         organization_id, user_id, token_hash, masked
+       ) VALUES ($1, $2, $3, 'amt_••••test')`,
+      [organizationId, memberId, "e".repeat(64)]
+    );
+    await pool.query(
+      `INSERT INTO memories (
+         id, organization_id, scope_kind, user_id, kind, title, content,
+         source_type, created_by
+       ) VALUES ($1, $2, 'user', $3, 'fact', 'Private fact', 'Retained', 'user', $3)`,
+      [memoryId, organizationId, memberId]
+    );
+    await pool.query(
+      `INSERT INTO documents (
+         id, organization_id, scope_kind, user_id, title, object_key,
+         checksum, mime_type, created_by
+       ) VALUES ($1, $2, 'user', $3, 'Private document', $4, $5, 'text/plain', $3)`,
+      [
+        documentId,
+        organizationId,
+        memberId,
+        `organizations/${organizationId}/documents/${documentId}/source`,
+        "d".repeat(64)
+      ]
+    );
+    await pool.query(
+      `INSERT INTO knowledge_nodes (
+         id, organization_id, scope_kind, user_id, kind, canonical_name
+       ) VALUES ($1, $3, 'user', $4, 'person', 'Retained source'),
+                ($2, $3, 'user', $4, 'system', 'Retained target')`,
+      [sourceNodeId, targetNodeId, organizationId, memberId]
+    );
+    await pool.query(
+      `INSERT INTO knowledge_edges (
+         id, organization_id, scope_kind, user_id, source_node_id,
+         target_node_id, predicate
+       ) VALUES ($1, $2, 'user', $3, $4, $5, 'uses')`,
+      [edgeId, organizationId, memberId, sourceNodeId, targetNodeId]
+    );
+
+    const administration = createOrganizationAdministrationRepository(db);
+    await expect(
+      administration.removeOrganizationMember(organizationId, memberId)
+    ).resolves.toEqual({ status: "removed" });
+    const retained = await pool.query<{
+      documentCount: number;
+      edgeCount: number;
+      memoryCount: number;
+      nodeCount: number;
+      status: string;
+      teamCount: number;
+      tokenCount: number;
+    }>(
+      `SELECT om.status,
+              (SELECT count(*)::int FROM team_members WHERE organization_id = $1 AND user_id = $2) AS "teamCount",
+              (SELECT count(*)::int FROM organization_agent_tokens WHERE organization_id = $1 AND user_id = $2) AS "tokenCount",
+              (SELECT count(*)::int FROM memories WHERE organization_id = $1 AND user_id = $2) AS "memoryCount",
+              (SELECT count(*)::int FROM documents WHERE organization_id = $1 AND user_id = $2) AS "documentCount",
+              (SELECT count(*)::int FROM knowledge_nodes WHERE organization_id = $1 AND user_id = $2) AS "nodeCount",
+              (SELECT count(*)::int FROM knowledge_edges WHERE organization_id = $1 AND user_id = $2) AS "edgeCount"
+       FROM organization_members om
+       WHERE om.organization_id = $1 AND om.user_id = $2`,
+      [organizationId, memberId]
+    );
+    expect(retained.rows[0]).toEqual({
+      status: "removed",
+      teamCount: 0,
+      tokenCount: 0,
+      memoryCount: 1,
+      documentCount: 1,
+      nodeCount: 2,
+      edgeCount: 1
+    });
+    await expect(
+      administration.findOrganizationMember(organizationId, memberId)
+    ).resolves.toBeNull();
+    await expect(
+      createOrganizationAccessRepository(db).findByUser(
+        organizationId,
+        memberId
+      )
+    ).resolves.toBeNull();
+    await expect(
+      administration.addOrganizationMember(
+        organizationId,
+        "retention-member@example.com",
+        "member"
+      )
+    ).resolves.toMatchObject({ status: "added", member: { status: "active" } });
+    await expect(
+      pool.query(
+        `SELECT count(*)::int AS total
+         FROM memories
+         WHERE organization_id = $1 AND user_id = $2`,
+        [organizationId, memberId]
+      )
+    ).resolves.toMatchObject({ rows: [{ total: 1 }] });
   });
 
   it("persists revisions and searches only accessible active memory", async () => {

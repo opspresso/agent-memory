@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import {
   newMemberStatuses,
-  organizationMemberStatuses,
+  manageableOrganizationMemberStatuses,
   organizationRoles,
   teamRoles
 } from "@/domain/identity/organization-access";
@@ -68,7 +68,7 @@ export const updateOrganizationSchema = z
 export const updateOrganizationMemberSchema = z
   .object({
     role: z.enum(organizationRoles).optional(),
-    status: z.enum(organizationMemberStatuses).optional()
+    status: z.enum(manageableOrganizationMemberStatuses).optional()
   })
   .refine((value) => value.role !== undefined || value.status !== undefined, {
     message: "at least one field is required"
