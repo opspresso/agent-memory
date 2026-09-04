@@ -1,6 +1,9 @@
 import { isAdminEmail } from "./access-control";
 import { auth } from "./auth";
-import { hasTrustedMutationOrigin } from "./request-security";
+import {
+  authenticationHeaders,
+  hasTrustedMutationOrigin
+} from "./request-security";
 
 export interface SessionUser {
   readonly email: string;
@@ -41,7 +44,7 @@ export async function authenticateRequest(
     };
   }
 
-  const user = await getSessionUser(request.headers);
+  const user = await getSessionUser(authenticationHeaders(request));
   if (!user) {
     return {
       authenticated: false,

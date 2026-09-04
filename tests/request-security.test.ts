@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import {
+  authenticationHeaders,
+  hasTrustedMutationOrigin
+} from "@/lib/request-security";
 
 const baseURL = "https://memory.example.com";
 
@@ -49,5 +52,25 @@ describe("request origin policy", () => {
     });
 
     expect(hasTrustedMutationOrigin(request, baseURL)).toBe(true);
+  });
+
+  it("does not let bearer requests fall back to session cookies", () => {
+    const bearerRequest = new Request(`${baseURL}/api/memories`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer session-token",
+        cookie: "better-auth.session_token=cookie-token"
+      }
+    });
+    const cookieRequest = new Request(`${baseURL}/api/memories`, {
+      method: "POST",
+      headers: { cookie: "better-auth.session_token=cookie-token" }
+    });
+
+    expect(authenticationHeaders(bearerRequest).get("cookie")).toBeNull();
+    expect(authenticationHeaders(bearerRequest).get("authorization")).toBe(
+      "Bearer session-token"
+    );
+    expect(authenticationHeaders(cookieRequest)).toBe(cookieRequest.headers);
   });
 });

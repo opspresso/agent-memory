@@ -1,4 +1,14 @@
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const bearerPattern = /^Bearer\s+\S+$/i;
+
+export function authenticationHeaders(request: Request): Headers {
+  if (!bearerPattern.test(request.headers.get("authorization") ?? "")) {
+    return request.headers;
+  }
+  const headers = new Headers(request.headers);
+  headers.delete("cookie");
+  return headers;
+}
 
 export function hasTrustedMutationOrigin(
   request: Request,
@@ -8,7 +18,7 @@ export function hasTrustedMutationOrigin(
     return true;
   }
 
-  if (/^Bearer\s+\S+$/i.test(request.headers.get("authorization") ?? "")) {
+  if (bearerPattern.test(request.headers.get("authorization") ?? "")) {
     return true;
   }
 
