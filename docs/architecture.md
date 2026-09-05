@@ -35,6 +35,18 @@ src/app  ──▶ src/lib ──▶ src/application ──▶ src/domain
 
 `dependency-cruiser.config.cjs`와 `eslint.config.mjs`가 이 방향을 검사한다. Dependency cruiser는 `import type`을 포함한 소스 의존성과 순환 의존성을 검사해 repository port와 외부 package의 타입 참조도 경계 규칙에 포함한다.
 
+## 개발 시 책임과 port 계약
+
+Memory 생성은 `src/app/api/organizations/[organizationSlug]/memories/route.ts` → `src/lib/memory-service.ts` → `src/application/memory/create-memory.ts` → domain의 `MemoryRepository` port로 이어진다. `src/lib/container.ts`가 PostgreSQL adapter와 선택형 AI adapter를 만들고 service가 clock·ID 함수와 함께 주입한다. HTTP와 MCP는 이 조립된 operation을 공유한다.
+
+- Domain은 프레임워크 타입을 받지 않고 entity와 순수 정책을 정의한다.
+- Application은 인증된 actor와 port를 받아 권한과 workflow를 결정한다. 시간·ID·외부 호출은 주입한다.
+- Repository adapter는 row 변환과 SQL을 소유한다. `saveRevision`, candidate `accept`, `mergeNodes`처럼 하나로 완료되어야 하는 작업을 transaction 안에서 실행한다. 마지막 owner 보존과 동일 scope merge 등 동시 변경에 민감한 불변 조건은 잠근 최신 상태에서 최종 검사한다.
+- `lib`의 `*-schemas`와 `*-http`는 입력 검증·공개 응답·오류 변환을, `*-service`와 `container`는 조립을 담당한다. Better Auth 연결과 readiness 같은 운영 기능도 이 외부 경계에 둔다. Route는 준비된 operation을 호출한다.
+- Unit test는 clock·ID·port 대역으로 정책을 검증한다. Transaction, tenant FK, SQL 권한 predicate는 실제 PostgreSQL integration test로 검증한다.
+
+Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 의미, 충돌 결과를 함께 확인하라. 예를 들어 candidate 승인은 최초 승격과 재실행을 구분한다. 최초 승격은 ready source를 요구하지만, 이미 승인한 candidate의 재실행은 source가 이후 archive되었더라도 기존 승인 결과를 반환하며 새 graph resource를 생성하지 않는다.
+
 ## 요청 경계
 
 조직 API 요청은 다음 경계를 통과한다.

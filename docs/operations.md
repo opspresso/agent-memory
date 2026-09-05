@@ -25,7 +25,7 @@ Compose: postgres, MinIO ─────┘      └── pg-boss
 
 IDC와 EKS에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
 
-`v*` tag를 push하면 release workflow가 self-hosted Linux runner에서 `pnpm verify`, PostgreSQL integration test, 인증 E2E test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 immutable tag를 배포한다.
+`v*` tag를 push하면 release workflow가 GitHub-hosted Ubuntu 24.04 runner에서 `pnpm verify`, PostgreSQL integration test, 인증 E2E test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 immutable tag를 배포한다.
 
 Release 완료 조건은 tag와 GitHub Release만 만드는 것이 아니다. Workflow 성공, ECR·GHCR image 게시, GitOps dispatch와 Argo CD sync를 확인한 뒤 container image, health endpoint, 공개 화면의 version을 검증하라. IDC rollout과 관측성은 `../dockpad`, EKS rollout은 `../argocd-env-demo`에서 확인한다.
 
@@ -111,7 +111,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 `NODE_ENV=production`에서는 `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `ALLOWED_EMAIL_DOMAINS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`이 필수다. `BETTER_AUTH_SECRET`은 32자 이상이어야 하고 public `BETTER_AUTH_URL`은 HTTPS를 사용해야 한다. 하나라도 유효하지 않으면 서버가 시작 시점에 실패한다 — 개발용 기본값으로의 무경고 fallback은 개발 환경에서만 동작한다.
 
-AI provider limit은 embedding, reranker, knowledge extraction이 공유하며 application instance마다 적용된다. Replica를 늘리면 cluster 전체 상한도 instance 수만큼 늘어나므로 provider account 또는 API gateway의 조직별 예산·quota를 함께 설정하라.
+Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 동시 실행·분당 호출 제한을 공유하고, PostgreSQL의 organization·user 분당 quota도 함께 적용받는다. Replica를 늘려도 같은 조직·사용자의 durable quota는 늘어나지 않는다. Provider account 전체 예산은 조직별 quota와 별도로 설정하라.
 
 다음 설정은 일부만 제공하면 application 시작 시 실패한다.
 
@@ -289,7 +289,7 @@ Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지
 | `413` | JSON body의 1 MiB 제한 또는 문서 upload request·원본 파일 제한 |
 | `422` | strict ontology의 미등록 node kind·edge predicate |
 | `428` | Memory PATCH·DELETE의 `If-Match` header |
-| `429` | AI provider instance limit과 `Retry-After` header |
+| `429` | AI instance·organization·user quota와 `Retry-After` header, 또는 document storage·backlog·upload quota |
 | `503` | PostgreSQL 연결·migration 상태 또는 온톨로지 AI 제안 model 설정 |
 
 ## 배포 전 확인
@@ -299,6 +299,29 @@ pnpm verify
 ```
 
 `pnpm verify`는 lint, typecheck, architecture, unit test, production build를 실행한다. Database 변경은 `pnpm test:integration`, 화면과 인증 흐름 변경은 `pnpm test:e2e`를 추가한다. 세부 기준은 [AGENTS.md](../AGENTS.md#검증)를 따른다.
+
+인증 E2E는 `E2E_AUTHENTICATED=true`가 있어야 실행된다. 이 값이 없으면 가입·조직 관리·Memory lifecycle 시나리오가 skip되므로 공개 화면 검사만으로 인증 검증을 완료했다고 판단하지 마라. 테스트는 계정과 조직을 생성하므로 별도 PostgreSQL DB를 사용한다. 예를 들어 다음과 같이 E2E 전용 container를 시작한다.
+
+```bash
+docker run --detach --name agent-memory-e2e \
+  --publish 127.0.0.1:5434:5432 \
+  --env POSTGRES_DB=agent_memory_e2e \
+  --env POSTGRES_USER=agent_memory \
+  --env POSTGRES_PASSWORD=agent_memory \
+  pgvector/pgvector:0.8.6-pg18-trixie
+docker exec agent-memory-e2e pg_isready -U agent_memory -d agent_memory_e2e
+```
+
+`pg_isready`가 성공한 뒤 같은 shell에서 migration과 인증 E2E를 실행한다. Playwright는 port 3110에 테스트 application을 시작하며 기존 서버가 있으면 재사용하므로 다른 설정의 서버를 먼저 종료하라.
+
+```bash
+export DATABASE_URL=postgresql://agent_memory:agent_memory@127.0.0.1:5434/agent_memory_e2e
+pnpm db:migrate
+pnpm exec playwright install chromium
+E2E_AUTHENTICATED=true DOCUMENT_WORKER_ENABLED=false pnpm test:e2e
+```
+
+`pnpm test:integration`은 Docker의 별도 Testcontainers PostgreSQL에 migration을 적용해 검사한다. 위 E2E DB를 재사용하지 않는다. CI는 두 검사를 모두 활성화한다.
 
 운영 배포 전에 다음도 확인하라.
 
