@@ -69,6 +69,7 @@ function TeamManagementView() {
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
   const [teamMembersError, setTeamMembersError] = useState<string>();
+  const [membersRefresh, setMembersRefresh] = useState(0);
   const [renameTarget, setRenameTarget] = useState<TeamView>();
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<TeamView>();
@@ -112,45 +113,55 @@ function TeamManagementView() {
     }
   }, [organizationSlug, t]);
 
-  const loadTeamMembers = useCallback(async () => {
-    if (!organizationSlug || !selectedTeamId) {
-      setTeamMembers([]);
-      setTeamMembersError(undefined);
-      return;
-    }
-    try {
-      const body = await fetch(
-        `/api/organizations/${organizationSlug}/teams/${selectedTeamId}/members`
-      ).then((response) =>
-        responseJson(
-          response,
-          t("organization.requestFailed"),
-          teamMembersResponseSchema
-        )
-      );
-      setTeamMembers(body.members);
-      setTeamMembersError(undefined);
-    } catch (caught) {
-      setTeamMembers([]);
-      setTeamMembersError(
-        caught instanceof Error ? caught.message : t("organization.loadFailed")
-      );
-    }
-  }, [organizationSlug, selectedTeamId, t]);
-
   useEffect(() => {
     void Promise.resolve().then(loadTeams);
   }, [loadTeams]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    async function loadTeamMembers() {
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (!organizationSlug || !selectedTeamId) {
+        setTeamMembers([]);
+        setTeamMembersError(undefined);
+        return;
+      }
+      setTeamMembersError(undefined);
+      try {
+        const response = await fetch(
+          `/api/organizations/${organizationSlug}/teams/${selectedTeamId}/members`,
+          { signal: controller.signal }
+        );
+        const body = await responseJson(
+          response,
+          t("organization.requestFailed"),
+          teamMembersResponseSchema
+        );
+        if (!controller.signal.aborted) {
+          setTeamMembers(body.members);
+        }
+      } catch (caught) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setTeamMembers([]);
+        setTeamMembersError(
+          caught instanceof Error ? caught.message : t("organization.loadFailed")
+        );
+      }
+    }
     void Promise.resolve().then(loadTeamMembers);
-  }, [loadTeamMembers]);
+    return () => controller.abort();
+  }, [organizationSlug, selectedTeamId, membersRefresh, t]);
 
   function refresh() {
     setLoading(true);
     setError(undefined);
     setTeamMembersError(undefined);
-    void Promise.all([loadTeams(), loadTeamMembers()]);
+    void loadTeams();
+    setMembersRefresh((current) => current + 1);
   }
 
   async function runMutation(execute: () => Promise<void>, success: string) {
@@ -161,7 +172,7 @@ function TeamManagementView() {
       await execute();
       setMessage(success);
       await loadTeams();
-      await loadTeamMembers();
+      setMembersRefresh((current) => current + 1);
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : t("organization.requestFailed")

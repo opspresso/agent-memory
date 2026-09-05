@@ -83,7 +83,7 @@ test("onboards, approves, and manages members through the console", async ({
       slug: approvalOrganizationSlug
     }
   );
-  await postJson<{ id: string }>(
+  const defaultTeam = await postJson<{ id: string }>(
     page,
     `/api/organizations/${approvalOrganizationSlug}/teams`,
     { name: "E2E Default Team", slug: `e2e-default-${runId}-${testInfo.retry}` }
@@ -156,6 +156,41 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(teamSelector).toHaveAttribute("aria-pressed", "true");
   await teamSelector.focus();
   await page.keyboard.press("Space");
+  const otherTeam = await postJson<{ id: string }>(
+    page,
+    `/api/organizations/${approvalOrganizationSlug}/teams`,
+    { name: "E2E Other Team", slug: `e2e-other-team-${runId}-${testInfo.retry}` }
+  );
+  const delayedMembers = Promise.withResolvers<void>();
+  const membersRequested = Promise.withResolvers<void>();
+  const defaultMembersPath = `**/api/organizations/${approvalOrganizationSlug}/teams/${defaultTeam.id}/members`;
+  const otherMembersPath = `**/api/organizations/${approvalOrganizationSlug}/teams/${otherTeam.id}/members`;
+  await page.route(defaultMembersPath, async (route) => {
+    const response = await route.fetch();
+    membersRequested.resolve();
+    await delayedMembers.promise;
+    await route.fulfill({ response });
+  });
+  await page.route(otherMembersPath, (route) => route.fulfill({
+    json: {
+      members: [{
+        teamId: otherTeam.id,
+        userId: "10000000-0000-4000-8000-000000000099",
+        name: "Other Team Member",
+        email: "other-team-member@nalbam.com",
+        role: "member"
+      }]
+    }
+  }));
+  await page.reload();
+  await membersRequested.promise;
+  await page.getByRole("button", { name: "E2E Other Team", exact: true }).click();
+  await expect(page.getByText("other-team-member@nalbam.com", { exact: true })).toBeVisible();
+  delayedMembers.resolve();
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByText("other-team-member@nalbam.com", { exact: true })).toBeVisible();
+  await page.unroute(defaultMembersPath);
+  await page.unroute(otherMembersPath);
   await page.goto("/members");
   await expect(page.getByText(memberEmail, { exact: true })).toBeVisible();
 
