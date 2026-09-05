@@ -109,10 +109,13 @@ function canManageTeam(access: OrganizationAccess, teamId: string): boolean {
 
 export function buildCreateOrganization(dependencies: CreateDependencies) {
   return async function execute(
-    ownerUserId: string,
+    actor: Readonly<{ userId: string; isAdmin: boolean }>,
     slug: string,
     name: string
   ): Promise<Organization> {
+    if (!actor.isAdmin) {
+      throw new OrganizationAdministrationAccessDeniedError();
+    }
     const organization = createOrganization({
       id: dependencies.generateId(),
       slug,
@@ -121,7 +124,7 @@ export function buildCreateOrganization(dependencies: CreateDependencies) {
     });
     const result = await dependencies.repository.createOrganization(
       organization,
-      ownerUserId
+      actor.userId
     );
     if (result.status === "slug_conflict") {
       throw new OrganizationSlugConflictError();

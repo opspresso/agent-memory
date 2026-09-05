@@ -67,7 +67,7 @@ describe("organization administration", () => {
       repository: repository({ createOrganization })
     });
 
-    await expect(create("user-1", " Platform-Team ", " Platform Team ")).resolves
+    await expect(create({ userId: "user-1", isAdmin: true }, " Platform-Team ", " Platform Team ")).resolves
       .toMatchObject({
         id: "organization-1",
         slug: "platform-team",
@@ -81,6 +81,22 @@ describe("organization administration", () => {
       expect.objectContaining({ id: "organization-1" }),
       "user-1"
     );
+  });
+
+  it("requires global admin authority before creating an organization", async () => {
+    const createOrganization = vi.fn();
+    const generateId = vi.fn();
+    const create = buildCreateOrganization({
+      clock: () => now,
+      generateId,
+      repository: repository({ createOrganization })
+    });
+
+    await expect(
+      create({ userId: "user-1", isAdmin: false }, "platform", "Platform")
+    ).rejects.toThrow("organization administration access denied");
+    expect(createOrganization).not.toHaveBeenCalled();
+    expect(generateId).not.toHaveBeenCalled();
   });
 
   it("restricts member administration to organization administrators", async () => {
