@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { buildProcessDocument } from "@/application/document/process-document";
+import { buildIngestDocument } from "@/application/document/ingest-document";
 import { buildGenerateKnowledgeCandidate } from "@/application/knowledge/generate-knowledge-candidate";
 import { logger } from "@/infrastructure/observability/logger";
 import {
@@ -53,6 +54,12 @@ const generateKnowledgeCandidate = knowledgeExtractionService
     })
   : undefined;
 
+const ingestDocument = buildIngestDocument({
+  processDocument,
+  repository: documentRepository,
+  ...(generateKnowledgeCandidate ? { enrichmentQueue: documentIngestionQueue } : {})
+});
+
 let workers: Promise<readonly string[]> | undefined;
 
 export async function startDocumentWorker(): Promise<void> {
@@ -73,19 +80,7 @@ export async function startDocumentWorker(): Promise<void> {
             "processing document ingestion job"
           );
           try {
-            await processDocument(data.organizationId, data.documentId);
-            if (generateKnowledgeCandidate) {
-              const chunks = await documentRepository.listChunksByDocument(
-                data.organizationId,
-                data.documentId
-              );
-              for (const chunk of chunks) {
-                await documentIngestionQueue.enqueueKnowledgeEnrichment(
-                  data.organizationId,
-                  chunk.id
-                );
-              }
-            }
+            await ingestDocument(data.organizationId, data.documentId);
           } catch (error) {
             logger.error(
               {

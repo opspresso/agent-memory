@@ -18,3 +18,10 @@ export interface DocumentIngestionQueue {
 export interface DocumentTextExtractor {
   extract(content: Uint8Array, mimeType: string): Promise<string>;
 }
+
+export interface DocumentKnowledgeEnrichmentQueue {
+  enqueueKnowledgeEnrichment(
+    organizationId: string,
+    chunkId: string
+  ): Promise<DocumentQueueEnqueueResult>;
+}
