@@ -420,7 +420,13 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
                   { key: "api", kind: "service", canonicalName: "Agent API" },
                   { key: "db", kind: "database", canonicalName: "Agent DB" }
                 ],
-                relationships: []
+                relationships: [
+                  {
+                    sourceKey: "api",
+                    predicate: "stores_data_in",
+                    targetKey: "db"
+                  }
+                ]
               },
               createdAt: "2026-08-27T00:00:00.000Z"
             }
@@ -453,21 +459,35 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
           },
           ontology: {
             mode: "warn",
-            violations: [{ type: "unknown_kind", term: "database" }]
+            violations: [
+              { type: "unknown_kind", term: "database" },
+              { type: "unknown_predicate", term: "stores_data_in" }
+            ]
           }
         }),
         status: 200
       });
     }
   );
+  const hydrationErrors: string[] = [];
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      message.text().includes("cannot be a descendant")
+    ) {
+      hydrationErrors.push(message.text());
+    }
+  });
   await page.getByRole("link", { name: "AI 후보 검토" }).click();
   await expect(
     page.getByText(/같은 scope와 이름의 기존 node가 1개 있습니다/)
   ).toBeVisible();
-  await expect(page.getByText("온톨로지에 없음", { exact: true })).toBeVisible();
+  await expect(page.getByText("온톨로지에 없음", { exact: true })).toHaveCount(2);
   await expect(
     page.getByText(/온톨로지 사전에 없는 용어가 포함되어 있습니다: database/)
   ).toBeVisible();
+  await expect(page.getByText("stores_data_in", { exact: true })).toBeVisible();
+  expect(hydrationErrors).toEqual([]);
   expect(duplicateRequests).toBe(1);
 
   await page.getByRole("link", { name: "통합 검색" }).click();

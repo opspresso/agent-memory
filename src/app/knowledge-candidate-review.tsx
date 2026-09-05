@@ -395,7 +395,11 @@ export function KnowledgeCandidateReview({
                   </Text>
                   <Stack gap="xs">
                     {selected.graph.relationships.map((relationship, index) => (
-                      <Text key={`${relationship.sourceKey}:${relationship.predicate}:${relationship.targetKey}:${index}`} size="sm">
+                      <Text
+                        component="div"
+                        key={`${relationship.sourceKey}:${relationship.predicate}:${relationship.targetKey}:${index}`}
+                        size="sm"
+                      >
                         <strong>{relationship.sourceKey}</strong>
                         <span className={classes.predicate}>
                           {relationship.predicate}
