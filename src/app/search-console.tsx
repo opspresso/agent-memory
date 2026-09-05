@@ -99,6 +99,7 @@ function SearchConsoleView() {
   const [mergeReason, setMergeReason] = useState("");
   const graphRequest = useRef<AbortController | undefined>(undefined);
   const searchRequest = useRef<AbortController | undefined>(undefined);
+  const lastSearchQuery = useRef("");
 
   const peakScore = useMemo(
     () =>
@@ -137,6 +138,7 @@ function SearchConsoleView() {
     setSearching(false);
     setLoadingGraph(false);
     setSearchKind(value);
+    lastSearchQuery.current = "";
     setHits([]);
     setSearchError(undefined);
     setGraphCenterNodeId(undefined);
@@ -158,14 +160,18 @@ function SearchConsoleView() {
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await searchForQuery(String(form.get("query") ?? "").trim());
+  }
+
+  async function searchForQuery(query: string) {
     if (!organizationSlug) {
       return;
     }
-    const form = new FormData(event.currentTarget);
-    const query = String(form.get("query") ?? "").trim();
     if (!query) {
       return;
     }
+    lastSearchQuery.current = query;
     searchRequest.current?.abort();
     const controller = new AbortController();
     searchRequest.current = controller;
@@ -181,7 +187,9 @@ function SearchConsoleView() {
         t("workspace.searchFailed"),
         searchResponseSchema
       );
-      setHits(body.hits);
+      if (!controller.signal.aborted) {
+        setHits(body.hits);
+      }
     } catch (caught) {
       if (controller.signal.aborted) {
         return;
@@ -196,6 +204,18 @@ function SearchConsoleView() {
         setSearching(false);
       }
     }
+  }
+
+  function refreshAfterMemoryChange() {
+    graphRequest.current?.abort();
+    setGraphCenterNodeId(undefined);
+    setGraphSelectedNodeId(undefined);
+    setGraphNodes([]);
+    setGraphEdges([]);
+    setGraphError(undefined);
+    setLoadingGraph(false);
+    setHits([]);
+    void searchForQuery(lastSearchQuery.current);
   }
 
   async function exploreKnowledgeNode(nodeId: string) {
@@ -452,6 +472,7 @@ function SearchConsoleView() {
         <MemoryLifecycle
           memoryId={selectedMemoryId}
           onClose={() => setSelectedMemoryId(undefined)}
+          onChanged={refreshAfterMemoryChange}
           organizationSlug={organizationSlug}
         />
       ) : null}

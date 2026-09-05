@@ -72,6 +72,7 @@ interface MemoryVersionView {
 interface MemoryLifecycleProps {
   readonly memoryId: string;
   readonly onClose: () => void;
+  readonly onChanged: () => void;
   readonly organizationSlug: string;
 }
 
@@ -123,6 +124,7 @@ function formattedDate(value: string, locale: "en" | "ko") {
 export function MemoryLifecycle({
   memoryId,
   onClose,
+  onChanged,
   organizationSlug
 }: MemoryLifecycleProps) {
   const locale = useLocale();
@@ -238,6 +240,7 @@ export function MemoryLifecycle({
         );
       }
       await responseOk(response, t("memory.requestFailed"));
+      onChanged();
       setMessage(t("memory.revisionSaved"));
       await loadMemory();
     } catch (caught) {
@@ -270,6 +273,7 @@ export function MemoryLifecycle({
         );
       }
       await responseOk(response, t("memory.requestFailed"));
+      onChanged();
       setMessage(t("memory.archived"));
       setConfirmArchive(false);
       onClose();

@@ -470,6 +470,8 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await expect(lifecycle.getByText("v2 · 현재")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(lifecycle).not.toBeVisible();
+  await expect(page.getByText("Checkout rollback requires three approvers.", { exact: true }))
+    .toBeVisible();
 
   const archivedDocumentId = "40000000-0000-0000-0000-000000000099";
   await page.route(
@@ -625,4 +627,12 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await mergeDialog.getByRole("button", { name: "병합 확인" }).click();
   await expect(page.getByText("중복된 Duplicate Entity node를 병합했습니다.")).toBeVisible();
   await expect(page.getByText("Duplicate Entity", { exact: true })).toHaveCount(1);
+  await page.getByText("Memory", { exact: true }).click();
+  await page.getByPlaceholder("정책, 장애 대응, 시스템 관계를 검색하세요").fill("checkout rollback");
+  await page.getByRole("button", { name: "검색", exact: true }).click();
+  await page.getByRole("button", { name: "Lifecycle" }).click();
+  await lifecycle.getByRole("button", { name: "Archive", exact: true }).click();
+  await lifecycle.getByRole("button", { name: "Archive 확인", exact: true }).click();
+  await expect(lifecycle).not.toBeVisible();
+  await expect(page.getByText("Checkout rollback policy", { exact: true })).not.toBeVisible();
 });
