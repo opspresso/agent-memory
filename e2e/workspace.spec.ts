@@ -209,7 +209,9 @@ test("onboards, approves, and manages members through the console", async ({
   await page.getByRole("button", { name: "새로고침" }).click();
   await teamsRequested.promise;
   const latestTeamName = `E2E Latest Team ${testInfo.retry}`;
-  await page.getByLabel("팀 이름").fill(latestTeamName);
+  await page.getByRole("textbox", { name: "팀 이름", exact: true }).fill(
+    latestTeamName
+  );
   await page.getByLabel("팀 slug").fill(`e2e-latest-${runId}-${testInfo.retry}`);
   await page.getByRole("button", { name: "팀 만들기" }).click();
   await expect(page.getByText("팀을 만들었습니다.")).toBeVisible();
