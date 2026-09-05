@@ -54,7 +54,7 @@ export function createS3DocumentObjectStorage(
             { code: "S3_BODY_MISSING" }
           );
         }
-        return response.Body.transformToByteArray();
+        return await response.Body.transformToByteArray();
       } catch (error) {
         if (error instanceof Error && isSafeOperationalError(error)) {
           throw error;

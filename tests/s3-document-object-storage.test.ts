@@ -80,6 +80,23 @@ describe("S3 document object storage", () => {
     });
   });
 
+  it("translates asynchronous download stream failures", async () => {
+    const failure = new Error("private storage response");
+    const storage = createS3DocumentObjectStorage({
+      bucket: "documents",
+      client: clientWithSend(vi.fn().mockResolvedValue({
+        Body: { transformToByteArray: vi.fn().mockRejectedValue(failure) }
+      }))
+    });
+
+    await expect(storage.get("source")).rejects.toMatchObject({
+      name: "SafeOperationalError",
+      message: "S3 object download failed",
+      code: "S3_GET_FAILED",
+      cause: failure
+    });
+  });
+
   it("rejects empty buckets and partial static credentials", () => {
     const client = new S3Client({ region: "ap-northeast-2" });
     expect(() =>
