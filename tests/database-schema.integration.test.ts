@@ -2204,6 +2204,38 @@ describe("PostgreSQL schema", () => {
       edges: [expect.objectContaining({ id: edge.id })]
     });
 
+    for (const unavailable of [
+      { status: "archived", validFrom: createdAt, expiresAt: null, userId: null },
+      { status: "active", validFrom: new Date("2100-01-01"), expiresAt: null, userId: null },
+      { status: "active", validFrom: createdAt, expiresAt: new Date("2026-08-27"), userId: null },
+      { status: "active", validFrom: createdAt, expiresAt: null, userId: otherUser }
+    ]) {
+      await pool.query(
+        `UPDATE memories
+         SET status = $3, valid_from = $4, expires_at = $5,
+             scope_kind = $6, team_id = $7, user_id = $8
+         WHERE organization_id = $1 AND id = $2`,
+        [organization, corroboratingMemoryId, unavailable.status,
+          unavailable.validFrom, unavailable.expiresAt,
+          unavailable.userId ? "user" : "team",
+          unavailable.userId ? null : team, unavailable.userId]
+      );
+      const expectedSources = [{ memoryId: sourceMemoryId }];
+      const filteredHits = await repository.searchNodes({ access, query: "checkout", limit: 10 });
+      expect(filteredHits.find((hit) => hit.node.id === sourceNodeId)?.node.sources)
+        .toEqual(expectedSources);
+      const duplicates = await repository.findNodesByCanonicalNames(access, scope, ["Checkout API"]);
+      expect(duplicates.find((node) => node.id === sourceNodeId)?.sources)
+        .toEqual(expectedSources);
+      const neighborhood = await repository.findNeighborhood(access, sourceNodeId, 2, 10);
+      expect(neighborhood.nodes.find((node) => node.id === sourceNodeId)?.sources)
+        .toEqual(expectedSources);
+      expect(neighborhood.edges.find((record) => record.id === edge.id)?.sources)
+        .toEqual(expectedSources);
+      expect((await repository.findNodeById(organization, sourceNodeId))?.sources)
+        .toHaveLength(2);
+    }
+
     await pool.query(
       `UPDATE memories SET status = 'archived'
        WHERE organization_id = $1 AND id IN ($2, $3)`,

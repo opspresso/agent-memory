@@ -2,8 +2,8 @@ import { PgBoss } from "pg-boss";
 
 import {
   documentProcessingLeaseMilliseconds,
-  type DocumentQueueEnqueueResult,
-  type DocumentIngestionQueue
+  type DocumentIngestionQueue,
+  type DocumentKnowledgeEnrichmentQueue
 } from "@/domain/document/document-services";
 
 export const documentIngestionQueueName = "document-ingestion-v2";
@@ -23,11 +23,7 @@ export interface DocumentKnowledgeEnrichmentJob {
 }
 
 export interface PgBossDocumentIngestionQueue
-  extends DocumentIngestionQueue {
-  enqueueKnowledgeEnrichment(
-    organizationId: string,
-    chunkId: string
-  ): Promise<DocumentQueueEnqueueResult>;
+  extends DocumentIngestionQueue, DocumentKnowledgeEnrichmentQueue {
   start(): Promise<PgBoss>;
   stop(): Promise<void>;
 }

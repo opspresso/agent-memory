@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { version as appVersion } from "../package.json";
 
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import { MemoryAccessDeniedError } from "@/application/memory/create-memory";
 import {
   createAgentMemoryMcpServer,
   type AgentMemoryMcpOperations
@@ -59,6 +60,53 @@ async function connectedClient(mcpOperations: AgentMemoryMcpOperations) {
 }
 
 describe("agent memory MCP server", () => {
+  it.each([
+    ["context_search", "searchContext", { query: "incident" }],
+    ["recall", "searchContext", { query: "incident" }],
+    ["memory_search", "searchMemories", { query: "incident" }],
+    ["document_search", "searchDocuments", { query: "incident" }],
+    ["knowledge_search", "searchKnowledge", { query: "incident" }],
+    ["knowledge_neighborhood", "getKnowledgeNeighborhood", {
+      nodeId: "60000000-0000-4000-8000-000000000001"
+    }],
+    ["memory_create", "createMemory", {
+      kind: "fact", scope: { kind: "user" }, title: "Fact",
+      content: "private-memory-content", source: { type: "user" }
+    }]
+  ] as const)("hides unexpected errors from %s", async (name, operation, input) => {
+    const execute = vi.fn().mockRejectedValue(
+      new Error("SQL INSERT failed: private-memory-content")
+    );
+    const client = await connectedClient(operations({
+      [operation]: execute
+    }));
+
+    const result = await client.callTool({ name, arguments: input });
+    expect(execute).toHaveBeenCalledOnce();
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: "text", text: "Tool execution failed" }
+    ]);
+    expect(JSON.stringify(result)).not.toContain("private-memory-content");
+  });
+
+  it("preserves actionable application errors", async () => {
+    const client = await connectedClient(operations({
+      createMemory: vi.fn().mockRejectedValue(new MemoryAccessDeniedError())
+    }));
+    const result = await client.callTool({
+      name: "memory_create",
+      arguments: {
+        kind: "fact", scope: { kind: "organization" }, title: "Fact",
+        content: "Content", source: { type: "user" }
+      }
+    });
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: "text", text: "memory access denied" }]
+    });
+  });
+
   it("advertises memory, document, and knowledge tools", async () => {
     const client = await connectedClient(operations());
 

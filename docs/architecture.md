@@ -33,7 +33,19 @@ src/app  ──▶ src/lib ──▶ src/application ──▶ src/domain
 - `src/app`은 UI와 HTTP entry point를 제공하고 infrastructure를 직접 선택하지 않는다. 화면이 표시·검증에 쓰는 domain 정책과 type은 직접 import할 수 있다.
 - `src/lib`은 인증·HTTP 변환과 composition root를 제공한다. infrastructure adapter를 application use case에 주입하고 app에 준비된 operation을 노출한다.
 
-`dependency-cruiser.config.cjs`와 `eslint.config.mjs`가 이 방향과 순환 의존성 금지를 검사한다.
+`dependency-cruiser.config.cjs`와 `eslint.config.mjs`가 이 방향을 검사한다. Dependency cruiser는 `import type`을 포함한 소스 의존성과 순환 의존성을 검사해 repository port와 외부 package의 타입 참조도 경계 규칙에 포함한다.
+
+## 개발 시 책임과 port 계약
+
+Memory 생성은 `src/app/api/organizations/[organizationSlug]/memories/route.ts` → `src/lib/memory-service.ts` → `src/application/memory/create-memory.ts` → domain의 `MemoryRepository` port로 이어진다. `src/lib/container.ts`가 PostgreSQL adapter와 선택형 AI adapter를 만들고 service가 clock·ID 함수와 함께 주입한다. HTTP와 MCP는 이 조립된 operation을 공유한다.
+
+- Domain은 프레임워크 타입을 받지 않고 entity와 순수 정책을 정의한다.
+- Application은 인증된 actor와 port를 받아 권한과 workflow를 결정한다. 시간·ID·외부 호출은 주입한다.
+- Repository adapter는 row 변환과 SQL을 소유한다. `saveRevision`, candidate `accept`, `mergeNodes`처럼 하나로 완료되어야 하는 작업을 transaction 안에서 실행한다. 마지막 owner 보존과 동일 scope merge 등 동시 변경에 민감한 불변 조건은 잠근 최신 상태에서 최종 검사한다.
+- `lib`의 `*-schemas`와 `*-http`는 입력 검증·공개 응답·오류 변환을, `*-service`와 `container`는 조립을 담당한다. Better Auth 연결과 readiness 같은 운영 기능도 이 외부 경계에 둔다. Route는 준비된 operation을 호출한다.
+- Unit test는 clock·ID·port 대역으로 정책을 검증한다. Transaction, tenant FK, SQL 권한 predicate는 실제 PostgreSQL integration test로 검증한다.
+
+Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 의미, 충돌 결과를 함께 확인하라. 예를 들어 candidate 승인은 최초 승격과 재실행을 구분한다. 최초 승격은 ready source를 요구하지만, 이미 승인한 candidate의 재실행은 source가 이후 archive되었더라도 기존 승인 결과를 반환하며 새 graph resource를 생성하지 않는다.
 
 ## 요청 경계
 
@@ -54,7 +66,7 @@ Next.js 전역 응답 header는 CSP `frame-ancestors 'none'`과 `X-Frame-Options
 
 조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 같은 slug의 MCP route에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자가 현재 active `admin` 또는 `owner`인지 다시 확인해 제거·차단·강등을 즉시 반영한다. 유효한 token 요청은 발급자에게 귀속되는 organization service principal로 실행하며 organization scope만 허용한다. User scope, team scope, 개별 access grant는 domain 정책과 SQL predicate 모두에서 제외하고 호출자가 지정한 identity header를 신뢰하지 않는다.
 
-Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 전역 admin email은 조직 bootstrap만 허용하며, 생성된 조직 안에서는 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
+Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 인증 경계는 설정된 전역 admin email 여부를 actor에 담고, 조직 생성 application use case가 이 권한을 확인한다. 이 권한은 조직 bootstrap만 허용하며, 생성된 조직 안에서는 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
 
 ## Scope와 권한
 
@@ -96,11 +108,15 @@ multipart upload → S3-compatible storage → document row(pending)
 
 원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v2` queue는 document ID별 exclusive job을 보장해 queued·active·retry job이 있을 때만 중복 enqueue를 병합한다. 지원 MIME type의 text를 정규화하고 문서당 최대 512개 chunk를 생성하며 embedding은 최대 64개 chunk씩 provider에 전달한다. 따라서 60초 provider timeout 기준 embedding 대기는 최대 8분으로 제한되어 추출·저장을 포함한 전체 작업이 lease 안에 끝날 여유를 둔다. 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다. Document 삭제는 provenance를 보존하는 archive이며 원본과 chunk를 유지하되 검색, retry, AI 후보 조회·승인에서 제외한다.
 
+`buildIngestDocument` application operation은 문서 처리를 완료한 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. Worker는 job decode, operation 호출, queue retry와 로그를 담당한다. 후속 queue 등록 실패는 문서 처리 상태를 되돌리지 않으며 ingestion 재실행에서 chunk 등록을 다시 시도한다.
+
 Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `document-knowledge-enrichment-v2` queue의 별도 job으로 enqueue해 entity와 relationship 후보를 생성한다. Chunk ID별 exclusive job이 독립적으로 retry되며 한 chunk의 실패는 문서의 ready 상태나 다른 chunk의 검색·후보 생성을 되돌리지 않는다. 후보는 source chunk, scope, model을 보존하며 chunk별로 중복 생성하지 않는다. AI 생성 결과는 graph에 직접 쓰지 않고 해당 scope의 `manage` 권한을 가진 사용자가 검토한 뒤 승격한다. 승인 transaction은 candidate를 잠그고 node·edge upsert, candidate→resource 관계, reviewer audit을 함께 저장한다. Node merge로 resource ID가 바뀌면 candidate 관계도 surviving resource로 옮겨 재승인 응답의 정합성을 유지한다.
 
 ## Knowledge Graph와 통합 검색
 
-Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenance 행은 DB constraint로 정확히 하나의 memory 또는 document chunk를 참조한다. Canonical resource가 여러 근거에서 발견되면 resource를 중복 생성하지 않고 provenance를 누적한다. 생성 시 호출자가 source를 읽을 수 있어야 하고 graph scope는 source scope보다 넓을 수 없다. 검색·Neighborhood·edge 생성은 source의 현재 권한과 active·유효·ready 상태를 다시 확인한다.
+Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenance 행은 DB constraint로 정확히 하나의 memory 또는 document chunk를 참조한다. Canonical resource가 여러 근거에서 발견되면 resource를 중복 생성하지 않고 provenance를 누적한다. 생성 시 호출자가 source를 읽을 수 있어야 하고 graph scope는 source scope보다 넓을 수 없다. 검색·Neighborhood·node 및 edge 생성은 source의 현재 권한과 active·유효·ready 상태를 다시 확인한다. Memory의 유효성은 domain의 `isMemoryActiveAt` 정책으로 정의하며 `validFrom <= now`이고 `expiresAt`이 없거나 `now < expiresAt`인 active Memory만 검색과 Graph 근거로 허용한다.
+
+Graph의 검색·중복 후보 조회·Neighborhood repository port는 읽을 수 있고 현재 유효한 provenance만 반환한다. Resource 선택과 개별 source 필터는 같은 SQL predicate를 사용하며, source를 다시 조회하는 사이 유효한 근거가 사라진 resource는 결과에서 제외한다. 내부 mutation을 위한 `findNodeById`와 `findEdgeById`는 전체 provenance를 보존하므로 공개 검색 결과로 직접 사용하지 않는다.
 
 Node identity는 NFKC·공백·대소문자를 정규화한 canonical name key와 ontology로 정규화한 kind를 사용한다. 동일 scope의 동일 identity 생성은 transaction advisory lock으로 직렬화해 하나의 node와 provenance로 수렴한다. 이름은 같지만 kind가 다른 node는 자동 병합하지 않고 검토 대상으로 남긴다.
 
@@ -132,4 +148,4 @@ Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같
 
 ## 관측성과 민감정보
 
-Pino는 작업명, organization ID, 결과 수, 처리 시간을 구조화해 기록한다. 일반 Error는 allowlist된 type·code만 직렬화하고 message를 기록하지 않는다. Provider·storage adapter가 만든 `SafeOperationalError`만 입력을 포함하지 않는 고정 message와 code를 기록하며, cause는 message 없이 type·code chain만 최대 3단계 보존한다. Reranker가 실패하면 본문 없이 fallback을 기록한다. 검색어와 본문은 retrieval log에 포함하지 않는다. Langfuse key가 모두 설정되면 OpenTelemetry trace를 내보내며 token과 secret을 마스킹하고 media upload를 비활성화한다. Embedding과 reranker 입력·출력은 telemetry 대상이 아니다.
+Pino는 작업명, organization ID, 결과 수, 처리 시간을 구조화해 기록한다. 일반 Error는 allowlist된 type·code만 직렬화하고 message를 기록하지 않는다. Provider·storage adapter가 만든 `SafeOperationalError`만 입력을 포함하지 않는 고정 message와 code를 기록하며, cause는 message 없이 type·code chain만 최대 3단계 보존한다. Reranker가 실패하면 본문 없이 fallback을 기록한다. 검색어와 본문은 retrieval log에 포함하지 않는다. Langfuse key가 모두 설정되면 OpenTelemetry trace를 내보내며 token과 secret을 마스킹하고 media upload를 비활성화한다. Retrieval 실패는 observation 안에서 고정된 실패 상태로 기록하고 원래 오류는 observation 밖에서 다시 던져 SDK가 오류 message를 span에 기록하지 못하게 한다. Embedding과 reranker 입력·출력은 telemetry 대상이 아니다.

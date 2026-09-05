@@ -1,8 +1,73 @@
-import { describe, expect, it } from "vitest";
+import { context, propagation, trace } from "@opentelemetry/api";
+import { NodeSDK, type tracing } from "@opentelemetry/sdk-node";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { serializeErrorForLog } from "@/infrastructure/observability/logger";
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
-import { readTelemetryConfiguration } from "@/infrastructure/observability/telemetry";
+import {
+  observeRetrieval,
+  readTelemetryConfiguration
+} from "@/infrastructure/observability/telemetry";
+
+describe("retrieval trace privacy", () => {
+  const spans: tracing.ReadableSpan[] = [];
+  const sdk = new NodeSDK({
+    resourceDetectors: [],
+    spanProcessors: [{
+      onStart() {},
+      onEnd(span) { spans.push(span); },
+      async shutdown() {},
+      async forceFlush() {}
+    }]
+  });
+  const access = {
+    organizationId: "organization-1",
+    userId: "user-1",
+    role: "member" as const,
+    teams: []
+  };
+
+  beforeAll(() => { sdk.start(); });
+  beforeEach(() => { spans.length = 0; });
+  afterAll(async () => {
+    await sdk.shutdown();
+    trace.disable();
+    context.disable();
+    propagation.disable();
+  });
+
+  it("records only the result count for successful retrieval", async () => {
+    const values = [{ content: "private-memory-content" }];
+    await expect(
+      observeRetrieval("memory.search", access, 10, async () => values)
+    ).resolves.toBe(values);
+    expect(spans).toHaveLength(1);
+    expect(JSON.stringify(spans[0]?.attributes)).toContain("resultCount");
+    expect(JSON.stringify(spans[0]?.attributes)).not.toContain("private-memory-content");
+  });
+
+  it.each([
+    new Error("SQL failed with private-search-query", {
+      cause: new Error("private-document-content")
+    }),
+    "private-search-query"
+  ])("keeps the original failure out of exported spans", async (failure) => {
+    await expect(
+      observeRetrieval("memory.search", access, 10, async () => { throw failure; })
+    ).rejects.toBe(failure);
+    expect(spans).toHaveLength(1);
+    const span = spans[0];
+    const exported = JSON.stringify({
+      status: span?.status,
+      attributes: span?.attributes,
+      events: span?.events
+    });
+    expect(exported).not.toContain("private-search-query");
+    expect(exported).not.toContain("private-document-content");
+    expect(exported).toContain("ERROR");
+    expect(exported).toContain("retrieval failed");
+  });
+});
 
 describe("structured error logging", () => {
   it("keeps type and code diagnostics without serializing untrusted messages", () => {

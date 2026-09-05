@@ -6,9 +6,11 @@ import {
 import type { DocumentRepository } from "@/domain/document/document-repository";
 import type { KnowledgeSource } from "@/domain/knowledge/knowledge-graph";
 import { canAccessMemory } from "@/domain/memory/memory-access";
+import { isMemoryActiveAt } from "@/domain/memory/memory";
 import type { MemoryRepository } from "@/domain/memory/memory-repository";
 
 export interface AuthorizeKnowledgeSourceDependencies {
+  readonly clock: () => Date;
   readonly documentRepository: Pick<DocumentRepository, "findChunkById">;
   readonly memoryRepository: Pick<MemoryRepository, "findById">;
 }
@@ -60,7 +62,7 @@ export function buildAuthorizeKnowledgeSource(
       );
       if (
         !memory ||
-        memory.status !== "active" ||
+        !isMemoryActiveAt(memory, dependencies.clock()) ||
         !canAccessMemory(access, "read", memory) ||
         !sourceCoversScope(memory.scope, targetScope)
       ) {

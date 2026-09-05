@@ -5,8 +5,8 @@ const { execute, logError } = vi.hoisted(() => ({
   logError: vi.fn()
 }));
 
-vi.mock("@/lib/container", () => ({
-  database: { db: { execute } }
+vi.mock("@/lib/health-service", () => ({
+  checkDatabaseReadiness: execute
 }));
 
 vi.mock("@/lib/observability", () => ({

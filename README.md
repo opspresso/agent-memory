@@ -94,7 +94,7 @@ pnpm dev
 pnpm verify
 ```
 
-`pnpm verify`는 lint, typecheck, architecture, unit test, production build를 실행한다. Database 변경에는 `pnpm test:integration`, 화면·인증 변경에는 `pnpm test:e2e`를 추가한다. 자세한 기준은 [AGENTS.md](AGENTS.md#검증)를 따른다.
+`pnpm verify`는 lint, typecheck, architecture, unit test, production build를 실행한다. Database 변경에는 `pnpm test:integration`, 화면·인증 변경에는 `pnpm test:e2e`를 추가한다. 자세한 기준은 [AGENTS.md](AGENTS.md#검증)를 따른다. 인증 E2E에는 `E2E_AUTHENTICATED=true`와 별도 migration 완료 DB가 필요하다. [운영 가이드의 검증 절차](docs/operations.md#배포-전-확인)를 따른다.
 
 Pull request와 `main` push CI는 PostgreSQL 18·pgvector service에서 migration, `pnpm verify`, integration test, 인증 E2E를 모두 실행한다.
 

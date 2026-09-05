@@ -120,7 +120,7 @@ export async function observeRetrieval<T>(
 ): Promise<readonly T[]> {
   const startedAt = performance.now();
   try {
-    const result = await propagateAttributes(
+    const outcome = await propagateAttributes(
       {
         traceName: name,
         userId: access.userId,
@@ -136,13 +136,25 @@ export async function observeRetrieval<T>(
                 limit
               }
             });
-            const values = await execute();
-            observation.update({ output: { resultCount: values.length } });
-            return values;
+            try {
+              const values = await execute();
+              observation.update({ output: { resultCount: values.length } });
+              return { succeeded: true as const, values };
+            } catch (error) {
+              observation.update({
+                level: "ERROR",
+                statusMessage: "retrieval failed"
+              });
+              return { succeeded: false as const, error };
+            }
           },
           { asType: "retriever" }
         )
     );
+    if (!outcome.succeeded) {
+      throw outcome.error;
+    }
+    const result = outcome.values;
     logger.info(
       {
         operation: name,

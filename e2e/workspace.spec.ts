@@ -83,7 +83,7 @@ test("onboards, approves, and manages members through the console", async ({
       slug: approvalOrganizationSlug
     }
   );
-  await postJson<{ id: string }>(
+  const defaultTeam = await postJson<{ id: string }>(
     page,
     `/api/organizations/${approvalOrganizationSlug}/teams`,
     { name: "E2E Default Team", slug: `e2e-default-${runId}-${testInfo.retry}` }
@@ -156,6 +156,74 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(teamSelector).toHaveAttribute("aria-pressed", "true");
   await teamSelector.focus();
   await page.keyboard.press("Space");
+  const otherTeam = await postJson<{ id: string }>(
+    page,
+    `/api/organizations/${approvalOrganizationSlug}/teams`,
+    { name: "E2E Other Team", slug: `e2e-other-team-${runId}-${testInfo.retry}` }
+  );
+  const delayedMembers = Promise.withResolvers<void>();
+  const membersRequested = Promise.withResolvers<void>();
+  const defaultMembersPath = `**/api/organizations/${approvalOrganizationSlug}/teams/${defaultTeam.id}/members`;
+  const otherMembersPath = `**/api/organizations/${approvalOrganizationSlug}/teams/${otherTeam.id}/members`;
+  await page.route(defaultMembersPath, async (route) => {
+    const response = await route.fetch();
+    membersRequested.resolve();
+    await delayedMembers.promise;
+    await route.fulfill({ response });
+  });
+  await page.route(otherMembersPath, (route) => route.fulfill({
+    json: {
+      members: [{
+        teamId: otherTeam.id,
+        userId: "10000000-0000-4000-8000-000000000099",
+        name: "Other Team Member",
+        email: "other-team-member@nalbam.com",
+        role: "member"
+      }]
+    }
+  }));
+  await page.reload();
+  await membersRequested.promise;
+  await page.getByRole("button", { name: "E2E Other Team", exact: true }).click();
+  await expect(page.getByText("other-team-member@nalbam.com", { exact: true })).toBeVisible();
+  delayedMembers.resolve();
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByText("other-team-member@nalbam.com", { exact: true })).toBeVisible();
+  await page.unroute(defaultMembersPath);
+  await page.unroute(otherMembersPath);
+  const delayedTeams = Promise.withResolvers<void>();
+  const teamsRequested = Promise.withResolvers<void>();
+  const teamsPath = `**/api/organizations/${approvalOrganizationSlug}/teams`;
+  let delayNextTeamList = true;
+  await page.route(teamsPath, async (route) => {
+    if (route.request().method() !== "GET" || !delayNextTeamList) {
+      await route.continue();
+      return;
+    }
+    delayNextTeamList = false;
+    const response = await route.fetch();
+    teamsRequested.resolve();
+    await delayedTeams.promise;
+    await route.fulfill({ response });
+  });
+  await page.getByRole("button", { name: "새로고침" }).click();
+  await teamsRequested.promise;
+  const latestTeamName = `E2E Latest Team ${testInfo.retry}`;
+  await page.getByRole("textbox", { name: "팀 이름", exact: true }).fill(
+    latestTeamName
+  );
+  await page.getByLabel("팀 slug").fill(`e2e-latest-${runId}-${testInfo.retry}`);
+  await page.getByRole("button", { name: "팀 만들기" }).click();
+  await expect(page.getByText("팀을 만들었습니다.")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: latestTeamName, exact: true })
+  ).toBeVisible();
+  delayedTeams.resolve();
+  await page.waitForLoadState("networkidle");
+  await expect(
+    page.getByRole("button", { name: latestTeamName, exact: true })
+  ).toBeVisible();
+  await page.unroute(teamsPath);
   await page.goto("/members");
   await expect(page.getByText(memberEmail, { exact: true })).toBeVisible();
 
@@ -435,6 +503,8 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await expect(lifecycle.getByText("v2 · 현재")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(lifecycle).not.toBeVisible();
+  await expect(page.getByText("Checkout rollback requires three approvers.", { exact: true }))
+    .toBeVisible();
 
   const archivedDocumentId = "40000000-0000-0000-0000-000000000099";
   await page.route(
@@ -590,4 +660,19 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await mergeDialog.getByRole("button", { name: "병합 확인" }).click();
   await expect(page.getByText("중복된 Duplicate Entity node를 병합했습니다.")).toBeVisible();
   await expect(page.getByText("Duplicate Entity", { exact: true })).toHaveCount(1);
+  await page.getByText("Memory", { exact: true }).click();
+  await page.getByPlaceholder("정책, 장애 대응, 시스템 관계를 검색하세요").fill("checkout rollback");
+  await page.getByRole("button", { name: "검색", exact: true }).click();
+  await page.getByRole("button", { name: "Lifecycle" }).click();
+  await lifecycle.getByRole("button", { name: "Archive", exact: true }).click();
+  const refreshedMemories = page.waitForResponse((response) =>
+    response.url().includes(`/api/organizations/${organizationSlug}/memories?q=`) &&
+    response.request().method() === "GET"
+  );
+  await lifecycle.getByRole("button", { name: "Archive 확인", exact: true }).click();
+  const refreshedResponse = await refreshedMemories;
+  expect(refreshedResponse.ok()).toBe(true);
+  expect(await refreshedResponse.json()).toMatchObject({ hits: [] });
+  await expect(lifecycle).not.toBeVisible();
+  await expect(page.getByText("Checkout rollback policy", { exact: true })).not.toBeVisible();
 });
