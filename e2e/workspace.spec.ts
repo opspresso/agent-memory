@@ -632,7 +632,14 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByRole("button", { name: "검색", exact: true }).click();
   await page.getByRole("button", { name: "Lifecycle" }).click();
   await lifecycle.getByRole("button", { name: "Archive", exact: true }).click();
+  const refreshedMemories = page.waitForResponse((response) =>
+    response.url().includes(`/api/organizations/${organizationSlug}/memories?q=`) &&
+    response.request().method() === "GET"
+  );
   await lifecycle.getByRole("button", { name: "Archive 확인", exact: true }).click();
+  const refreshedResponse = await refreshedMemories;
+  expect(refreshedResponse.ok()).toBe(true);
+  expect(await refreshedResponse.json()).toMatchObject({ hits: [] });
   await expect(lifecycle).not.toBeVisible();
   await expect(page.getByText("Checkout rollback policy", { exact: true })).not.toBeVisible();
 });
