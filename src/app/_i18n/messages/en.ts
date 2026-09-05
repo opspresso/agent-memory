@@ -313,7 +313,7 @@ export const en = {
     "Register this organization endpoint as a Streamable HTTP MCP server.",
   "workspace.agentTokenTitle": "Agent token",
   "workspace.agentTokenBody":
-    "Generate an organization-scoped Bearer token for Agent Studio. MCP runs with the current organization access of the user email sent by Agent Studio.",
+    "Generate a Bearer token for Agent Studio. MCP uses the issuer's current administrator access and is limited to organization scope.",
   "workspace.agentTokenGenerate": "Generate token",
   "workspace.agentTokenRegenerate": "Regenerate token",
   "workspace.agentTokenReveal": "View token",
