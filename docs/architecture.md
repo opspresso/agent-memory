@@ -33,7 +33,7 @@ src/app  ──▶ src/lib ──▶ src/application ──▶ src/domain
 - `src/app`은 UI와 HTTP entry point를 제공하고 infrastructure를 직접 선택하지 않는다. 화면이 표시·검증에 쓰는 domain 정책과 type은 직접 import할 수 있다.
 - `src/lib`은 인증·HTTP 변환과 composition root를 제공한다. infrastructure adapter를 application use case에 주입하고 app에 준비된 operation을 노출한다.
 
-`dependency-cruiser.config.cjs`와 `eslint.config.mjs`가 이 방향과 순환 의존성 금지를 검사한다.
+`dependency-cruiser.config.cjs`와 `eslint.config.mjs`가 이 방향을 검사한다. Dependency cruiser는 `import type`을 포함한 소스 의존성과 순환 의존성을 검사해 repository port와 외부 package의 타입 참조도 경계 규칙에 포함한다.
 
 ## 요청 경계
 

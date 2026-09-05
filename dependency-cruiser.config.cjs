@@ -45,6 +45,7 @@ module.exports = {
     }
   ],
   options: {
+    tsPreCompilationDeps: true,
     doNotFollow: { path: "node_modules" },
     tsConfig: { fileName: "tsconfig.json" },
     enhancedResolveOptions: {
