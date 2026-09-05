@@ -1,6 +1,4 @@
-import { sql } from "drizzle-orm";
-
-import { database } from "@/lib/container";
+import { checkDatabaseReadiness } from "@/lib/health-service";
 import { logger } from "@/lib/observability";
 
 const headers = { "Cache-Control": "no-store" };
@@ -8,7 +6,7 @@ const headers = { "Cache-Control": "no-store" };
 export async function GET() {
   const startedAt = performance.now();
   try {
-    await database.db.execute(sql`select 1`);
+    await checkDatabaseReadiness();
     return Response.json(
       { status: "ok", checks: { database: "ok" } },
       { headers }
