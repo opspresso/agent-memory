@@ -4,6 +4,12 @@ import { z } from "zod";
 import { version as appVersion } from "../../package.json";
 
 import { contextRecallText } from "@/application/context/context-recall";
+import { InvalidContextSearchError } from "@/application/context/search-context";
+import { InvalidDocumentSearchError } from "@/application/document/search-documents";
+import { KnowledgeNodeNotFoundError } from "@/application/knowledge/create-knowledge-edge";
+import { InvalidKnowledgeSearchError } from "@/application/knowledge/search-knowledge-nodes";
+import { MemoryAccessDeniedError } from "@/application/memory/create-memory";
+import { InvalidMemorySearchError } from "@/application/memory/search-memories";
 import type { ContextSearchResult } from "@/application/context/search-context";
 import type { CreateMemoryInput } from "@/application/memory/create-memory";
 import type { DocumentSearchHit } from "@/domain/document/document-repository";
@@ -13,7 +19,9 @@ import type {
   KnowledgeNodeSearchHit
 } from "@/domain/knowledge/knowledge-graph-repository";
 import type { Memory } from "@/domain/memory/memory";
+import { InvalidMemoryError } from "@/domain/memory/memory";
 import type { MemorySearchHit } from "@/domain/memory/memory-repository";
+import { AiRequestLimitExceededError } from "@/domain/shared/ai-request-limiter";
 
 import { publicDocumentHit } from "./document-http";
 import { publicContextSearchResult } from "./context-http";
@@ -25,6 +33,7 @@ import {
 import { publicMemory } from "./memory-http";
 import { createMemorySchema } from "./memory-schemas";
 import { resolveScopedResource } from "./scoped-resource";
+import { logger } from "./observability";
 
 export interface AgentMemoryMcpOperations {
   searchContext(
@@ -70,6 +79,32 @@ function textResult(text: string, payload: Readonly<Record<string, unknown>>) {
   };
 }
 
+async function executeMcpTool<T>(execute: () => Promise<T>) {
+  try {
+    return await execute();
+  } catch (error) {
+    const publicError =
+      error instanceof InvalidContextSearchError ||
+      error instanceof InvalidDocumentSearchError ||
+      error instanceof KnowledgeNodeNotFoundError ||
+      error instanceof InvalidKnowledgeSearchError ||
+      error instanceof MemoryAccessDeniedError ||
+      error instanceof InvalidMemorySearchError ||
+      error instanceof InvalidMemoryError ||
+      error instanceof AiRequestLimitExceededError;
+    if (!publicError) {
+      logger.error({ err: error }, "MCP tool execution failed");
+    }
+    return {
+      isError: true,
+      content: [{
+        type: "text" as const,
+        text: publicError ? error.message : "Tool execution failed"
+      }]
+    };
+  }
+}
+
 const searchInputSchema = {
   query: z.string().trim().min(1).max(10_000),
   limit: z.number().int().min(1).max(100).optional()
@@ -90,10 +125,10 @@ export function createAgentMemoryMcpServer(
       inputSchema: searchInputSchema,
       annotations: { readOnlyHint: true, idempotentHint: true }
     },
-    async ({ query, limit }) => {
+    async ({ query, limit }) => executeMcpTool(async () => {
       const result = await operations.searchContext(access, query, limit ?? 10);
       return jsonResult(publicContextSearchResult(result));
-    }
+    })
   );
 
   server.registerTool(
@@ -105,7 +140,7 @@ export function createAgentMemoryMcpServer(
       inputSchema: searchInputSchema,
       annotations: { readOnlyHint: true, idempotentHint: true }
     },
-    async ({ query, limit }) => {
+    async ({ query, limit }) => executeMcpTool(async () => {
       const result = await operations.searchContext(access, query, limit ?? 10);
       const remembered = contextRecallText(result);
       return textResult(remembered, {
@@ -113,7 +148,7 @@ export function createAgentMemoryMcpServer(
         count: result.hits.length,
         ranking: result.ranking
       });
-    }
+    })
   );
 
   server.registerTool(
@@ -125,12 +160,12 @@ export function createAgentMemoryMcpServer(
       inputSchema: searchInputSchema,
       annotations: { readOnlyHint: true, idempotentHint: true }
     },
-    async ({ query, limit }) => {
+    async ({ query, limit }) => executeMcpTool(async () => {
       const hits = await operations.searchMemories(access, query, limit ?? 10);
       return jsonResult({
         hits: hits.map((hit) => ({ ...hit, memory: publicMemory(hit.memory) }))
       });
-    }
+    })
   );
 
   server.registerTool(
@@ -141,7 +176,7 @@ export function createAgentMemoryMcpServer(
       inputSchema: createMemorySchema,
       annotations: { idempotentHint: false }
     },
-    async (input) => {
+    async (input) => executeMcpTool(async () => {
       const memory = await operations.createMemory({
         access,
         kind: input.kind,
@@ -160,7 +195,7 @@ export function createAgentMemoryMcpServer(
         ...(input.expiresAt ? { expiresAt: new Date(input.expiresAt) } : {})
       });
       return jsonResult({ memory: publicMemory(memory) });
-    }
+    })
   );
 
   server.registerTool(
@@ -171,10 +206,10 @@ export function createAgentMemoryMcpServer(
       inputSchema: searchInputSchema,
       annotations: { readOnlyHint: true, idempotentHint: true }
     },
-    async ({ query, limit }) => {
+    async ({ query, limit }) => executeMcpTool(async () => {
       const hits = await operations.searchDocuments(access, query, limit ?? 10);
       return jsonResult({ hits: hits.map(publicDocumentHit) });
-    }
+    })
   );
 
   server.registerTool(
@@ -185,10 +220,10 @@ export function createAgentMemoryMcpServer(
       inputSchema: searchInputSchema,
       annotations: { readOnlyHint: true, idempotentHint: true }
     },
-    async ({ query, limit }) => {
+    async ({ query, limit }) => executeMcpTool(async () => {
       const hits = await operations.searchKnowledge(access, query, limit ?? 10);
       return jsonResult({ hits: hits.map(publicKnowledgeHit) });
-    }
+    })
   );
 
   server.registerTool(
@@ -204,7 +239,7 @@ export function createAgentMemoryMcpServer(
       },
       annotations: { readOnlyHint: true, idempotentHint: true }
     },
-    async ({ nodeId, depth, limit }) => {
+    async ({ nodeId, depth, limit }) => executeMcpTool(async () => {
       const neighborhood = await operations.getKnowledgeNeighborhood(
         access,
         nodeId,
@@ -215,7 +250,7 @@ export function createAgentMemoryMcpServer(
         nodes: neighborhood.nodes.map(publicKnowledgeNode),
         edges: neighborhood.edges.map(publicKnowledgeEdge)
       });
-    }
+    })
   );
 
   return server;

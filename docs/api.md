@@ -477,6 +477,8 @@ curl \
 
 ## MCP
 
+도구 실행 실패는 `isError: true`와 text 메시지로 반환한다. 알려진 application 오류는 입력·권한·요청 제한을 설명하고, DB·provider 등 예상하지 못한 오류는 내부 상세 없이 `Tool execution failed`로 반환한다.
+
 Streamable HTTP endpoint는 `/api/organizations/:organizationSlug/mcp`다. Better Auth session Bearer token은 session 사용자의 조직 권한을 적용한다. 조직 Agent token은 organization scope만 접근하는 service principal 권한을 적용한다.
 
 | Tool | 역할 | 주요 입력 |
