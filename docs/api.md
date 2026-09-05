@@ -332,6 +332,8 @@ Retry 성공은 `202`와 갱신된 document를 반환한다. `pending`, `process
 
 ## Knowledge Graph
 
+검색·중복 후보 조회·Neighborhood 응답의 `sources`에는 호출자가 읽을 수 있는 현재 유효한 Memory 또는 ready 문서 chunk 참조만 포함한다. 유효한 근거가 하나도 없는 node·edge는 해당 조회 결과에서 제외한다.
+
 Node 생성 입력은 `scope`, `kind`, `canonicalName`, `source`와 선택형 `summary`, `properties`다. Edge 생성 입력은 `scope`, `sourceNodeId`, `targetNodeId`, `predicate`, `source`와 선택형 `properties`다.
 
 - Node의 `kind`는 1–100자, `canonicalName`은 1–500자, `summary`는 1–10,000자다.
