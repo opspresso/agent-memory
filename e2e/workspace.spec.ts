@@ -191,6 +191,37 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(page.getByText("other-team-member@nalbam.com", { exact: true })).toBeVisible();
   await page.unroute(defaultMembersPath);
   await page.unroute(otherMembersPath);
+  const delayedTeams = Promise.withResolvers<void>();
+  const teamsRequested = Promise.withResolvers<void>();
+  const teamsPath = `**/api/organizations/${approvalOrganizationSlug}/teams`;
+  let delayNextTeamList = true;
+  await page.route(teamsPath, async (route) => {
+    if (route.request().method() !== "GET" || !delayNextTeamList) {
+      await route.continue();
+      return;
+    }
+    delayNextTeamList = false;
+    const response = await route.fetch();
+    teamsRequested.resolve();
+    await delayedTeams.promise;
+    await route.fulfill({ response });
+  });
+  await page.getByRole("button", { name: "새로고침" }).click();
+  await teamsRequested.promise;
+  const latestTeamName = `E2E Latest Team ${testInfo.retry}`;
+  await page.getByLabel("팀 이름").fill(latestTeamName);
+  await page.getByLabel("팀 slug").fill(`e2e-latest-${runId}-${testInfo.retry}`);
+  await page.getByRole("button", { name: "팀 만들기" }).click();
+  await expect(page.getByText("팀을 만들었습니다.")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: latestTeamName, exact: true })
+  ).toBeVisible();
+  delayedTeams.resolve();
+  await page.waitForLoadState("networkidle");
+  await expect(
+    page.getByRole("button", { name: latestTeamName, exact: true })
+  ).toBeVisible();
+  await page.unroute(teamsPath);
   await page.goto("/members");
   await expect(page.getByText(memberEmail, { exact: true })).toBeVisible();
 

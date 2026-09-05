@@ -24,7 +24,13 @@ import {
   IconUsersGroup,
   IconX
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent
+} from "react";
 
 import type { TeamRole } from "@/domain/identity/organization-access";
 
@@ -73,6 +79,7 @@ function TeamManagementView() {
   const [renameTarget, setRenameTarget] = useState<TeamView>();
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<TeamView>();
+  const teamsRequest = useRef<AbortController | undefined>(undefined);
 
   const canManageOrganization =
     access?.role === "admin" || access?.role === "owner";
@@ -88,9 +95,13 @@ function TeamManagementView() {
     if (!organizationSlug) {
       return;
     }
+    teamsRequest.current?.abort();
+    const controller = new AbortController();
+    teamsRequest.current = controller;
     try {
       const body = await fetch(
-        `/api/organizations/${organizationSlug}/teams`
+        `/api/organizations/${organizationSlug}/teams`,
+        { signal: controller.signal }
       ).then((response) =>
         responseJson(
           response,
@@ -98,23 +109,37 @@ function TeamManagementView() {
           teamsResponseSchema
         )
       );
+      if (controller.signal.aborted) {
+        return;
+      }
       setTeams(body.teams);
       setSelectedTeamId((current) =>
         current && body.teams.some((team) => team.id === current)
           ? current
           : body.teams[0]?.id
       );
+      setError(undefined);
     } catch (caught) {
+      if (controller.signal.aborted) {
+        return;
+      }
       setError(
         caught instanceof Error ? caught.message : t("organization.loadFailed")
       );
     } finally {
-      setLoading(false);
+      if (teamsRequest.current === controller) {
+        teamsRequest.current = undefined;
+        setLoading(false);
+      }
     }
   }, [organizationSlug, t]);
 
   useEffect(() => {
     void Promise.resolve().then(loadTeams);
+    return () => {
+      teamsRequest.current?.abort();
+      teamsRequest.current = undefined;
+    };
   }, [loadTeams]);
 
   useEffect(() => {
