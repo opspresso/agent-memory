@@ -24,6 +24,7 @@ import {
 
 const clock = () => new Date();
 const authorizeSource = buildAuthorizeKnowledgeSource({
+  clock,
   documentRepository,
   memoryRepository
 });

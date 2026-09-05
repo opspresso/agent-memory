@@ -1,5 +1,5 @@
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
-import type { MemoryEmbedding } from "@/domain/memory/memory";
+import { isMemoryActiveAt, type MemoryEmbedding } from "@/domain/memory/memory";
 import { canAccessMemory } from "@/domain/memory/memory-access";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 import type {
@@ -48,17 +48,18 @@ export function buildSearchMemories(dependencies: SearchMemoriesDependencies) {
             userId: access.userId
           })
         : undefined);
+    const now = dependencies.clock();
     const hits = await dependencies.repository.search({
       access,
       query: normalizedQuery,
       ...(queryEmbedding ? { queryEmbedding } : {}),
-      now: dependencies.clock(),
+      now,
       limit
     });
 
     return hits.filter(
       (hit) =>
-        hit.memory.status === "active" &&
+        isMemoryActiveAt(hit.memory, now) &&
         canAccessMemory(access, "read", hit.memory)
     );
   };

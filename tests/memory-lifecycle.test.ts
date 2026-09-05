@@ -326,4 +326,26 @@ describe("memory lifecycle", () => {
       { memory: allowed, lexicalScore: 1, vectorScore: 0, score: 1 }
     ]);
   });
+
+  it("rechecks the validity window of repository search results", async () => {
+    const current = memory({ expiresAt: later });
+    const candidates = [
+      current,
+      memory({ status: "archived" }),
+      memory({ validFrom: new Date(now.getTime() + 1) }),
+      memory({ expiresAt: now }),
+      memory({ expiresAt: new Date(now.getTime() - 1) })
+    ].map((record) => ({
+      memory: record,
+      lexicalScore: 1,
+      vectorScore: 0,
+      score: 1
+    }));
+    const search = buildSearchMemories({
+      clock: () => now,
+      repository: repository({ search: vi.fn().mockResolvedValue(candidates) })
+    });
+
+    await expect(search(access, "decision")).resolves.toEqual([candidates[0]]);
+  });
 });

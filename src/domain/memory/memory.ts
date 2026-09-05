@@ -124,6 +124,14 @@ export class InvalidMemoryError extends Error {
   }
 }
 
+export function isMemoryActiveAt(memory: Memory, now: Date): boolean {
+  return (
+    memory.status === "active" &&
+    memory.validFrom <= now &&
+    (memory.expiresAt === undefined || memory.expiresAt > now)
+  );
+}
+
 function normalizeSource(source: MemorySource): Readonly<MemorySource> {
   return Object.freeze({
     ...source,

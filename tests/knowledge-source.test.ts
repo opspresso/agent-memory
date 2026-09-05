@@ -66,10 +66,30 @@ function chunkRecord() {
 }
 
 describe("knowledge source authorization", () => {
+  it.each([
+    { status: "archived" as const },
+    { validFrom: new Date(now.getTime() + 1) },
+    { expiresAt: now },
+    { expiresAt: new Date(now.getTime() - 1) }
+  ])("rejects a memory source that is not currently valid: %j", async (override) => {
+    const authorize = buildAuthorizeKnowledgeSource({
+      clock: () => now,
+      memoryRepository: {
+        findById: vi.fn().mockResolvedValue({ ...memory(), ...override })
+      },
+      documentRepository: { findChunkById: vi.fn() }
+    });
+
+    await expect(
+      authorize(access, { memoryId: "memory-1" }, memory().scope)
+    ).rejects.toBeInstanceOf(KnowledgeSourceNotFoundError);
+  });
+
   it("allows readable memory and document chunk references", async () => {
     const findById = vi.fn().mockResolvedValue(memory());
     const findChunkById = vi.fn().mockResolvedValue(chunkRecord());
     const authorize = buildAuthorizeKnowledgeSource({
+      clock: () => now,
       memoryRepository: { findById },
       documentRepository: { findChunkById }
     });
@@ -86,6 +106,7 @@ describe("knowledge source authorization", () => {
 
   it("hides a source outside the caller read scope", async () => {
     const authorize = buildAuthorizeKnowledgeSource({
+      clock: () => now,
       memoryRepository: { findById: vi.fn().mockResolvedValue(memory("team-2")) },
       documentRepository: { findChunkById: vi.fn() }
     });
@@ -97,6 +118,7 @@ describe("knowledge source authorization", () => {
 
   it("prevents a source from being exposed at a broader scope", async () => {
     const authorize = buildAuthorizeKnowledgeSource({
+      clock: () => now,
       memoryRepository: { findById: vi.fn().mockResolvedValue(memory()) },
       documentRepository: { findChunkById: vi.fn() }
     });
