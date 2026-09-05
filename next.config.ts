@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: "standalone",
   agentRules: false,
+  logging: {
+    incomingRequests: false
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   }

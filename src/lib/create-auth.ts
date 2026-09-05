@@ -11,6 +11,7 @@ import {
   authVerifications,
   users
 } from "@/infrastructure/database/schema";
+import { authenticationLogger } from "@/infrastructure/observability/logger";
 
 import { isAllowedEmailDomain } from "./access-control";
 
@@ -54,6 +55,7 @@ export function createAuth(options: CreateAuthOptions) {
     baseURL: options.baseURL,
     secret: options.secret,
     trustedOrigins: [new URL(options.baseURL).origin],
+    logger: authenticationLogger,
     database: drizzleAdapter(options.database, {
       provider: "pg",
       schema: {

@@ -64,3 +64,24 @@ export const logger = pino({
   },
   serializers: { err: serializeErrorForLog }
 });
+
+type AuthenticationLogLevel = "debug" | "info" | "warn" | "error";
+
+interface AuthenticationLogSink {
+  debug(bindings: object, message: string): void;
+  error(bindings: object, message: string): void;
+  info(bindings: object, message: string): void;
+  warn(bindings: object, message: string): void;
+}
+
+export function createAuthenticationLogger(
+  sink: AuthenticationLogSink = logger
+) {
+  return {
+    log(level: AuthenticationLogLevel, message: string): void {
+      sink[level]({ component: "better-auth" }, message);
+    }
+  };
+}
+
+export const authenticationLogger = createAuthenticationLogger();

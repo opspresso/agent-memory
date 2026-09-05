@@ -2,7 +2,10 @@ import { context, propagation, trace } from "@opentelemetry/api";
 import { NodeSDK, type tracing } from "@opentelemetry/sdk-node";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { serializeErrorForLog } from "@/infrastructure/observability/logger";
+import {
+  createAuthenticationLogger,
+  serializeErrorForLog
+} from "@/infrastructure/observability/logger";
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
 import {
   observeRetrieval,
@@ -70,6 +73,28 @@ describe("retrieval trace privacy", () => {
 });
 
 describe("structured error logging", () => {
+  it("drops untrusted Better Auth logger arguments", () => {
+    const records: unknown[] = [];
+    const sink = {
+      debug: (...args: unknown[]) => { records.push(args); },
+      error: (...args: unknown[]) => { records.push(args); },
+      info: (...args: unknown[]) => { records.push(args); },
+      warn: (...args: unknown[]) => { records.push(args); }
+    };
+    const authenticationLogger = createAuthenticationLogger(sink);
+
+    Reflect.apply(authenticationLogger.log, authenticationLogger, [
+      "error",
+      "Failed to parse state",
+      { details: { state: "private-oauth-state" } }
+    ]);
+
+    expect(records).toEqual([
+      [{ component: "better-auth" }, "Failed to parse state"]
+    ]);
+    expect(JSON.stringify(records)).not.toContain("private-oauth-state");
+  });
+
   it("keeps type and code diagnostics without serializing untrusted messages", () => {
     const cause = new Error("Bearer secret-document-content");
     const error = Object.assign(
