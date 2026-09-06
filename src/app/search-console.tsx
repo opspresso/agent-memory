@@ -109,6 +109,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
   const graphRequest = useRef<AbortController | undefined>(undefined);
   const searchRequest = useRef<AbortController | undefined>(undefined);
   const lastSearchQuery = useRef(initialQuery);
+  const searchInput = useRef<HTMLInputElement | null>(null);
   const selectedHit = hits.find((hit) => searchResultKey(hit) === selectedResultKey);
   const detailPanel = useRef<HTMLElement | null>(null);
   const selectedButton = useRef<HTMLButtonElement | null>(null);
@@ -120,7 +121,10 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
   function closeDetail() {
     setSelectedResultKey(undefined);
     setSelectedMemoryId(undefined);
-    requestAnimationFrame(() => selectedButton.current?.focus());
+    requestAnimationFrame(() => {
+      const button = selectedButton.current;
+      (button?.isConnected ? button : searchInput.current)?.focus();
+    });
   }
 
   const peakScore = useMemo(
@@ -160,7 +164,8 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
 
   function selectSearchKind(value: string) {
     const parameters = new URLSearchParams({ kind: value });
-    if (lastSearchQuery.current) parameters.set("q", lastSearchQuery.current);
+    const query = searchInput.current?.value.trim() ?? lastSearchQuery.current;
+    if (query) parameters.set("q", query);
     startNavigation(() => router.push(`${pathname}?${parameters}`, { scroll: false }));
   }
 
@@ -396,6 +401,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
           /></div> : null}
           <form onSubmit={search}>
             <TextInput
+              ref={searchInput}
               aria-label={t("workspace.search")}
               defaultValue={initialQuery}
               disabled={!organizationSlug || navigating}

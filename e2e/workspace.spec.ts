@@ -329,6 +329,17 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   ).toBeVisible();
   const organizationId = organization.id;
 
+  await page.getByRole("textbox", { name: "검색", exact: true }).fill("Unsubmitted document query");
+  await page.getByRole("radiogroup").getByText("Documents", { exact: true }).click();
+  await expect(page).toHaveURL(/kind=documents/);
+  await expect(page.getByRole("textbox", { name: "검색", exact: true })).toHaveValue("Unsubmitted document query");
+  await expect(page).toHaveURL(/q=Unsubmitted\+document\+query/);
+  await page.getByRole("textbox", { name: "검색", exact: true }).fill("");
+  await page.getByRole("radiogroup").getByText("Memory", { exact: true }).click();
+  await expect(page).toHaveURL(/kind=memories/);
+  await expect(page.getByRole("textbox", { name: "검색", exact: true })).toHaveValue("");
+  expect(new URL(page.url()).searchParams.has("q")).toBe(false);
+
   await page.getByRole("link", { name: "문서 수집" }).click();
   await page.getByRole("button", { name: "문서 수집", exact: true }).first().click();
   await page.getByRole("combobox", { name: "공유 범위" }).click();
