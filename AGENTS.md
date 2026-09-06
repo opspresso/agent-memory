@@ -21,6 +21,26 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 - HTTP·MCP 계약: [docs/api.md](docs/api.md)
 - 환경과 실행 절차: [docs/operations.md](docs/operations.md)
 
+## 형제 프로젝트 역할과 소유 경계
+
+형제 저장소와 연동할 때 아래 역할을 기준으로 변경 위치를 선택하고, 상세 계약은 각 저장소의 README와 설계 문서에서 다시 확인하라.
+
+| 저장소 | 역할과 소유 범위 |
+| --- | --- |
+| `../agent-studio` | 기업 내부 설치형 Agent 실행 플랫폼이다. Project·version·publish, LLM/tool loop, subagent, chat, MCP·skill binding, 채널 연동, 비용·trace, 실행 artifact를 소유한다. 한 설치는 한 기업이며 필수 경로는 폐쇄망에서도 동작한다. |
+| `../agent-memory` | 독립 실행 가능한 조직 단위 Context 플랫폼이다. 장기 Memory·revision·ACL, RAG 문서·chunk, provenance 기반 Knowledge Graph, AI 후보 검토, 통합 검색과 HTTP/MCP를 소유한다. |
+| `../agent-models` | 모델 family·provider offering, 가격, context/output 한도, capability, `id`와 `wireId`의 정적 JSON 카탈로그를 소유한다. 모델 실행 서버가 아니며 Studio는 카탈로그를 소비하고 offline snapshot을 유지한다. |
+| `../agent-plugins` | Agent Studio용 도메인별 plugin 콘텐츠를 소유한다. `plugin.json`, `mcp.json`, `skills/*/SKILL.md`와 참고 자료를 묶으며 기존 agent-skills·agent-tools를 대체한다. Sync와 실행은 Studio가 담당한다. |
+| `../mcp-memory` | 프로젝트·대화 범위의 간단한 기억 저장과 의미 검색을 제공한다. `recall`, `remember`, `list_memories`, `forget`, `memory_stats`와 PostgreSQL·pgvector 저장소를 소유하며 RAG·Graph·object storage는 다루지 않는다. |
+| `../mcp-document` | 원본 bytes를 받아 Office·한글 문서를 읽고 구조를 검사하며 Markdown·행 데이터로 문서와 XLSX를 생성하는 MCP 서버다. URL fetch·영속 저장·PDF 읽기는 호출자가 담당하고, 생성 파일은 MCP resource bytes로 반환한다. |
+| `../mcp-youtube` | YouTube 자막과 동영상 metadata를 제공하는 MCP 서버다. `get_transcript`와 `get_video_info`를 소유하며 자막과 metadata의 근거를 구분한다. |
+| `../dockpad` | 단일 호스트 Docker Compose 배포·운영 관리자다. Studio·Memory·MCP의 독립 배포, 공통 Caddy·PostgreSQL·MinIO, health check·backup과 DGX Spark의 LLM·embedding·reranker 운영을 소유한다. |
+
+- Agent Memory와 MCP Memory는 scope·인증·도구 계약이 다른 별도 서비스다. Plugin의 기본 `memory`는 MCP Memory이며 Agent Memory 연동에는 조직별 MCP URL과 Bearer credential을 별도로 설정한다.
+- Studio의 capability catalog 검색과 Agent Memory의 조직 지식 검색을 구분하라. Agent 실행 기능은 Studio에, 공유 Memory·RAG·Graph 기능은 Agent Memory에 둔다.
+- Plugin은 사용 지침과 MCP 선언을, 설치 측은 credential·조직 URL·model 선택·version binding을 소유한다. Studio용 skill은 shell·filesystem·network를 직접 사용할 수 있다고 가정하지 않는다.
+- IDC에서는 PostgreSQL·MinIO 인프라를 공유하되 database(`agent_studio`, `mcp_memory`, `agent_memory`)와 bucket(`agent-studio`, `agent-memory`)을 분리한다. Application image와 localdev는 각 앱, IDC 배포는 Dockpad, EKS/Kubernetes 배포는 `../argocd-env-demo`가 소유한다.
+
 ## Toolchain
 
 - Node.js `>=24 <25`와 pnpm `>=11 <12`를 사용하라.
