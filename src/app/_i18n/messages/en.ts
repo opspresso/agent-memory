@@ -311,6 +311,18 @@ export const en = {
   "workspace.startIngestion": "Start ingestion",
   "workspace.mcpBody":
     "Register this organization endpoint as a Streamable HTTP MCP server.",
+  "workspace.studioTemplateTitle": "Agent Studio registration template",
+  "workspace.studioTemplateBody":
+    "In Agent Studio, open Tools → Register MCP server and paste the values below into the matching fields. Name identifies the server a version binds. Description reaches the model and capability search; optional Content is shown only to operators.",
+  "workspace.studioTemplateDescription":
+    "Use for previous decisions, rules, experience, document evidence, and knowledge relationships in the {organizationSlug} organization. Search Memory, RAG, and Knowledge Graph, and save shared information as organization-scope memories.",
+  "workspace.studioTemplateContent":
+    "# Agent Memory operator notes for {organizationSlug}\n\n- Access: Organization Agent tokens only allow organization scope. Studio project, user, and conversation headers do not grant personal or team access.\n- Capabilities: Create and search memories; search RAG documents and Knowledge Graph relationships. Ingest documents and manage the Graph in the Agent Memory console.\n- Verification: Test connection checks tool discovery. Bind the server directly to the project version and verify an actual run too.\n- Automatic recall: Enable memoryRecall on the version and allow the recall tool. Dynamically discovered servers are not queried before a run.\n- Token changes: After regeneration, update the Studio Authorization header and any version override of that header.\n\nThis Content is an operator note and is not sent to the model. Put memory-writing conditions and response rules in the version system prompt or a bound Skill.",
+  "workspace.studioTemplateCopyField": "Copy template {field}",
+  "workspace.studioTemplateTokenHint":
+    "Set the Headers key to Authorization and its value to Bearer followed by a space and the actual Agent token. Replace <amt_token> with the token generated or viewed above.",
+  "workspace.studioTemplateNextSteps":
+    "After registering, use Test connection to inspect the tool list and bind the server directly to the project version. For Context before a run, enable memoryRecall and allow the recall tool. Put memory-writing and response rules in the version system prompt or a Skill.",
   "workspace.agentTokenTitle": "Agent token",
   "workspace.agentTokenBody":
     "Generate a Bearer token for Agent Studio. MCP uses the issuer's current administrator access and is limited to organization scope.",

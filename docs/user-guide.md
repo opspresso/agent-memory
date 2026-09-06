@@ -169,6 +169,12 @@ Organization `admin` 또는 `owner`는 같은 화면에서 MCP 전용 Agent toke
 Authorization: Bearer <amt_token>
 ```
 
+같은 화면의 `Agent Studio 등록 템플릿`은 활성 organization slug와 현재 사이트 주소로 Name, URL, Description, Headers의 Key·Value, 선택 입력인 Content 예시를 만든다. 각 항목의 복사 버튼으로 Agent Studio의 `Tools → Register MCP server`에 붙여 넣어라. Name 기본값은 `<organizationSlug>-memory`이며 필요하면 변경한다. Headers 예시의 `<amt_token>`은 위에서 생성하거나 확인한 실제 token으로 교체한다. 템플릿 자체에는 실제 token을 포함하지 않는다.
+
+Name은 version이 참조하는 registry 식별자다. Description은 모델의 `Connected MCP Servers` 표와 capability 검색에 사용되므로 서버를 사용할 상황과 기능을 설명한다. Content는 콘솔에만 표시되는 운영자 메모이며 모델에 전달되지 않는다. 모델의 정보 저장 조건·응답 규칙은 version의 system prompt 또는 연결한 Skill에 작성하라. 개별 tool의 설명과 입력 schema는 MCP 서버에서 자동으로 읽으므로 Content에 적어도 tool 계약이 바뀌지 않는다.
+
+등록 후 `Test connection`으로 도구 목록 조회를 확인하고 사용할 project의 version에 해당 MCP server를 bind한 뒤 실제 실행을 확인하라. 조직을 전환하면 템플릿의 이름·URL·설명·Content도 해당 조직에 맞게 바뀐다. Version의 header override는 registry header보다 우선하므로 token 재생성 시 override도 확인하라.
+
 Agent token은 발급자에게 귀속되는 organization service principal로 동작한다. Organization scope만 검색·변경할 수 있으며 user scope, team scope, 개별 access grant에는 접근하지 못한다. 사용자·팀 범위가 필요한 MCP client는 해당 사용자의 Better Auth Bearer token을 사용하라.
 
 MCP에서 제공하는 tool은 다음과 같다.
@@ -181,6 +187,6 @@ MCP에서 제공하는 tool은 다음과 같다.
 - `knowledge_search`
 - `knowledge_neighborhood`
 
-Agent Studio에서 version의 `memoryRecall`을 켜면 실행 전 `recall`을 호출해 관련 Context를 system prompt에 넣는다. 이 응답은 전체 4,000자로 제한되며 reranker가 활성화된 배포에서는 통합 순위를 사용한다. Reranker가 실패해도 권한이 적용된 hybrid 결과로 복귀한다.
+Agent Studio에서 version에 서버를 직접 bind하고 `memoryRecall`을 켜면 실행 전 `recall`을 호출해 관련 Context를 system prompt에 넣는다. Binding의 도구 선택에서 `recall`을 허용해야 하며 dynamic discovery만으로 추가된 서버는 자동 회상 대상이 아니다. 이 응답은 전체 4,000자로 제한되며 reranker가 활성화된 배포에서는 통합 순위를 사용한다. Reranker가 실패해도 권한이 적용된 hybrid 결과로 복귀한다.
 
 재생성은 이전 token을 즉시 무효화하며 폐기하면 연결된 Agent가 더 이상 인증되지 않는다. Hash만 저장된 기존 token은 한 번 재생성해야 `Token 보기`를 사용할 수 있다. Token lifecycle과 MCP client 설정 예시는 [HTTP API와 MCP](api.md#조직-agent-token)를 따른다.

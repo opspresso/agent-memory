@@ -54,7 +54,79 @@ export function AgentConnect({ origin }: { readonly origin: string }) {
         origin={origin}
         organizationSlug={organizationSlug}
       />
+      {organizationSlug && origin ? (
+        <StudioRegistrationTemplate
+          key={organizationSlug}
+          mcpEndpoint={mcpEndpoint}
+          organizationSlug={organizationSlug}
+        />
+      ) : null}
     </Stack>
+  );
+}
+
+function StudioRegistrationTemplate({
+  mcpEndpoint,
+  organizationSlug
+}: {
+  readonly mcpEndpoint: string;
+  readonly organizationSlug: string;
+}) {
+  const t = useT();
+  const fields = [
+    { label: "Name", value: `${organizationSlug}-memory` },
+    { label: "URL", value: mcpEndpoint },
+    {
+      label: "Description",
+      value: t("workspace.studioTemplateDescription", { organizationSlug })
+    },
+    { label: "Headers · Key", value: "Authorization" },
+    { label: "Headers · Value", value: "Bearer <amt_token>" },
+    {
+      label: "Content",
+      value: t("workspace.studioTemplateContent", { organizationSlug })
+    }
+  ];
+
+  return (
+    <Paper
+      aria-label={t("workspace.studioTemplateTitle")}
+      component="section"
+      p="lg"
+      radius="lg"
+      withBorder
+    >
+      <Stack gap="md">
+        <Title order={3}>{t("workspace.studioTemplateTitle")}</Title>
+        <Text c="dimmed">{t("workspace.studioTemplateBody")}</Text>
+        {fields.map(({ label, value }) => (
+          <Stack gap="xs" key={label}>
+            <Group justify="space-between">
+              <Text fw={500} size="sm">{label}</Text>
+              <CopyButton value={value}>
+                {({ copied, copy }) => (
+                  <Button
+                    aria-label={t("workspace.studioTemplateCopyField", { field: label })}
+                    color={copied ? "teal" : "brand"}
+                    leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                    onClick={copy}
+                    size="xs"
+                    variant="light"
+                  >
+                    {copied ? t("workspace.copied") : t("workspace.copy")}
+                  </Button>
+                )}
+              </CopyButton>
+            </Group>
+            <Code block style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+              {value}
+            </Code>
+          </Stack>
+        ))}
+        <Text c="dimmed" size="sm">{t("workspace.studioTemplateTokenHint")}</Text>
+        <Text c="dimmed" size="sm">{t("workspace.studioTemplateNextSteps")}</Text>
+      </Stack>
+    </Paper>
   );
 }
 

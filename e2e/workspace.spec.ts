@@ -363,7 +363,33 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
 
   await page.getByRole("link", { name: "Agent 연결" }).click();
   const mcpEndpoint = `${new URL(page.url()).origin}/api/organizations/${organizationSlug}/mcp`;
-  await expect(page.getByText(mcpEndpoint, { exact: true })).toBeVisible();
+  const registrationTemplate = page.getByRole("region", {
+    name: "Agent Studio 등록 템플릿"
+  });
+  await expect(registrationTemplate.getByText(mcpEndpoint, { exact: true })).toBeVisible();
+  await expect(registrationTemplate.getByText(`${organizationSlug}-memory`, { exact: true })).toBeVisible();
+  await registrationTemplate.getByRole("button", { name: "등록 템플릿 URL 복사" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(mcpEndpoint);
+  await registrationTemplate.getByRole("button", { name: "등록 템플릿 Description 복사" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
+    `${organizationSlug} 조직의 이전 결정·규칙·경험, 문서 근거, 지식 간 관계를 확인할 때 사용합니다. Memory·RAG·Knowledge Graph를 검색하고 공유할 정보를 조직 범위 Memory로 저장합니다.`
+  );
+  await expect(registrationTemplate).toContainText("Content는 운영자에게만 표시됩니다.");
+  await registrationTemplate.getByRole("button", { name: "등록 템플릿 Content 복사" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(
+    "이 Content는 모델에 전달되지 않는 운영자 메모다."
+  );
+  await page.getByRole("combobox", { name: "활성 조직" }).click();
+  await page.getByRole("option", { name: "E2E Other Organization" }).click();
+  const otherSlug = `e2e-other-organization-${runId}-${testInfo.retry}`;
+  await expect(registrationTemplate.getByText(`${otherSlug}-memory`, { exact: true })).toBeVisible();
+  await expect(registrationTemplate.getByText(mcpEndpoint, { exact: true })).not.toBeVisible();
+  await registrationTemplate.getByRole("button", { name: "등록 템플릿 URL 복사" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
+    `${new URL(page.url()).origin}/api/organizations/${otherSlug}/mcp`
+  );
+  await page.getByRole("combobox", { name: "활성 조직" }).click();
+  await page.getByRole("option", { name: "E2E Organization" }).click();
   await page.getByRole("button", { name: "MCP endpoint 복사" }).click();
   await expect(page.getByRole("button", { name: "MCP endpoint 복사" })).toHaveText(
     "복사됨"
@@ -373,6 +399,8 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     .getByText(/^Bearer amt_[A-Za-z0-9_-]{43}$/)
     .textContent();
   expect(authorization).toBeTruthy();
+  await expect(registrationTemplate.getByText("Bearer <amt_token>", { exact: true })).toBeVisible();
+  await expect(registrationTemplate).not.toContainText(authorization!);
   await page.getByRole("button", { name: "Token 숨기기" }).click();
   await expect(page.getByText(authorization!, { exact: true })).not.toBeVisible();
   await page.getByRole("button", { name: "Token 보기" }).click();
@@ -395,6 +423,22 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     }
   });
   expect(initializeResponse.ok()).toBe(true);
+
+  await page.context().addCookies([
+    { name: "agent-memory-locale", value: "en", domain: "127.0.0.1", path: "/" }
+  ]);
+  await page.reload();
+  const englishTemplate = page.getByRole("region", {
+    name: "Agent Studio registration template"
+  });
+  await expect(englishTemplate).toContainText(`knowledge relationships in the ${organizationSlug} organization`);
+  await expect(englishTemplate).toContainText("optional Content is shown only to operators.");
+  await englishTemplate.getByRole("button", { name: "Copy template Name", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${organizationSlug}-memory`);
+  await page.context().addCookies([
+    { name: "agent-memory-locale", value: "ko", domain: "127.0.0.1", path: "/" }
+  ]);
+  await page.reload();
 
   const candidateId = "80000000-0000-4000-8000-000000000099";
   let duplicateRequests = 0;
