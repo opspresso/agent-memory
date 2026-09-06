@@ -83,6 +83,7 @@ pnpm dev
 | --- | --- | --- |
 | [시작 가이드](docs/getting-started.md) | 처음 설치하는 사용자 | 인증 가능한 로컬 환경, 첫 조직, 첫 검색, 선택 기능 활성화 |
 | [사용자 가이드](docs/user-guide.md) | 운영자·Agent 통합 개발자 | 콘솔, Memory lifecycle, 문서, Graph, AI 검토, MCP 연결 |
+| [Workspace UI](docs/ui-workspace.md) | 제품·UI 개발자 | 정보 구조, 디자인 기준, 전후 화면과 검증 범위 |
 | [Architecture](docs/architecture.md) | 개발자·보안 검토자 | 계층, 요청 경계, 권한, 데이터 흐름, 불변 조건 |
 | [HTTP API와 MCP](docs/api.md) | API·Agent 통합 개발자 | 인증, endpoint, 요청·응답, 오류, 실행 예시 |
 | [운영 가이드](docs/operations.md) | 배포·운영 담당자 | 환경 변수, topology, migration, worker, 관측성, 장애 대응 |
