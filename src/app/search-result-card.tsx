@@ -35,7 +35,7 @@ export function SearchResultCard({ hit, selected, onSelect }: {
   const summary = hit.memory?.content ?? hit.chunk?.content ?? hit.node?.summary ?? "";
   const Icon = hit.memory ? IconBrain : hit.document ? IconFileText : IconTopologyStar3;
   return (
-    <UnstyledButton className={classes.result} data-selected={selected || undefined} aria-pressed={selected} onClick={(event) => onSelect(event.currentTarget)}>
+    <UnstyledButton className={classes.result} data-selected={selected || undefined} aria-label={`${title} · ${presentation.sourceLabel} · ${presentation.scopeLabel} · ${presentation.evidenceLabel}`} aria-pressed={selected} onClick={(event) => onSelect(event.currentTarget)}>
       <Stack gap={8}>
         <Group gap="xs"><Icon size={16} aria-hidden /><Badge size="xs">{presentation.sourceLabel}</Badge><Text c="dimmed" size="xs">{presentation.scopeLabel}</Text></Group>
         <Text fw={600} size="sm" className={classes.title}>{title}</Text>

@@ -169,6 +169,18 @@ export const documentLibraryResponseSchema = z.object({
   nextOffset: z.number().int().nonnegative().nullable()
 });
 
+export const documentContentsResponseSchema = z.object({
+  document: documentDetailResponseSchema,
+  chunks: z.array(z.object({
+    id: z.string().min(1),
+    ordinal: z.number().int().nonnegative(),
+    content: z.string(),
+    metadata: z.record(z.string(), z.unknown())
+  })),
+  count: z.number().int().nonnegative(),
+  nextOffset: z.number().int().nonnegative().nullable()
+});
+
 export const documentChunkDetailResponseSchema = z.object({
   document: documentDetailResponseSchema,
   chunk: z.object({

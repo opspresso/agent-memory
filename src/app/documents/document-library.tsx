@@ -10,7 +10,7 @@ import type { z } from "zod";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 
 import { useLocale, useT } from "../_i18n/provider";
-import { documentDetailResponseSchema, documentLibraryResponseSchema } from "../api-response-schemas";
+import { documentContentsResponseSchema, documentDetailResponseSchema, documentLibraryResponseSchema } from "../api-response-schemas";
 import { responseJson, responseOk } from "../http-response";
 import { useOrganization } from "../organization-context";
 import { EmptyState, WorkspaceHeader, WorkspaceSection } from "../workspace-components";
@@ -27,6 +27,67 @@ function safeSourceUrl(value: string | undefined) {
     const url = new URL(value);
     return url.protocol === "https:" || url.protocol === "http:" ? url.href : undefined;
   } catch { return undefined; }
+}
+
+function DocumentContents({ documentId }: { readonly documentId: string }) {
+  const t = useT();
+  const { organizationSlug } = useOrganization();
+  const [chunks, setChunks] = useState<z.infer<typeof documentContentsResponseSchema>["chunks"]>([]);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [request, setRequest] = useState({ offset: 0, version: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const response = await fetch(`/api/organizations/${organizationSlug}/documents/${documentId}/chunks?limit=25&offset=${request.offset}`, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (response.status === 403 || response.status === 404) {
+          setChunks([]);
+          setNextOffset(null);
+        }
+        const body = await responseJson(response, t("documentUi.contents.failed"), documentContentsResponseSchema);
+        if (controller.signal.aborted) return;
+        if (body.document.id !== documentId || body.document.status !== "ready") {
+          setChunks([]);
+          setNextOffset(null);
+          throw new Error(t("documentUi.contents.failed"));
+        }
+        setChunks((current) => request.offset === 0 ? body.chunks : [...current, ...body.chunks.filter((chunk) => !current.some((item) => item.id === chunk.id))]);
+        setNextOffset(body.nextOffset);
+      } catch {
+        if (!controller.signal.aborted) setError(t("documentUi.contents.failed"));
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [documentId, organizationSlug, request, t]);
+
+  function loadPage(offset: number) {
+    setError(undefined);
+    setLoading(true);
+    setRequest((current) => ({ offset, version: current.version + 1 }));
+  }
+
+  return <section aria-label={t("documentUi.contents.title")}>
+    <Stack gap="md">
+      <Stack gap={4}><Title order={3}>{t("documentUi.contents.title")}</Title><Text c="dimmed" size="sm">{t("documentUi.contents.description")}</Text></Stack>
+      {error ? <Alert color="red" role="alert"><Stack gap="xs"><Text size="sm">{error}</Text><Button variant="light" size="xs" onClick={() => loadPage(0)}>{t("documentUi.refresh")}</Button></Stack></Alert> : null}
+      {loading && chunks.length === 0 ? <Skeleton height={150} aria-label={t("documentUi.contents.loading")} /> : null}
+      {!loading && !error && chunks.length === 0 ? <Text c="dimmed" size="sm">{t("documentUi.contents.empty")}</Text> : null}
+      {chunks.length > 0 ? <>
+        <Text c="dimmed" size="xs" role="status">{t("documentUi.contents.count", { count: chunks.length })}</Text>
+        <div className={classes.contents} role="region" tabIndex={0} aria-label={t("documentUi.contents.body")}>
+          {chunks.map((chunk) => <article key={chunk.id} className={classes.chunk}><Text size="xs" c="dimmed" fw={600}>{t("documentUi.contents.part", { number: chunk.ordinal + 1 })}</Text><Text size="sm" className={classes.chunkBody}>{chunk.content}</Text></article>)}
+        </div>
+      </> : null}
+      {!error && nextOffset !== null ? <Button variant="default" loading={loading} onClick={() => loadPage(nextOffset)}>{t("documentUi.contents.more")}</Button> : null}
+    </Stack>
+  </section>;
 }
 
 export function DocumentLibrary() {
@@ -214,7 +275,8 @@ function DocumentLibraryView({ selectedId }: { readonly selectedId?: string }) {
           {selected.processingError ? <Alert color="red" title={t("documentUi.processingError")}><Text size="sm" className={classes.error}>{selected.processingError}</Text></Alert> : null}
           {pollPaused ? <Alert color="gray">{t("documentUi.pollPaused")}</Alert> : null}
           {selected.sourceUri ? <Stack gap={4}><Text fw={600} size="sm">{t("documentUi.source")}</Text>{sourceUrl ? <Anchor href={sourceUrl} target="_blank" rel="noopener noreferrer" className={classes.title}>{selected.sourceUri}</Anchor> : <Text size="sm" className={classes.title}>{selected.sourceUri}</Text>}</Stack> : null}
-          {selected.status === "ready" ? <Button component={Link} href={`/?q=${encodeURIComponent(selected.title)}&kind=documents`} variant="light">{t("documentUi.findContent")}</Button> : null}
+          {selected.status === "ready" ? <DocumentContents key={`${selected.id}:${selected.updatedAt}`} documentId={selected.id} /> : null}
+          {selected.status === "ready" ? <Button component={Link} href="/?kind=documents" variant="light">{t("documentUi.findContent")}</Button> : null}
           <Group justify="space-between">{selected.status === "failed" && canWrite ? <Button leftSection={<IconRefresh size={16} />} loading={mutating} onClick={() => void mutate("retry")}>{t("documentUi.retry")}</Button> : <span />}{canManage ? <Button color="red" variant="subtle" leftSection={<IconArchive size={16} />} disabled={mutating} onClick={() => setArchiveOpen(true)}>{t("documentUi.archive")}</Button> : null}</Group>
         </Stack>}
       </Paper>

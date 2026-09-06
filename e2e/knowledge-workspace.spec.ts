@@ -42,7 +42,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
   const organizationName = `Knowledge UX ${suffix}`;
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => { if (message.type() === "error" && /hydration|cannot be a descendant/i.test(message.text())) errors.push(message.text()); });
+  page.on("console", (message) => { if ((message.type() === "error" || message.type() === "warning") && /hydration|cannot be a descendant|same key|unique.*key/i.test(message.text())) errors.push(message.text()); });
   // Better Auth uses single-value x-forwarded-for for its per-client rate limit.
   // Synthetic clients stay isolated without changing production auth policy.
   await page.setExtraHTTPHeaders({ "x-forwarded-for": "192.0.2.31" });
@@ -73,6 +73,34 @@ test("completes knowledge work with real evidence, scoped access and responsive 
   await expect(page.getByRole("heading", { name: "UI rollback policy", exact: true })).toBeVisible();
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: testInfo.outputPath("after-memory-desktop-ko.png"), fullPage: true });
+
+  const unavailableFixture = await jsonRequest<{ id: string }>(page, `/api/organizations/${slug}/memories`, "POST", { kind: "fact", scope: { kind: "user" }, title: "Unavailable response fixture", content: "Original synthetic content", source: { type: "user" } });
+  let refuseNextRead = false;
+  const unavailablePath = `**/api/organizations/${slug}/memories/${unavailableFixture.id}`;
+  // The mutation is real; only its follow-up read simulates access being revoked.
+  await page.route(unavailablePath, async (route) => {
+    if (route.request().method() === "PATCH") {
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      refuseNextRead = true;
+      await route.fulfill({ response });
+    } else if (route.request().method() === "GET" && refuseNextRead) {
+      await route.fulfill({ status: 403, json: { error: "Synthetic access change" } });
+    } else await route.continue();
+  });
+  await page.goto(`/memories?memory=${unavailableFixture.id}`);
+  await page.getByRole("tab", { name: "수정", exact: true }).click();
+  await page.getByRole("textbox", { name: "내용", exact: true }).fill("Saved synthetic content after access change");
+  await page.getByRole("button", { name: "Revision 저장", exact: true }).click();
+  const unavailableDetail = page.getByRole("region", { name: "내용과 출처", exact: true });
+  await expect(unavailableDetail.getByText("이 Memory가 없거나 접근 권한이 변경되었습니다.", { exact: true })).toBeVisible();
+  await expect(unavailableDetail.getByRole("tab", { name: "수정", exact: true })).toHaveCount(0);
+  await expect(unavailableDetail.getByText("Original synthetic content", { exact: true })).toHaveCount(0);
+  await expect(unavailableDetail.getByText("Saved synthetic content after access change", { exact: true })).toHaveCount(0);
+  await page.unroute(unavailablePath);
+  await unavailableDetail.getByRole("alert").getByRole("button", { name: "다시 불러오기", exact: true }).click();
+  await expect(unavailableDetail.getByRole("heading", { name: "Unavailable response fixture", exact: true })).toBeVisible();
+  await expect(unavailableDetail.getByText("Saved synthetic content after access change", { exact: true })).toBeVisible();
 
   const shared = await jsonRequest<{ id: string }>(page, `/api/organizations/${slug}/memories`, "POST", { kind: "decision", scope: { kind: "organization" }, title: "Shared release standard", content: "Every release has an accountable owner.", source: { type: "user" } });
   const delayedMemory = await jsonRequest<{ id: string }>(page, `/api/organizations/${slug}/memories`, "POST", { kind: "fact", scope: { kind: "user" }, title: "Delayed archive fixture", content: "Synthetic disposable memory", source: { type: "user" } });
@@ -119,6 +147,9 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     for (const [id, ordinal] of [[chunkId, 0], [rejectChunkId, 1]]) {
       await database.query("INSERT INTO document_chunks (id, organization_id, document_id, ordinal, content) VALUES ($1,$2,$3,$4,$5)", [id, organization.id, readyId, ordinal, "Evidence API stores release records in Evidence Database. The source requires an accountable release owner."]);
     }
+    for (let ordinal = 2; ordinal < 26; ordinal += 1) {
+      await database.query("INSERT INTO document_chunks (id, organization_id, document_id, ordinal, content) VALUES ($1,$2,$3,$4,$5)", [randomUUID(), organization.id, readyId, ordinal, `Synthetic release appendix ${ordinal + 1}.`]);
+    }
     const graph = { entities: [{ key: "api", kind: "service", canonicalName: "Evidence API" }, { key: "db", kind: "database", canonicalName: "Evidence Database" }], relationships: [{ sourceKey: "api", predicate: "stores_in", targetKey: "db" }] };
     for (const [id, sourceChunk] of [[candidateId, chunkId], [rejectCandidateId, rejectChunkId]]) {
       await database.query("INSERT INTO knowledge_candidates (id, organization_id, document_id, chunk_id, model, graph) VALUES ($1,$2,$3,$4,$5,$6)", [id, organization.id, readyId, sourceChunk, "synthetic-e2e-extractor", JSON.stringify(graph)]);
@@ -144,6 +175,20 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await expect(page.getByRole("button", { name: /Failed release notes.*사용 가능/ })).toBeVisible();
     await page.getByRole("button", { name: /Release source guide/ }).click();
     await expect(page.getByRole("link", { name: "https://example.com/release-guide", exact: true })).toHaveAttribute("rel", "noopener noreferrer");
+    const contents = page.getByRole("region", { name: "문서 내용", exact: true });
+    await expect(contents.getByText("본문 25개 표시 중", { exact: true })).toBeVisible();
+    await expect(contents.getByText("Evidence API stores release records in Evidence Database. The source requires an accountable release owner.", { exact: true })).toHaveCount(2);
+    await expect(contents.getByText("Synthetic release appendix 26.", { exact: true })).toHaveCount(0);
+    await contents.getByRole("button", { name: "본문 더 보기", exact: true }).click();
+    await expect(contents.getByText("본문 26개 표시 중", { exact: true })).toBeVisible();
+    await expect(contents.getByText("Synthetic release appendix 26.", { exact: true })).toBeVisible();
+    await expect(contents.getByRole("button", { name: "본문 더 보기", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "문서 검색 열기", exact: true })).toHaveAttribute("href", "/?kind=documents");
+    await page.getByRole("button", { name: /Failed release notes/ }).click();
+    await expect(contents.getByText("표시할 처리된 본문이 없습니다.", { exact: true })).toBeVisible();
+    await expect(contents.getByText("Synthetic release appendix 26.", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: /Release source guide/ }).click();
+    await expect(contents.getByText("본문 25개 표시 중", { exact: true })).toBeVisible();
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({ path: testInfo.outputPath("after-documents-desktop-ko.png"), fullPage: true });
 
@@ -165,6 +210,8 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await page.goto("/?q=Evidence%20API&kind=knowledge%2Fnodes");
     await page.getByRole("button", { name: /Evidence API/ }).click();
     await expect(page.getByText("Evidence API stores release records in Evidence Database. The source requires an accountable release owner.", { exact: true })).toBeVisible();
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await page.screenshot({ path: testInfo.outputPath("after-search-desktop-ko.png"), fullPage: true });
     await page.getByRole("button", { name: "관계 보기", exact: true }).click();
     await page.getByRole("button", { name: "DATABASE Evidence Database", exact: true }).click();
     await expect(page.getByText("← stores_in", { exact: true })).toBeVisible();
@@ -198,7 +245,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
       expect(blockedWrite).toBe(403);
       await member.goto(`/memories?memory=${memoryId}`);
       await expect(member.getByRole("heading", { name: "UI rollback policy", exact: true })).toHaveCount(0);
-      await expect(member.getByRole("alert")).toBeVisible();
+      await expect(member.getByRole("region", { name: "내용과 출처", exact: true }).getByRole("alert")).toBeVisible();
       await member.goto(`/documents?document=${readyId}`);
       await expect(member.getByRole("heading", { name: "Release source guide", exact: true })).toBeVisible();
       await expect(member.getByRole("button", { name: "문서 보관", exact: true })).toHaveCount(0);
@@ -225,6 +272,8 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-mantine-color-scheme", "dark");
     await expect(page.getByRole("heading", { name: "Document library", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Document contents", exact: true }).getByText("Showing 25 sections", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Refresh", exact: true }).first()).toBeEnabled();
     await noOverflow(page);
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({ path: testInfo.outputPath("after-documents-mobile-en-dark.png"), fullPage: true });

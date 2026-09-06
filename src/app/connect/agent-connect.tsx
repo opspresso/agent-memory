@@ -45,16 +45,15 @@ export function AgentConnect({ origin }: { readonly origin: string }) {
   return (
     <Stack gap="lg">
       <WorkspaceHeader title={t("workspace.tab.connect")} description={t("manageUi.connectBody")} />
-      <AgentConnectionPanels
+      <McpEndpointPanel key={`endpoint:${organizationSlug}`} mcpEndpoint={mcpEndpoint} origin={origin} organizationSlug={organizationSlug} />
+      <AgentTokenPanel
         canManageToken={canManageToken}
-        key={`${organizationSlug}:${canManageToken}`}
-        mcpEndpoint={mcpEndpoint}
-        origin={origin}
+        key={`token:${organizationSlug}:${canManageToken}`}
         organizationSlug={organizationSlug}
       />
       {organizationSlug && origin ? (
         <StudioRegistrationTemplate
-          key={organizationSlug}
+          key={`template:${organizationSlug}`}
           mcpEndpoint={mcpEndpoint}
           organizationSlug={organizationSlug}
         />
@@ -131,15 +130,52 @@ function StudioRegistrationTemplate({
   );
 }
 
-function AgentConnectionPanels({
+function McpEndpointPanel({ mcpEndpoint, origin, organizationSlug }: {
+  readonly mcpEndpoint: string;
+  readonly origin: string;
+  readonly organizationSlug: string;
+}) {
+  const t = useT();
+  return (
+      <Paper p="lg" radius="lg" withBorder>
+        <Stack gap="md">
+          <Group gap="xs"><Badge variant="outline">01</Badge><Title order={2}>Streamable HTTP MCP</Title></Group>
+          <Text c="dimmed">{t("workspace.mcpBody")}</Text>
+          <Group align="stretch" gap="xs" wrap="nowrap">
+            <Code block style={{ flex: 1, minWidth: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+              {mcpEndpoint}
+            </Code>
+            <CopyButton value={mcpEndpoint}>
+              {({ copied, copy }) => (
+                <Button
+                  aria-label={t("workspace.copyEndpoint")}
+                  color={copied ? "teal" : "brand"}
+                  disabled={!organizationSlug || !origin}
+                  leftSection={
+                    copied ? <IconCheck size={16} /> : <IconCopy size={16} />
+                  }
+                  onClick={copy}
+                  variant="light"
+                >
+                  {copied ? t("workspace.copied") : t("workspace.copy")}
+                </Button>
+              )}
+            </CopyButton>
+          </Group>
+          <Text c="dimmed" size="sm">
+            context_search · recall · memory_search · memory_create ·
+            document_search · knowledge_search · knowledge_neighborhood
+          </Text>
+        </Stack>
+      </Paper>
+  );
+}
+
+function AgentTokenPanel({
   canManageToken,
-  mcpEndpoint,
-  origin,
   organizationSlug
 }: {
   readonly canManageToken: boolean;
-  readonly mcpEndpoint: string;
-  readonly origin: string;
   readonly organizationSlug: string;
 }) {
   const t = useT();
@@ -277,38 +313,6 @@ function AgentConnectionPanels({
   }
 
   return (
-    <>
-      <Paper p="lg" radius="lg" withBorder>
-        <Stack gap="md">
-          <Group gap="xs"><Badge variant="outline">01</Badge><Title order={2}>Streamable HTTP MCP</Title></Group>
-          <Text c="dimmed">{t("workspace.mcpBody")}</Text>
-          <Group align="stretch" gap="xs" wrap="nowrap">
-            <Code block style={{ flex: 1, minWidth: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-              {mcpEndpoint}
-            </Code>
-            <CopyButton value={mcpEndpoint}>
-              {({ copied, copy }) => (
-                <Button
-                  aria-label={t("workspace.copyEndpoint")}
-                  color={copied ? "teal" : "brand"}
-                  disabled={!organizationSlug || !origin}
-                  leftSection={
-                    copied ? <IconCheck size={16} /> : <IconCopy size={16} />
-                  }
-                  onClick={copy}
-                  variant="light"
-                >
-                  {copied ? t("workspace.copied") : t("workspace.copy")}
-                </Button>
-              )}
-            </CopyButton>
-          </Group>
-          <Text c="dimmed" size="sm">
-            context_search · recall · memory_search · memory_create ·
-            document_search · knowledge_search · knowledge_neighborhood
-          </Text>
-        </Stack>
-      </Paper>
       <Paper p="lg" radius="lg" withBorder>
         <Stack gap="md">
           <Group gap="xs"><Badge variant="outline">02</Badge><Title order={2}>{t("workspace.agentTokenTitle")}</Title></Group>
@@ -395,6 +399,5 @@ function AgentConnectionPanels({
           )}
         </Stack>
       </Paper>
-    </>
   );
 }

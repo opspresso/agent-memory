@@ -497,7 +497,7 @@ export const en = {
   "documentUi.attempts": "Processing attempts",
   "documentUi.processingError": "Processing failed",
   "documentUi.source": "Source",
-  "documentUi.findContent": "Search related content",
+  "documentUi.findContent": "Search documents",
   "documentUi.retry": "Retry processing",
   "documentUi.retryQueued": "Retry requested. The status will update when the worker starts processing.",
   "documentUi.archive": "Archive document",
@@ -565,6 +565,21 @@ export const en = {
   "searchUi.noResultsBody": "Try another term or search a different type of knowledge. Only information you can access is shown.",
   "searchUi.startTitle": "What would you like to know?",
   "searchUi.startBody": "Search decisions, rules, documents, and relationships. You can also browse Memory or add your first document.",
+  "memoryUi.unavailable": "This Memory is unavailable or you no longer have access.",
+
+  "documentUi.contents.title": "Document contents",
+  "documentUi.contents.description": "Read the processed text in source order. This is extracted content, not a download of the original file.",
+  "documentUi.contents.failed": "Unable to read the document contents. Refresh to try again.",
+  "documentUi.contents.loading": "Loading document contents",
+  "documentUi.contents.empty": "No processed text is available for this document.",
+  "documentUi.contents.count": "Showing {count} sections",
+  "documentUi.contents.body": "Processed document text",
+  "documentUi.contents.part": "Section {number}",
+  "documentUi.contents.more": "Read more sections",
+  "result.scope.organization": "Organization",
+  "result.scope.team": "Team",
+  "result.scope.user": "Personal",
+  "result.scope.unknown": "Scope unavailable",
 
 } as const;
 

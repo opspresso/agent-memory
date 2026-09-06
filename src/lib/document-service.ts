@@ -1,3 +1,4 @@
+import { buildListDocumentChunks } from "@/application/document/list-document-chunks";
 import { buildGetDocumentChunk } from "@/application/document/get-document-chunk";
 import { buildListDocuments } from "@/application/document/list-documents";
 import { createHash, randomUUID } from "node:crypto";
@@ -60,3 +61,5 @@ export const retryDocumentRecord = buildRetryDocument({
 export const listDocumentRecords = buildListDocuments(documentRepository);
 
 export const getDocumentChunkRecord = buildGetDocumentChunk(documentRepository);
+
+export const listDocumentChunkRecords = buildListDocumentChunks(documentRepository);

@@ -279,6 +279,10 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   if (!runId) {
     throw new Error("E2E_RUN_ID must be configured by Playwright");
   }
+  const renderingErrors: string[] = [];
+  page.on("console", (message) => {
+    if ((message.type() === "error" || message.type() === "warning") && /hydration|cannot be a descendant|same key|unique.*key/i.test(message.text())) renderingErrors.push(message.text());
+  });
   await page.setExtraHTTPHeaders({ "x-forwarded-for": "192.0.2.21" });
   const email = `e2e+${runId}-${testInfo.retry}@nalbam.com`;
 
@@ -391,13 +395,29 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
     `${new URL(page.url()).origin}/api/organizations/${otherSlug}/mcp`
   );
+  const accessRequested = Promise.withResolvers<void>();
+  const releaseAccess = Promise.withResolvers<void>();
+  const accessPath = `**/api/organizations/${organizationSlug}/me`;
+  await page.route(accessPath, async (route) => {
+    const response = await route.fetch();
+    accessRequested.resolve();
+    await releaseAccess.promise;
+    await route.fulfill({ response });
+  });
   await page.getByRole("combobox", { name: "활성 조직" }).click();
   await page.getByRole("option", { name: "E2E Organization" }).click();
+  await accessRequested.promise;
   await expect(registrationTemplate.getByText(mcpEndpoint, { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "MCP endpoint 복사" }).click();
-  await expect(page.getByRole("button", { name: "MCP endpoint 복사" })).toHaveText(
-    "복사됨"
-  );
+  const endpointCopy = page.getByRole("button", { name: "MCP endpoint 복사" });
+  const endpointElement = await endpointCopy.elementHandle();
+  await endpointCopy.click();
+  await expect(endpointCopy).toHaveText("복사됨");
+  releaseAccess.resolve();
+  await expect(page.getByRole("button", { name: "Token 생성", exact: true })).toBeVisible();
+  // Permission resolution must not remount the endpoint and reset copy feedback.
+  expect(await endpointElement?.evaluate((element) => element.isConnected)).toBe(true);
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(mcpEndpoint);
+  await page.unroute(accessPath);
   await page.getByRole("button", { name: "Token 생성" }).click();
   const authorization = await page
     .getByText(/^Bearer amt_[A-Za-z0-9_-]{43}$/)
@@ -517,15 +537,6 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
       });
     }
   );
-  const hydrationErrors: string[] = [];
-  page.on("console", (message) => {
-    if (
-      message.type() === "error" &&
-      message.text().includes("cannot be a descendant")
-    ) {
-      hydrationErrors.push(message.text());
-    }
-  });
   await page.getByRole("link", { name: "AI 후보 검토" }).click();
   await expect(
     page.getByText(/같은 scope와 이름의 기존 node가 1개 있습니다/)
@@ -535,7 +546,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     page.getByText(/온톨로지 사전에 없는 용어가 포함되어 있습니다: database/)
   ).toBeVisible();
   await expect(page.getByText("stores_data_in", { exact: true })).toBeVisible();
-  expect(hydrationErrors).toEqual([]);
+  expect(renderingErrors).toEqual([]);
   expect(duplicateRequests).toBe(1);
 
   await page.getByRole("link", { name: "통합 검색" }).click();
@@ -760,4 +771,5 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   expect(await refreshedResponse.json()).toMatchObject({ hits: [] });
   await expect(lifecycle.getByRole("tab", { name: "수정", exact: true })).not.toBeVisible();
   await expect(page.getByText("Checkout rollback policy", { exact: true })).not.toBeVisible();
+  expect(renderingErrors).toEqual([]);
 });

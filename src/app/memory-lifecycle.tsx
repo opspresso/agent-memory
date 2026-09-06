@@ -86,17 +86,23 @@ interface LoadedMemory {
   readonly versions: readonly MemoryVersionView[];
 }
 
+class MemoryUnavailableError extends Error {}
+
 async function requestMemory(
   organizationSlug: string,
   memoryId: string,
   fallback: string,
   etagMissing: string,
+  unavailable: string,
   signal?: AbortSignal
 ): Promise<LoadedMemory> {
   const response = await fetch(
     `/api/organizations/${organizationSlug}/memories/${memoryId}`,
     { signal }
   );
+  if (response.status === 403 || response.status === 404) {
+    throw new MemoryUnavailableError(unavailable);
+  }
   const memory = await responseJson(
     response,
     fallback,
@@ -160,6 +166,7 @@ export function MemoryLifecycle({
   const getLoadMessages = useEffectEvent(() => ({
     requestFailed: t("memory.requestFailed"),
     etagMissing: t("memory.etagMissing"),
+    unavailable: t("memoryUi.unavailable"),
     loadFailed: t("memory.loadFailed")
   }));
 
@@ -184,11 +191,13 @@ export function MemoryLifecycle({
         memoryId,
         t("memory.requestFailed"),
         t("memory.etagMissing"),
+        t("memoryUi.unavailable"),
         controller.signal
       );
       if (!controller.signal.aborted && mounted.current) applyLoaded(next);
     } catch (caught) {
       if (controller.signal.aborted || !mounted.current) return;
+      if (caught instanceof MemoryUnavailableError) setLoaded(undefined);
       setError(
         caught instanceof Error ? caught.message : t("memory.loadFailed")
       );
@@ -206,6 +215,7 @@ export function MemoryLifecycle({
       memoryId,
       loadMessages.requestFailed,
       loadMessages.etagMissing,
+      loadMessages.unavailable,
       controller.signal
     )
       .then((next) => {
@@ -365,7 +375,7 @@ export function MemoryLifecycle({
                     {loaded.memory.status}
                   </Badge>
                 </Group>
-                <Title order={1}>{loaded.memory.title}</Title>
+                <Title order={2}>{loaded.memory.title}</Title>
                 <Text c="dimmed" size="sm">
                   {formattedDate(loaded.memory.updatedAt, locale)} · {t("memory.source", { source: loaded.memory.source.type })}
                 </Text>

@@ -21,6 +21,7 @@ import type {
   DocumentProcessingClaim,
   DocumentRepository,
   DocumentLibraryReader,
+  DocumentChunkPageReader,
   DocumentSearchHit,
   DocumentSearchInput,
   DocumentUploadLimits,
@@ -109,7 +110,7 @@ function scoreExpressions(input: DocumentSearchInput) {
 
 export function createDocumentRepository(
   db: AgentMemoryDatabase
-): DocumentRepository & DocumentLibraryReader {
+): DocumentRepository & DocumentLibraryReader & DocumentChunkPageReader {
   function documentValues(document: Document) {
     return {
       id: document.id,
@@ -225,6 +226,23 @@ export function createDocumentRepository(
             chunk: chunkFromRow(row.chunk)
           } satisfies DocumentChunkRecord)
         : null;
+    },
+
+    async readChunks(input) {
+      return db.transaction(async (tx) => {
+        const [document] = await tx.select().from(documents).where(and(
+          eq(documents.organizationId, input.access.organizationId),
+          eq(documents.id, input.documentId),
+          eq(documents.status, "ready"),
+          accessPredicate(input.access)
+        )).limit(1);
+        if (!document) return null;
+        const chunks = await tx.select().from(documentChunks).where(and(
+          eq(documentChunks.organizationId, input.access.organizationId),
+          eq(documentChunks.documentId, input.documentId)
+        )).orderBy(documentChunks.ordinal, documentChunks.id).limit(input.limit).offset(input.offset);
+        return { document: documentFromRow(document), chunks: chunks.map(chunkFromRow) };
+      }, { isolationLevel: "repeatable read", accessMode: "read only" });
     },
 
     async listChunksByDocument(organizationId, documentId) {

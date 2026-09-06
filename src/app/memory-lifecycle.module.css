@@ -1,7 +1,7 @@
 .shell { min-width: 0; }
 .loading { display: grid; min-height: 12rem; place-items: center; }
 .header { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--memory-border); overflow-wrap: anywhere; }
-.header h1 { font-size: 22px; }
+.header h2 { font-size: 22px; }
 .snapshot { background: var(--memory-surface); }
 .content { font-size: 14px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .timeline { display: grid; gap: 12px; }

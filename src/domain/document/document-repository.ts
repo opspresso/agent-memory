@@ -92,3 +92,12 @@ export interface DocumentLibraryReader {
     readonly offset: number;
   }): Promise<readonly Document[]>;
 }
+
+export interface DocumentChunkPageReader {
+  readChunks(input: {
+    readonly access: OrganizationAccess;
+    readonly documentId: string;
+    readonly limit: number;
+    readonly offset: number;
+  }): Promise<{ readonly document: Document; readonly chunks: readonly DocumentChunk[] } | null>;
+}
