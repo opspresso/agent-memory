@@ -84,3 +84,20 @@ export interface DocumentRepository {
   ): Promise<boolean>;
   search(input: DocumentSearchInput): Promise<readonly DocumentSearchHit[]>;
 }
+
+export interface DocumentLibraryReader {
+  list(input: {
+    readonly access: OrganizationAccess;
+    readonly limit: number;
+    readonly offset: number;
+  }): Promise<readonly Document[]>;
+}
+
+export interface DocumentChunkPageReader {
+  readChunks(input: {
+    readonly access: OrganizationAccess;
+    readonly documentId: string;
+    readonly limit: number;
+    readonly offset: number;
+  }): Promise<{ readonly document: Document; readonly chunks: readonly DocumentChunk[] } | null>;
+}

@@ -19,6 +19,7 @@ import type {
 } from "@/domain/memory/memory";
 import type {
   MemoryRepository,
+  MemoryLibraryReader,
   MemorySearchHit,
   MemorySearchInput,
   SaveMemoryRevisionResult
@@ -223,7 +224,7 @@ function scoreExpressions(input: MemorySearchInput) {
 
 export function createMemoryRepository(
   db: AgentMemoryDatabase
-): MemoryRepository {
+): MemoryRepository & MemoryLibraryReader {
   return {
     async save(memory) {
       await db.transaction(async (transaction) => {
@@ -355,6 +356,19 @@ export function createMemoryRepository(
         }
         return "saved";
       });
+    },
+
+    async list(input) {
+      const rows = await db.select().from(memories).where(and(
+        eq(memories.organizationId, input.access.organizationId),
+        eq(memories.status, "active"),
+        lte(memories.validFrom, input.now),
+        or(isNull(memories.expiresAt), sql`${memories.expiresAt} > ${input.now}`),
+        memoryReadPredicate(input.access)
+      )).orderBy(desc(memories.createdAt), desc(memories.id))
+        .limit(input.limit).offset(input.offset);
+      const grants = await grantRowsByMemoryIds(db, input.access.organizationId, rows.map((row) => row.id));
+      return rows.map((row) => memoryFromRow(row, grants.get(row.id) ?? []));
     },
 
     async search(input) {

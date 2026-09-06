@@ -71,7 +71,13 @@ export function contextResultPresentation(
     sourceType: type,
     sourceLabel:
       type === "memory" ? "Memory" : type === "document" ? "Document" : "Knowledge",
-    scopeLabel: typeof scope?.kind === "string" ? scope.kind : "organization",
+    scopeLabel: scope?.kind === "organization"
+      ? t("result.scope.organization")
+      : scope?.kind === "team"
+        ? t("result.scope.team")
+        : scope?.kind === "user"
+          ? t("result.scope.user")
+          : t("result.scope.unknown"),
     evidenceLabel,
     lexicalScore: finiteNumber(hit.lexicalScore),
     vectorScore: finiteNumber(hit.vectorScore),

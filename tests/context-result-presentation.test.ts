@@ -25,7 +25,7 @@ describe("context result presentation", () => {
     ).toEqual({
       sourceType: "document",
       sourceLabel: "Document",
-      scopeLabel: "team",
+      scopeLabel: "팀",
       evidenceLabel: "text/markdown · chunk 3",
       lexicalScore: 0.6,
       vectorScore: 0.3,
@@ -59,5 +59,11 @@ describe("context result presentation", () => {
     expect(relativeRelevance(0.45, 0.9)).toBe(50);
     expect(relativeRelevance(2, 1)).toBe(100);
     expect(relativeRelevance(undefined, 1)).toBe(0);
+  });
+
+  it("localizes sharing scope without assuming unknown data is organization-wide", () => {
+    expect(contextResultPresentation({ memory: { scope: { kind: "user" } } }, t).scopeLabel).toBe("개인");
+    expect(contextResultPresentation({ memory: { scope: { kind: "organization" } } }, translator("en")).scopeLabel).toBe("Organization");
+    expect(contextResultPresentation({ memory: {} }, t).scopeLabel).toBe("범위 확인 필요");
   });
 });

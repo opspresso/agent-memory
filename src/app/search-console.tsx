@@ -8,19 +8,20 @@ import {
   Modal,
   Paper,
   SegmentedControl,
-  SimpleGrid,
+  Skeleton,
   Stack,
   Text,
   TextInput,
-  Textarea,
-  Title
+  Textarea
 } from "@mantine/core";
 import {
   IconArchive,
   IconSearch,
   IconTrash
 } from "@tabler/icons-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
   canAccessScopedResource,
@@ -41,7 +42,9 @@ import {
 } from "./knowledge-graph";
 import { MemoryLifecycle } from "./memory-lifecycle";
 import { useOrganization } from "./organization-context";
-import { SearchResultCard, searchResultKey } from "./search-result-card";
+import { SearchResultCard, SearchHitDetails, searchResultKey } from "./search-result-card";
+import { WorkspaceHeader, EmptyState } from "./workspace-components";
+import classes from "./search-workspace.module.css";
 
 type PendingResourceAction =
   | Readonly<{ kind: "document"; id: string; name: string }>
@@ -65,21 +68,27 @@ function scopedResource(value: unknown): ScopedResource | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-export function SearchConsole() {
+export function SearchConsole({ initialKind = "context/search" }: { readonly initialKind?: SearchKind }) {
   const { organizationSlug } = useOrganization();
-  if (!organizationSlug) {
-    return null;
-  }
-  return <SearchConsoleView key={organizationSlug} />;
+  const parameters = useSearchParams();
+  const value = parameters.get("kind");
+  const kind = value === "documents" || value === "memories" || value === "knowledge/nodes" || value === "context/search" ? value : initialKind;
+  const query = parameters.get("q")?.trim() ?? "";
+  if (!organizationSlug) return null;
+  return <SearchConsoleView key={`${organizationSlug}:${kind}:${query}`} initialKind={kind} initialQuery={query} />;
 }
 
-function SearchConsoleView() {
+function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind: SearchKind; readonly initialQuery: string }) {
   const t = useT();
+  const router = useRouter();
+  const [navigating, startNavigation] = useTransition();
+  const pathname = usePathname();
   const { organizationSlug, access } = useOrganization();
-  const [searchKind, setSearchKind] = useState<SearchKind>("context/search");
-  const [searching, setSearching] = useState(false);
+  const searchKind = initialKind;
+  const [searching, setSearching] = useState(Boolean(initialQuery));
   const [searchError, setSearchError] = useState<string>();
   const [hits, setHits] = useState<readonly SearchHitResponse[]>([]);
+  const [selectedResultKey, setSelectedResultKey] = useState<string>();
   const [selectedMemoryId, setSelectedMemoryId] = useState<string>();
   const [graphCenterNodeId, setGraphCenterNodeId] = useState<string>();
   const [graphSelectedNodeId, setGraphSelectedNodeId] = useState<string>();
@@ -99,7 +108,24 @@ function SearchConsoleView() {
   const [mergeReason, setMergeReason] = useState("");
   const graphRequest = useRef<AbortController | undefined>(undefined);
   const searchRequest = useRef<AbortController | undefined>(undefined);
-  const lastSearchQuery = useRef("");
+  const lastSearchQuery = useRef(initialQuery);
+  const searchInput = useRef<HTMLInputElement | null>(null);
+  const selectedHit = hits.find((hit) => searchResultKey(hit) === selectedResultKey);
+  const detailPanel = useRef<HTMLElement | null>(null);
+  const selectedButton = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (selectedResultKey && !graphCenterNodeId) detailPanel.current?.focus();
+  }, [selectedResultKey, graphCenterNodeId]);
+
+  function closeDetail() {
+    setSelectedResultKey(undefined);
+    setSelectedMemoryId(undefined);
+    requestAnimationFrame(() => {
+      const button = selectedButton.current;
+      (button?.isConnected ? button : searchInput.current)?.focus();
+    });
+  }
 
   const peakScore = useMemo(
     () =>
@@ -122,33 +148,25 @@ function SearchConsoleView() {
     []
   );
 
+  useEffect(() => {
+    if (!initialQuery) return;
+    const controller = new AbortController();
+    searchRequest.current = controller;
+    fetch(`/api/organizations/${organizationSlug}/${searchKind}?q=${encodeURIComponent(initialQuery)}`, { signal: controller.signal })
+      .then((response) => responseJson(response, t("workspace.searchFailed"), searchResponseSchema))
+      .then((body) => { if (!controller.signal.aborted) setHits(body.hits); })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setSearchError(error instanceof Error ? error.message : t("workspace.searchFailed"));
+      })
+      .finally(() => { if (!controller.signal.aborted) setSearching(false); });
+    return () => controller.abort();
+  }, [initialQuery, organizationSlug, searchKind, t]);
+
   function selectSearchKind(value: string) {
-    if (
-      value !== "context/search" &&
-      value !== "documents" &&
-      value !== "knowledge/nodes" &&
-      value !== "memories"
-    ) {
-      return;
-    }
-    graphRequest.current?.abort();
-    graphRequest.current = undefined;
-    searchRequest.current?.abort();
-    searchRequest.current = undefined;
-    setSearching(false);
-    setLoadingGraph(false);
-    setSearchKind(value);
-    lastSearchQuery.current = "";
-    setHits([]);
-    setSearchError(undefined);
-    setGraphCenterNodeId(undefined);
-    setGraphSelectedNodeId(undefined);
-    setGraphNodes([]);
-    setGraphEdges([]);
-    setGraphError(undefined);
-    setPendingResourceAction(undefined);
-    setResourceActionError(undefined);
-    setResourceActionMessage(undefined);
+    const parameters = new URLSearchParams({ kind: value });
+    const query = searchInput.current?.value.trim() ?? lastSearchQuery.current;
+    if (query) parameters.set("q", query);
+    startNavigation(() => router.push(`${pathname}?${parameters}`, { scroll: false }));
   }
 
   function canManage(scope: unknown): boolean {
@@ -161,7 +179,13 @@ function SearchConsoleView() {
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    await searchForQuery(String(form.get("query") ?? "").trim());
+    const query = String(form.get("query") ?? "").trim();
+    if (!query) return;
+    if (query === initialQuery) {
+      await searchForQuery(query);
+    } else {
+      startNavigation(() => router.push(`${pathname}?${new URLSearchParams({ q: query, kind: searchKind })}`, { scroll: false }));
+    }
   }
 
   async function searchForQuery(query: string) {
@@ -214,7 +238,6 @@ function SearchConsoleView() {
     setGraphEdges([]);
     setGraphError(undefined);
     setLoadingGraph(false);
-    setHits([]);
     void searchForQuery(lastSearchQuery.current);
   }
 
@@ -237,6 +260,7 @@ function SearchConsoleView() {
         t("workspace.graphFailed"),
         neighborhoodResponseSchema
       );
+      if (controller.signal.aborted) return;
       setGraphCenterNodeId(nodeId);
       setGraphSelectedNodeId(nodeId);
       setGraphNodes(body.nodes);
@@ -263,6 +287,10 @@ function SearchConsoleView() {
       return;
     }
     setDeletingResource(true);
+    graphRequest.current?.abort();
+    searchRequest.current?.abort();
+    setLoadingGraph(false);
+    setSearching(false);
     setResourceActionError(undefined);
     setResourceActionMessage(undefined);
     const action = pendingResourceAction;
@@ -353,92 +381,49 @@ function SearchConsoleView() {
 
   return (
     <Stack gap="lg">
-      <Stack gap={4}>
-        <Text c="dimmed" size="sm">
-          {t("workspace.eyebrow")}
-        </Text>
-        <Title order={1}>{t("workspace.title")}</Title>
-      </Stack>
-      <Paper p="lg" radius="lg" withBorder>
-        <Stack gap="lg">
-          <SegmentedControl
+      <WorkspaceHeader
+        title={pathname === "/knowledge" ? t("nav.graph") : t("workspace.tab.search")}
+        description={t("searchUi.description")}
+        actions={<><Button component={Link} href="/memories?create=true" variant="default">{t("memoryUi.create")}</Button><Button component={Link} href="/documents">{t("searchUi.ingest")}</Button></>}
+      />
+      <Paper p="md" withBorder>
+        <Stack gap="md">
+          {pathname !== "/knowledge" ? <div className={classes.filters}><SegmentedControl
             data={[
-              { label: "All Context", value: "context/search" },
+              { label: t("searchUi.all"), value: "context/search" },
               { label: "Memory", value: "memories" },
               { label: "Documents", value: "documents" },
               { label: "Graph", value: "knowledge/nodes" }
             ]}
             onChange={selectSearchKind}
+            disabled={navigating}
             value={searchKind}
-          />
+          /></div> : null}
           <form onSubmit={search}>
             <TextInput
-              disabled={!organizationSlug}
+              ref={searchInput}
+              aria-label={t("workspace.search")}
+              defaultValue={initialQuery}
+              disabled={!organizationSlug || navigating}
               leftSection={<IconSearch size={17} />}
               name="query"
               placeholder={t("workspace.searchPlaceholder")}
-              rightSection={
-                <Button loading={searching} size="compact-sm" type="submit">
-                  {t("workspace.search")}
-                </Button>
-              }
+              rightSection={<Button loading={searching || navigating} size="compact-sm" type="submit">{t("workspace.search")}</Button>}
               rightSectionWidth={76}
               size="md"
             />
           </form>
-          {searchError ? <Alert color="red">{searchError}</Alert> : null}
-          {resourceActionMessage ? (
-            <Alert color="green">{resourceActionMessage}</Alert>
-          ) : null}
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            {hits.map((hit) => (
-              <SearchResultCard
-                canManage={canManage}
-                hit={hit}
-                hits={hits}
-                key={searchResultKey(hit)}
-                loadingGraph={loadingGraph}
-                onArchiveDocument={(id, name) =>
-                  setPendingResourceAction({ kind: "document", id, name })
-                }
-                onExploreNode={(nodeId) => void exploreKnowledgeNode(nodeId)}
-                onMergeNodes={(targetNodeId, sourceNodeId, name) => {
-                  setMergeReason("");
-                  setPendingResourceAction({
-                    kind: "merge",
-                    targetNodeId,
-                    sourceNodeId,
-                    name
-                  });
-                }}
-                onSelectMemory={setSelectedMemoryId}
-                peakScore={peakScore}
-                showGraphAction={searchKind === "knowledge/nodes"}
-              />
-            ))}
-          </SimpleGrid>
-          {!searching && hits.length === 0 && !searchError ? (
-            <Text c="dimmed" ta="center">
-              {t("workspace.searchEmpty")}
-            </Text>
-          ) : null}
-          {graphError ? <Alert color="red">{graphError}</Alert> : null}
-          {graphCenterNodeId && graphNodes.length > 0 ? (
-            <Stack gap="sm">
-              <Group justify="space-between">
-                <Stack gap={2}>
-                  <Text c="brand" fw={750} size="xs" tt="uppercase">
-                    {t("workspace.mapEyebrow")}
-                  </Text>
-                  <Title order={2}>{t("workspace.mapTitle")}</Title>
-                </Stack>
-                <Badge variant="light">
-                  {t("workspace.mapCount", {
-                    nodes: graphNodes.length,
-                    edges: graphEdges.length
-                  })}
-                </Badge>
-              </Group>
+        </Stack>
+      </Paper>
+      {searchError ? <Alert color="red">{searchError}</Alert> : null}
+      {resourceActionMessage ? <Alert color="green" role="status">{resourceActionMessage}</Alert> : null}
+      {graphError ? <Alert color="red">{graphError}</Alert> : null}
+      {graphCenterNodeId && graphNodes.length > 0 ? (
+        <Stack gap="md">
+          <Group justify="space-between">
+            <Button variant="default" onClick={() => { graphRequest.current?.abort(); setLoadingGraph(false); setGraphCenterNodeId(undefined); setGraphNodes([]); setGraphEdges([]); }}>{t("searchUi.backResults")}</Button>
+            <Badge>{t("workspace.mapCount", { nodes: graphNodes.length, edges: graphEdges.length })}</Badge>
+          </Group>
               <KnowledgeGraph
                 centerNodeId={graphCenterNodeId}
                 edges={graphEdges}
@@ -464,19 +449,33 @@ function SearchConsoleView() {
                 onSelectNode={setGraphSelectedNodeId}
                 selectedNodeId={graphSelectedNodeId ?? graphCenterNodeId}
               />
-            </Stack>
-          ) : null}
         </Stack>
-      </Paper>
-      {selectedMemoryId ? (
-        <MemoryLifecycle
-          memoryId={selectedMemoryId}
-          onClose={() => setSelectedMemoryId(undefined)}
-          onChanged={refreshAfterMemoryChange}
-          organizationSlug={organizationSlug}
-        />
-      ) : null}
+      ) : searching && hits.length === 0 && !selectedMemoryId ? <Stack aria-label={t("searchUi.loading")}><Skeleton height={120} /><Skeleton height={120} /></Stack> : hits.length > 0 || selectedMemoryId ? (
+        <>
+          <Text size="sm" c="dimmed" role="status">{t("searchUi.results", { count: hits.length })}</Text>
+          <div className={classes.workspace} data-detail={Boolean(selectedHit || selectedMemoryId) || undefined}>
+            <div className={classes.list} aria-label={t("searchUi.resultsLabel")}>
+              {hits.map((hit) => <SearchResultCard key={searchResultKey(hit)} hit={hit} selected={selectedResultKey === searchResultKey(hit)} onSelect={(button) => { selectedButton.current = button; setSelectedResultKey(searchResultKey(hit)); setSelectedMemoryId(hit.memory?.id); }} />)}
+              {hits.length === 0 ? <Text p="md" size="sm" c="dimmed">{t("searchUi.noResults")}</Text> : null}
+            </div>
+            <section className={classes.detail} aria-label={t("searchUi.detail")} ref={detailPanel} tabIndex={-1}>
+              {selectedHit || selectedMemoryId ? <Stack gap="md">
+                <Group justify="space-between"><Text size="xs" c="dimmed">{t("searchUi.detail")}</Text><Button variant="subtle" size="xs" onClick={closeDetail}>{t("searchUi.closeDetail")}</Button></Group>
+                {selectedMemoryId ? <MemoryLifecycle embedded key={selectedMemoryId} memoryId={selectedMemoryId} organizationSlug={organizationSlug} onClose={closeDetail} onChanged={refreshAfterMemoryChange} /> : selectedHit ? (
+                  <SearchHitDetails hit={selectedHit} hits={hits} canManage={canManage} loadingGraph={loadingGraph} peakScore={peakScore} onExploreNode={(id) => void exploreKnowledgeNode(id)} onMergeNodes={(targetNodeId, sourceNodeId, name) => { setMergeReason(""); setPendingResourceAction({ kind: "merge", targetNodeId, sourceNodeId, name }); }} />
+                ) : null}
+              </Stack> : <EmptyState title={t("searchUi.selectTitle")} description={t("searchUi.selectBody")} />}
+            </section>
+          </div>
+        </>
+      ) : !searchError ? <Paper withBorder><EmptyState
+        icon={<IconSearch size={24} />}
+        title={initialQuery ? t("searchUi.noResults") : t("searchUi.startTitle")}
+        description={initialQuery ? t("searchUi.noResultsBody") : t("searchUi.startBody")}
+        action={<Button component={Link} href="/memories" variant="default">{t("nav.memory")}</Button>}
+      /></Paper> : null}
       <Modal
+        attributes={{ content: { "aria-label": pendingResourceAction?.kind === "document" ? t("resource.archiveDocumentTitle") : pendingResourceAction?.kind === "merge" ? t("resource.mergeNodesTitle") : t("resource.deleteGraphTitle") } }}
         centered
         closeOnClickOutside={!deletingResource}
         closeOnEscape={!deletingResource}

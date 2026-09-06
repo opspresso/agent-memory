@@ -8,7 +8,6 @@ import {
   Paper,
   Stack,
   Text,
-  Title
 } from "@mantine/core";
 import {
   IconAlertCircle,
@@ -18,6 +17,8 @@ import {
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+
+import { WorkspaceHeader } from "../workspace-components";
 
 import { useT } from "../_i18n/provider";
 import {
@@ -103,13 +104,7 @@ export function OrganizationOnboarding({
 
   return (
     <Stack gap="lg" maw={640} mx="auto">
-      <Stack gap={4}>
-        <Text c="dimmed" size="sm">
-          {t("onboarding.eyebrow")}
-        </Text>
-        <Title order={1}>{t("onboarding.title")}</Title>
-        <Text c="dimmed">{t("onboarding.lede")}</Text>
-      </Stack>
+      <WorkspaceHeader title={t("onboarding.title")} description={t("onboarding.lede")} />
 
       {error ? (
         <Alert color="red" icon={<IconAlertCircle size={18} />}>

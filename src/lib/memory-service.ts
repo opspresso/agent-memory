@@ -1,3 +1,4 @@
+import { buildListMemories } from "@/application/memory/list-memories";
 import { randomUUID } from "node:crypto";
 
 import { buildArchiveMemory } from "@/application/memory/archive-memory";
@@ -52,3 +53,5 @@ export async function searchMemoryRecords(
     searchMemoryRecordsBase(access, query, limit, queryEmbedding)
   );
 }
+
+export const listMemoryRecords = buildListMemories(memoryRepository, () => new Date());

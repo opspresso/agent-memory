@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { getSessionUser } from "@/lib/session";
 
-import { DocumentUpload } from "./document-upload";
+import { DocumentLibrary } from "./document-library";
 
 export const dynamic = "force-dynamic";
 
@@ -12,5 +12,5 @@ export default async function DocumentsPage() {
   if (!user) {
     redirect("/");
   }
-  return <DocumentUpload />;
+  return <DocumentLibrary />;
 }

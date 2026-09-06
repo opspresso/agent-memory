@@ -38,3 +38,12 @@ export interface MemoryRepository {
   ): Promise<SaveMemoryRevisionResult>;
   search(input: MemorySearchInput): Promise<readonly MemorySearchHit[]>;
 }
+
+export interface MemoryLibraryReader {
+  list(input: {
+    readonly access: OrganizationAccess;
+    readonly limit: number;
+    readonly offset: number;
+    readonly now: Date;
+  }): Promise<readonly Memory[]>;
+}

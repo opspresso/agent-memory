@@ -1,6 +1,6 @@
 # 사용자 가이드
 
-운영 콘솔은 조직의 Memory, RAG 문서, Knowledge Graph를 검색하고 관리하는 화면이다. 좌측 메뉴에서 `통합 검색`, `문서 수집`, `AI 후보 검토`, `Agent 연결`으로 이동하고, 조직 `admin`·`owner`에게는 `회원`, `팀`, `설정` 관리 메뉴가, team `manager`에게는 `팀` 메뉴가 추가로 표시된다. 모든 화면은 로그인 사용자와 활성 조직의 멤버십·scope 권한을 적용한다. 같은 내용을 사이트에서 읽으려면 로그인 전후에 `/guide`를 열거나 좌측 메뉴 하단의 `가이드`를 선택하라.
+운영 콘솔은 조직의 Memory, RAG 문서, Knowledge Graph를 검색하고 관리하는 화면이다. 좌측 메뉴에서 `통합 검색`, `Memory`, `문서 수집`, `Knowledge Graph`, `AI 후보 검토`, `Agent 연결`으로 이동하고, 조직 `admin`·`owner`에게는 `회원`, `팀`, `설정` 관리 메뉴가, team `manager`에게는 `팀` 메뉴가 추가로 표시된다. 모든 화면은 로그인 사용자와 활성 조직의 멤버십·scope 권한을 적용한다. 같은 내용을 사이트에서 읽으려면 로그인 전후에 `/guide`를 열거나 좌측 메뉴 하단의 `가이드`를 선택하라.
 
 ## 최초 로그인과 조직 가입
 
@@ -24,30 +24,26 @@ Resource scope는 다음과 같이 동작한다.
 
 `통합 검색`에서 검색 대상을 선택한다.
 
-- `All Context`: Memory, document chunk, Knowledge node를 하나의 순위로 결합한다.
+- `모든 지식` / `All knowledge`: Memory, document chunk, Knowledge node를 하나의 순위로 결합한다.
 - `Memory`: 활성 상태이고 현재 유효한 Memory만 검색한다.
 - `Documents`: 처리가 완료된 `ready` document chunk만 검색한다.
 - `Graph`: 읽을 수 있는 provenance를 가진 Knowledge node만 검색한다.
 
-검색 결과에는 다음 정보가 표시된다.
+검색 결과는 목록과 상세 패널로 구성된다. 목록에서 제목·요약·종류·공유 범위를 확인하고 항목을 선택하면 전체 내용과 원문 근거를 읽는다. Memory 상세는 읽기 권한이 있는 모든 사용자에게 열리며 수정과 이력 조회 권한은 별도로 적용한다. 문서 결과는 원문 본문과 문서 상세로, Knowledge 결과는 근거와 관계 지도로 이어진다. 관계 지도를 닫으면 기존 검색 목록으로 돌아온다.
 
-- 결과 종류와 scope
-- title 또는 canonical name
-- 본문 요약이나 chunk 내용
-- provenance 설명
-- 상대 관련도
-- lexical score
-- embedding이 활성화된 경우 vector score
+검색어와 종류는 URL에 보존되어 링크 공유와 뒤로·앞으로 이동에 사용할 수 있다. 처음 방문한 상태와 검색 결과가 없는 상태는 서로 다른 안내를 제공한다. 모바일에서는 목록과 선택한 상세를 전환하고 `목록으로 돌아가기`로 탐색을 이어간다.
 
-상대 관련도는 현재 결과 집합에서 가장 높은 최종 score를 100%로 정규화한 표시다. Reranker가 설정되면 reranker relevance, 그렇지 않거나 provider fallback이 발생하면 hybrid score를 사용한다. 서로 다른 검색 요청이나 model 사이의 절대 품질을 비교하는 값으로 사용하지 마라.
+Knowledge·문서 상세의 `검색 진단 정보`를 펼치면 상대 관련도와 lexical·vector score를 확인한다. 상대 관련도는 현재 결과 집합에서 가장 높은 최종 score를 100%로 정규화한 표시이며 정확도나 신뢰 확률이 아니다. Reranker가 설정되면 reranker relevance, 그렇지 않거나 provider fallback이 발생하면 hybrid score를 사용한다.
 
 ## Memory lifecycle
 
-Memory 검색 결과에서 `Lifecycle`을 선택하면 전체 화면 관리 창이 열린다.
+`Memory`에서 현재 유효하고 읽을 수 있는 Memory를 최신순으로 둘러보거나 검색한다. `새 Memory`에서 종류·제목·내용·공유 범위를 입력하면 사용자 출처의 Memory가 생성된다. 기본 범위는 개인이며 조직과 팀 범위는 현재 쓰기 권한에 따라 선택한다.
+
+목록에서 항목을 선택하면 상세 패널의 `내용과 출처`, `수정`, `Version 이력` 탭을 사용한다. 읽기 권한만 있으면 내용과 출처만 표시된다. 상세 URL의 `memory` 값으로 직접 진입할 수 있으며 조직을 바꾸면 이전 조직의 선택과 검색을 초기화한다.
 
 ### Revision 생성
 
-1. title 또는 content를 수정한다.
+1. 상세의 `수정` 탭에서 title 또는 content를 수정한다.
 2. 다음 사용자가 변경 이유를 이해할 수 있도록 `변경 사유`를 입력한다.
 3. `Revision 저장`을 선택한다.
 
@@ -63,7 +59,7 @@ Memory 검색 결과에서 `Lifecycle`을 선택하면 전체 화면 관리 창�
 
 ## 문서 수집
 
-`문서 수집`에서 공유 범위를 선택하고 문서를 업로드한다.
+`문서 수집`에서 문서 목록과 상태를 확인한다. `문서 업로드`를 선택하고 공유 범위와 파일을 입력한다. 업로드가 완료되면 해당 문서를 상세 패널에서 선택한다.
 
 - user scope: 본인만 선택할 수 있다.
 - team scope: 해당 팀 멤버와 조직 `admin`·`owner`가 선택할 수 있다. 먼저 공유할 팀을 선택하라.
@@ -81,15 +77,17 @@ upload → pending → processing → ready
                          └──→ failed → retry
 ```
 
-문서 상태 확인과 `failed` 문서의 재처리는 API로 수행한다([HTTP API와 MCP](api.md#문서) 참조). 문서가 `pending`에 머물면 document worker가 실행 중인지 확인한다. 원본은 S3 호환 storage에 있고 검색용 chunk와 상태는 PostgreSQL에 저장된다.
+문서 상세에서 상태와 처리 시도 횟수, 실패 사유를 확인한다. 쓰기 권한이 있으면 `failed` 문서의 재처리를 요청할 수 있다. 재처리 요청 성공은 처리 완료를 뜻하지 않는다. 화면은 실제 상태를 최대 2분 동안 확인하며 비활성 탭에서는 조회를 쉬고, 이후에는 새로고침으로 다시 확인한다. 문서가 `pending`에 머물면 document worker가 실행 중인지 확인한다. 원본은 S3 호환 storage에 있고 검색용 chunk와 상태는 PostgreSQL에 저장된다.
+
+`사용 가능` 문서를 선택하면 상세의 `문서 내용`에서 처리된 원문을 본문 순서대로 읽는다. 한 번에 25개 본문을 불러오며 `본문 더 보기`로 이어서 읽는다. 원본 파일 다운로드가 아니라 검색·Graph에서 사용하는 처리된 원문의 조회다. 다른 문서나 조직을 선택하면 이전 본문을 지우고 접근 권한을 다시 확인한다.
 
 문서 삭제는 원본과 provenance를 보존하는 archive다. Archive된 문서는 검색, 상태 조회, retry, AI 후보 검토에서 제외되며 해당 scope의 `manage` 권한이 필요하다.
 
 ## Knowledge Graph 탐색
 
-1. 통합 검색에서 `Graph`를 선택한다.
+1. `Knowledge Graph`를 열거나 통합 검색에서 `Graph`를 선택한다.
 2. entity 이름이나 요약을 검색한다.
-3. 검색 결과의 `관계 보기`를 선택한다.
+3. 검색 결과를 선택하고 상세의 `관계 보기`를 선택한다.
 4. 관계 지도에서 node와 방향성 edge를 탐색한다.
 
 관계 지도는 다음 요소를 사용한다.
@@ -97,9 +95,9 @@ upload → pending → processing → ready
 - 종류별 색상과 연결 수에 따른 크기로 구분한 node
 - 관계 방향을 표시하는 화살표
 - edge의 predicate label
-- node 이름·kind 검색과 종류별 표시 필터
+- node 이름·kind 검색과 종류별 표시 필터, 키보드로 선택할 수 있는 노드 목록
 - 확대·축소와 화면 맞춤 제어
-- 선택 node의 kind, 이름, summary, 연결 관계를 보여주는 inspector
+- 선택 node의 kind, 이름, summary, 연결 관계와 node·edge별 원문 근거를 보여주는 inspector
 
 Node를 선택하면 해당 node와 직접 연결된 관계가 강조되고 inspector가 바뀐다. inspector의 `이 node 중심으로 탐색`을 선택하면 해당 node를 중심으로 neighborhood를 다시 조회한다. 키보드에서는 node에 focus한 뒤 `Enter` 또는 `Space`로 선택할 수 있다.
 
@@ -116,9 +114,9 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 `AI 후보 검토`에서 다음 내용을 확인한다.
 
 - 사용한 extraction model
-- source document chunk ID
+- source 문서 제목과 실제 chunk 원문
 - 제안된 entity의 kind, canonical name, summary
-- 제안된 source–predicate–target 관계
+- entity 이름으로 표시된 source–predicate–target 관계와 기존 지식 중복 후보
 - 선택형 검토 사유
 
 ### 승인
@@ -137,7 +135,7 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 
 ## 조직과 팀 관리
 
-`회원`에서 조직 회원 목록을 확인하고 관리한다.
+`회원`에서 이름·email과 상태로 조직 회원 목록을 좁혀 확인하고 관리한다.
 
 - 조직 `admin`, `owner`: 멤버 추가, 조직 role 변경, 승인 대기 멤버 승인, 차단·차단 해제, 조직에서 제거, 팀 배정·해제
 - `owner` role 부여와 `owner` 멤버 변경·제거는 `owner`만 가능하다. 마지막 owner와 자기 자신은 변경할 수 없다.

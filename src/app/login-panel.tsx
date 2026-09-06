@@ -101,7 +101,7 @@ export function LoginPanel({
   const configured = googleEnabled || oidcEnabled || passwordEnabled;
 
   return (
-    <Paper aria-labelledby="login-title" p="xl" radius="lg" shadow="xl" withBorder>
+    <Paper aria-labelledby="login-title" p={{ base: "lg", sm: "xl" }} radius="lg" withBorder>
       <Stack gap="lg">
         <Stack gap={4}>
           <Text c="brand" fw={700} size="sm">
@@ -177,7 +177,7 @@ export function LoginPanel({
                   type="email"
                 />
                 <PasswordInput
-                  autoComplete="current-password"
+                  autoComplete={passwordMode === "sign-up" ? "new-password" : "current-password"}
                   label={t("login.password")}
                   name="password"
                   required

@@ -60,10 +60,10 @@ pnpm dev
 
 - 좌측 메뉴와 상단 메뉴로 구성된 셸에서 조직을 전환하며 작업
 - Memory·문서·Knowledge Graph 통합 검색과 검색 근거 확인
-- Memory revision 생성, version 이력 확인, archive
-- 개인·팀·조직 범위 문서 업로드
+- Memory 목록·생성·읽기 상세, revision 생성, version 이력 확인, archive
+- 개인·팀·조직 범위 문서 업로드, 처리 상태 확인과 실패 재처리
 - 검색·종류 필터·관계 집중을 제공하는 Knowledge Graph 관계 지도 탐색
-- AI graph 후보의 source·entity·relationship 검토와 승인·거절
+- AI graph 후보의 실제 원문·entity·relationship 비교와 승인·거절
 - 최초 로그인 시 가입할 조직 선택, 조직 정책에 따른 즉시 활성화 또는 승인 대기
 - 조직 회원 목록에서 role·status(승인·차단)·팀 배정 관리, 팀 생성·이름 변경·삭제
 - 조직 설정에서 신규 회원 정책·기본 팀 관리, 조직 생성(전역 admin)·삭제(owner)
@@ -83,6 +83,7 @@ pnpm dev
 | --- | --- | --- |
 | [시작 가이드](docs/getting-started.md) | 처음 설치하는 사용자 | 인증 가능한 로컬 환경, 첫 조직, 첫 검색, 선택 기능 활성화 |
 | [사용자 가이드](docs/user-guide.md) | 운영자·Agent 통합 개발자 | 콘솔, Memory lifecycle, 문서, Graph, AI 검토, MCP 연결 |
+| [Workspace UI](docs/ui-workspace.md) | 제품·UI 개발자 | 정보 구조, 디자인 기준, 전후 화면과 검증 범위 |
 | [Architecture](docs/architecture.md) | 개발자·보안 검토자 | 계층, 요청 경계, 권한, 데이터 흐름, 불변 조건 |
 | [HTTP API와 MCP](docs/api.md) | API·Agent 통합 개발자 | 인증, endpoint, 요청·응답, 오류, 실행 예시 |
 | [운영 가이드](docs/operations.md) | 배포·운영 담당자 | 환경 변수, topology, migration, worker, 관측성, 장애 대응 |

@@ -20,6 +20,8 @@ import type {
   DocumentChunkRecord,
   DocumentProcessingClaim,
   DocumentRepository,
+  DocumentLibraryReader,
+  DocumentChunkPageReader,
   DocumentSearchHit,
   DocumentSearchInput,
   DocumentUploadLimits,
@@ -108,7 +110,7 @@ function scoreExpressions(input: DocumentSearchInput) {
 
 export function createDocumentRepository(
   db: AgentMemoryDatabase
-): DocumentRepository {
+): DocumentRepository & DocumentLibraryReader & DocumentChunkPageReader {
   function documentValues(document: Document) {
     return {
       id: document.id,
@@ -224,6 +226,23 @@ export function createDocumentRepository(
             chunk: chunkFromRow(row.chunk)
           } satisfies DocumentChunkRecord)
         : null;
+    },
+
+    async readChunks(input) {
+      return db.transaction(async (tx) => {
+        const [document] = await tx.select().from(documents).where(and(
+          eq(documents.organizationId, input.access.organizationId),
+          eq(documents.id, input.documentId),
+          eq(documents.status, "ready"),
+          accessPredicate(input.access)
+        )).limit(1);
+        if (!document) return null;
+        const chunks = await tx.select().from(documentChunks).where(and(
+          eq(documentChunks.organizationId, input.access.organizationId),
+          eq(documentChunks.documentId, input.documentId)
+        )).orderBy(documentChunks.ordinal, documentChunks.id).limit(input.limit).offset(input.offset);
+        return { document: documentFromRow(document), chunks: chunks.map(chunkFromRow) };
+      }, { isolationLevel: "repeatable read", accessMode: "read only" });
     },
 
     async listChunksByDocument(organizationId, documentId) {
@@ -393,6 +412,16 @@ export function createDocumentRepository(
         )
         .returning({ id: documents.id });
       return archived !== undefined;
+    },
+
+    async list(input) {
+      const rows = await db.select().from(documents).where(and(
+        eq(documents.organizationId, input.access.organizationId),
+        sql`${documents.status} <> 'archived'`,
+        accessPredicate(input.access)
+      )).orderBy(desc(documents.createdAt), desc(documents.id))
+        .limit(input.limit).offset(input.offset);
+      return rows.map(documentFromRow);
     },
 
     async search(input) {

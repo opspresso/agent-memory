@@ -80,15 +80,15 @@ curl -i http://localhost:3100/api/health
 
 ## 4. 첫 Memory와 검색
 
-현재 운영 콘솔은 검색과 lifecycle 관리에 집중한다. 첫 Memory는 HTTP API나 MCP의 `memory_create`로 생성한다. 브라우저 로그인 상태에서 API를 호출하거나 [HTTP API와 MCP](api.md#memory)의 예시를 사용하라.
+운영 콘솔의 `Memory → 새 Memory`에서 종류·제목·내용·공유 범위를 입력해 첫 Memory를 만든다. 기본값은 개인 범위이며 조직·팀 범위는 쓰기 권한에 따라 선택한다. Agent는 HTTP API나 MCP의 `memory_create`로 같은 기능을 사용한다.
 
 Memory를 만든 뒤 운영 콘솔에서 다음 순서로 확인한다.
 
 1. `통합 검색`을 연다.
-2. `Memory` 또는 `All Context`를 선택한다.
+2. `Memory` 또는 `모든 지식`를 선택한다.
 3. title이나 content에 포함된 검색어를 입력한다.
-4. 결과의 scope, 상대 관련도, lexical·vector score와 출처를 확인한다.
-5. `Lifecycle`을 열어 현재 version과 revision 이력을 확인한다.
+4. 결과를 선택해 공유 범위, 전체 내용과 출처를 확인한다.
+5. 수정·관리 권한이 있으면 상세의 `수정`과 `Version 이력` 탭을 사용한다.
 
 `EMBEDDING_MODEL`을 설정하지 않은 초기 환경에서는 lexical score만 사용한다.
 

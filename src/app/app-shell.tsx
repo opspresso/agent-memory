@@ -20,6 +20,8 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import {
   IconBook2,
+  IconBrain,
+  IconTopologyStar3,
   IconChartBar,
   IconCloudUpload,
   IconLogout,
@@ -51,6 +53,8 @@ const NAV_GROUPS = [
     label: "nav.group.workspace",
     items: [
       { href: "/", label: "nav.search", Icon: IconSearch },
+      { href: "/memories", label: "nav.memory", Icon: IconBrain },
+      { href: "/knowledge", label: "nav.graph", Icon: IconTopologyStar3 },
       { href: "/documents", label: "nav.documents", Icon: IconCloudUpload },
       { href: "/review", label: "nav.review", Icon: IconShieldCheck },
       { href: "/connect", label: "nav.connect", Icon: IconPlugConnected }
@@ -146,14 +150,15 @@ export function AppShellFrame({
 
   return (
     <AppShell
-      header={{ height: 64 }}
+      header={{ height: 60 }}
       navbar={{
-        width: 248,
+        width: 224,
         breakpoint: "md",
         collapsed: { mobile: !opened || !showNav, desktop: !showNav }
       }}
       padding={0}
     >
+      <a className={classes.skipLink} href="#main-content">{t("design.skipToContent")}</a>
       <AppShell.Header className={classes.header}>
         <Group gap="md" h="100%" px={{ base: "md", md: "lg" }} wrap="nowrap">
           {showNav ? (
@@ -191,6 +196,7 @@ export function AppShellFrame({
               onChange={(value) => {
                 if (value) {
                   selectOrganization(value);
+                  router.replace(pathname, { scroll: false });
                 }
               }}
               size="xs"
@@ -277,6 +283,7 @@ export function AppShellFrame({
               onChange={(value) => {
                 if (value) {
                   selectOrganization(value);
+                  router.replace(pathname, { scroll: false });
                 }
               }}
               size="xs"
@@ -341,7 +348,7 @@ export function AppShellFrame({
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <main className={classes.main} id="main-content">
+        <div className={classes.main} id="main-content" tabIndex={-1}>
           {signOutError ? (
             <Alert
               color="red"
@@ -364,7 +371,7 @@ export function AppShellFrame({
             </Alert>
           ) : null}
           {children}
-        </main>
+        </div>
       </AppShell.Main>
     </AppShell>
   );

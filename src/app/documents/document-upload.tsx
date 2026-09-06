@@ -7,11 +7,10 @@ import {
   Select,
   Stack,
   Text,
-  TextInput,
-  Title
+  TextInput
 } from "@mantine/core";
 import { IconCloudUpload } from "@tabler/icons-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 
@@ -29,15 +28,22 @@ interface TeamSummary {
   readonly name: string;
 }
 
-export function DocumentUpload() {
+interface DocumentUploadProps {
+  readonly onUploaded?: (id: string) => void;
+  readonly onUploadingChange?: (uploading: boolean) => void;
+}
+
+export function DocumentUpload(props: DocumentUploadProps) {
   const { organizationSlug } = useOrganization();
   if (!organizationSlug) {
     return null;
   }
-  return <DocumentUploadView key={organizationSlug} />;
+  return <DocumentUploadView key={organizationSlug} {...props} />;
 }
 
-function DocumentUploadView() {
+function DocumentUploadView({ onUploaded, onUploadingChange }: DocumentUploadProps) {
+  const uploadController = useRef<AbortController | null>(null);
+  useEffect(() => () => uploadController.current?.abort(), []);
   const t = useT();
   const { organizationId, organizationSlug, access } = useOrganization();
   const [teams, setTeams] = useState<readonly TeamSummary[]>([]);
@@ -96,7 +102,10 @@ function DocumentUploadView() {
     if (!organizationId || !organizationSlug) {
       return;
     }
+    const controller = new AbortController();
+    uploadController.current = controller;
     setUploading(true);
+    onUploadingChange?.(true);
     setUploadMessage(undefined);
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -107,36 +116,36 @@ function DocumentUploadView() {
     try {
       const response = await fetch(
         `/api/organizations/${organizationSlug}/documents`,
-        { method: "POST", body: form }
+        { method: "POST", body: form, signal: controller.signal }
       );
       const body = await responseJson(
         response,
         t("workspace.uploadFailed"),
         documentUploadResponseSchema
       );
+      if (controller.signal.aborted) return;
       setUploadMessage(
         body.status === "failed"
           ? t("workspace.uploadQueueFailed", { id: body.id })
           : t("workspace.uploadQueued", { id: body.id })
       );
       formElement.reset();
+      onUploaded?.(body.id);
     } catch (caught) {
+      if (controller.signal.aborted) return;
       setUploadMessage(
         caught instanceof Error ? caught.message : t("workspace.uploadFailed")
       );
     } finally {
-      setUploading(false);
+      if (!controller.signal.aborted) {
+        setUploading(false);
+        onUploadingChange?.(false);
+      }
     }
   }
 
   return (
     <Stack gap="lg">
-      <Stack gap={4}>
-        <Text c="dimmed" size="sm">
-          {t("workspace.eyebrow")}
-        </Text>
-        <Title order={1}>{t("workspace.uploadTitle")}</Title>
-      </Stack>
       <Paper p="lg" radius="lg" withBorder>
         <form onSubmit={upload}>
           <Stack gap="md">
@@ -211,7 +220,7 @@ function DocumentUploadView() {
             />
             <Button
               disabled={
-                !organizationSlug ||
+                !organizationSlug || !access ||
                 (documentScopeKind === "team" && !documentTeamId)
               }
               leftSection={<IconCloudUpload size={17} />}

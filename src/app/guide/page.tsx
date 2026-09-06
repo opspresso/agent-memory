@@ -82,7 +82,7 @@ export default async function GuidePage() {
   return (
     <Box className={classes.page}>
       <Container className={classes.shell} size="xl">
-        <main>
+        <article>
           <section className={classes.hero}>
             <Stack className={classes.heroCopy} gap="lg">
               <Badge className={classes.eyebrow} color="brand" variant="light">
@@ -92,7 +92,7 @@ export default async function GuidePage() {
                 {t("guide.title")}
                 <br />{t("guide.titleSecond")}
               </Title>
-              <Text c="dimmed" className={classes.lead} size="xl">
+              <Text c="dimmed" className={classes.lead} size="md">
                 {t("guide.lede")}
               </Text>
             </Stack>
@@ -265,7 +265,7 @@ export default async function GuidePage() {
               </section>
             </div>
           </div>
-        </main>
+        </article>
       </Container>
     </Box>
   );

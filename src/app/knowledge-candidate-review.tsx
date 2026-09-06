@@ -7,6 +7,7 @@ import {
   Group,
   Paper,
   ScrollArea,
+  Skeleton,
   Stack,
   Text,
   Textarea,
@@ -25,6 +26,8 @@ import {
   candidateDuplicatesResponseSchema,
   knowledgeCandidatesResponseSchema
 } from "./api-response-schemas";
+import { SourceEvidence } from "./source-evidence";
+import { WorkspaceHeader } from "./workspace-components";
 import { responseJson, responseOk } from "./http-response";
 import classes from "./knowledge-candidate-review.module.css";
 
@@ -268,27 +271,16 @@ export function KnowledgeCandidateReview({
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Stack gap={2}>
-          <Text c="brand" fw={750} size="xs" tt="uppercase">
-            {t("candidate.eyebrow")}
-          </Text>
-          <Title order={2}>{t("candidate.title")}</Title>
-          <Text c="dimmed" size="sm">
-            {t("candidate.lede")}
-          </Text>
-        </Stack>
-        <Button
-          leftSection={<IconRefresh size={16} />}
-          loading={loading}
-          onClick={() => void loadCandidates()}
-          variant="subtle"
-        >
-          {t("candidate.refresh")}
-        </Button>
-      </Group>
-      {error ? <Alert color="red">{error}</Alert> : null}
-      {message ? <Alert color="teal">{message}</Alert> : null}
+      <WorkspaceHeader
+        eyebrow={t("candidate.eyebrow")}
+        title={t("candidate.title")}
+        description={t("candidate.lede")}
+        actions={<Button leftSection={<IconRefresh size={16} />} loading={loading} disabled={reviewing} onClick={() => void loadCandidates()} variant="default">{t("candidate.refresh")}</Button>}
+      />
+      {error ? <Alert color="red" role="alert">{error}</Alert> : null}
+      {message ? <Alert color="teal" role="status">{message}</Alert> : null}
+
+      {loading && candidates.length === 0 ? <Stack aria-busy="true" aria-label={t("evidence.loading")}><Skeleton height={100} /><Skeleton height={240} /></Stack> : null}
 
       {!loading && !error && candidates.length === 0 ? (
         <Paper className={classes.empty} p="xl" radius="lg" withBorder>
@@ -304,18 +296,22 @@ export function KnowledgeCandidateReview({
         <div className={classes.reviewGrid}>
           <ScrollArea className={classes.queue} type="auto">
             <Stack gap="xs">
+              <Text size="xs" fw={700} c="dimmed">{t("evidence.queue", { count: candidates.length })}</Text>
               {candidates.map((candidate) => (
                 <button
                   className={classes.queueItem}
                   data-active={candidate.id === selected.id || undefined}
                   key={candidate.id}
-                  onClick={() => setSelectedId(candidate.id)}
+                  aria-pressed={candidate.id === selected.id}
+                  disabled={reviewing}
+                  onClick={() => { setSelectedId(candidate.id); setReason(""); setError(undefined); }}
                   type="button"
                 >
                   <span>
                     {candidate.graph.entities[0]?.canonicalName ??
                       t("candidate.noEntity")}
                   </span>
+                  <small>{t(`workspace.scope.${candidate.scope.kind}`)}</small>
                   <small>
                     {t("candidate.counts", {
                       entities: candidate.graph.entities.length,
@@ -327,7 +323,7 @@ export function KnowledgeCandidateReview({
             </Stack>
           </ScrollArea>
 
-          <Paper className={classes.candidate} p="xl" radius="lg" withBorder>
+          <Paper className={classes.candidate} p={{ base: "md", sm: "lg" }} radius="lg" withBorder>
             <Stack gap="xl">
               <Group align="flex-start" justify="space-between">
                 <Stack gap={4}>
@@ -344,79 +340,77 @@ export function KnowledgeCandidateReview({
                 </Text>
               </Group>
 
+              <Badge variant="light">{t(`workspace.scope.${selected.scope.kind}`)}</Badge>
               <div className={classes.evidenceRail}>
                 <section className={classes.railStep}>
-                  <Text c="dimmed" fw={700} size="xs" tt="uppercase">
-                    Source
-                  </Text>
-                  <Text fw={650} size="sm">{t("candidate.documentChunk")}</Text>
-                  <Text c="dimmed" ff="monospace" size="xs">
-                    {selected.chunkId}
-                  </Text>
+                  <Text fw={700} size="sm">{t("evidence.original")}</Text>
+                  <SourceEvidence key={selected.chunkId} chunkId={selected.chunkId} />
                 </section>
-                <section className={classes.railStep}>
-                  <Text c="dimmed" fw={700} size="xs" tt="uppercase">
-                    Entities
-                  </Text>
-                  <Stack gap="xs">
-                    {selected.graph.entities.map((entity) => (
-                      <Paper className={classes.fact} key={entity.key} p="sm">
-                        <Group gap="xs">
-                          <Badge size="xs" variant="dot">{entity.kind}</Badge>
-                          {unknownKinds.includes(entity.kind) ? (
-                            <Badge color="orange" size="xs" variant="light">
+                <div className={classes.proposal}>
+                  <section className={classes.railStep}>
+                    <Text c="dimmed" fw={700} size="xs" tt="uppercase">
+                      {t("evidence.entities")}
+                    </Text>
+                    <Stack gap="xs">
+                      {selected.graph.entities.map((entity) => (
+                        <Paper className={classes.fact} key={entity.key} p="sm">
+                          <Group gap="xs">
+                            <Badge size="xs" variant="dot">{entity.kind}</Badge>
+                            {unknownKinds.includes(entity.kind) ? (
+                              <Badge color="orange" size="xs" variant="light">
+                                {t("candidate.ontologyUnknown")}
+                              </Badge>
+                            ) : null}
+                            <Text fw={650} size="sm">{entity.canonicalName}</Text>
+                          </Group>
+                          {entity.summary ? (
+                            <Text c="dimmed" mt={4} size="xs">
+                              {entity.summary}
+                            </Text>
+                          ) : null}
+                          {(similarNodes[entity.key]?.length ?? 0) > 0 ? (
+                            <Alert color="yellow" mt="xs" p="xs">
+                              {t("candidate.similarNodes", {
+                                count: similarNodes[entity.key]?.length ?? 0,
+                                kinds: similarNodes[entity.key]
+                                  ?.map((node) => `${node.canonicalName} (${node.kind})`)
+                                  .join(", ") ?? ""
+                              })}
+                            </Alert>
+                          ) : null}
+                        </Paper>
+                      ))}
+                    </Stack>
+                  </section>
+                  <section className={classes.railStep}>
+                    <Text c="dimmed" fw={700} size="xs" tt="uppercase">
+                      {t("evidence.relationships")}
+                    </Text>
+                    <Stack gap="xs">
+                      {selected.graph.relationships.map((relationship, index) => (
+                        <Text
+                          component="div"
+                          key={`${relationship.sourceKey}:${relationship.predicate}:${relationship.targetKey}:${index}`}
+                          size="sm"
+                        >
+                          <strong>{selected.graph.entities.find((entity) => entity.key === relationship.sourceKey)?.canonicalName ?? relationship.sourceKey}</strong>
+                          <span className={classes.predicate}>
+                            {relationship.predicate}
+                          </span>
+                          <strong>{selected.graph.entities.find((entity) => entity.key === relationship.targetKey)?.canonicalName ?? relationship.targetKey}</strong>
+                          {unknownPredicates.includes(relationship.predicate) ? (
+                            <Badge color="orange" ml="xs" size="xs" variant="light">
                               {t("candidate.ontologyUnknown")}
                             </Badge>
                           ) : null}
-                          <Text fw={650} size="sm">{entity.canonicalName}</Text>
-                        </Group>
-                        {entity.summary ? (
-                          <Text c="dimmed" mt={4} size="xs">
-                            {entity.summary}
-                          </Text>
-                        ) : null}
-                        {(similarNodes[entity.key]?.length ?? 0) > 0 ? (
-                          <Alert color="yellow" mt="xs" p="xs">
-                            {t("candidate.similarNodes", {
-                              count: similarNodes[entity.key]?.length ?? 0,
-                              kinds: similarNodes[entity.key]
-                                ?.map((node) => node.kind)
-                                .join(", ") ?? ""
-                            })}
-                          </Alert>
-                        ) : null}
-                      </Paper>
-                    ))}
-                  </Stack>
-                </section>
-                <section className={classes.railStep}>
-                  <Text c="dimmed" fw={700} size="xs" tt="uppercase">
-                    Relationships
-                  </Text>
-                  <Stack gap="xs">
-                    {selected.graph.relationships.map((relationship, index) => (
-                      <Text
-                        component="div"
-                        key={`${relationship.sourceKey}:${relationship.predicate}:${relationship.targetKey}:${index}`}
-                        size="sm"
-                      >
-                        <strong>{relationship.sourceKey}</strong>
-                        <span className={classes.predicate}>
-                          {relationship.predicate}
-                        </span>
-                        <strong>{relationship.targetKey}</strong>
-                        {unknownPredicates.includes(relationship.predicate) ? (
-                          <Badge color="orange" ml="xs" size="xs" variant="light">
-                            {t("candidate.ontologyUnknown")}
-                          </Badge>
-                        ) : null}
-                      </Text>
-                    ))}
-                    {selected.graph.relationships.length === 0 ? (
-                      <Text c="dimmed" size="sm">{t("candidate.noRelationships")}</Text>
-                    ) : null}
-                  </Stack>
-                </section>
+                        </Text>
+                      ))}
+                      {selected.graph.relationships.length === 0 ? (
+                        <Text c="dimmed" size="sm">{t("candidate.noRelationships")}</Text>
+                      ) : null}
+                    </Stack>
+                  </section>
+                </div>
               </div>
 
               {ontologyViolations.length > 0 ? (
@@ -427,6 +421,7 @@ export function KnowledgeCandidateReview({
                 </Alert>
               ) : null}
               <Textarea
+                disabled={reviewing}
                 autosize
                 id="knowledge-review-reason"
                 label={t("candidate.reason")}
