@@ -20,6 +20,7 @@ import type {
   DocumentChunkRecord,
   DocumentProcessingClaim,
   DocumentRepository,
+  DocumentLibraryReader,
   DocumentSearchHit,
   DocumentSearchInput,
   DocumentUploadLimits,
@@ -108,7 +109,7 @@ function scoreExpressions(input: DocumentSearchInput) {
 
 export function createDocumentRepository(
   db: AgentMemoryDatabase
-): DocumentRepository {
+): DocumentRepository & DocumentLibraryReader {
   function documentValues(document: Document) {
     return {
       id: document.id,
@@ -393,6 +394,16 @@ export function createDocumentRepository(
         )
         .returning({ id: documents.id });
       return archived !== undefined;
+    },
+
+    async list(input) {
+      const rows = await db.select().from(documents).where(and(
+        eq(documents.organizationId, input.access.organizationId),
+        sql`${documents.status} <> 'archived'`,
+        accessPredicate(input.access)
+      )).orderBy(desc(documents.createdAt), desc(documents.id))
+        .limit(input.limit).offset(input.offset);
+      return rows.map(documentFromRow);
     },
 
     async search(input) {

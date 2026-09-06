@@ -802,6 +802,17 @@ describe("PostgreSQL schema", () => {
       );
     }
 
+    for (const [index, status] of ["ready", "processing", "failed"].entries()) {
+      await pool.query("UPDATE documents SET status = $1 WHERE id = $2", [status, scopes[index]![0]]);
+    }
+    const memoryLibrary = createMemoryRepository(db);
+    for (const [id, scope] of scopes) {
+      await memoryLibrary.save(createMemory({
+        id: id.replace(/^4/, "3"), scope, kind: "fact", title: "Library fixture", content: "Library evidence",
+        source: { type: "user" }, createdBy: user, validFrom: createdAt, now: createdAt
+      }));
+    }
+
     const accessVariants: readonly OrganizationAccess[] = [
       { organizationId: organization, userId: user, role: "member", teams: [] },
       {
@@ -827,6 +838,13 @@ describe("PostgreSQL schema", () => {
       }
     ];
     for (const access of accessVariants) {
+      const expectedRead = scopes.filter(([, scope]) => canAccessScopedResource(access, "read", scope)).map(([id]) => id).toSorted().toReversed();
+      const documents = await repository.list({ access, limit: 100, offset: 0 });
+      expect(documents.map((document) => document.id)).toEqual(expectedRead);
+      expect((await repository.list({ access, limit: 1, offset: 1 })).map((document) => document.id)).toEqual(expectedRead.slice(1, 2));
+      const memories = await memoryLibrary.list({ access, now: createdAt, limit: 100, offset: 0 });
+      expect(memories.map((memory) => memory.id)).toEqual(expectedRead.map((id) => id.replace(/^4/, "3")));
+      expect((await memoryLibrary.list({ access, now: createdAt, limit: 1, offset: 1 })).map((memory) => memory.id)).toEqual(expectedRead.slice(1, 2).map((id) => id.replace(/^4/, "3")));
       for (const action of ["read", "manage"] as const) {
         const predicate =
           action === "read"
@@ -848,6 +866,17 @@ describe("PostgreSQL schema", () => {
         ).toEqual(expected);
       }
     }
+    const owner = accessVariants[4]!;
+    const foreignAccess = { ...owner, organizationId: "00000000-0000-0000-0000-000000000099" };
+    expect(await repository.list({ access: foreignAccess, limit: 100, offset: 0 })).toEqual([]);
+    expect(await memoryLibrary.list({ access: foreignAccess, now: createdAt, limit: 100, offset: 0 })).toEqual([]);
+    await pool.query("UPDATE documents SET status = 'archived' WHERE id = $1", [scopes[0]![0]]);
+    expect((await repository.list({ access: owner, limit: 100, offset: 0 })).some((document) => document.id === scopes[0]![0])).toBe(false);
+    await pool.query("UPDATE memories SET valid_from = $1::timestamptz - interval '1 second', expires_at = $1 WHERE id = $2", [createdAt, scopes[0]![0].replace(/^4/, "3")]);
+    await pool.query("UPDATE memories SET valid_from = $1 WHERE id = $2", [new Date(createdAt.getTime() + 1), scopes[1]![0].replace(/^4/, "3")]);
+    const active = await memoryLibrary.list({ access: owner, now: createdAt, limit: 100, offset: 0 });
+    expect(active.map((memory) => memory.id)).not.toContain(scopes[0]![0].replace(/^4/, "3"));
+    expect(active.map((memory) => memory.id)).not.toContain(scopes[1]![0].replace(/^4/, "3"));
   });
 
   it("applies join policy, membership status, and default team assignment", async () => {

@@ -512,3 +512,14 @@ MCP client에는 endpoint와 Agent token Bearer header를 함께 설정하라. �
 ```
 
 Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. Agent Studio에서는 MCP registry entry의 `Authorization` header에 `Bearer amt_...` 값을 저장하라. User scope 또는 team scope가 필요하면 조직 Agent token 대신 실제 사용자의 Better Auth Bearer token을 사용하라. MCP가 `400`을 반환하면 URL의 organization slug 형식을, `401`을 반환하면 token, URL의 organization slug, 발급자의 active admin·owner membership을 확인하라.
+
+## Workspace library reads
+
+검색어 없이 접근 가능한 자료를 탐색할 때 다음 읽기 endpoint를 사용한다. 기존 Memory·Document 검색 endpoint의 `q` 계약은 유지한다.
+
+- `GET /api/organizations/{organizationSlug}/memories/library?limit=25&offset=0`: 현재 active이고 유효하며 읽을 수 있는 Memory를 반환한다. 응답은 `{ memories: [...], count, nextOffset }`이고 각 항목은 기존 공개 Memory 형식과 capability를 사용한다.
+- `GET /api/organizations/{organizationSlug}/documents/library?limit=25&offset=0`: 읽을 수 있는 pending·processing·failed·ready 문서를 반환하며 archived 문서는 제외한다. 응답은 `{ documents: [...], count, nextOffset }`이고 각 항목은 기존 공개 Document 형식이다.
+
+두 목록은 생성 시각 내림차순, 같은 시각이면 ID 내림차순으로 정렬한다. `limit`은 1–100(기본 25), `offset`은 0 이상의 안전한 정수(기본 0)이며 다음 page 계산을 위해 `Number.MAX_SAFE_INTEGER - 101` 이하로 제한한다. `count`는 현재 page의 항목 수이며 총 자료 수가 아니다. 다음 page가 있으면 `nextOffset`으로 요청하고 없으면 `null`을 반환한다. 동시 생성·archive 중에는 offset 기반 page 사이에 항목이 이동할 수 있으므로 새로 고침은 첫 page에서 시작한다.
+
+`GET /api/organizations/{organizationSlug}/document-chunks/{chunkId}`는 후보 검토와 Graph 출처 확인을 위한 원문을 반환한다. 응답은 `{ document, chunk: { id, ordinal, content, metadata } }`이다. Document는 기존 공개 응답을 사용하고 object key나 embedding은 노출하지 않는다. 같은 조직의 ready 문서이며 현재 사용자가 source를 읽을 수 있을 때만 반환한다. 없는 chunk, 권한 없는 source, ready가 아닌 source는 모두 `404`로 처리한다. 원본 파일 download endpoint가 아니라 처리된 chunk 원문 조회다.
