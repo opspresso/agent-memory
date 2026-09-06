@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { organizationAgentTokenPrefix } from "@/domain/identity/organization-agent-token-repository";
 
@@ -91,6 +93,35 @@ export async function authorizeOrganizationMcpRoute(
           { status: 401 }
         )
       };
+    }
+
+    const delegatedEmail = request.headers.get("x-user-email");
+    if (delegatedEmail !== null) {
+      const email = z.email().safeParse(delegatedEmail.trim().toLowerCase());
+      if (!email.success) {
+        return {
+          authorized: false,
+          response: Response.json(
+            { error: "Invalid delegated user email" },
+            { status: 400 }
+          )
+        };
+      }
+
+      const access = await organizationAccessRepository.findByEmail(
+        credential.organizationId,
+        email.data
+      );
+      if (!access) {
+        return {
+          authorized: false,
+          response: Response.json(
+            { error: "Organization access denied" },
+            { status: 403 }
+          )
+        };
+      }
+      return { authorized: true, access };
     }
 
     return {

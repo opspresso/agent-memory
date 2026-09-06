@@ -84,7 +84,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 
 일상적인 `GET .../agent-token` 응답은 `configured` 여부와 함께 mask, 생성 시각, `revealable` 상태만 반환하며, token이 없으면 `{ "configured": false }`만 반환한다. 원문은 생성 응답과 명시적인 `POST .../agent-token/reveal`에서만 반환하며 두 응답 모두 `Cache-Control: no-store`다. 암호문 column이 없는 기존 hash-only token은 MCP 인증은 유지하지만 reveal할 수 없으므로 한 번 재생성해야 한다.
 
-이 token은 URL의 동일 organization slug에 해당하는 MCP endpoint에서만 인증된다. 일반 HTTP API나 다른 조직에서는 사용할 수 없다. Token 발급자가 현재 active `admin` 또는 `owner`인지 확인한 뒤 organization scope만 접근할 수 있는 service principal을 적용한다. User scope, team scope, 개별 access grant는 접근하지 못하며 `X-User-Email` 같은 호출자 지정 header를 인증 주체로 신뢰하지 않는다. 발급자가 차단·제거·강등되면 다음 요청부터 인증이 거부된다. `BETTER_AUTH_SECRET`을 변경하면 기존 token은 hash 검증으로 계속 인증되지만 원문을 복호화할 수 없으므로 재생성해야 한다.
+이 token은 URL의 동일 organization slug에 해당하는 MCP endpoint에서만 인증된다. 일반 HTTP API나 다른 조직에서는 사용할 수 없다. Token 발급자가 현재 active `admin` 또는 `owner`인지 확인한 뒤 `X-User-Email`이 없으면 organization scope만 접근할 수 있는 service principal을 적용한다. 유효한 token과 함께 전달된 `X-User-Email`은 해당 조직의 활성 사용자 권한으로 위임한다. 상세 검증과 신뢰 경계는 MCP 절을 따른다. 발급자가 차단·제거·강등되면 다음 요청부터 인증이 거부된다. `BETTER_AUTH_SECRET`을 변경하면 기존 token은 hash 검증으로 계속 인증되지만 원문을 복호화할 수 없으므로 재생성해야 한다.
 
 인증은 `ALLOWED_EMAIL_DOMAINS`에 설정한 email domain으로 제한한다. `POST /api/organizations`는 `ADMIN_EMAILS`에 설정한 사용자만 호출할 수 있으며, 생성자는 새 조직의 owner가 된다. 이 전역 bootstrap 권한은 기존 조직의 멤버십이나 role을 대체하지 않는다.
 
@@ -485,7 +485,7 @@ curl \
 
 도구 실행 실패는 `isError: true`와 text 메시지로 반환한다. 알려진 application 오류는 입력·권한·요청 제한을 설명하고, DB·provider 등 예상하지 못한 오류는 내부 상세 없이 `Tool execution failed`로 반환한다.
 
-Streamable HTTP endpoint는 `/api/organizations/:organizationSlug/mcp`다. Better Auth session Bearer token은 session 사용자의 조직 권한을 적용한다. 조직 Agent token은 organization scope만 접근하는 service principal 권한을 적용한다.
+Streamable HTTP endpoint는 `/api/organizations/:organizationSlug/mcp`다. Better Auth session Bearer token은 session 사용자의 조직 권한을 적용한다. 조직 Agent token은 `X-User-Email`이 없으면 organization scope만 접근하는 service principal 권한을 적용한다. 유효한 조직 Agent token과 `X-User-Email`을 함께 보내면 해당 조직의 활성 멤버를 email로 조회해 그 사용자의 role·team·user scope·개별 access grant를 적용한다. Email은 앞뒤 공백을 제거하고 소문자로 정규화한다. 잘못된 형식이나 빈 header는 `400`, 활성 멤버가 아닌 email은 `403`이며 발급자 권한으로 대체하지 않는다. Session 인증에서는 이 header를 무시하고 session 사용자 권한만 적용한다.
 
 | Tool | 역할 | 주요 입력 |
 | --- | --- | --- |
@@ -515,7 +515,7 @@ MCP client에는 endpoint와 Agent token Bearer header를 함께 설정하라. �
 }
 ```
 
-Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. Agent Studio에서는 MCP registry entry의 `Authorization` header에 `Bearer amt_...` 값을 저장하라. User scope 또는 team scope가 필요하면 조직 Agent token 대신 실제 사용자의 Better Auth Bearer token을 사용하라. MCP가 `400`을 반환하면 URL의 organization slug 형식을, `401`을 반환하면 token, URL의 organization slug, 발급자의 active admin·owner membership을 확인하라.
+Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. Agent Studio에서는 MCP registry entry의 `Authorization` header에 `Bearer amt_...` 값을 저장하라. Agent Studio는 로그인 사용자의 `X-User-Email`을 자동으로 전달하므로 해당 사용자가 웹에서 볼 수 있는 개인·팀 문서도 MCP에서 검색할 수 있다. 다른 client는 실제 사용자 email을 `X-User-Email`로 전달하거나 실제 사용자의 Better Auth Bearer token을 사용하라. 조직 Agent token은 조직 내 활성 사용자를 대신할 수 있는 위임 credential이다. 사용자 신원을 검증하고 header를 생성하는 신뢰된 server-side client에만 제공하고 브라우저·모델 인자·외부 요청 header를 그대로 전달하지 마라. Email만으로는 인증할 수 없으며 다른 조직 token으로 위임할 수 없다. MCP가 `400`을 반환하면 URL의 organization slug 형식을, `401`을 반환하면 token, URL의 organization slug, 발급자의 active admin·owner membership을 확인하라.
 
 ## Workspace library reads
 

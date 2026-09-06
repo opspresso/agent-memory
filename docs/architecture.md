@@ -52,7 +52,7 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 조직 API 요청은 다음 경계를 통과한다.
 
 1. Route가 path와 query 또는 body를 검증한다.
-2. Better Auth session 또는 session Bearer token으로 사용자를 인증한다. MCP route는 조직 Agent token을 organization scope 전용 service credential로 별도 인정한다.
+2. Better Auth session 또는 session Bearer token으로 사용자를 인증한다. MCP route는 조직 Agent token을 service credential로 별도 인정하고, 검증 후 `X-User-Email`이 있으면 해당 조직의 활성 사용자로 위임한다.
 3. URL의 `organizationSlug`를 UUID로 해석하고 session 사용자 또는 Agent token 발급자의 현재 조직 멤버십과 역할을 조회한다.
 4. Application use case가 scope와 action에 대한 domain 정책을 적용한다.
 5. Repository가 모든 조회와 변경을 `organizationId`로 제한한다.
@@ -64,7 +64,7 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 Next.js 전역 응답 header는 CSP `frame-ancestors 'none'`과 `X-Frame-Options: DENY`로 clickjacking을 차단하고 MIME sniffing, cross-origin referrer, 사용하지 않는 browser capability를 제한한다.
 
-조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 같은 slug의 MCP route에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자가 현재 active `admin` 또는 `owner`인지 다시 확인해 제거·차단·강등을 즉시 반영한다. 유효한 token 요청은 발급자에게 귀속되는 organization service principal로 실행하며 organization scope만 허용한다. User scope, team scope, 개별 access grant는 domain 정책과 SQL predicate 모두에서 제외하고 호출자가 지정한 identity header를 신뢰하지 않는다.
+조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 같은 slug의 MCP route에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자가 현재 active `admin` 또는 `owner`인지 다시 확인해 제거·차단·강등을 즉시 반영한다. 유효한 token 요청에 `X-User-Email`이 없으면 발급자에게 귀속되는 organization service principal로 실행하며 organization scope만 허용한다. 이 경우 user scope, team scope, 개별 access grant는 domain 정책과 SQL predicate 모두에서 제외한다. Header가 있으면 정규화·형식 검증 후 token 조직의 활성 멤버를 `findByEmail`로 조회해 사용자의 role과 team을 포함한 기존 사용자 권한을 적용한다. 빈 값·잘못된 형식은 거부하고 활성 멤버가 없으면 접근을 거부하며 service principal로 fallback하지 않는다. Token 발급자의 role을 위임 사용자에게 물려주지 않는다. 조직 token은 조직 내 사용자 신원을 위임할 수 있으므로 인증된 사용자 email을 전달하는 신뢰된 server-side client만 보유해야 한다. Session 인증과 일반 HTTP route는 이 header로 사용자를 변경하지 않는다.
 
 Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 인증 경계는 설정된 전역 admin email 여부를 actor에 담고, 조직 생성 application use case가 이 권한을 확인한다. 이 권한은 조직 bootstrap만 허용하며, 생성된 조직 안에서는 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
 

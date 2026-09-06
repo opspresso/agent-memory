@@ -173,7 +173,7 @@ Name은 version이 참조하는 registry 식별자다. Description은 모델의 
 
 등록 후 `Test connection`으로 도구 목록 조회를 확인하고 사용할 project의 version에 해당 MCP server를 bind한 뒤 실제 실행을 확인하라. 조직을 전환하면 템플릿의 이름·URL·설명·Content도 해당 조직에 맞게 바뀐다. Version의 header override는 registry header보다 우선하므로 token 재생성 시 override도 확인하라.
 
-Agent token은 발급자에게 귀속되는 organization service principal로 동작한다. Organization scope만 검색·변경할 수 있으며 user scope, team scope, 개별 access grant에는 접근하지 못한다. 사용자·팀 범위가 필요한 MCP client는 해당 사용자의 Better Auth Bearer token을 사용하라.
+Agent token만 전달하면 발급자에게 귀속되는 organization service principal로 동작하며 organization scope만 검색·변경할 수 있다. Agent Studio는 로그인 사용자의 `X-User-Email`을 함께 전달하므로 해당 조직의 활성 멤버 권한으로 개인·팀 문서와 허용된 Memory도 검색한다. 다른 client는 실제 사용자의 email을 이 header로 전달하거나 해당 사용자의 Better Auth Bearer token을 사용하라. 조직 Agent token은 조직 내 사용자를 대신할 수 있으므로 사용자 신원을 검증하는 신뢰된 server-side client에만 제공하라. 잘못된 email은 `400`, 활성 멤버가 아닌 email은 `403`으로 거부한다.
 
 MCP에서 제공하는 tool은 다음과 같다.
 
