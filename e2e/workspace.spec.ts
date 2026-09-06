@@ -54,6 +54,7 @@ test("onboards, approves, and manages members through the console", async ({
   if (!runId) {
     throw new Error("E2E_RUN_ID must be configured by Playwright");
   }
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": "192.0.2.11" });
   const adminEmail = `e2e-admin2+${runId}-${testInfo.retry}@nalbam.com`;
   const memberEmail = `e2e-member+${runId}-${testInfo.retry}@nalbam.com`;
   const password = "agent-memory-e2e-password";
@@ -120,7 +121,7 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(page.getByText("recognition", { exact: true })).toBeVisible();
   await expect(page.getByText("depends_on", { exact: true })).toBeVisible();
 
-  const memberContext = await browser.newContext();
+  const memberContext = await browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": "192.0.2.12" } });
   const memberPage = await memberContext.newPage();
   await memberContext.addCookies([
     { name: "agent-memory-locale", value: "ko", domain: "127.0.0.1", path: "/" }
@@ -144,7 +145,7 @@ test("onboards, approves, and manages members through the console", async ({
 
   await page.goto("/members");
   await expect(page.getByText(memberEmail, { exact: true })).toBeVisible();
-  await expect(page.getByText("승인 대기", { exact: true })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: memberEmail }).getByText("승인 대기", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "승인" }).click();
   await expect(page.getByText("회원을 승인했습니다.")).toBeVisible();
   await expect(page.getByText("E2E Default Team").first()).toBeVisible();
@@ -229,7 +230,7 @@ test("onboards, approves, and manages members through the console", async ({
 
   await memberPage.goto("/");
   await expect(
-    memberPage.getByRole("heading", { name: "공유 Context를 한곳에서 관리합니다." })
+    memberPage.getByRole("heading", { name: "통합 검색", exact: true })
   ).toBeVisible();
 
   const secondOrganizationName = `E2E Second Organization ${runId} R${testInfo.retry}`;
@@ -253,7 +254,7 @@ test("onboards, approves, and manages members through the console", async ({
   await page.getByRole("button", { name: `${memberEmail}에 대한 작업` }).click();
   await page.getByRole("menuitem", { name: "차단" }).click();
   await expect(page.getByText("회원을 차단했습니다.")).toBeVisible();
-  await expect(page.getByText("차단됨", { exact: true })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: memberEmail }).getByText("차단됨", { exact: true })).toBeVisible();
 
   await page.route("**/api/auth/sign-out", (route) =>
     route.fulfill({
@@ -278,6 +279,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   if (!runId) {
     throw new Error("E2E_RUN_ID must be configured by Playwright");
   }
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": "192.0.2.21" });
   const email = `e2e+${runId}-${testInfo.retry}@nalbam.com`;
 
   await page.context().addCookies([
@@ -319,11 +321,12 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "공유 Context를 한곳에서 관리합니다." })
+    page.getByRole("heading", { name: "통합 검색", exact: true })
   ).toBeVisible();
   const organizationId = organization.id;
 
   await page.getByRole("link", { name: "문서 수집" }).click();
+  await page.getByRole("button", { name: "문서 수집", exact: true }).first().click();
   await page.getByRole("combobox", { name: "공유 범위" }).click();
   await expect(
     page.getByRole("option", { name: "조직 · 모든 조직 멤버와 공유" })
@@ -352,11 +355,11 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     }
   );
   await page.getByRole("button", { name: "수집 시작" }).click();
-  await expect(page.getByText("수집 대기열에 등록했습니다: e2e-document")).toBeVisible();
+  await expect(page.getByText("문서를 업로드했습니다. 상세 화면에서 처리 상태를 확인하세요.")).toBeVisible();
   await page.getByRole("combobox", { name: "활성 조직" }).click();
   await page.getByRole("option", { name: "E2E Other Organization" }).click();
   await expect(
-    page.getByText("수집 대기열에 등록했습니다: e2e-document")
+    page.getByText("문서를 업로드했습니다. 상세 화면에서 처리 상태를 확인하세요.")
   ).not.toBeVisible();
   await page.getByRole("combobox", { name: "활성 조직" }).click();
   await page.getByRole("option", { name: "E2E Organization" }).click();
@@ -390,6 +393,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   );
   await page.getByRole("combobox", { name: "활성 조직" }).click();
   await page.getByRole("option", { name: "E2E Organization" }).click();
+  await expect(registrationTemplate.getByText(mcpEndpoint, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "MCP endpoint 복사" }).click();
   await expect(page.getByRole("button", { name: "MCP endpoint 복사" })).toHaveText(
     "복사됨"
@@ -548,25 +552,29 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     }
   );
 
-  await page.getByText("Memory", { exact: true }).click();
+  await page.getByRole("radiogroup").getByText("Memory", { exact: true }).click();
+  await expect(page).toHaveURL(/kind=memories/);
+  await expect(page.getByRole("radio", { name: "Memory", exact: true })).toBeChecked();
   await page
     .getByPlaceholder("정책, 장애 대응, 시스템 관계를 검색하세요")
     .fill("checkout rollback");
   await page.getByRole("button", { name: "검색", exact: true }).click();
   await expect(page.getByText("Checkout rollback policy")).toBeVisible();
-  await page.getByRole("button", { name: "Lifecycle" }).click();
+  await page.getByRole("button", { name: /Checkout rollback policy/ }).click();
 
-  const lifecycle = page.getByRole("dialog", { name: "Memory lifecycle" });
+  const lifecycle = page.getByRole("region", { name: "지식 상세" });
+  await lifecycle.getByRole("tab", { name: "수정", exact: true }).click();
   await expect(lifecycle.getByText("Version 이력")).toBeVisible();
   await lifecycle
-    .getByLabel("내용")
+    .getByRole("textbox", { name: "내용", exact: true })
     .fill("Checkout rollback requires three approvers.");
   await lifecycle.getByLabel("변경 사유").fill("E2E revision verification");
   await lifecycle.getByRole("button", { name: "Revision 저장" }).click();
   await expect(lifecycle.getByText("새 revision을 저장했습니다.")).toBeVisible();
+  await lifecycle.getByRole("tab", { name: "Version 이력" }).click();
   await expect(lifecycle.getByText("v2 · 현재")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(lifecycle).not.toBeVisible();
+  await lifecycle.getByRole("tab", { name: "내용과 출처" }).click();
+  await lifecycle.getByRole("button", { name: "목록으로 돌아가기" }).click();
   await expect(page.getByText("Checkout rollback requires three approvers.", { exact: true }))
     .toBeVisible();
 
@@ -599,22 +607,27 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.route(
     `**/api/organizations/${organizationSlug}/documents/${archivedDocumentId}`,
     async (route) => {
-      expect(route.request().method()).toBe("DELETE");
-      await route.fulfill({ status: 204 });
+      if (route.request().method() === "DELETE") await route.fulfill({ status: 204 });
+      else await route.fulfill({ json: { id: archivedDocumentId, title: "Archived team guide", mimeType: "text/markdown", scope: { kind: "organization", organizationId }, sizeBytes: 10, status: "ready", processingAttempts: 1, createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z" } });
     }
   );
-  await page.getByText("Documents", { exact: true }).click();
+  await page.getByRole("radiogroup").getByText("Documents", { exact: true }).click();
+  await expect(page).toHaveURL(/kind=documents/);
+  await expect(page.getByRole("radio", { name: "Documents", exact: true })).toBeChecked();
   await page
     .getByPlaceholder("정책, 장애 대응, 시스템 관계를 검색하세요")
     .fill("team guide");
   await page.getByRole("button", { name: "검색", exact: true }).click();
   await expect(page.getByText("Archived team guide")).toBeVisible();
-  await page.getByRole("button", { name: "문서 Archive" }).click();
-  const archiveDialog = page.getByRole("dialog", { name: "문서 Archive" });
-  await archiveDialog.getByRole("button", { name: "Archive 확인" }).click();
-  await expect(page.getByText("Archived team guide을 Archive했습니다.")).toBeVisible();
+  await page.getByRole("button", { name: /Archived team guide/ }).click();
+  await page.getByRole("link", { name: "문서 상세 열기" }).click();
+  await page.getByRole("button", { name: "문서 보관" }).click();
+  const archiveDialog = page.getByRole("dialog", { name: "문서 보관" });
+  await archiveDialog.getByRole("button", { name: "문서 보관" }).click();
+  await expect(page.getByText("문서를 보관했습니다.")).toBeVisible();
   await expect(page.getByText("Archived team guide", { exact: true })).not.toBeVisible();
 
+  await page.goto("/");
   const firstNode = await postJson<{ id: string }>(
     page,
     `/api/organizations/${organizationSlug}/knowledge/nodes`,
@@ -649,14 +662,17 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     }
   );
 
-  await page.getByText("Graph", { exact: true }).click();
+  await page.getByRole("radiogroup").getByText("Graph", { exact: true }).click();
+  await expect(page).toHaveURL(/kind=knowledge%2Fnodes/);
+  await expect(page.getByRole("radio", { name: "Graph", exact: true })).toBeChecked();
   await page
     .getByPlaceholder("정책, 장애 대응, 시스템 관계를 검색하세요")
     .fill("Checkout API");
   await page.getByRole("button", { name: "검색", exact: true }).click();
   await expect(page.getByText("Checkout API", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Checkout API/ }).click();
   await page.getByRole("button", { name: "관계 보기" }).first().click();
-  await expect(page.getByText("Knowledge map")).toBeVisible();
+  await expect(page.getByRole("button", { name: "검색 결과로 돌아가기" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "DATABASE Orders Database" })
   ).toBeVisible();
@@ -693,6 +709,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await nodeDeleteResponse;
   await expect(page.getByText("Graph에서 Orders Database을 삭제했습니다.")).toBeVisible();
 
+  await page.getByRole("button", { name: "검색 결과로 돌아가기" }).click();
   await postJson(
     page,
     `/api/organizations/${organizationSlug}/knowledge/nodes`,
@@ -718,16 +735,20 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     .fill("Duplicate Entity");
   await page.getByRole("button", { name: "검색", exact: true }).click();
   await expect(page.getByText("Duplicate Entity", { exact: true })).toHaveCount(2);
+  await page.getByRole("button", { name: /Duplicate Entity/ }).first().click();
   await page.getByRole("button", { name: "중복 병합" }).first().click();
   const mergeDialog = page.getByRole("dialog", { name: "중복 node 병합" });
   await mergeDialog.getByLabel("병합 사유").fill("E2E duplicate verification");
   await mergeDialog.getByRole("button", { name: "병합 확인" }).click();
   await expect(page.getByText("중복된 Duplicate Entity node를 병합했습니다.")).toBeVisible();
-  await expect(page.getByText("Duplicate Entity", { exact: true })).toHaveCount(1);
-  await page.getByText("Memory", { exact: true }).click();
+  await expect(page.locator("[aria-label=\"검색 결과 목록\"]").getByText("Duplicate Entity", { exact: true })).toHaveCount(1);
+  await page.getByRole("radiogroup").getByText("Memory", { exact: true }).click();
+  await expect(page).toHaveURL(/kind=memories/);
+  await expect(page.getByRole("radio", { name: "Memory", exact: true })).toBeChecked();
   await page.getByPlaceholder("정책, 장애 대응, 시스템 관계를 검색하세요").fill("checkout rollback");
   await page.getByRole("button", { name: "검색", exact: true }).click();
-  await page.getByRole("button", { name: "Lifecycle" }).click();
+  await page.getByRole("button", { name: /Checkout rollback policy/ }).click();
+  await lifecycle.getByRole("tab", { name: "수정", exact: true }).click();
   await lifecycle.getByRole("button", { name: "Archive", exact: true }).click();
   const refreshedMemories = page.waitForResponse((response) =>
     response.url().includes(`/api/organizations/${organizationSlug}/memories?q=`) &&
@@ -737,6 +758,6 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const refreshedResponse = await refreshedMemories;
   expect(refreshedResponse.ok()).toBe(true);
   expect(await refreshedResponse.json()).toMatchObject({ hits: [] });
-  await expect(lifecycle).not.toBeVisible();
+  await expect(lifecycle.getByRole("tab", { name: "수정", exact: true })).not.toBeVisible();
   await expect(page.getByText("Checkout rollback policy", { exact: true })).not.toBeVisible();
 });

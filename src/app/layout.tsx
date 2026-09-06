@@ -10,7 +10,7 @@ import {
   mantineHtmlProps
 } from "@mantine/core";
 import type { Metadata } from "next";
-import { Chakra_Petch, Figtree, JetBrains_Mono } from "next/font/google";
+import { Figtree, JetBrains_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
 
@@ -30,12 +30,6 @@ import "./globals.css";
 const sans = Figtree({
   subsets: ["latin"],
   variable: "--font-sans",
-  display: "swap"
-});
-const display = Chakra_Petch({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-display",
   display: "swap"
 });
 const mono = JetBrains_Mono({
@@ -58,7 +52,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html
-      className={`${sans.variable} ${display.variable} ${mono.variable}`}
+      className={`${sans.variable} ${mono.variable}`}
       lang={locale}
       {...mantineHtmlProps}
     >
@@ -71,7 +65,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <OrganizationProvider organizations={organizations}>
               <AppShellFrame user={user} version={packageJson.version}>
                 {children}
-                <Box
+                {!user ? <Box
                   component="footer"
                   mt="xl"
                   py="sm"
@@ -96,7 +90,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                       </Anchor>
                     </Text>
                   </Group>
-                </Box>
+                </Box> : null}
               </AppShellFrame>
             </OrganizationProvider>
           </I18nProvider>

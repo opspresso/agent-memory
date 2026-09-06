@@ -3,33 +3,26 @@
 import { createTheme, type MantineColorsTuple } from "@mantine/core";
 
 const brand: MantineColorsTuple = [
-  "#f4f3fe",
-  "#e9e7fd",
-  "#d5d1fb",
-  "#c0b8f9",
-  "#ab9df8",
-  "#957ef5",
-  "#805fe9",
-  "#6b3dd8",
-  "#5b33b8",
-  "#4b2a99"
+  "#eef2ff", "#e0e7ff", "#c7d2fe", "#a5b4fc", "#818cf8",
+  "#6366f1", "#4f46e5", "#4338ca", "#3730a3", "#312e81"
 ];
 
 export const theme = createTheme({
   primaryColor: "brand",
-  primaryShade: { light: 6, dark: 7 },
+  primaryShade: { light: 6, dark: 5 },
   colors: { brand },
   fontFamily:
     'var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   fontFamilyMonospace:
     'var(--font-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-  radius: { xl: "20px" },
-  defaultRadius: "lg",
+  radius: { xs: "4px", sm: "6px", md: "8px", lg: "10px", xl: "12px" },
+  defaultRadius: "md",
   focusRing: "auto",
   headings: {
     fontFamily:
-      'var(--font-display), var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-    fontWeight: "600"
+      'var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontWeight: "650",
+    sizes: { h1: { fontSize: "1.75rem", lineHeight: "1.25" }, h2: { fontSize: "1.25rem", lineHeight: "1.35" }, h3: { fontSize: "1.05rem", lineHeight: "1.4" } }
   },
   components: {
     Button: { defaultProps: { size: "sm" } },

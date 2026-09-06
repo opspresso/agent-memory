@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionIcon, Badge, Button, Group, Paper, Stack, Text, TextInput, Title, Tooltip } from "@mantine/core";
+import { Accordion, ActionIcon, Badge, Button, Group, Paper, Stack, Text, TextInput, Title, Tooltip } from "@mantine/core";
 import { IconFocusCentered, IconMinus, IconPlus, IconRoute, IconSearch, IconTrash } from "@tabler/icons-react";
 import { useMemo, useState, type CSSProperties } from "react";
 
@@ -8,6 +8,7 @@ import type { ScopedResource } from "@/domain/identity/organization-access";
 
 import { useT } from "./_i18n/provider";
 import classes from "./knowledge-graph.module.css";
+import { SourceEvidence } from "./source-evidence";
 
 export interface KnowledgeGraphNodeView {
   readonly id: string;
@@ -15,6 +16,7 @@ export interface KnowledgeGraphNodeView {
   readonly canonicalName: string;
   readonly summary?: string;
   readonly scope: ScopedResource;
+  readonly sources?: readonly { readonly memoryId?: string; readonly chunkId?: string }[];
 }
 
 export interface KnowledgeGraphEdgeView {
@@ -23,6 +25,7 @@ export interface KnowledgeGraphEdgeView {
   readonly targetNodeId: string;
   readonly predicate: string;
   readonly scope: ScopedResource;
+  readonly sources?: readonly { readonly memoryId?: string; readonly chunkId?: string }[];
 }
 
 interface PositionedNode extends KnowledgeGraphNodeView {
@@ -183,7 +186,7 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
             <Tooltip label={t("graph.fit")}><ActionIcon aria-label={t("graph.fit")} onClick={() => setZoom(1)} variant="default"><IconFocusCentered size={15} /></ActionIcon></Tooltip>
           </Group>
         </div>
-        <svg aria-label={t("graph.summary", { nodes: visibleNodes.length, edges: visibleEdges.length })} className={classes.graph} role="img" viewBox={`${viewOffset} ${viewOffset} ${viewSize} ${viewSize}`}>
+        <svg aria-label={t("graph.summary", { nodes: visibleNodes.length, edges: visibleEdges.length })} className={classes.graph} role="group" viewBox={`${viewOffset} ${viewOffset} ${viewSize} ${viewSize}`}>
           <defs>
             <marker id="graph-arrow" markerHeight="5" markerWidth="5" orient="auto" refX="4" refY="2.5"><path className={classes.arrow} d="M 0 0 L 5 2.5 L 0 5 z" /></marker>
             <radialGradient id="graph-center-glow"><stop offset="0" stopColor="#a78bfa" stopOpacity=".22" /><stop offset="1" stopColor="#a78bfa" stopOpacity="0" /></radialGradient>
@@ -205,11 +208,11 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
           {positionedNodes.map((node) => {
             const isCenter = node.id === centerNodeId;
             const isSelected = node.id === selectedNode?.id;
-            const isMuted = normalizedQuery ? !matchingIds.has(node.id) : Boolean(selectedNode && !neighborIds.has(node.id));
+            const isMuted = normalizedQuery ? !matchingIds.has(node.id) : Boolean(selectedNode && node.id !== selectedNode.id && !neighborIds.has(node.id));
             const radius =
               (isCenter ? 5.3 : 4.1) +
               Math.min(degrees.get(node.id) ?? 0, 6) * 0.18;
-            return <g aria-label={`${node.kind.toUpperCase()} ${node.canonicalName}`} className={classes.node} data-center={isCenter || undefined} data-muted={isMuted || undefined} data-search-match={matchingIds.has(node.id) || undefined} data-selected={isSelected || undefined} key={node.id} onClick={() => onSelectNode(node.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectNode(node.id); } }} role="button" style={{ "--node-accent": kindColor(node.kind) } as CSSProperties} tabIndex={0} transform={`translate(${node.x} ${node.y})`}>
+            return <g aria-label={`${node.kind.toUpperCase()} ${node.canonicalName}`} aria-pressed={isSelected} className={classes.node} data-center={isCenter || undefined} data-muted={isMuted || undefined} data-search-match={matchingIds.has(node.id) || undefined} data-selected={isSelected || undefined} key={node.id} onClick={() => onSelectNode(node.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectNode(node.id); } }} role="button" style={{ "--node-accent": kindColor(node.kind) } as CSSProperties} tabIndex={0} transform={`translate(${node.x} ${node.y})`}>
               <circle className={classes.nodeAura} r={radius + 2.3} />
               <circle className={classes.nodeRing} r={radius + 0.8} />
               <circle className={classes.nodeCore} r={radius} />
@@ -223,16 +226,25 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
         </div>
       </div>
       <Paper className={classes.inspector} p="md" radius="lg">
+        <details className={classes.nodeList} open>
+          <summary>{t("evidence.nodeList", { count: normalizedQuery ? matchingIds.size : visibleNodes.length })}</summary>
+          <Stack gap={4} mt="sm">
+            {visibleNodes.filter((node) => !normalizedQuery || matchingIds.has(node.id)).map((node) => <button type="button" className={classes.listItem} aria-pressed={node.id === selectedNode?.id} key={node.id} onClick={() => onSelectNode(node.id)}><strong>{node.canonicalName}</strong><span>{node.kind}</span></button>)}
+            {normalizedQuery && matchingIds.size === 0 ? <Text size="sm" c="dimmed">{t("evidence.noNodes")}</Text> : null}
+          </Stack>
+        </details>
         {selectedNode ? <Stack gap="md">
           <Stack gap={4}><Group justify="space-between"><Badge color="gray" size="xs" variant="light">{selectedNode.kind}</Badge><Text c="dimmed" ff="monospace" size="xs">{t("graph.relations", { count: degrees.get(selectedNode.id) ?? 0 })}</Text></Group><Title order={4}>{selectedNode.canonicalName}</Title></Stack>
+          <Badge variant="light">{t(`workspace.scope.${selectedNode.scope.kind}`)}</Badge>
           <Text c="dimmed" size="sm">{selectedNode.summary ?? t("graph.noSummary")}</Text>
           <Stack gap="xs"><Text c="dimmed" fw={700} size="xs" tt="uppercase">{t("graph.connectedBy")}</Text>
             {selectedEdges.length > 0 ? selectedEdges.map((edge) => {
               const isOutgoing = edge.sourceNodeId === selectedNode.id;
               const related = positions.get(isOutgoing ? edge.targetNodeId : edge.sourceNodeId);
-              return <div className={classes.relationRow} key={edge.id}><button className={classes.relation} onClick={() => related && onSelectNode(related.id)} type="button"><IconRoute aria-hidden size={14} /><span>{isOutgoing ? "→" : "←"} {edge.predicate}</span><strong>{related?.canonicalName}</strong></button>{canDeleteEdge(edge) ? <Tooltip label={t("graph.deleteEdge")}><ActionIcon aria-label={t("graph.deleteEdge")} color="red" disabled={deletingResource} onClick={() => onDeleteEdge(edge)} variant="subtle"><IconTrash size={14} /></ActionIcon></Tooltip> : null}</div>;
+              return <div key={edge.id}><div className={classes.relationRow}><button className={classes.relation} onClick={() => related && onSelectNode(related.id)} type="button"><IconRoute aria-hidden size={14} /><span>{isOutgoing ? "→" : "←"} {edge.predicate}</span><strong>{related?.canonicalName}</strong></button>{canDeleteEdge(edge) ? <Tooltip label={t("graph.deleteEdge")}><ActionIcon aria-label={t("graph.deleteEdge")} color="red" disabled={deletingResource} onClick={() => onDeleteEdge(edge)} variant="subtle"><IconTrash size={14} /></ActionIcon></Tooltip> : null}</div>{(edge.sources?.length ?? 0) > 0 ? <Accordion variant="contained"><Accordion.Item value="sources"><Accordion.Control>{t("evidence.sources", { count: edge.sources?.length ?? 0 })}</Accordion.Control><Accordion.Panel><Stack>{edge.sources?.map((source, index) => <SourceEvidence key={`${source.memoryId ?? source.chunkId}:${index}`} {...source} />)}</Stack></Accordion.Panel></Accordion.Item></Accordion> : null}</div>;
             }) : <Text c="dimmed" size="sm">{t("graph.noRelations")}</Text>}
           </Stack>
+          {(selectedNode.sources?.length ?? 0) > 0 ? <Accordion variant="contained" key={selectedNode.id}><Accordion.Item value="sources"><Accordion.Control>{t("evidence.sources", { count: selectedNode.sources?.length ?? 0 })}</Accordion.Control><Accordion.Panel><Stack>{selectedNode.sources?.map((source, index) => <SourceEvidence key={`${source.memoryId ?? source.chunkId}:${index}`} {...source} />)}</Stack></Accordion.Panel></Accordion.Item></Accordion> : null}
           {selectedNode.id !== centerNodeId ? <Button leftSection={<IconFocusCentered size={15} />} onClick={() => onExploreNode(selectedNode.id)} size="compact-sm" variant="light">{t("graph.exploreFromNode")}</Button> : null}
           {canDeleteNode(selectedNode) ? <Button color="red" disabled={deletingResource} leftSection={<IconTrash size={15} />} onClick={() => onDeleteNode(selectedNode)} size="compact-sm" variant="subtle">{t("graph.deleteNode")}</Button> : null}
         </Stack> : null}

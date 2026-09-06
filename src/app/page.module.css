@@ -19,8 +19,8 @@
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.75fr);
-  gap: clamp(3rem, 7vw, 7rem);
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: clamp(2rem, 5vw, 5rem);
   align-items: center;
   min-height: calc(100vh - 320px);
   padding-block: 3rem;
@@ -36,9 +36,9 @@
 }
 
 .title {
-  font-size: clamp(3rem, 6vw, 5.8rem);
-  line-height: 0.98;
-  letter-spacing: -0.055em;
+  font-size: clamp(2.5rem, 4.5vw, 4.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.035em;
 }
 
 .lead {
@@ -50,9 +50,9 @@
   padding: var(--mantine-spacing-md);
   border: 1px solid var(--memory-border);
   border-radius: var(--mantine-radius-lg);
-  background: color-mix(in oklab, var(--memory-surface) 78%, transparent);
+  background: var(--memory-surface);
   box-shadow: var(--memory-shadow);
-  backdrop-filter: blur(12px);
+
 }
 
 .workspace {
@@ -65,10 +65,10 @@
   --result-accent: var(--mantine-color-brand-5);
   position: relative;
   overflow: hidden;
-  border-left: 3px solid var(--result-accent);
+  border-left: 2px solid var(--result-accent);
   background: var(--memory-surface);
   box-shadow: var(--memory-shadow);
-  transition: border-color 160ms ease, transform 160ms ease;
+  transition: border-color 160ms ease;
 }
 
 .resultCard[data-source="document"] {
@@ -80,7 +80,7 @@
 }
 
 .resultCard:hover {
-  transform: translateY(-2px);
+  border-color: var(--mantine-color-brand-4);
 }
 
 .evidenceRail {
@@ -121,7 +121,7 @@
   }
 
   .title {
-    font-size: 3rem;
+    font-size: 2.5rem;
   }
 }
 

@@ -46,41 +46,12 @@
   background: var(--memory-highlight);
 }
 
-.candidate {
-  background:
-    linear-gradient(135deg, color-mix(in oklab, var(--mantine-color-brand-5) 8%, transparent), transparent 42%),
-    var(--memory-surface);
-}
-
-.evidenceRail {
-  display: grid;
-  gap: 0;
-  margin-left: 0.55rem;
-  border-left: 1px solid light-dark(var(--mantine-color-brand-2), var(--mantine-color-brand-8));
-}
-
-.railStep {
-  position: relative;
-  display: grid;
-  gap: var(--mantine-spacing-xs);
-  padding: 0 0 var(--mantine-spacing-xl) var(--mantine-spacing-xl);
-}
-
-.railStep:last-child {
-  padding-bottom: 0;
-}
-
-.railStep::before {
-  position: absolute;
-  top: 0.25rem;
-  left: -0.36rem;
-  width: 0.68rem;
-  height: 0.68rem;
-  border: 2px solid light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
-  border-radius: 50%;
-  background: var(--mantine-color-brand-5);
-  content: "";
-}
+.candidate { min-width: 0; background: var(--memory-surface); }
+.evidenceRail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--mantine-spacing-lg); align-items: start; }
+.railStep { min-width: 0; display: grid; gap: var(--mantine-spacing-sm); overflow-wrap: anywhere; }
+.proposal { display: grid; gap: var(--mantine-spacing-xl); min-width: 0; }
+.queueItem:disabled { cursor: wait; opacity: .65; }
+@media (max-width: 75em) { .evidenceRail { grid-template-columns: 1fr; } }
 
 .fact {
   border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));

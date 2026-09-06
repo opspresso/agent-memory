@@ -128,6 +128,7 @@ const memorySourceResponseSchema = z.object({
 
 export const memoryDetailResponseSchema = z.object({
   id: z.string().min(1),
+  scope: scopeResponseSchema.optional(),
   kind: z.string().min(1),
   title: z.string(),
   content: z.string(),
@@ -140,6 +141,41 @@ export const memoryDetailResponseSchema = z.object({
   validFrom: z.string().min(1),
   expiresAt: z.string().optional(),
   capabilities: z.object({ write: z.boolean(), manage: z.boolean() })
+});
+
+export const memoryLibraryResponseSchema = z.object({
+  memories: z.array(memoryDetailResponseSchema.extend({ scope: scopeResponseSchema })),
+  count: z.number().int().nonnegative(),
+  nextOffset: z.number().int().nonnegative().nullable()
+});
+
+export const documentDetailResponseSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  scope: scopeResponseSchema,
+  mimeType: z.string(),
+  sizeBytes: z.number().nonnegative(),
+  status: z.enum(["pending", "processing", "ready", "failed", "archived"]),
+  sourceUri: z.string().optional(),
+  processingError: z.string().optional(),
+  processingAttempts: z.number().int().nonnegative(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const documentLibraryResponseSchema = z.object({
+  documents: z.array(documentDetailResponseSchema),
+  count: z.number().int().nonnegative(),
+  nextOffset: z.number().int().nonnegative().nullable()
+});
+
+export const documentChunkDetailResponseSchema = z.object({
+  document: documentDetailResponseSchema,
+  chunk: z.object({
+    id: z.string().min(1),
+    ordinal: z.number().int().nonnegative(),
+    content: z.string()
+  })
 });
 
 export const memoryVersionResponseSchema = z.object({
@@ -177,7 +213,8 @@ export const knowledgeEdgeResponseSchema = z.object({
   sourceNodeId: z.string().min(1),
   targetNodeId: z.string().min(1),
   predicate: z.string().min(1),
-  scope: scopeResponseSchema
+  scope: scopeResponseSchema,
+  sources: z.array(knowledgeSourceResponseSchema).optional()
 });
 
 const memorySearchResourceSchema = z.object({

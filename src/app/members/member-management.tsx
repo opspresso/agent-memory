@@ -14,7 +14,6 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
   Tooltip
 } from "@mantine/core";
 import {
@@ -22,6 +21,7 @@ import {
   IconCheck,
   IconDotsVertical,
   IconRefresh,
+  IconSearch,
   IconTrash,
   IconUserPlus,
   IconX
@@ -33,6 +33,8 @@ import type {
   OrganizationMemberStatus,
   OrganizationRole
 } from "@/domain/identity/organization-access";
+
+import { WorkspaceHeader, WorkspaceSection } from "../workspace-components";
 
 import { useT } from "../_i18n/provider";
 import {
@@ -74,6 +76,8 @@ export function MemberManagement() {
 function MemberManagementView() {
   const t = useT();
   const { organizationSlug, access } = useOrganization();
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string | null>("all");
   const [members, setMembers] = useState<readonly MemberView[]>([]);
   const [teams, setTeams] = useState<readonly TeamView[]>([]);
   const [teamMembers, setTeamMembers] = useState<readonly TeamMemberView[]>([]);
@@ -270,39 +274,33 @@ function MemberManagementView() {
     );
   }
 
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleMembers = members.filter((member) =>
+    (statusFilter === "all" || member.status === statusFilter) &&
+    `${member.name} ${member.email}`.toLocaleLowerCase().includes(normalizedQuery)
+  );
+
   const statusColor = (status: OrganizationMemberStatus) =>
     status === "active" ? "teal" : status === "pending" ? "yellow" : "red";
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Stack gap={4}>
-          <Text c="dimmed" size="sm">
-            {t("workspace.eyebrow")}
-          </Text>
-          <Title order={1}>{t("members.title")}</Title>
-          <Text c="dimmed">{t("members.lede")}</Text>
-        </Stack>
-        <Button
-          leftSection={<IconRefresh size={16} />}
-          loading={loading}
-          onClick={refresh}
-          variant="subtle"
-        >
-          {t("organization.refresh")}
-        </Button>
-      </Group>
+      <WorkspaceHeader
+        title={t("members.title")}
+        description={t("members.lede")}
+        actions={<Button leftSection={<IconRefresh size={16} />} loading={loading} onClick={refresh} variant="default">{t("organization.refresh")}</Button>}
+      />
       {error ? <Alert color="red">{error}</Alert> : null}
       {message ? <Alert color="teal">{message}</Alert> : null}
 
-      <Paper p="lg" radius="lg" withBorder>
+      <WorkspaceSection title={t("manageUi.addMember")} description={t("manageUi.addMemberBody")}>
         <form onSubmit={addMember}>
           <Group align="flex-end" gap="md" wrap="wrap">
             <TextInput
               label={t("organization.registeredEmail")}
               name="email"
               required
-              style={{ flex: 1, minWidth: 220 }}
+              style={{ flex: "1 1 220px", minWidth: 0 }}
               type="email"
             />
             <Select
@@ -326,9 +324,33 @@ function MemberManagementView() {
             </Button>
           </Group>
         </form>
-      </Paper>
+      </WorkspaceSection>
 
-      <Paper p="lg" radius="lg" withBorder>
+      <Paper p={{ base: "md", sm: "lg" }} radius="lg" withBorder>
+        <Group mb="md" align="flex-end">
+          <TextInput
+            aria-label={t("manageUi.searchMembers")}
+            placeholder={t("manageUi.searchMembers")}
+            leftSection={<IconSearch size={16} />}
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            style={{ flex: "1 1 220px", minWidth: 0 }}
+          />
+          <Select
+            aria-label={t("members.column.status")}
+            allowDeselect={false}
+            data={[
+              { value: "all", label: t("manageUi.allStatuses") },
+              { value: "active", label: t("members.status.active") },
+              { value: "pending", label: t("members.status.pending") },
+              { value: "blocked", label: t("members.status.blocked") }
+            ]}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            w={160}
+          />
+          <Text c="dimmed" size="sm" role="status">{t("manageUi.memberCount", { count: visibleMembers.length })}</Text>
+        </Group>
         <Table.ScrollContainer minWidth={780}>
           <Table highlightOnHover striped verticalSpacing="sm">
             <Table.Thead>
@@ -341,7 +363,7 @@ function MemberManagementView() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {members.map((member) => {
+              {visibleMembers.map((member) => {
                 const memberTeams = teamMembers.filter(
                   (teamMember) => teamMember.userId === member.userId
                 );
@@ -518,6 +540,7 @@ function MemberManagementView() {
                   </Table.Tr>
                 );
               })}
+              {!loading && visibleMembers.length === 0 ? <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" ta="center" py="xl">{t("manageUi.noMembers")}</Text></Table.Td></Table.Tr> : null}
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
@@ -527,7 +550,7 @@ function MemberManagementView() {
         centered
         onClose={() => setRemoveTarget(undefined)}
         opened={removeTarget !== undefined}
-        title={t("members.removeTitle")}
+        title={t("members.removeTitle")} attributes={{ content: { "aria-label": t("members.removeTitle") } }}
       >
         <Stack gap="md">
           <Text size="sm">

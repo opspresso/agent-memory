@@ -2,6 +2,7 @@
 
 import {
   Alert,
+  Badge,
   Button,
   Code,
   CopyButton,
@@ -13,6 +14,8 @@ import {
 } from "@mantine/core";
 import { IconCheck, IconCopy } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
+
+import { WorkspaceHeader } from "../workspace-components";
 
 import { useT } from "../_i18n/provider";
 import {
@@ -41,12 +44,7 @@ export function AgentConnect({ origin }: { readonly origin: string }) {
 
   return (
     <Stack gap="lg">
-      <Stack gap={4}>
-        <Text c="dimmed" size="sm">
-          {t("workspace.eyebrow")}
-        </Text>
-        <Title order={1}>{t("workspace.tab.connect")}</Title>
-      </Stack>
+      <WorkspaceHeader title={t("workspace.tab.connect")} description={t("manageUi.connectBody")} />
       <AgentConnectionPanels
         canManageToken={canManageToken}
         key={`${organizationSlug}:${canManageToken}`}
@@ -97,7 +95,7 @@ function StudioRegistrationTemplate({
       withBorder
     >
       <Stack gap="md">
-        <Title order={3}>{t("workspace.studioTemplateTitle")}</Title>
+        <Group gap="xs"><Badge variant="outline">03</Badge><Title order={2}>{t("workspace.studioTemplateTitle")}</Title></Group>
         <Text c="dimmed">{t("workspace.studioTemplateBody")}</Text>
         {fields.map(({ label, value }) => (
           <Stack gap="xs" key={label}>
@@ -118,9 +116,12 @@ function StudioRegistrationTemplate({
                 )}
               </CopyButton>
             </Group>
-            <Code block style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-              {value}
-            </Code>
+            {label === "Content" ? (
+              <details>
+                <summary style={{ cursor: "pointer", color: "var(--mantine-color-dimmed)", fontSize: "var(--mantine-font-size-sm)" }}>{t("manageUi.operatorNotes")}</summary>
+                <Code block mt="xs" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{value}</Code>
+              </details>
+            ) : <Code block style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{value}</Code>}
           </Stack>
         ))}
         <Text c="dimmed" size="sm">{t("workspace.studioTemplateTokenHint")}</Text>
@@ -279,10 +280,10 @@ function AgentConnectionPanels({
     <>
       <Paper p="lg" radius="lg" withBorder>
         <Stack gap="md">
-          <Title order={3}>Streamable HTTP MCP</Title>
+          <Group gap="xs"><Badge variant="outline">01</Badge><Title order={2}>Streamable HTTP MCP</Title></Group>
           <Text c="dimmed">{t("workspace.mcpBody")}</Text>
           <Group align="stretch" gap="xs" wrap="nowrap">
-            <Code block style={{ flex: 1, overflowWrap: "anywhere" }}>
+            <Code block style={{ flex: 1, minWidth: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
               {mcpEndpoint}
             </Code>
             <CopyButton value={mcpEndpoint}>
@@ -310,7 +311,7 @@ function AgentConnectionPanels({
       </Paper>
       <Paper p="lg" radius="lg" withBorder>
         <Stack gap="md">
-          <Title order={3}>{t("workspace.agentTokenTitle")}</Title>
+          <Group gap="xs"><Badge variant="outline">02</Badge><Title order={2}>{t("workspace.agentTokenTitle")}</Title></Group>
           <Text c="dimmed">{t("workspace.agentTokenBody")}</Text>
           {error ? <Alert color="red">{error}</Alert> : null}
           {canManageToken ? (
@@ -320,7 +321,7 @@ function AgentConnectionPanels({
                   <Stack gap="xs">
                     <Text size="sm">Authorization</Text>
                     <Group align="stretch" gap="xs" wrap="nowrap">
-                      <Code block style={{ flex: 1, overflowWrap: "anywhere" }}>
+                      <Code block style={{ flex: 1, minWidth: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                         {`Bearer ${generatedToken}`}
                       </Code>
                       <CopyButton value={`Bearer ${generatedToken}`}>

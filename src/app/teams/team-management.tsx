@@ -34,6 +34,8 @@ import {
 
 import type { TeamRole } from "@/domain/identity/organization-access";
 
+import { WorkspaceHeader, WorkspaceSection } from "../workspace-components";
+
 import { useT } from "../_i18n/provider";
 import {
   teamMembersResponseSchema,
@@ -321,23 +323,11 @@ function TeamManagementView() {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Stack gap={4}>
-          <Text c="dimmed" size="sm">
-            {t("workspace.eyebrow")}
-          </Text>
-          <Title order={1}>{t("teams.title")}</Title>
-          <Text c="dimmed">{t("teams.lede")}</Text>
-        </Stack>
-        <Button
-          leftSection={<IconRefresh size={16} />}
-          loading={loading}
-          onClick={refresh}
-          variant="subtle"
-        >
-          {t("organization.refresh")}
-        </Button>
-      </Group>
+      <WorkspaceHeader
+        title={t("teams.title")}
+        description={t("teams.lede")}
+        actions={<Button leftSection={<IconRefresh size={16} />} loading={loading} onClick={refresh} variant="default">{t("organization.refresh")}</Button>}
+      />
       {error ? <Alert color="red">{error}</Alert> : null}
       {teamMembersError ? (
         <Alert color="red">{teamMembersError}</Alert>
@@ -345,21 +335,21 @@ function TeamManagementView() {
       {message ? <Alert color="teal">{message}</Alert> : null}
 
       {canManageOrganization ? (
-        <Paper p="lg" radius="lg" withBorder>
+        <WorkspaceSection title={t("organization.createTeam")} description={t("manageUi.teamBody")}>
           <form onSubmit={createTeam}>
             <Group align="flex-end" gap="md" wrap="wrap">
               <TextInput
                 label={t("organization.teamName")}
                 name="name"
                 required
-                style={{ flex: 1, minWidth: 180 }}
+                style={{ flex: "1 1 180px", minWidth: 0 }}
               />
               <TextInput
                 label={t("organization.teamSlug")}
                 name="slug"
                 pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
                 required
-                style={{ flex: 1, minWidth: 180 }}
+                style={{ flex: "1 1 180px", minWidth: 0 }}
               />
               <Button
                 leftSection={<IconUsersGroup size={17} />}
@@ -371,25 +361,23 @@ function TeamManagementView() {
               </Button>
             </Group>
           </form>
-        </Paper>
+        </WorkspaceSection>
       ) : null}
 
       <Paper p="lg" radius="lg" withBorder>
         <Stack gap="md">
           <Group gap="xs" wrap="wrap">
             {teams.map((team) => (
-              <Badge
+              <Button
                 aria-pressed={team.id === selectedTeamId}
-                component="button"
                 key={team.id}
                 onClick={() => setSelectedTeamId(team.id)}
-                size="lg"
-                style={{ cursor: "pointer" }}
+                size="sm"
                 type="button"
                 variant={team.id === selectedTeamId ? "filled" : "light"}
               >
                 {team.name}
-              </Badge>
+              </Button>
             ))}
             {teams.length === 0 ? (
               <Text c="dimmed" size="sm">
@@ -442,7 +430,7 @@ function TeamManagementView() {
                       label={t("organization.memberEmail")}
                       name="email"
                       required
-                      style={{ flex: 1, minWidth: 220 }}
+                      style={{ flex: "1 1 220px", minWidth: 0 }}
                       type="email"
                     />
                     <Select
@@ -551,7 +539,7 @@ function TeamManagementView() {
         centered
         onClose={() => setRenameTarget(undefined)}
         opened={renameTarget !== undefined}
-        title={t("teams.renameTitle")}
+        title={t("teams.renameTitle")} attributes={{ content: { "aria-label": t("teams.renameTitle") } }}
       >
         <Stack gap="md">
           <TextInput
@@ -579,7 +567,7 @@ function TeamManagementView() {
         centered
         onClose={() => setDeleteTarget(undefined)}
         opened={deleteTarget !== undefined}
-        title={t("teams.deleteTitle")}
+        title={t("teams.deleteTitle")} attributes={{ content: { "aria-label": t("teams.deleteTitle") } }}
       >
         <Stack gap="md">
           <Text size="sm">

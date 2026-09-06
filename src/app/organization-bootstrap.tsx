@@ -45,12 +45,12 @@ export function OrganizationBootstrap({
   }
 
   return (
-    <Paper p="xl" radius="lg" withBorder>
+    <Paper p={{ base: "md", sm: "lg" }} radius="lg" withBorder>
       <form onSubmit={createOrganization}>
         <Stack gap="md">
           <Stack gap={2}>
             <Title order={2}>{t("organization.firstTitle")}</Title>
-            <Text c="dimmed">
+            <Text c="dimmed" size="sm">
               {t("organization.firstBody")}
             </Text>
           </Stack>

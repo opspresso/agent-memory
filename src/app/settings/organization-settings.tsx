@@ -8,6 +8,7 @@ import {
   Modal,
   Paper,
   Select,
+  SimpleGrid,
   Stack,
   TagsInput,
   Text,
@@ -25,6 +26,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { NewMemberStatus } from "@/domain/identity/organization-access";
 import type { KnowledgeOntologyMode } from "@/domain/knowledge/knowledge-ontology";
+
+import { WorkspaceHeader } from "../workspace-components";
 
 import { useT } from "../_i18n/provider";
 import {
@@ -282,13 +285,7 @@ function OrganizationSettingsView({
 
   return (
     <Stack gap="lg">
-      <Stack gap={4}>
-        <Text c="dimmed" size="sm">
-          {t("workspace.eyebrow")}
-        </Text>
-        <Title order={1}>{t("settings.title")}</Title>
-        <Text c="dimmed">{t("settings.lede")}</Text>
-      </Stack>
+      <WorkspaceHeader title={t("settings.title")} description={t("settings.lede")} />
       {error ? <Alert color="red">{error}</Alert> : null}
       {message ? <Alert color="teal">{message}</Alert> : null}
 
@@ -299,6 +296,7 @@ function OrganizationSettingsView({
             <Title order={3}>{t("settings.general")}</Title>
             <Badge variant="outline">{organization.slug}</Badge>
           </Group>
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
           <TextInput
             label={t("organization.name")}
             onChange={(event) => setName(event.currentTarget.value)}
@@ -329,6 +327,7 @@ function OrganizationSettingsView({
             placeholder={t("settings.defaultTeam.placeholder")}
             value={defaultTeamId}
           />
+          </SimpleGrid>
           <Group justify="flex-end">
             <Button
               disabled={name.trim().length === 0}
@@ -368,6 +367,7 @@ function OrganizationSettingsView({
               }}
               value={ontologyMode}
             />
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
             <TagsInput
               description={`${t("settings.ontology.nodeKinds.description")} · ${t(
                 "settings.ontology.termCount",
@@ -395,6 +395,7 @@ function OrganizationSettingsView({
               splitChars={[",", " "]}
               value={edgePredicates}
             />
+            </SimpleGrid>
             {recommendedKinds.length > 0 || recommendedPredicates.length > 0 ? (
               <Stack gap={6}>
                 <Text fw={650} size="sm">
@@ -555,7 +556,7 @@ function OrganizationSettingsView({
           }
         }}
         opened={deleteOpened}
-        title={t("settings.deleteTitle")}
+        title={t("settings.deleteTitle")} attributes={{ content: { "aria-label": t("settings.deleteTitle") } }}
       >
         <Stack gap="md">
           <Text size="sm">

@@ -10,6 +10,7 @@ import {
   Modal,
   Paper,
   Stack,
+  Tabs,
   Text,
   Textarea,
   TextInput,
@@ -20,7 +21,8 @@ import {
   IconDeviceFloppy,
   IconRefresh
 } from "@tabler/icons-react";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import type { ScopedResource } from "@/domain/identity/organization-access";
 
 import { useLocale, useT } from "./_i18n/provider";
 import {
@@ -43,6 +45,7 @@ interface MemorySourceView {
 
 interface MemoryDetailView {
   readonly id: string;
+  readonly scope?: ScopedResource;
   readonly kind: string;
   readonly title: string;
   readonly content: string;
@@ -70,6 +73,7 @@ interface MemoryVersionView {
 }
 
 interface MemoryLifecycleProps {
+  readonly embedded?: boolean;
   readonly memoryId: string;
   readonly onClose: () => void;
   readonly onChanged: () => void;
@@ -86,10 +90,12 @@ async function requestMemory(
   organizationSlug: string,
   memoryId: string,
   fallback: string,
-  etagMissing: string
+  etagMissing: string,
+  signal?: AbortSignal
 ): Promise<LoadedMemory> {
   const response = await fetch(
-    `/api/organizations/${organizationSlug}/memories/${memoryId}`
+    `/api/organizations/${organizationSlug}/memories/${memoryId}`,
+    { signal }
   );
   const memory = await responseJson(
     response,
@@ -104,7 +110,8 @@ async function requestMemory(
     return { memory, etag, versions: [] };
   }
   const versionsResponse = await fetch(
-    `/api/organizations/${organizationSlug}/memories/${memoryId}/versions?limit=100`
+    `/api/organizations/${organizationSlug}/memories/${memoryId}/versions?limit=100`,
+    { signal }
   );
   const versionsBody = await responseJson(
     versionsResponse,
@@ -122,6 +129,7 @@ function formattedDate(value: string, locale: "en" | "ko") {
 }
 
 export function MemoryLifecycle({
+  embedded = false,
   memoryId,
   onClose,
   onChanged,
@@ -138,6 +146,17 @@ export function MemoryLifecycle({
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const mounted = useRef(true);
+  const readRequest = useRef<AbortController | null>(null);
+  const mutationRequest = useRef<AbortController | null>(null);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      readRequest.current?.abort();
+      mutationRequest.current?.abort();
+    };
+  }, []);
   const getLoadMessages = useEffectEvent(() => ({
     requestFailed: t("memory.requestFailed"),
     etagMissing: t("memory.etagMissing"),
@@ -153,32 +172,41 @@ export function MemoryLifecycle({
   }
 
   async function loadMemory() {
+    if (!mounted.current) return;
+    readRequest.current?.abort();
+    const controller = new AbortController();
+    readRequest.current = controller;
     setLoading(true);
     setError(undefined);
     try {
-      applyLoaded(await requestMemory(
+      const next = await requestMemory(
         organizationSlug,
         memoryId,
         t("memory.requestFailed"),
-        t("memory.etagMissing")
-      ));
+        t("memory.etagMissing"),
+        controller.signal
+      );
+      if (!controller.signal.aborted && mounted.current) applyLoaded(next);
     } catch (caught) {
+      if (controller.signal.aborted || !mounted.current) return;
       setError(
         caught instanceof Error ? caught.message : t("memory.loadFailed")
       );
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted && mounted.current) setLoading(false);
     }
   }
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     const loadMessages = getLoadMessages();
     requestMemory(
       organizationSlug,
       memoryId,
       loadMessages.requestFailed,
-      loadMessages.etagMissing
+      loadMessages.etagMissing,
+      controller.signal
     )
       .then((next) => {
         if (active) {
@@ -198,6 +226,7 @@ export function MemoryLifecycle({
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [memoryId, organizationSlug]);
 
@@ -212,6 +241,8 @@ export function MemoryLifecycle({
       return;
     }
     setSaving(true);
+    const controller = new AbortController();
+    mutationRequest.current = controller;
     setError(undefined);
     setMessage(undefined);
     try {
@@ -219,6 +250,7 @@ export function MemoryLifecycle({
         `/api/organizations/${organizationSlug}/memories/${memoryId}`,
         {
           method: "PATCH",
+          signal: controller.signal,
           headers: {
             "Content-Type": "application/json",
             "If-Match": loaded.etag
@@ -240,15 +272,17 @@ export function MemoryLifecycle({
         );
       }
       await responseOk(response, t("memory.requestFailed"));
+      if (controller.signal.aborted || !mounted.current) return;
       onChanged();
       setMessage(t("memory.revisionSaved"));
       await loadMemory();
     } catch (caught) {
+      if (controller.signal.aborted || !mounted.current) return;
       setError(
         caught instanceof Error ? caught.message : t("memory.revisionFailed")
       );
     } finally {
-      setSaving(false);
+      if (mounted.current) setSaving(false);
     }
   }
 
@@ -257,6 +291,8 @@ export function MemoryLifecycle({
       return;
     }
     setSaving(true);
+    const controller = new AbortController();
+    mutationRequest.current = controller;
     setError(undefined);
     setMessage(undefined);
     try {
@@ -265,7 +301,7 @@ export function MemoryLifecycle({
         : "";
       const response = await fetch(
         `/api/organizations/${organizationSlug}/memories/${memoryId}${query}`,
-        { method: "DELETE", headers: { "If-Match": loaded.etag } }
+        { method: "DELETE", headers: { "If-Match": loaded.etag }, signal: controller.signal }
       );
       if (response.status === 409) {
         throw new Error(
@@ -273,27 +309,22 @@ export function MemoryLifecycle({
         );
       }
       await responseOk(response, t("memory.requestFailed"));
+      if (controller.signal.aborted || !mounted.current) return;
       onChanged();
       setMessage(t("memory.archived"));
       setConfirmArchive(false);
       onClose();
     } catch (caught) {
+      if (controller.signal.aborted || !mounted.current) return;
       setError(
         caught instanceof Error ? caught.message : t("memory.archiveFailed")
       );
     } finally {
-      setSaving(false);
+      if (mounted.current) setSaving(false);
     }
   }
 
-  return (
-    <Modal
-      fullScreen
-      onClose={onClose}
-      opened
-      padding={0}
-      title={<Text fw={750}>{t("memory.lifecycle")}</Text>}
-    >
+  const panel = (
       <div className={classes.shell}>
         {loading ? (
           <div className={classes.loading}><Loader /></div>
@@ -326,6 +357,7 @@ export function MemoryLifecycle({
               <Stack gap="xs">
                 <Group gap="xs">
                   <Badge variant="filled">v{loaded.memory.version}</Badge>
+                  {loaded.memory.scope ? <Badge variant="outline">{t(`workspace.scope.${loaded.memory.scope.kind}`)}</Badge> : null}
                   <Badge color="gray" variant="light">
                     {loaded.memory.kind}
                   </Badge>
@@ -343,14 +375,26 @@ export function MemoryLifecycle({
               </Text>
             </header>
 
-            <div className={classes.editorGrid}>
-              <Paper className={classes.snapshot} p="xl" radius="lg">
+            <Tabs defaultValue="content" keepMounted={false}>
+              <Tabs.List mb="md">
+                <Tabs.Tab value="content">{t("memoryUi.read")}</Tabs.Tab>
+                {loaded.memory.capabilities.write || loaded.memory.capabilities.manage ? (
+                  <Tabs.Tab value="edit">{t("memoryUi.edit")}</Tabs.Tab>
+                ) : null}
+                {loaded.memory.capabilities.manage ? (
+                  <Tabs.Tab value="history">{t("memory.versionSpine")}</Tabs.Tab>
+                ) : null}
+              </Tabs.List>
+              <Tabs.Panel value="content">
+              <Paper className={classes.snapshot} p="md" withBorder>
                 <Stack gap="lg">
                   <Text c="dimmed" fw={750} size="xs" tt="uppercase">
                     {t("memory.currentSnapshot")}
                   </Text>
                   <Text className={classes.content}>{loaded.memory.content}</Text>
                   <Divider />
+                  <Text size="sm">{t("memory.source", { source: loaded.memory.source.type })}</Text>
+                  {loaded.memory.source.uri ? <Text size="sm" style={{ overflowWrap: "anywhere" }}>{loaded.memory.source.uri}</Text> : null}
                   <Group grow>
                     <Stack gap={2}>
                       <Text c="dimmed" size="xs">{t("memory.validFrom")}</Text>
@@ -367,8 +411,10 @@ export function MemoryLifecycle({
                   </Group>
                 </Stack>
               </Paper>
-
-              <Paper p="xl" radius="lg" withBorder>
+              </Tabs.Panel>
+              <Tabs.Panel value="edit">
+              {loaded.memory.capabilities.write || loaded.memory.capabilities.manage ? (
+              <Paper p="md" withBorder>
                 <Stack gap="md">
                   <Stack gap={2}>
                     <Title order={3}>{t("memory.newRevision")}</Title>
@@ -413,7 +459,7 @@ export function MemoryLifecycle({
                       </Button>
                     ) : <span />}
                     <Button
-                      disabled={!changed || !title.trim() || !content.trim()}
+                      disabled={!loaded.memory.capabilities.write || !changed || !title.trim() || !content.trim()}
                       leftSection={<IconDeviceFloppy size={16} />}
                       loading={saving}
                       onClick={() => void saveRevision()}
@@ -449,8 +495,9 @@ export function MemoryLifecycle({
                   ) : null}
                 </Stack>
               </Paper>
-            </div>
-
+              ) : null}
+              </Tabs.Panel>
+              <Tabs.Panel value="history">
             {loaded.memory.capabilities.manage ? (
               <section>
                 <Stack gap="xs" mb="lg">
@@ -477,7 +524,7 @@ export function MemoryLifecycle({
                         <Text c="dimmed" size="xs">{version.status}</Text>
                       </Group>
                       <Text fw={700}>{version.title}</Text>
-                      <Text c="dimmed" lineClamp={3} size="sm">
+                      <Text c="dimmed" size="sm" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                         {version.content}
                       </Text>
                       {version.changeReason ? (
@@ -493,9 +540,16 @@ export function MemoryLifecycle({
                 </div>
               </section>
             ) : null}
+              </Tabs.Panel>
+            </Tabs>
           </Stack>
         ) : null}
       </div>
+  );
+
+  return embedded ? panel : (
+    <Modal attributes={{ content: { "aria-label": t("memory.lifecycle") } }} onClose={onClose} opened size="xl" title={<Text fw={650}>{t("memory.lifecycle")}</Text>}>
+      {panel}
     </Modal>
   );
 }
