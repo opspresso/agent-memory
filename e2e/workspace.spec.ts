@@ -421,7 +421,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(mcpEndpoint);
   await registrationTemplate.getByRole("button", { name: "등록 템플릿 Description 복사" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
-    `${organizationSlug} 조직의 이전 결정·규칙·경험, 문서 근거, 지식 간 관계를 확인할 때 사용합니다. Memory·RAG·Knowledge Graph를 검색하고 공유할 정보를 조직 범위 Memory로 저장합니다.`
+    `${organizationSlug} 조직에 저장된 결정·규칙·경험, 문서 근거, 지식 간 관계를 확인할 때 사용합니다. Memory·RAG·Knowledge Graph를 검색하고 공유할 정보를 조직 범위 Memory로 저장합니다.`
   );
   await expect(registrationTemplate).toContainText("Content는 운영자에게만 표시됩니다.");
   await registrationTemplate.getByRole("button", { name: "등록 템플릿 Content 복사" }).click();
