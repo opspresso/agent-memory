@@ -66,7 +66,9 @@ Next.js 전역 응답 header는 CSP `frame-ancestors 'none'`과 `X-Frame-Options
 
 조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 같은 slug의 MCP route에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자가 현재 active `admin` 또는 `owner`인지 다시 확인해 제거·차단·강등을 즉시 반영한다. 유효한 token 요청에 `X-User-Email`이 없으면 발급자에게 귀속되는 organization service principal로 실행하며 organization scope만 허용한다. 이 경우 user scope, team scope, 개별 access grant는 domain 정책과 SQL predicate 모두에서 제외한다. Header가 있으면 정규화·형식 검증 후 token 조직의 활성 멤버를 `findByEmail`로 조회해 사용자의 role과 team을 포함한 기존 사용자 권한을 적용한다. 빈 값·잘못된 형식은 거부하고 활성 멤버가 없으면 접근을 거부하며 service principal로 fallback하지 않는다. Token 발급자의 role을 위임 사용자에게 물려주지 않는다. 조직 token은 조직 내 사용자 신원을 위임할 수 있으므로 인증된 사용자 email을 전달하는 신뢰된 server-side client만 보유해야 한다. Session 인증과 일반 HTTP route는 이 header로 사용자를 변경하지 않는다.
 
-Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 인증 경계는 설정된 전역 admin email 여부를 actor에 담고, 조직 생성 application use case가 이 권한을 확인한다. 이 권한은 조직 bootstrap만 허용하며, 생성된 조직 안에서는 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
+Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 허용 domain 목록이 없으면 모든 email domain을 허용한다. 인증 경계는 설정된 전역 admin email 여부를 actor에 담고, 조직 생성 application use case와 전역 설정 API가 이 권한을 확인한다. 이 권한은 조직 bootstrap과 애플리케이션 설정 관리만 허용하며, 생성된 조직 안에서는 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
+
+전역 애플리케이션 설정은 singleton `app_settings` row에 env 이름별 override로 저장한다. Application use case가 env보다 override를 우선해 유효 설정을 만들고, infrastructure adapter가 Secret 값을 `BETTER_AUTH_SECRET`에서 분리해 파생한 AES-256-GCM key와 env 이름 AAD로 암호화한다. 인증 domain과 admin 목록은 짧은 cache를 거쳐 요청 시 다시 읽으며, process 초기화형 설정은 instrumentation이 migration 이후 다른 adapter를 import하기 전에 `process.env`에 적용한다. Database 연결, 암호화 root, migration 실행 여부, Node runtime은 이 row를 읽기 전에 필요하므로 bootstrap env로 남긴다.
 
 ## Scope와 권한
 

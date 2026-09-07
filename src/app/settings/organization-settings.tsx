@@ -28,6 +28,7 @@ import type { NewMemberStatus } from "@/domain/identity/organization-access";
 import type { KnowledgeOntologyMode } from "@/domain/knowledge/knowledge-ontology";
 
 import { WorkspaceHeader } from "../workspace-components";
+import { ApplicationSettings } from "./application-settings";
 
 import { useT } from "../_i18n/provider";
 import {
@@ -288,6 +289,8 @@ function OrganizationSettingsView({
       <WorkspaceHeader title={t("settings.title")} description={t("settings.lede")} />
       {error ? <Alert color="red">{error}</Alert> : null}
       {message ? <Alert color="teal">{message}</Alert> : null}
+
+      <ApplicationSettings isAdmin={isAdmin} />
 
       {organization ? (
       <Paper p="lg" radius="lg" withBorder>

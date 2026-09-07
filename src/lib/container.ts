@@ -1,4 +1,3 @@
-import { createDatabase } from "@/infrastructure/database/client";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createOrganizationAgentTokenRepository } from "@/infrastructure/database/repositories/organization-agent-token-repository";
 import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
@@ -29,13 +28,9 @@ import { logger } from "@/infrastructure/observability/logger";
 import { createPgBossDocumentIngestionQueue } from "@/infrastructure/queue/document-ingestion-queue";
 import { createOrganizationAgentTokenSecret } from "@/infrastructure/security/organization-agent-token-secret";
 import { createOrganizationAgentTokenUseCases } from "@/application/identity/manage-organization-agent-token";
+import { database, defaultDatabaseUrl } from "./database";
 
-const defaultDatabaseUrl =
-  "postgresql://agent_memory:agent_memory@localhost:5433/agent_memory";
-
-export const database = createDatabase(
-  process.env.DATABASE_URL ?? defaultDatabaseUrl
-);
+export { database };
 const localAiRequestLimiter = createAiRequestLimiter(readAiRequestLimits());
 const durableAiRequestLimiter = createPostgresAiRequestLimiter(
   database.db,

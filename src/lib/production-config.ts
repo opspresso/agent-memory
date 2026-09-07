@@ -3,12 +3,13 @@ const requiredProductionSettings = [
   "BETTER_AUTH_SECRET",
   "BETTER_AUTH_URL",
   "ADMIN_EMAILS",
-  "ALLOWED_EMAIL_DOMAINS",
   "S3_ENDPOINT",
   "S3_ACCESS_KEY_ID",
   "S3_SECRET_ACCESS_KEY",
   "S3_BUCKET"
 ] as const;
+
+const requiredBootstrapSettings = ["DATABASE_URL", "BETTER_AUTH_SECRET"] as const;
 
 interface ProductionConfigurationEnvironment {
   readonly [key: string]: string | undefined;
@@ -33,6 +34,22 @@ function productionBaseUrl(value: string): URL {
     throw new Error("BETTER_AUTH_URL must use HTTPS outside loopback environments");
   }
   return url;
+}
+
+export function assertProductionBootstrapConfiguration(
+  environment: ProductionConfigurationEnvironment = process.env
+): void {
+  if (environment.NODE_ENV !== "production") {
+    return;
+  }
+  const missing = requiredBootstrapSettings.filter(
+    (name) => !environment[name]?.trim()
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `production bootstrap configuration is incomplete: ${missing.join(", ")} must be set`
+    );
+  }
 }
 
 export function assertProductionConfiguration(

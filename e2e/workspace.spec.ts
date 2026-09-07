@@ -94,6 +94,11 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(
     page.getByRole("heading", { name: "조직 설정" })
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "애플리케이션 설정" })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "인증 및 접근" }).click();
+  await expect(page.getByLabel(/ALLOWED_EMAIL_DOMAINS/)).toHaveValue("nalbam.com");
   await page.getByRole("combobox", { name: "신규 회원 정책" }).click();
   await page.getByRole("option", { name: "승인 대기" }).click();
   await page.getByRole("combobox", { name: "기본 팀" }).click();

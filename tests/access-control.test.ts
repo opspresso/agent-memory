@@ -8,8 +8,8 @@ import {
 } from "@/lib/access-control";
 
 describe("access control configuration", () => {
-  it("uses the nalbam.com deployment defaults", () => {
-    expect(getAllowedEmailDomains({})).toEqual(["nalbam.com"]);
+  it("allows every email domain when no restriction is configured", () => {
+    expect(getAllowedEmailDomains({})).toEqual([]);
     expect(getAdminEmails({})).toEqual(["me@nalbam.com"]);
   });
 
