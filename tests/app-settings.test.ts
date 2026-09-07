@@ -11,6 +11,7 @@ import type {
   AppSettingsSecretCipher
 } from "@/domain/settings/app-settings";
 import { createAppSettingsSecretCipher } from "@/infrastructure/security/app-settings-secret";
+import { validateRuntimeEnvironment } from "@/lib/runtime-configuration";
 
 function dependencies(environment: Readonly<Record<string, string | undefined>>) {
   let stored: AppSettings | null = null;
@@ -46,9 +47,9 @@ function dependencies(environment: Readonly<Record<string, string | undefined>>)
     useCases: createAppSettingsUseCases({
       cipher,
       clock: () => new Date("2026-09-07T00:00:00.000Z"),
-      environment,
+      environment: { AUTH_PASSWORD: "true", ...environment },
       repository,
-      validate: () => undefined
+      validate: validateRuntimeEnvironment
     })
   };
 }
@@ -58,7 +59,8 @@ describe("application settings", () => {
     const { stored, useCases } = dependencies({
       ADMIN_EMAILS: "admin@example.com",
       ALLOWED_EMAIL_DOMAINS: "example.com",
-      GOOGLE_CLIENT_SECRET: "environment-secret"
+      GOOGLE_CLIENT_SECRET: "environment-secret",
+      GOOGLE_CLIENT_ID: "synthetic-client"
     });
 
     await expect(useCases.getView()).resolves.toMatchObject({
@@ -122,6 +124,38 @@ describe("application settings", () => {
         "admin@example.com"
       )
     ).rejects.toBeInstanceOf(InvalidAppSettingsError);
+  });
+
+  it.each([
+    ["EMBEDDING_BASE_URL", "EMBEDDING_API_KEY"],
+    ["RERANKER_BASE_URL", "RERANKER_API_KEY"],
+    ["KNOWLEDGE_EXTRACTION_BASE_URL", "KNOWLEDGE_EXTRACTION_API_KEY"]
+  ] as const)("protects credentials when changing %s", async (target, key) => {
+    const { useCases } = dependencies({
+      ADMIN_EMAILS: "admin@example.com",
+      [target]: "https://original.example/v1",
+      [key]: "original-secret",
+      RERANKER_MODEL: "model",
+      RERANKER_BASE_URL: "https://original.example/v1"
+    });
+    await expect(useCases.update({ values: { [target]: "https://new.example/v1" } }, "admin@example.com"))
+      .rejects.toThrow(`Changing ${target}`);
+    await expect(useCases.update({ values: { [target]: "https://new.example/v1", [key]: "masked:••••••••" } }, "admin@example.com"))
+      .rejects.toThrow(`Changing ${target}`);
+    await useCases.update({ values: { [target]: "https://new.example/v1", [key]: "new-secret" } }, "admin@example.com");
+    expect((await useCases.getEffectiveEnvironment())[key]).toBe("new-secret");
+    await useCases.update({ reset: [target, key] }, "admin@example.com");
+    expect((await useCases.getEffectiveEnvironment())[key]).toBe("original-secret");
+    await useCases.update({ values: { [target]: "http://localhost:8000/v1", [key]: "" } }, "admin@example.com");
+    expect((await useCases.getEffectiveEnvironment())[key]).toBe("");
+  });
+
+  it("does not persist invalid runtime settings or disable the last login method", async () => {
+    const { stored, useCases } = dependencies({ ADMIN_EMAILS: "admin@example.com" });
+    for (const values of [{ LOG_LEVEL: "" }, { AUTH_PASSWORD: "false" }, { LANGFUSE_EXPORT_MODE: "" }]) {
+      await expect(useCases.update({ values }, "admin@example.com")).rejects.toBeInstanceOf(InvalidAppSettingsError);
+      expect(stored()).toBeNull();
+    }
   });
 
   it("prevents an administrator from excluding their own sign-in domain", async () => {

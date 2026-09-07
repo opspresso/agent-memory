@@ -107,6 +107,8 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 
 `ALLOWED_EMAIL_DOMAINS`의 빈 문자열은 명시적인 무제한 override다. Override 삭제는 빈 문자열 대신 `reset`을 사용한다.
 
+저장 시 서버 시작과 동일한 runtime 검증을 수행하며 모든 로그인 수단을 비활성화하는 변경은 거부한다. AI endpoint 변경에는 해당 API key의 명시적 입력·제거 또는 env 쌍으로의 reset이 필요하다. 마스킹된 key를 재전송하는 것은 새 endpoint에 대한 credential 입력으로 인정하지 않는다.
+
 오류 응답은 기본적으로 `{ "error": string }`이며 schema validation 오류는 `issues`를 추가할 수 있다.
 
 | Status | 의미 |

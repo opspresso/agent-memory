@@ -228,6 +228,7 @@ export function ApplicationSettings({ isAdmin }: { readonly isAdmin: boolean }) 
                       const isReset = reset.has(name);
                       return (
                         <TextInput
+                          disabled={pending}
                           key={name}
                           description={
                             field.restartRequired
@@ -259,6 +260,7 @@ export function ApplicationSettings({ isAdmin }: { readonly isAdmin: boolean }) 
                           rightSection={
                             field.source === "override" ? (
                               <Button
+                                disabled={pending}
                                 aria-label={t("settings.application.useEnv", { name })}
                                 onClick={() => {
                                   setReset((current) => new Set(current).add(name));

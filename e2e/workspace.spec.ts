@@ -80,6 +80,28 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(page.getByRole("heading", { name: "애플리케이션 설정" })).toBeVisible();
   await page.getByRole("button", { name: "인증 및 접근" }).click();
   await expect(page.getByLabel(/ALLOWED_EMAIL_DOMAINS/)).toHaveValue("nalbam.com");
+  await page.getByRole("button", { name: "로그 및 telemetry" }).click();
+  await page.getByRole("textbox", { name: /LOG_LEVEL/ }).fill("trace");
+  await page.getByRole("textbox", { name: /LOG_LEVEL/ }).fill("debug");
+  let releaseSave!: () => void;
+  const saveGate = new Promise<void>((resolve) => { releaseSave = resolve; });
+  await page.route("**/api/settings/runtime", async (route) => {
+    if (route.request().method() === "PUT") await saveGate;
+    await route.continue();
+  });
+  await page.getByRole("button", { name: "Override 저장" }).click();
+  await expect(page.getByRole("textbox", { name: /LOG_LEVEL/ })).toBeDisabled();
+  releaseSave();
+  await expect(page.getByText("애플리케이션 설정을 저장했습니다.", { exact: true })).toBeVisible();
+  await page.unroute("**/api/settings/runtime");
+  await page.reload();
+  await page.getByRole("button", { name: "로그 및 telemetry" }).click();
+  await expect(page.getByRole("textbox", { name: /LOG_LEVEL/ })).toHaveValue("debug");
+  await page.getByRole("button", { name: "LOG_LEVEL에 환경 변수 값 사용", exact: true }).click();
+  await page.getByRole("button", { name: "Override 저장" }).click();
+  await expect(page.getByText("애플리케이션 설정을 저장했습니다.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "LOG_LEVEL에 환경 변수 값 사용", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: /LOG_LEVEL/ })).toHaveValue("info");
   await postJson<{ id: string }>(
     page,
     "/api/organizations",

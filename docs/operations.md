@@ -113,6 +113,10 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 ### Database 설정 override
 
+저장과 서버 시작은 같은 runtime 검증기를 사용한다. URL은 credential을 포함하지 않는 절대 HTTP(S) 주소여야 하며 빈 log level과 Langfuse export mode는 거부한다. 환경 변수 기본값으로 복귀하려면 빈 문자열을 저장하지 말고 override를 reset한다. 최소 한 개의 Google·OIDC·password 로그인 수단을 유지해야 한다. 이 검증은 설정 형식을 확인하며 외부 provider의 실제 인증 성공까지 보장하지 않는다.
+
+Embedding·reranker·knowledge extraction endpoint를 바꿀 때 기존 credential이 있으면 해당 API key를 명시적으로 입력하거나 빈 값으로 제거해야 한다. Endpoint와 API key를 함께 reset하면 env의 쌍으로 복귀한다. 새 endpoint에 이전 provider credential을 자동 전달하지 않는다.
+
 전역 admin은 계정 메뉴의 `설정`에서 조직 가입 여부와 관계없이 애플리케이션 설정을 관리한다. 저장된 값은 env보다 우선하며, override를 reset하면 다시 env와 기본값 순으로 fallback한다. `ALLOWED_EMAIL_DOMAINS`에 빈 override를 저장하면 env에 제한 목록이 있어도 모든 domain을 허용한다. 설정 변경은 DB transaction에서 최신 관리자 권한을 확인하고 직렬화해 동시에 저장한 다른 항목의 변경을 보존한다.
 
 Secret 항목은 `BETTER_AUTH_SECRET`에서 파생한 key로 암호화해 저장하고 화면과 API 응답에서는 마스킹한다. `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN`은 현재 instance에 즉시 반영된다. 인증 provider, AI service, worker, object storage, logging, telemetry처럼 process 초기화 시 구성되는 항목은 모든 instance를 재시작한 뒤 반영된다. 여러 replica에서 접근 정책 override는 최대 5초 안에 다시 읽는다.

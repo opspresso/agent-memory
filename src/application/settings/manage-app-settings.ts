@@ -25,6 +25,12 @@ export interface AppSettingsUpdate {
 
 export class InvalidAppSettingsError extends Error {}
 
+const credentialTargets = [
+  ["EMBEDDING_BASE_URL", "EMBEDDING_API_KEY"],
+  ["RERANKER_BASE_URL", "RERANKER_API_KEY"],
+  ["KNOWLEDGE_EXTRACTION_BASE_URL", "KNOWLEDGE_EXTRACTION_API_KEY"]
+] as const;
+
 interface Dependencies {
   readonly cipher: AppSettingsSecretCipher;
   readonly clock: () => Date;
@@ -164,6 +170,18 @@ export function createAppSettingsUseCases(dependencies: Dependencies) {
           updatedAt: dependencies.clock()
         };
         const effective = effectiveEnvironment(next, dependencies);
+        for (const [target, credential] of credentialTargets) {
+          const previousTarget = fieldValue(target, current, dependencies);
+          if (previousTarget === effective[target] || !effective[credential]) continue;
+          const submitted = update.values?.[credential];
+          const explicitlyProvided = submitted !== undefined && !dependencies.cipher.isMasked(submitted.trim());
+          const resetPair = update.reset?.includes(credential) &&
+            effective[target] === dependencies.environment[target] &&
+            effective[credential] === dependencies.environment[credential];
+          if (!explicitlyProvided && !resetPair) {
+            throw new InvalidAppSettingsError(`Changing ${target} requires an explicit ${credential} value or clearing it`);
+          }
+        }
         try {
           dependencies.validate(effective);
         } catch (error) {
