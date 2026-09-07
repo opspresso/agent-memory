@@ -4,7 +4,7 @@
 
 ```bash
 export AGENT_MEMORY_URL=http://localhost:3100
-export AGENT_MEMORY_TOKEN=<better-auth-session-token>
+export AGENT_MEMORY_TOKEN='<better-auth-session-token>'
 ```
 
 ## 인증과 요청 경계
@@ -38,7 +38,7 @@ curl -i \
 
 성공 응답의 `set-auth-token` header 값을 저장하고 이후 요청에 사용하라. Token을 source code, shell history, log 또는 MCP 설정 repository에 넣지 마라. 운영 환경에서는 secret manager를 사용하라.
 
-접근 가능한 조직과 organization slug는 다음 요청으로 확인한다.
+가입 요청 후 운영자 승인을 받은 사용자는 다음 요청으로 설치 조직을 확인한다. 최초 owner 준비는 [시작 가이드](getting-started.md#3-최초-운영자-준비와-가입-요청)를 따른다. 로그인 API만 호출하면 가입 요청이 접수되지 않으므로 먼저 브라우저에서 콘솔에 접속하라.
 
 ```bash
 curl \
@@ -46,24 +46,18 @@ curl \
   "$AGENT_MEMORY_URL/api/organization"
 ```
 
-응답 형식은 다음과 같다.
+일반 활성 멤버의 응답 형식은 다음과 같다.
 
 ```json
 {
-  "organizations": [
-    {
-      "id": "00000000-0000-0000-0000-000000000000",
-      "name": "Example Organization",
-      "slug": "example",
-      "role": "owner",
-      "status": "active"
-    }
-  ],
-  "count": 1
+  "id": "00000000-0000-0000-0000-000000000000",
+  "slug": "default",
+  "name": "Agent Memory",
+  "createdAt": "2026-09-08T00:00:00.000Z"
 }
 ```
 
-`status`는 `active`, `pending`, `blocked` 중 하나다. `active` membership만 조직 resource에 접근할 수 있으며, `pending`과 `blocked` 사용자의 조직 요청은 `403`을 반환한다.
+`admin`·`owner`에게는 `defaultTeamId`, `ontologyMode`, `ontology` 설정도 반환한다. 조직 목록·멤버십 응답이 아니므로 `organizations`, `count`, `role`, `status`는 포함하지 않는다. `active` membership만 이 endpoint와 조직 resource에 접근할 수 있으며, 승인 대기·차단·제거된 사용자는 `403`을 받는다.
 
 현재 role과 team membership은 `GET /api/me`로 확인한다.
 
@@ -83,9 +77,9 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 
 일상적인 `GET .../agent-token` 응답은 `configured` 여부와 함께 mask, 생성 시각, `revealable` 상태만 반환하며, token이 없으면 `{ "configured": false }`만 반환한다. 원문은 생성 응답과 명시적인 `POST .../agent-token/reveal`에서만 반환하며 두 응답 모두 `Cache-Control: no-store`다. 암호문 column이 없는 기존 hash-only token은 MCP 인증은 유지하지만 reveal할 수 없으므로 한 번 재생성해야 한다.
 
-이 token은 URL의 동일 organization slug에 해당하는 MCP endpoint에서만 인증된다. 일반 HTTP API나 다른 조직에서는 사용할 수 없다. Token 발급자가 현재 active `admin` 또는 `owner`인지 확인한 뒤 `X-User-Email`이 없으면 organization scope만 접근할 수 있는 service principal을 적용한다. 유효한 token과 함께 전달된 `X-User-Email`은 해당 조직의 활성 사용자 권한으로 위임한다. 상세 검증과 신뢰 경계는 MCP 절을 따른다. 발급자가 차단·제거·강등되면 다음 요청부터 인증이 거부된다. `BETTER_AUTH_SECRET`을 변경하면 기존 token은 hash 검증으로 계속 인증되지만 원문을 복호화할 수 없으므로 재생성해야 한다.
+이 token은 설치의 `/api/mcp`에서만 인증되며 일반 HTTP API에서는 사용할 수 없다. Token 발급자가 현재 active `admin` 또는 `owner`인지 확인한 뒤 `X-User-Email`이 없으면 organization scope만 접근할 수 있는 service principal을 적용한다. 유효한 token과 함께 전달된 `X-User-Email`은 설치 조직의 활성 사용자 권한으로 위임한다. 상세 검증과 신뢰 경계는 MCP 절을 따른다. 발급자가 차단·제거·강등되면 다음 요청부터 인증이 거부된다. `BETTER_AUTH_SECRET`을 변경하면 기존 token은 hash 검증으로 계속 인증되지만 원문을 복호화할 수 없으므로 재생성해야 한다.
 
-`ALLOWED_EMAIL_DOMAINS`가 미설정 또는 빈 값이면 모든 email domain으로 로그인할 수 있다. 목록을 설정하면 인증을 해당 email domain으로 제한한다. 서버가 설치 조직을 준비하며 최초 `ADMIN_EMAILS` 사용자 로그인 시 owner를 설정한다. 이후 사용자는 가입 후 첫 콘솔 접속 시 가입 요청이 접수되며 운영자 승인 전까지 pending 상태다. 전역 admin 권한은 기존 조직의 멤버십이나 role을 대체하지 않는다. 조직 생성·가입·삭제 API는 제공하지 않는다.
+`ALLOWED_EMAIL_DOMAINS`가 미설정 또는 빈 값이면 모든 email domain으로 로그인할 수 있다. 목록을 설정하면 인증을 해당 email domain으로 제한한다. 서버가 설치 조직을 준비하며 active owner가 없을 때 `ADMIN_EMAILS` 사용자가 콘솔에 접속하면 최초 owner를 설정한다. 그 외 신규 사용자는 첫 콘솔 접속 시 가입 요청이 접수되며 운영자 승인 전까지 pending 상태다. 전역 admin 권한은 조직의 멤버십이나 role을 대체하지 않는다. 조직 생성·가입·삭제 API는 제공하지 않는다.
 
 ### 전역 애플리케이션 설정
 
@@ -168,17 +162,18 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 ## 조직 관리 입력
 
 - 조직 설정 변경(`PATCH /api/organization`): `{ "name"?: string, "defaultTeamId"?: UUID | null, "ontologyMode"?: "off" | "warn" | "strict", "ontology"?: { "nodeKinds": string[], "edgePredicates": string[] } }` — 필드 하나 이상 필요. `ontology`는 두 목록 전체를 치환하며 목록당 최대 200개, 용어당 최대 100자다. 용어는 소문자로 정규화하고 중복을 제거해 저장한다.
-- 조직 멤버 추가: `{ "email": string, "role": "member" | "admin" | "owner" }` — 이미 가입한 사용자는 `409`. 기존 멤버의 role은 `PATCH .../members/:userId`로 변경한다.
+- 조직 멤버 추가: `{ "email": string, "role": "member" | "admin" | "owner" }` — 이미 존재하는 계정만 운영자가 active 멤버로 추가할 수 있다. 계정이 없으면 `404`, pending·active·blocked 멤버가 이미 있으면 `409`다. Pending 요청 승인과 기존 멤버의 role 변경은 `PATCH /api/members/:userId`를 사용한다. Removed 멤버의 재추가는 허용한다.
 - 멤버 변경(`PATCH .../members/:userId`): `{ "role"?: "member" | "admin" | "owner", "status"?: "active" | "pending" | "blocked" }` — 필드 하나 이상 필요
 - 팀 생성: `{ "slug": string, "name": string }`
 - 팀 이름 변경(`PATCH .../teams/:teamId`): `{ "name": string }`
 - 팀 멤버 추가·변경: `{ "email": string, "role": "member" | "manager" }`
 
-`slug`는 63자 이하의 소문자 영숫자와 단일 hyphen 구분 형식을 사용한다. 조직과 팀의 `name`은 1–200자다. 멤버·팀 관리는 organization `admin` 또는 `owner`가 수행하고, team `manager`는 자신이 관리하는 팀에 기존 조직 멤버를 배정하거나 팀 이름을 변경할 수 있다. 팀 삭제와 조직 설정 변경은 `admin`·`owner`만 가능하다.
+팀 `slug`는 63자 이하의 소문자 영숫자와 단일 hyphen 구분 형식을 사용한다. 조직과 팀의 `name`은 1–200자다. 멤버·팀 관리는 organization `admin` 또는 `owner`가 수행하고, team `manager`는 자신이 관리하는 팀에 기존 조직 멤버를 배정하거나 팀 이름을 변경할 수 있다. 팀 삭제와 조직 설정 변경은 `admin`·`owner`만 가능하다. 조직 설정 PATCH는 알 수 없는 필드를 `400`으로 거부한다.
 
 ### 멤버십 status와 가입 흐름
 
-- 조직에 `defaultTeamId`가 설정되어 있으면 멤버가 `active`가 되는 시점(즉시 가입 또는 pending 승인)에 해당 팀의 `member`로 자동 배정한다.
+- 일반 사용자의 첫 콘솔 접속은 `pending` 가입 요청으로 저장한다. 운영자는 회원 목록에서 요청자를 확인하고 `PATCH /api/members/:userId`에 `{ "status": "active" }`를 보내 승인한다. 로그인 성공이나 허용 email domain만으로 멤버 권한이 부여되지 않는다.
+- 조직에 `defaultTeamId`가 설정되어 있으면 멤버가 `active`가 되는 시점(최초 owner 준비, 운영자의 멤버 추가·승인)에 해당 팀의 `member`로 자동 배정한다.
 - `owner` role 부여와 `owner` 멤버 변경·제거는 `owner`만 수행할 수 있고, 마지막 active `owner`는 강등·차단·제거할 수 없다(`409`).
 - 멤버 제거는 active membership과 team membership을 해제하지만 user scope의 Memory, Document, Knowledge resource는 보존한다. 관리자가 제거된 사용자를 다시 추가하면 같은 membership을 활성화해 기존 user scope 소유권을 복원한다.
 - 자기 자신의 role·status 변경과 제거는 허용하지 않는다(`409`).
@@ -529,7 +524,7 @@ MCP client에는 endpoint와 Agent token Bearer header를 함께 설정하라. �
 }
 ```
 
-Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. Agent Studio에서는 MCP registry entry의 `Authorization` header에 `Bearer amt_...` 값을 저장하라. Agent Studio는 로그인 사용자의 `X-User-Email`을 자동으로 전달하므로 해당 사용자가 웹에서 볼 수 있는 개인·팀 문서도 MCP에서 검색할 수 있다. 다른 client는 실제 사용자 email을 `X-User-Email`로 전달하거나 실제 사용자의 Better Auth Bearer token을 사용하라. 조직 Agent token은 조직 내 활성 사용자를 대신할 수 있는 위임 credential이다. 사용자 신원을 검증하고 header를 생성하는 신뢰된 server-side client에만 제공하고 브라우저·모델 인자·외부 요청 header를 그대로 전달하지 마라. Email만으로는 인증할 수 없으며 다른 조직 token으로 위임할 수 없다. MCP가 `400`을 반환하면 URL의 organization slug 형식을, `401`을 반환하면 token, URL의 organization slug, 발급자의 active admin·owner membership을 확인하라.
+Token은 설정 파일에 직접 commit하지 말고 client의 secret 또는 environment variable 기능으로 주입하라. Agent Studio에서는 MCP registry entry의 `Authorization` header에 `Bearer amt_...` 값을 저장하라. Agent Studio는 로그인 사용자의 `X-User-Email`을 자동으로 전달하므로 해당 사용자가 웹에서 볼 수 있는 개인·팀 문서도 MCP에서 검색할 수 있다. 다른 client는 실제 사용자 email을 `X-User-Email`로 전달하거나 실제 사용자의 Better Auth Bearer token을 사용하라. 조직 Agent token은 조직 내 활성 사용자를 대신할 수 있는 위임 credential이다. 사용자 신원을 검증하고 header를 생성하는 신뢰된 server-side client에만 제공하고 브라우저·모델 인자·외부 요청 header를 그대로 전달하지 마라. Email만으로는 인증할 수 없다. MCP가 `400`을 반환하면 요청 형식과 `X-User-Email` 형식을, `401`이면 token과 발급자의 active admin·owner membership을, `403`이면 위임 사용자의 승인·차단 상태를 확인하라.
 
 ## Workspace library reads
 

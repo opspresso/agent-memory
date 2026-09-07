@@ -1,6 +1,6 @@
 # Agent Memory
 
-Agent Memory는 설치당 하나의 조직에서 여러 AI Agent가 조직 경계 안에서 장기 Memory, RAG 문서, Knowledge Graph를 안전하게 공유하도록 지원하는 설치형 Context 플랫폼이다. 독립적으로 실행하거나 Agent Studio 같은 실행 환경에 HTTP API와 MCP로 연결할 수 있다.
+Agent Memory는 설치당 하나의 조직에서 여러 AI Agent가 장기 Memory, RAG 문서, Knowledge Graph를 안전하게 공유하도록 지원하는 설치형 Context 플랫폼이다. 독립적으로 실행하거나 Agent Studio 같은 실행 환경에 HTTP API와 MCP로 연결할 수 있다. 별도의 조직 선택 없이 개인·팀·조직 범위로 지식을 관리하며, 일반 사용자는 가입 요청 후 운영자 승인을 받아 사용한다.
 
 ## 핵심 흐름
 
@@ -36,6 +36,7 @@ cp .env.example .env.local
 ```dotenv
 AUTH_PASSWORD=true
 AUTH_PASSWORD_SIGNUP=true
+ADMIN_EMAILS=your-admin@example.com
 ```
 
 그다음 Database migration과 application을 실행하라.
@@ -46,7 +47,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-서버 시작 시 기본 조직이 자동 생성된다. `http://localhost:3100`에서 가입하면 이 조직에 자동 등록된다. `ALLOWED_EMAIL_DOMAINS`를 설정한 경우에만 가입 email domain을 제한하며, 최초 owner는 `ADMIN_EMAILS`에 포함된 로그인 사용자에게 부여된다. 일반 사용자의 가입은 가입 요청으로 처리되며, 운영자 승인 후에만 활성 멤버가 된다. 전역 admin은 설정 화면에서 env 값을 Database override로 관리할 수 있다.
+`ADMIN_EMAILS`를 실제 운영자 email로 바꾸고 `http://localhost:3100`에서 해당 계정으로 가입하라. 서버가 기본 조직을 준비하고 active owner가 없을 때 이 사용자를 최초 owner로 설정한다. 다른 사용자는 첫 콘솔 접속 시 가입 요청이 접수되며, 운영자가 `회원`에서 승인한 뒤에만 지식에 접근한다. `ALLOWED_EMAIL_DOMAINS`는 설정한 경우에만 가입 email domain을 제한한다. 전역 admin은 설정 화면에서 env 값을 Database override로 관리할 수 있다.
 
 로그인 전후에 `http://localhost:3100/guide`에서 제품 사용 흐름과 기능별 설명을 확인할 수 있다.
 

@@ -36,9 +36,9 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 | `../mcp-youtube` | YouTube 자막과 동영상 metadata를 제공하는 MCP 서버다. `get_transcript`와 `get_video_info`를 소유하며 자막과 metadata의 근거를 구분한다. |
 | `../dockpad` | 단일 호스트 Docker Compose 배포·운영 관리자다. Studio·Memory·MCP의 독립 배포, 공통 Caddy·PostgreSQL·MinIO, health check·backup과 DGX Spark의 LLM·embedding·reranker 운영을 소유한다. |
 
-- Agent Memory와 MCP Memory는 scope·인증·도구 계약이 다른 별도 서비스다. Plugin의 기본 `memory`는 MCP Memory이며 Agent Memory 연동에는 조직별 MCP URL과 Bearer credential을 별도로 설정한다.
+- Agent Memory와 MCP Memory는 scope·인증·도구 계약이 다른 별도 서비스다. Plugin의 기본 `memory`는 MCP Memory이며 Agent Memory 연동에는 설치의 `/api/mcp` URL과 Bearer credential을 별도로 설정한다.
 - Studio의 capability catalog 검색과 Agent Memory의 조직 지식 검색을 구분하라. Agent 실행 기능은 Studio에, 공유 Memory·RAG·Graph 기능은 Agent Memory에 둔다.
-- Plugin은 사용 지침과 MCP 선언을, 설치 측은 credential·조직 URL·model 선택·version binding을 소유한다. Studio용 skill은 shell·filesystem·network를 직접 사용할 수 있다고 가정하지 않는다.
+- Plugin은 사용 지침과 MCP 선언을, 설치 측은 credential·서비스 URL·model 선택·version binding을 소유한다. Studio용 skill은 shell·filesystem·network를 직접 사용할 수 있다고 가정하지 않는다.
 - IDC에서는 PostgreSQL·MinIO 인프라를 공유하되 database(`agent_studio`, `mcp_memory`, `agent_memory`)와 bucket(`agent-studio`, `agent-memory`)을 분리한다. Application image와 localdev는 각 앱, IDC 배포는 Dockpad, EKS/Kubernetes 배포는 `../argocd-env-demo`가 소유한다.
 
 ## Toolchain
@@ -60,7 +60,8 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 ## 보안과 데이터 불변 조건
 
 - 모든 조직 resource는 서버가 결정한 설치 조직, 인증 사용자, 조직 멤버십을 함께 검증하라. 공개 API에서 조직 식별자를 받지 마라. 요청 body의 tenant 식별자를 신뢰하지 마라.
-- organization scope 쓰기·관리는 `admin`과 `owner`만 허용하라. team scope는 해당 팀 멤버에게, user scope는 본인에게만 허용하라. team `manage`는 `manager` 이상으로 제한하라.
+- 일반 사용자의 첫 콘솔 접속은 `pending` 가입 요청으로 처리하고 운영자 승인 후에만 `active` 멤버로 접근을 허용하라. 최초 owner bootstrap 외에 로그인만으로 권한을 부여하거나 blocked·removed 멤버십을 복구하지 마라.
+- 기본 scope 정책에서 organization 쓰기·관리는 `admin`과 `owner`만 허용하라. team scope는 해당 팀 멤버와 조직 관리자에게, user scope는 본인에게만 허용하라. team `manage`는 팀 `manager` 또는 조직 관리자로 제한하라. Memory의 명시적 user·team access grant는 별도 정책으로 적용하며, 모든 경로에서 활성 조직 멤버십을 요구하라.
 - 브라우저 mutation은 trusted same-origin만 허용하고 Agent 요청은 Bearer 인증을 사용하라.
 - memory 수정과 archive는 `If-Match` version을 요구해 낙관적 동시성 제어를 유지하라.
 - Knowledge Graph의 source는 정확히 하나의 memory 또는 document chunk를 참조하게 하라. source를 읽을 수 없는 사용자의 연결을 허용하거나 source보다 넓은 scope로 승격하지 마라.

@@ -2,15 +2,15 @@
 
 운영 콘솔은 조직의 Memory, RAG 문서, Knowledge Graph를 검색하고 관리하는 화면이다. 좌측 메뉴에서 `통합 검색`, `Memory`, `문서 수집`, `Knowledge Graph`, `AI 후보 검토`, `Agent 연결`으로 이동하고, 조직 `admin`·`owner`에게는 `회원`, `팀`, `설정` 관리 메뉴가, team `manager`에게는 `팀` 메뉴가 추가로 표시된다. 모든 화면은 로그인 사용자와 활성 조직의 멤버십·scope 권한을 적용한다. 같은 내용을 사이트에서 읽으려면 로그인 전후에 `/guide`를 열거나 좌측 메뉴 하단의 `가이드`를 선택하라.
 
-## 최초 로그인과 조직 가입
+## 최초 로그인과 가입 요청
 
-설치마다 하나의 조직이 자동으로 준비된다. 최초 전역 admin(`ADMIN_EMAILS`) 로그인 시 owner가 설정된다. 다른 사용자의 가입은 가입 요청으로 접수되며 항상 승인 대기 상태다. 승인 대기 중에는 조직의 지식 API를 사용할 수 없으며, 관리자가 `회원`에서 승인하면 활성화된다. 차단·제거된 사용자는 로그인으로 접근 권한이 복구되지 않는다.
+설치마다 하나의 조직이 자동으로 준비된다. Active owner가 없을 때 전역 admin(`ADMIN_EMAILS`)이 콘솔에 접속하면 최초 owner가 설정된다. 그 외 신규 사용자는 첫 콘솔 접속 시 가입 요청이 접수되며 승인 대기 상태가 된다. 승인 대기 중에는 조직의 지식 API를 사용할 수 없으며, 관리자가 `회원`에서 승인하면 활성화된다. 승인 후 콘솔을 새로고침해 이용하라. 차단·제거된 사용자는 로그인으로 접근 권한이 복구되지 않는다.
 
-## 활성 조직과 권한
+## 설치 조직과 권한
 
 상단에는 설치의 조직 이름이 표시된다. 조직 선택·생성·삭제 기능은 제공하지 않는다. 팀·개인 공유 범위와 역할에 따른 권한은 그대로 적용한다.
 
-Resource scope는 다음과 같이 동작한다.
+Resource scope의 기본 권한은 다음과 같다. 모든 접근에는 활성 멤버십이 필요하다.
 
 | Scope | 읽기 | 쓰기 | 관리 |
 | --- | --- | --- | --- |
@@ -18,7 +18,7 @@ Resource scope는 다음과 같이 동작한다.
 | team | 팀 멤버, 조직 관리자 | 팀 멤버, 조직 관리자 | team `manager`, 조직 관리자 |
 | user | 본인 | 본인 | 본인 |
 
-읽을 수 없는 resource는 검색과 관계 지도에 나타나지 않는다. 권한을 잃거나 source가 archive·만료되면 이전에 보이던 Knowledge Graph 관계도 더 이상 반환되지 않을 수 있다.
+Memory는 HTTP API의 `accessGrants`로 같은 조직의 사용자·팀에 추가 읽기·쓰기·관리 권한을 부여할 수 있다. 명시적 grant가 없다면 관리자가 다른 사용자의 개인 자료를 볼 수 없다. 읽을 수 없는 resource는 검색과 관계 지도에 나타나지 않는다. 권한을 잃거나 source가 archive·만료되면 이전에 보이던 Knowledge Graph 관계도 더 이상 반환되지 않을 수 있다.
 
 ## 통합 검색
 
@@ -155,7 +155,7 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 
 ## Agent 연결
 
-`Agent 연결`에는 현재 사이트 주소와 활성 organization slug가 포함된 전체 Streamable HTTP MCP endpoint가 표시된다. `복사`를 선택해 client 설정에 붙여 넣어라.
+`Agent 연결`에는 현재 사이트 주소에 `/api/mcp`를 붙인 전체 Streamable HTTP MCP endpoint가 표시된다. 조직 slug나 조직 선택 parameter는 사용하지 않는다. `복사`를 선택해 client 설정에 붙여 넣어라.
 
 ```text
 http://localhost:3100/api/mcp
@@ -167,7 +167,7 @@ Organization `admin` 또는 `owner`는 같은 화면에서 MCP 전용 Agent toke
 Authorization: Bearer <amt_token>
 ```
 
-같은 화면의 `Agent Studio 등록 템플릿`은 활성 organization slug와 현재 사이트 주소로 Name, URL, Description, Headers의 Key·Value, 선택 입력인 Content 예시를 만든다. 각 항목의 복사 버튼으로 Agent Studio의 `Tools → Register MCP server`에 붙여 넣어라. Name 기본값은 `<organizationSlug>-memory`이며 필요하면 변경한다. Headers 예시의 `<amt_token>`은 위에서 생성하거나 확인한 실제 token으로 교체한다. 템플릿 자체에는 실제 token을 포함하지 않는다.
+같은 화면의 `Agent Studio 등록 템플릿`은 Name, URL, Description, Headers의 Key·Value, 선택 입력인 Content 예시를 만든다. 각 항목의 복사 버튼으로 Agent Studio의 `Tools → Register MCP server`에 붙여 넣어라. Name 기본값은 내부 조직 slug를 사용한 `<organizationSlug>-memory`(새 설치는 `default-memory`)이며 필요하면 변경한다. URL은 사이트의 `/api/mcp`로 고정되며 Name을 바꿔도 영향을 받지 않는다. Headers 예시의 `<amt_token>`은 위에서 생성하거나 확인한 실제 token으로 교체한다. 템플릿 자체에는 실제 token을 포함하지 않는다.
 
 Name은 version이 참조하는 registry 식별자다. Description은 모델의 `Connected MCP Servers` 표와 capability 검색에 사용되므로 서버를 사용할 상황과 기능을 설명한다. Content는 콘솔에만 표시되는 운영자 메모이며 모델에 전달되지 않는다. 모델의 정보 저장 조건·응답 규칙은 version의 system prompt 또는 연결한 Skill에 작성하라. 개별 tool의 설명과 입력 schema는 MCP 서버에서 자동으로 읽으므로 Content에 적어도 tool 계약이 바뀌지 않는다.
 

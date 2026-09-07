@@ -107,7 +107,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Telemetry | `LANGFUSE_EXPORT_MODE` | `batched` 또는 `immediate`. Vercel runtime(`VERCEL` 자동 설정)에서는 기본값 `immediate` |
 | Telemetry | `LANGFUSE_TRACING_ENVIRONMENT` | Trace 환경 이름 |
 
-`ALLOWED_EMAIL_DOMAINS`는 미설정하거나 빈 값이면 모든 domain을 허용한다. 목록을 설정하면 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. `ADMIN_EMAILS`는 조직 bootstrap 권한과 전역 설정 관리 권한만 제어하고 기존 조직의 tenant role을 우회하지 않는다. 빈 값으로 설정하면 누구도 새 조직을 만들거나 전역 설정을 관리할 수 없다.
+`ALLOWED_EMAIL_DOMAINS`는 미설정하거나 빈 값이면 모든 domain을 허용한다. 목록을 설정하면 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. `ADMIN_EMAILS`는 최초 owner bootstrap과 전역 설정 관리 권한만 제어하고 조직의 membership·role을 우회하지 않는다. 초기 설치 전에 실제 운영자 email을 지정하라. 전역 admin도 active owner가 이미 있으면 다른 신규 사용자처럼 승인을 기다린다.
 
 `NODE_ENV=production`에서는 `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`이 필수다. `ALLOWED_EMAIL_DOMAINS`는 production에서도 선택 항목이다. `BETTER_AUTH_SECRET`은 32자 이상이어야 하고 public `BETTER_AUTH_URL`은 HTTPS를 사용해야 한다. 하나라도 유효하지 않으면 서버가 시작 시점에 실패한다 — 개발용 기본값으로의 무경고 fallback은 개발 환경에서만 동작한다.
 
@@ -230,9 +230,9 @@ worker instance: MIGRATE_ON_START=false, DOCUMENT_WORKER_ENABLED=true
 
 Database만 복원하고 object storage를 복원하지 않으면 document metadata는 남지만 원본 재처리가 실패할 수 있다. Object storage만 복원하면 권한·상태·chunk·provenance를 복구할 수 없다. 두 저장소의 보존 시점과 복원 절차를 함께 관리하라.
 
-조직 또는 팀 삭제는 PostgreSQL resource만 cascade 삭제하고 S3 호환 storage의 문서 원본 object는 제거하지 않는다. PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 object storage lifecycle로 제거하라.
+팀 삭제는 PostgreSQL resource만 cascade 삭제하고 S3 호환 storage의 문서 원본 object는 제거하지 않는다. PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 별도로 구성한 object storage lifecycle로 제거하라. 조직 삭제 UI·API는 제공하지 않는다. 운영자가 DB를 직접 초기화할 때도 object storage와 queue의 정리는 별도로 관리해야 한다.
 
-회원 제거는 membership을 `removed` tombstone으로 전환해 user scope의 document metadata와 원본 object key를 보존하므로 storage orphan을 만들지 않는다. 제거된 사용자는 active membership으로 다시 가입하기 전까지 해당 resource에 접근할 수 없다.
+회원 제거는 membership을 `removed` tombstone으로 전환해 user scope의 document metadata와 원본 object key를 보존하므로 storage orphan을 만들지 않는다. 제거된 사용자는 운영자가 다시 추가해 active membership을 복원하기 전까지 해당 resource에 접근할 수 없다.
 
 ## 장애 대응
 
@@ -318,7 +318,7 @@ pnpm verify
 
 `pnpm verify`는 lint, typecheck, architecture, unit test, production build를 실행한다. Database 변경은 `pnpm test:integration`, 화면과 인증 흐름 변경은 `pnpm test:e2e`를 추가한다. 세부 기준은 [AGENTS.md](../AGENTS.md#검증)를 따른다.
 
-인증 E2E는 `E2E_AUTHENTICATED=true`가 있어야 실행된다. 이 값이 없으면 가입·조직 관리·Memory lifecycle 시나리오가 skip되므로 공개 화면 검사만으로 인증 검증을 완료했다고 판단하지 마라. 테스트는 계정과 조직을 생성하므로 별도 PostgreSQL DB를 사용한다. 예를 들어 다음과 같이 E2E 전용 container를 시작한다.
+인증 E2E는 `E2E_AUTHENTICATED=true`가 있어야 실행된다. 이 값이 없으면 가입 요청·승인·멤버 관리·Memory lifecycle 시나리오가 skip되므로 공개 화면 검사만으로 인증 검증을 완료했다고 판단하지 마라. 인증 fixture는 시나리오 시작 시 `TRUNCATE organizations, users CASCADE`로 계정과 조직 소속 데이터를 초기화한다. 이름이 `_e2e` 또는 `_test`로 끝나는 폐기 가능한 별도 DB를 `DATABASE_URL`에 명시해야 하며 개발·운영 DB를 연결하지 마라. 인증 E2E는 worker 하나로 실행해 초기화 간 충돌을 방지한다. 예를 들어 다음과 같이 E2E 전용 container를 시작한다.
 
 ```bash
 docker run --detach --name agent-memory-e2e \
