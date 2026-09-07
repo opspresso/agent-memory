@@ -6,6 +6,7 @@ import type {
 
 export interface InstallationRepository {
   initialize(): Promise<Organization>;
+  get(): Promise<Organization>;
   enrollUser(userId: string, isAdmin: boolean): Promise<void>;
 }
 

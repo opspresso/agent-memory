@@ -9,13 +9,13 @@ import { createAgentMemoryMcpServer } from "@/lib/mcp-server";
 
 const mocks = vi.hoisted(() => ({
   authenticateRequest: vi.fn(),
-  initialize: vi.fn(),
+  getInstallation: vi.fn(),
   findBySlug: vi.fn(),
   findByEmail: vi.fn(),
   verifyAgentToken: vi.fn()
 }));
 
-vi.mock("@/lib/installation", () => ({ installationRepository: { initialize: mocks.initialize } }));
+vi.mock("@/lib/installation", () => ({ installationRepository: { get: mocks.getInstallation } }));
 
 vi.mock("@/lib/container", () => ({
   organizationAccessRepository: {
@@ -50,11 +50,19 @@ const access = {
 
 describe("organization route authorization", () => {
   beforeEach(() => {
-    mocks.initialize.mockResolvedValue({ id: access.organizationId, slug: "opspresso" });
+    mocks.getInstallation.mockResolvedValue({ id: access.organizationId, slug: "opspresso" });
     mocks.authenticateRequest.mockReset();
     mocks.findBySlug.mockReset();
     mocks.findByEmail.mockReset();
     mocks.verifyAgentToken.mockReset();
+  });
+
+  it.each([authorizeOrganizationRoute, authorizeOrganizationMcpRoute])("rejects unauthenticated requests before touching the installation", async (authorize) => {
+    const response = Response.json({ error: "Authentication required" }, { status: 401 });
+    mocks.authenticateRequest.mockResolvedValue({ authenticated: false, response });
+    mocks.getInstallation.mockClear();
+    await expect(authorize(new Request("https://memory.example.com/api/me"))).resolves.toEqual({ authorized: false, response });
+    expect(mocks.getInstallation).not.toHaveBeenCalled();
   });
 
   it("resolves a public organization slug to UUID-backed access", async () => {

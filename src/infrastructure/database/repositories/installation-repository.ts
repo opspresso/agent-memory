@@ -1,20 +1,33 @@
 import { and, eq, sql } from "drizzle-orm";
 
 import { installationMembership, type InstallationRepository } from "@/domain/identity/installation";
+import type { Organization } from "@/domain/identity/organization-administration";
 
 import type { AgentMemoryDatabase } from "../client";
 import { organizations, organizationMembers, teamMembers } from "../schema";
 
+function singleOrganization(rows: readonly Organization[]): Organization | undefined {
+  if (rows.length > 1) {
+    throw new Error("Agent Memory requires a single organization. Separate existing organizations into independent installations before starting; no data has been changed.");
+  }
+  return rows[0];
+}
+
 export function createInstallationRepository(db: AgentMemoryDatabase): InstallationRepository {
+  async function find() {
+    return singleOrganization(await db.select().from(organizations).limit(2));
+  }
+
   async function initialize() {
+    const current = await find();
+    if (current) {
+      return current;
+    }
     return db.transaction(async (transaction) => {
       await transaction.execute(sql`LOCK TABLE organizations IN SHARE ROW EXCLUSIVE MODE`);
-      const existing = await transaction.select().from(organizations).limit(2);
-      if (existing.length > 1) {
-        throw new Error("Agent Memory requires a single organization. Separate existing organizations into independent installations before starting; no data has been changed.");
-      }
-      if (existing[0]) {
-        return existing[0];
+      const existing = singleOrganization(await transaction.select().from(organizations).limit(2));
+      if (existing) {
+        return existing;
       }
       const [created] = await transaction.insert(organizations).values({
         slug: "default",
@@ -29,6 +42,13 @@ export function createInstallationRepository(db: AgentMemoryDatabase): Installat
 
   return {
     initialize,
+    async get() {
+      const organization = await find();
+      if (!organization) {
+        throw new Error("installation organization is missing");
+      }
+      return organization;
+    },
     async enrollUser(userId, isAdmin) {
       const installation = await initialize();
       await db.transaction(async (transaction) => {

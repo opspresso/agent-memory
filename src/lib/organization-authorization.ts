@@ -18,17 +18,17 @@ export type OrganizationAuthorizationResult =
     }>
   | Readonly<{ authorized: false; response: Response }>;
 
-export async function authorizeOrganizationRequest(
-  request: Request,
-  organizationSlug: string
+export async function authorizeOrganizationRoute(
+  request: Request
 ): Promise<OrganizationAuthorizationResult> {
   const authentication = await authenticateRequest(request);
   if (!authentication.authenticated) {
     return { authorized: false, response: authentication.response };
   }
 
+  const organization = await installationRepository.get();
   const access = await organizationAccessRepository.findBySlug(
-    organizationSlug,
+    organization.slug,
     authentication.user.id
   );
   if (!access) {
@@ -41,21 +41,16 @@ export async function authorizeOrganizationRequest(
   return { authorized: true, access, user: authentication.user };
 }
 
-export async function authorizeOrganizationRoute(request: Request): Promise<OrganizationAuthorizationResult> {
-  const organization = await installationRepository.initialize();
-  return authorizeOrganizationRequest(request, organization.slug);
-}
-
 export type OrganizationMcpAuthorizationResult =
   | Readonly<{ authorized: true; access: OrganizationAccess }>
   | Readonly<{ authorized: false; response: Response }>;
 
 export async function authorizeOrganizationMcpRoute(request: Request): Promise<OrganizationMcpAuthorizationResult> {
-  const organization = await installationRepository.initialize();
   const bearer = /^Bearer\s+(\S+)$/i.exec(
     request.headers.get("authorization") ?? ""
   )?.[1];
   if (bearer?.startsWith(organizationAgentTokenPrefix)) {
+    const organization = await installationRepository.get();
     const credential = await organizationAgentTokenUseCases.verify(
       organization.slug,
       bearer
@@ -111,7 +106,7 @@ export async function authorizeOrganizationMcpRoute(request: Request): Promise<O
     };
   }
 
-  const authorization = await authorizeOrganizationRequest(request, organization.slug);
+  const authorization = await authorizeOrganizationRoute(request);
   return authorization.authorized
     ? { authorized: true, access: authorization.access }
     : authorization;

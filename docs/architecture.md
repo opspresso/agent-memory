@@ -49,7 +49,7 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 ## 설치 경계
 
-한 설치는 하나의 조직을 사용한다. 서버 시작 시 조직이 없으면 기본 조직을 만들고, 하나면 기존 데이터를 사용하며, 둘 이상이면 시작을 거부한다. 조직 초기화는 PostgreSQL table lock으로 직렬화한다. 내부 organization ID와 tenant FK는 scope·provenance 검증을 위해 유지한다. 공개 API에는 조직 선택 경로가 없고 `/api/organization`은 조회·설정 변경만 제공한다. MCP 주소는 `/api/mcp`다.
+한 설치는 하나의 조직을 사용한다. 서버 시작 시 조직이 없으면 기본 조직을 만들고, 하나면 기존 데이터를 사용하며, 둘 이상이면 시작을 거부한다. 조직 생성 시 PostgreSQL table lock으로 직렬화하고 기존 조직 조회에는 이 잠금을 사용하지 않는다. 요청 권한 검사는 조직을 읽기만 하며 조직을 생성하지 않는다. 일반 HTTP와 session MCP는 사용자 인증을 먼저 확인한다. 내부 organization ID와 tenant FK는 scope·provenance 검증을 위해 유지한다. 공개 API에는 조직 선택 경로가 없고 `/api/organization`은 조회·설정 변경만 제공한다. MCP 주소는 `/api/mcp`다.
 
 인증 사용자의 첫 콘솔 진입 시 가입 요청을 등록한다. 같은 조직 advisory lock 아래에서 최초 owner를 결정하고 기본 팀 배정을 수행한다. active owner가 없는 경우에만 전역 admin을 owner로 준비한다. 그 외 신규 사용자는 pending 요청으로 등록하며 운영자가 승인해야 active 멤버가 된다. 기존 blocked·removed membership은 로그인으로 재활성화하지 않는다.
 

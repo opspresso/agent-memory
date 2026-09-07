@@ -50,10 +50,34 @@ describe("single organization installation", () => {
     expect(await repository.initialize()).toMatchObject({ id, slug: "existing", name: "Existing" });
   });
 
+  it("does not block existing installation lookup behind an organization writer", async () => {
+    const organization = await repository.initialize();
+    const blocker = await pool.connect();
+    const connection = new URL(container.getConnectionUri());
+    connection.searchParams.set("options", "-c lock_timeout=100ms");
+    const reader = createDatabase(connection.toString());
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query("LOCK TABLE organizations IN ROW EXCLUSIVE MODE");
+      await expect(createInstallationRepository(reader.db).initialize()).resolves.toMatchObject({ id: organization.id });
+      await expect(createInstallationRepository(reader.db).get()).resolves.toMatchObject({ id: organization.id });
+    } finally {
+      await blocker.query("ROLLBACK");
+      blocker.release();
+      await reader.pool.end();
+    }
+  });
+
+  it("does not create an organization through the read-only lookup", async () => {
+    await expect(repository.get()).rejects.toThrow("installation organization is missing");
+    expect((await pool.query("SELECT count(*)::int AS count FROM organizations")).rows).toEqual([{ count: 0 }]);
+  });
+
   it("rejects multiple organizations without changing either", async () => {
     await pool.query("INSERT INTO organizations(slug,name) VALUES('first','First'),('second','Second')");
     const before = await pool.query("SELECT * FROM organizations ORDER BY slug");
     await expect(repository.initialize()).rejects.toThrow("requires a single organization");
+    await expect(repository.get()).rejects.toThrow("requires a single organization");
     expect((await pool.query("SELECT * FROM organizations ORDER BY slug")).rows).toEqual(before.rows);
   });
 
