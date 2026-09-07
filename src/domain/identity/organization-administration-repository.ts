@@ -5,7 +5,6 @@ import type {
 import type {
   NewMemberStatus,
   ManageableOrganizationMemberStatus,
-  OrganizationMemberStatus,
   OrganizationRole,
   TeamRole
 } from "./organization-access";
@@ -15,10 +14,6 @@ import type {
   Team,
   TeamMember
 } from "./organization-administration";
-
-export type CreateOrganizationResult =
-  | Readonly<{ status: "created"; organization: Organization }>
-  | Readonly<{ status: "slug_conflict" }>;
 
 export interface OrganizationSettingsUpdate {
   readonly name?: string;
@@ -66,32 +61,13 @@ export type UpsertTeamMemberResult =
   | Readonly<{ status: "organization_member_not_found" }>
   | Readonly<{ status: "team_not_found" }>;
 
-export interface JoinableOrganization {
-  readonly id: string;
-  readonly slug: string;
-  readonly name: string;
-}
-
-export type JoinOrganizationResult =
-  | Readonly<{
-      status: "joined";
-      membershipStatus: OrganizationMemberStatus;
-    }>
-  | Readonly<{ status: "already_member" }>
-  | Readonly<{ status: "organization_not_found" }>;
-
 export interface OrganizationAdministrationRepository {
-  createOrganization(
-    organization: Organization,
-    ownerUserId: string
-  ): Promise<CreateOrganizationResult>;
   findOrganization(organizationId: string): Promise<Organization | null>;
   updateOrganizationSettings(
     organizationId: string,
     update: OrganizationSettingsUpdate,
     now: Date
   ): Promise<UpdateOrganizationSettingsResult>;
-  deleteOrganization(organizationId: string): Promise<boolean>;
   listOrganizationMembers(
     organizationId: string
   ): Promise<readonly OrganizationMember[]>;
@@ -137,11 +113,4 @@ export interface OrganizationAdministrationRepository {
     teamId: string,
     userId: string
   ): Promise<boolean>;
-  listJoinableOrganizations(
-    userId: string
-  ): Promise<readonly JoinableOrganization[]>;
-  joinOrganizationBySlug(
-    organizationSlug: string,
-    userId: string
-  ): Promise<JoinOrganizationResult>;
 }

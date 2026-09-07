@@ -10,6 +10,8 @@ import {
 } from "@/infrastructure/database/client";
 import {
   documents as documentsTable,
+  organizations,
+  organizationMembers,
   knowledgeNodeMerges
 } from "@/infrastructure/database/schema";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
@@ -88,6 +90,13 @@ describe("PostgreSQL schema", () => {
     await pool?.end();
     await container?.stop();
   });
+
+  async function seedOrganization(organization: ReturnType<typeof createOrganization>, ownerUserId: string) {
+    await db.transaction(async (transaction) => {
+      await transaction.insert(organizations).values(organization);
+      await transaction.insert(organizationMembers).values({ organizationId: organization.id, userId: ownerUserId, role: "owner", status: "active" });
+    });
+  }
 
   it("runs on PostgreSQL 18 with pgvector enabled", async () => {
     const result = await pool.query<{
@@ -508,12 +517,7 @@ describe("PostgreSQL schema", () => {
       now: createdAt
     });
 
-    await expect(
-      administration.createOrganization(organization, ownerId)
-    ).resolves.toMatchObject({ status: "created", organization });
-    await expect(
-      administration.createOrganization(organization, ownerId)
-    ).resolves.toEqual({ status: "slug_conflict" });
+    await seedOrganization(organization, ownerId);
     await expect(
       administration.addOrganizationMember(
         organizationId,
@@ -620,7 +624,7 @@ describe("PostgreSQL schema", () => {
     );
     const administration = createOrganizationAdministrationRepository(db);
     const ontologyReader = createKnowledgeOntologyReader(db);
-    await administration.createOrganization(
+    await seedOrganization(
       createOrganization({
         id: organizationId,
         slug: "organization-q",
@@ -972,7 +976,7 @@ describe("PostgreSQL schema", () => {
     );
     const administration = createOrganizationAdministrationRepository(db);
     const access = createOrganizationAccessRepository(db);
-    await administration.createOrganization(
+    await seedOrganization(
       createOrganization({
         id: organizationId,
         slug: "organization-p",
@@ -990,7 +994,7 @@ describe("PostgreSQL schema", () => {
         now: createdAt
       })
     );
-    await administration.createOrganization(
+    await seedOrganization(
       createOrganization({
         id: otherOrganizationId,
         slug: "other-organization-p",
@@ -1050,23 +1054,9 @@ describe("PostgreSQL schema", () => {
       teams: [{ teamId, role: "member" }]
     });
 
-    await expect(
-      administration.listJoinableOrganizations(joinerId)
-    ).resolves.toContainEqual({
-      id: organizationId,
-      slug: "organization-p",
-      name: "Organization P"
-    });
-    await expect(
-      administration.joinOrganizationBySlug("organization-p", joinerId)
-    ).resolves.toEqual({ status: "joined", membershipStatus: "pending" });
-    await expect(
-      administration.joinOrganizationBySlug("organization-p", joinerId)
-    ).resolves.toEqual({ status: "already_member" });
-    await expect(
-      administration.listJoinableOrganizations(joinerId)
-    ).resolves.not.toContainEqual(
-      expect.objectContaining({ id: organizationId })
+    await pool.query(
+      "INSERT INTO organization_members(organization_id,user_id,status) VALUES($1,$2,'pending')",
+      [organizationId, joinerId]
     );
 
     await expect(
@@ -1115,15 +1105,6 @@ describe("PostgreSQL schema", () => {
     await expect(
       administration.removeOrganizationMember(organizationId, joinerId)
     ).resolves.toEqual({ status: "removed" });
-    await expect(
-      administration.listJoinableOrganizations(joinerId)
-    ).resolves.toContainEqual(
-      expect.objectContaining({ id: organizationId })
-    );
-    await expect(
-      administration.joinOrganizationBySlug("organization-p", joinerId)
-    ).resolves.toEqual({ status: "joined", membershipStatus: "pending" });
-
     await expect(administration.deleteTeam(organizationId, teamId)).resolves.toBe(
       true
     );
@@ -1131,9 +1112,7 @@ describe("PostgreSQL schema", () => {
       administration.findOrganization(organizationId)
     ).resolves.toMatchObject({ defaultTeamId: null });
 
-    await expect(
-      administration.deleteOrganization(organizationId)
-    ).resolves.toBe(true);
+    await pool.query("DELETE FROM organizations WHERE id=$1", [organizationId]);
     const remaining = await pool.query<{ total: number }>(
       `SELECT count(*)::int AS total FROM organization_members
        WHERE organization_id = $1`,

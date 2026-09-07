@@ -37,7 +37,7 @@ export const en = {
     "Explore entity relationships and trace them back to source memories and chunks.",
   "home.capability.sharing": "Flexible Sharing",
   "home.capability.sharingBody":
-    "Share the context people need across organizations, teams, and individuals.",
+    "Share context across your organization, teams, and individuals.",
   "login.eyebrow": "MEMORY WORKSPACE",
   "login.title": "Get started with Agent Memory",
   "login.lede": "Find the memory and context you need in one place.",
@@ -141,7 +141,7 @@ export const en = {
   "organization.teamCreated": "Team created.",
   "organization.teamMemberSaved": "Team member saved.",
   "organization.manageTitle": "Manage organization",
-  "organization.manageBody": "Assign registered accounts to organizations and teams.",
+  "organization.manageBody": "Manage access and teams for registered accounts.",
   "organization.refresh": "Refresh",
   "organization.members": "Organization members",
   "organization.registeredEmail": "Registered user email",
@@ -159,18 +159,17 @@ export const en = {
   "organization.name": "Organization name",
   "organization.slug": "Organization slug",
 
-  "onboarding.eyebrow": "Get started",
+
   "onboarding.title": "Access approval",
   "onboarding.lede":
     "You are enrolled automatically in this installation. An administrator must approve access before you can use Memory.",
-  "onboarding.loadFailed": "Available organizations could not be loaded.",
-  "onboarding.joinFailed": "The join request failed.",
-  "onboarding.join": "Join",
-  "onboarding.pendingBadge": "Awaiting approval",
+
+
+
+
   "onboarding.pendingNotice":
     "Your membership is awaiting approval by an organization administrator.",
-  "onboarding.empty":
-    "There is no organization you can join yet. Ask an administrator for membership.",
+
   "members.title": "Members",
   "members.lede": "Review members, change roles and teams, and moderate access.",
   "members.accessDenied": "Only organization administrators can view this page.",
@@ -193,7 +192,7 @@ export const en = {
   "members.removed": "The member was removed.",
   "members.removeTitle": "Remove member",
   "members.removeBody":
-    "Remove {email} from this organization? Team memberships and access are removed, while user-scoped data is retained for a future rejoin.",
+    "Remove {email} from this organization? Team memberships and access are removed, while user-scoped data is retained if an administrator restores membership.",
   "members.assignTeam": "Assign {email} to a team",
   "members.addTeam": "Add team",
   "members.removeFromTeam": "Remove from {team}",

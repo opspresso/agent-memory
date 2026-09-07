@@ -1,4 +1,4 @@
-import { and, asc, count, eq, ne, notInArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, ne, sql } from "drizzle-orm";
 
 import type { OrganizationAdministrationRepository } from "@/domain/identity/organization-administration-repository";
 
@@ -68,27 +68,6 @@ export function createOrganizationAdministrationRepository(
   db: AgentMemoryDatabase
 ): OrganizationAdministrationRepository {
   return {
-    async createOrganization(organization, ownerUserId) {
-      return db.transaction(async (transaction) => {
-        const [created] = await transaction
-          .insert(organizations)
-          .values(organization)
-          .onConflictDoNothing({ target: organizations.slug })
-          .returning();
-        if (!created) {
-          return { status: "slug_conflict" } as const;
-        }
-        await transaction.insert(organizationMembers).values({
-          organizationId: created.id,
-          userId: ownerUserId,
-          role: "owner",
-          status: "active",
-          createdAt: organization.createdAt
-        });
-        return { status: "created", organization: created } as const;
-      });
-    },
-
     async findOrganization(organizationId) {
       const [organization] = await db
         .select()
@@ -141,14 +120,6 @@ export function createOrganizationAdministrationRepository(
         }
         return { status: "updated", organization } as const;
       });
-    },
-
-    async deleteOrganization(organizationId) {
-      const deleted = await db
-        .delete(organizations)
-        .where(eq(organizations.id, organizationId))
-        .returning({ id: organizations.id });
-      return deleted.length > 0;
     },
 
     async listOrganizationMembers(organizationId) {
@@ -548,102 +519,6 @@ export function createOrganizationAdministrationRepository(
         )
         .returning({ userId: teamMembers.userId });
       return removed.length > 0;
-    },
-
-    async listJoinableOrganizations(userId) {
-      const memberships = db
-        .select({ organizationId: organizationMembers.organizationId })
-        .from(organizationMembers)
-        .where(
-          and(
-            eq(organizationMembers.userId, userId),
-            ne(organizationMembers.status, "removed")
-          )
-        );
-      return db
-        .select({
-          id: organizations.id,
-          slug: organizations.slug,
-          name: organizations.name
-        })
-        .from(organizations)
-        .where(notInArray(organizations.id, memberships))
-        .orderBy(asc(organizations.name), asc(organizations.id));
-    },
-
-    async joinOrganizationBySlug(organizationSlug, userId) {
-      return db.transaction(async (transaction) => {
-        const [candidate] = await transaction
-          .select({ id: organizations.id })
-          .from(organizations)
-          .where(eq(organizations.slug, organizationSlug))
-          .limit(1);
-        if (!candidate) {
-          return { status: "organization_not_found" } as const;
-        }
-        await lockOrganization(transaction, candidate.id);
-        const [organization] = await transaction
-          .select({
-            id: organizations.id,
-            newMemberStatus: organizations.newMemberStatus,
-            defaultTeamId: organizations.defaultTeamId
-          })
-          .from(organizations)
-          .where(eq(organizations.id, candidate.id))
-          .limit(1);
-        if (!organization) {
-          return { status: "organization_not_found" } as const;
-        }
-        const [existing] = await transaction
-          .select({ status: organizationMembers.status })
-          .from(organizationMembers)
-          .where(
-            and(
-              eq(organizationMembers.organizationId, organization.id),
-              eq(organizationMembers.userId, userId)
-            )
-          )
-          .limit(1);
-        if (existing && existing.status !== "removed") {
-          return { status: "already_member" } as const;
-        }
-        const [saved] = existing
-          ? await transaction
-              .update(organizationMembers)
-              .set({ role: "member", status: organization.newMemberStatus })
-              .where(
-                and(
-                  eq(organizationMembers.organizationId, organization.id),
-                  eq(organizationMembers.userId, userId),
-                  eq(organizationMembers.status, "removed")
-                )
-              )
-              .returning({ status: organizationMembers.status })
-          : await transaction
-              .insert(organizationMembers)
-              .values({
-                organizationId: organization.id,
-                userId,
-                role: "member",
-                status: organization.newMemberStatus
-              })
-              .returning({ status: organizationMembers.status });
-        if (!saved) {
-          throw new Error("organization membership join claim was lost");
-        }
-        if (saved.status === "active" && organization.defaultTeamId) {
-          await addMemberToDefaultTeam(
-            transaction,
-            organization.id,
-            userId,
-            organization.defaultTeamId
-          );
-        }
-        return {
-          status: "joined",
-          membershipStatus: saved.status
-        } as const;
-      });
     }
   };
 }

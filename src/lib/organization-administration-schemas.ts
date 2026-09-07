@@ -16,11 +16,6 @@ export const organizationSlugSchema = z
   .max(63)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 
-export const createOrganizationSchema = z.object({
-  slug: organizationSlugSchema,
-  name: z.string().trim().min(1).max(200)
-});
-
 export const organizationMemberSchema = z.object({
   email: z.email().trim().toLowerCase(),
   role: z.enum(organizationRoles)

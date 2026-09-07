@@ -45,10 +45,6 @@ export const teamMemberResponseSchema = z.object({
   role: z.enum(teamRoles)
 });
 
-export const organizationsResponseSchema = z.object({
-  organizations: z.array(organizationSummaryResponseSchema)
-});
-
 export const organizationMembersResponseSchema = z.object({
   members: z.array(organizationMemberResponseSchema)
 });
@@ -59,10 +55,6 @@ export const teamsResponseSchema = z.object({
 
 export const teamMembersResponseSchema = z.object({
   members: z.array(teamMemberResponseSchema)
-});
-
-export const joinOrganizationResponseSchema = z.object({
-  status: z.enum(["active", "pending"])
 });
 
 export const organizationAccessResponseSchema = z.object({

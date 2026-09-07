@@ -161,17 +161,16 @@ export const ko: Messages = {
   "organization.name": "조직 이름",
   "organization.slug": "조직 slug",
 
-  "onboarding.eyebrow": "시작하기",
+
   "onboarding.title": "접근 승인 대기",
   "onboarding.lede":
     "이 설치의 조직에 자동으로 등록됩니다. 관리자가 접근을 승인하면 Memory를 사용할 수 있습니다.",
-  "onboarding.loadFailed": "가입 가능한 조직을 불러오지 못했습니다.",
-  "onboarding.joinFailed": "가입 요청에 실패했습니다.",
-  "onboarding.join": "가입",
-  "onboarding.pendingBadge": "승인 대기",
+
+
+
+
   "onboarding.pendingNotice": "조직 관리자의 승인을 기다리고 있습니다.",
-  "onboarding.empty":
-    "아직 가입할 수 있는 조직이 없습니다. 관리자에게 멤버십을 요청하세요.",
+
   "members.title": "회원 관리",
   "members.lede": "회원을 확인하고 역할·팀을 변경하거나 접근을 관리합니다.",
   "members.accessDenied": "조직 관리자만 볼 수 있는 페이지입니다.",
@@ -194,7 +193,7 @@ export const ko: Messages = {
   "members.removed": "회원을 제거했습니다.",
   "members.removeTitle": "회원 제거",
   "members.removeBody":
-    "{email}을(를) 조직에서 제거할까요? 팀 소속과 접근 권한은 제거되지만 user scope 데이터는 재가입을 위해 보존됩니다.",
+    "{email}을(를) 조직에서 제거할까요? 팀 소속과 접근 권한은 제거되지만 user scope 데이터는 관리자의 재등록을 위해 보존됩니다.",
   "members.assignTeam": "{email}을(를) 팀에 배정",
   "members.addTeam": "팀 추가",
   "members.removeFromTeam": "{team}에서 제거",

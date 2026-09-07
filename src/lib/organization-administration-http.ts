@@ -5,7 +5,6 @@ import {
   OrganizationNotFoundError,
   OrganizationOwnerImmutableError,
   OrganizationSelfManagementError,
-  OrganizationSlugConflictError,
   TeamNotFoundError,
   TeamSlugConflictError
 } from "@/application/identity/manage-organization";
@@ -47,7 +46,6 @@ export function organizationAdministrationErrorResponse(
     );
   }
   if (
-    error instanceof OrganizationSlugConflictError ||
     error instanceof TeamSlugConflictError ||
     error instanceof OrganizationOwnerImmutableError ||
     error instanceof OrganizationSelfManagementError ||
