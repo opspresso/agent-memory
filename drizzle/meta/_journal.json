@@ -176,6 +176,13 @@
       "when": 1788761602576,
       "tag": "0024_left_james_howlett",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788795945109,
+      "tag": "0025_hard_lady_vermin",
+      "breakpoints": true
     }
   ]
 }

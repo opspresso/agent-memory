@@ -162,7 +162,7 @@ export const en = {
 
   "onboarding.title": "Access approval",
   "onboarding.lede":
-    "You are enrolled automatically in this installation. An administrator must approve access before you can use Memory.",
+    "Your signup is a membership request. You can use Memory after an administrator approves it.",
 
 
 
@@ -210,7 +210,7 @@ export const en = {
   "teams.deleteBody":
     "Delete {name}? Team memberships and team-scoped database records are permanently deleted. Uploaded source objects remain subject to the storage lifecycle.",
   "settings.title": "Organization settings",
-  "settings.lede": "Control the organization profile and how new members join.",
+  "settings.lede": "Manage the organization profile and default team.",
   "settings.general": "General",
   "settings.save": "Save settings",
   "settings.saved": "Settings saved.",
@@ -229,11 +229,10 @@ export const en = {
   "settings.application.saved": "Application settings saved.",
   "settings.application.loadFailed": "Application settings could not be loaded.",
   "settings.application.saveFailed": "Application settings could not be saved.",
-  "settings.newMember.label": "New member policy",
-  "settings.newMember.description":
-    "How a signed-in user who joins this organization is treated.",
-  "settings.newMember.active": "Activate immediately",
-  "settings.newMember.pending": "Hold for approval",
+
+
+
+
   "settings.defaultTeam.label": "Default team",
   "settings.defaultTeam.description":
     "New members are added to this team when they become active.",

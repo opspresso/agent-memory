@@ -94,7 +94,6 @@ export const ontologyResponseSchema = z.object({
 });
 
 export const organizationDetailResponseSchema = organizationSummaryResponseSchema.extend({
-  newMemberStatus: z.enum(["active", "pending"]).optional(),
   defaultTeamId: z.string().nullable().optional(),
   ontologyMode: z.enum(knowledgeOntologyModes).optional(),
   ontology: ontologyResponseSchema.optional()

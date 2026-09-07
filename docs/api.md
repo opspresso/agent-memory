@@ -85,7 +85,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 
 이 token은 URL의 동일 organization slug에 해당하는 MCP endpoint에서만 인증된다. 일반 HTTP API나 다른 조직에서는 사용할 수 없다. Token 발급자가 현재 active `admin` 또는 `owner`인지 확인한 뒤 `X-User-Email`이 없으면 organization scope만 접근할 수 있는 service principal을 적용한다. 유효한 token과 함께 전달된 `X-User-Email`은 해당 조직의 활성 사용자 권한으로 위임한다. 상세 검증과 신뢰 경계는 MCP 절을 따른다. 발급자가 차단·제거·강등되면 다음 요청부터 인증이 거부된다. `BETTER_AUTH_SECRET`을 변경하면 기존 token은 hash 검증으로 계속 인증되지만 원문을 복호화할 수 없으므로 재생성해야 한다.
 
-`ALLOWED_EMAIL_DOMAINS`가 미설정 또는 빈 값이면 모든 email domain으로 로그인할 수 있다. 목록을 설정하면 인증을 해당 email domain으로 제한한다. 서버가 설치 조직을 준비하며 최초 `ADMIN_EMAILS` 사용자 로그인 시 owner를 설정한다. 이후 사용자는 첫 콘솔 접속 시 자동 등록되고 신규 회원 정책을 따른다. 전역 admin 권한은 기존 조직의 멤버십이나 role을 대체하지 않는다. 조직 생성·가입·삭제 API는 제공하지 않는다.
+`ALLOWED_EMAIL_DOMAINS`가 미설정 또는 빈 값이면 모든 email domain으로 로그인할 수 있다. 목록을 설정하면 인증을 해당 email domain으로 제한한다. 서버가 설치 조직을 준비하며 최초 `ADMIN_EMAILS` 사용자 로그인 시 owner를 설정한다. 이후 사용자는 가입 후 첫 콘솔 접속 시 가입 요청이 접수되며 운영자 승인 전까지 pending 상태다. 전역 admin 권한은 기존 조직의 멤버십이나 role을 대체하지 않는다. 조직 생성·가입·삭제 API는 제공하지 않는다.
 
 ### 전역 애플리케이션 설정
 
@@ -167,7 +167,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 
 ## 조직 관리 입력
 
-- 조직 설정 변경(`PATCH /api/organization`): `{ "name"?: string, "newMemberStatus"?: "active" | "pending", "defaultTeamId"?: UUID | null, "ontologyMode"?: "off" | "warn" | "strict", "ontology"?: { "nodeKinds": string[], "edgePredicates": string[] } }` — 필드 하나 이상 필요. `ontology`는 두 목록 전체를 치환하며 목록당 최대 200개, 용어당 최대 100자다. 용어는 소문자로 정규화하고 중복을 제거해 저장한다.
+- 조직 설정 변경(`PATCH /api/organization`): `{ "name"?: string, "defaultTeamId"?: UUID | null, "ontologyMode"?: "off" | "warn" | "strict", "ontology"?: { "nodeKinds": string[], "edgePredicates": string[] } }` — 필드 하나 이상 필요. `ontology`는 두 목록 전체를 치환하며 목록당 최대 200개, 용어당 최대 100자다. 용어는 소문자로 정규화하고 중복을 제거해 저장한다.
 - 조직 멤버 추가: `{ "email": string, "role": "member" | "admin" | "owner" }` — 이미 가입한 사용자는 `409`. 기존 멤버의 role은 `PATCH .../members/:userId`로 변경한다.
 - 멤버 변경(`PATCH .../members/:userId`): `{ "role"?: "member" | "admin" | "owner", "status"?: "active" | "pending" | "blocked" }` — 필드 하나 이상 필요
 - 팀 생성: `{ "slug": string, "name": string }`

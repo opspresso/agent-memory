@@ -18,8 +18,6 @@ export const manageableOrganizationMemberStatuses = [
 export type ManageableOrganizationMemberStatus =
   (typeof manageableOrganizationMemberStatuses)[number];
 
-export const newMemberStatuses = ["active", "pending"] as const;
-export type NewMemberStatus = (typeof newMemberStatuses)[number];
 
 export const teamRoles = ["member", "manager"] as const;
 export type TeamRole = (typeof teamRoles)[number];

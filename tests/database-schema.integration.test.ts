@@ -1019,25 +1019,16 @@ describe("PostgreSQL schema", () => {
       )
     ).rejects.toMatchObject({ constraint: "organizations_default_team_fk" });
     await expect(
-      pool.query(
-        `UPDATE organizations SET new_member_status = 'blocked' WHERE id = $1`,
-        [organizationId]
-      )
-    ).rejects.toMatchObject({
-      constraint: "organizations_new_member_status_check"
-    });
-    await expect(
       administration.updateOrganizationSettings(
         organizationId,
         {
-          newMemberStatus: "pending",
           defaultTeamId: teamId
         },
         createdAt
       )
     ).resolves.toMatchObject({
       status: "updated",
-      organization: { newMemberStatus: "pending", defaultTeamId: teamId }
+      organization: { defaultTeamId: teamId }
     });
 
     await expect(

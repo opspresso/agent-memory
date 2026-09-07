@@ -46,7 +46,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-서버 시작 시 기본 조직이 자동 생성된다. `http://localhost:3100`에서 가입하면 이 조직에 자동 등록된다. `ALLOWED_EMAIL_DOMAINS`를 설정한 경우에만 가입 email domain을 제한하며, 최초 owner는 `ADMIN_EMAILS`에 포함된 로그인 사용자에게 부여된다. 일반 사용자는 기본적으로 관리자 승인을 기다린다. 전역 admin은 설정 화면에서 env 값을 Database override로 관리할 수 있다.
+서버 시작 시 기본 조직이 자동 생성된다. `http://localhost:3100`에서 가입하면 이 조직에 자동 등록된다. `ALLOWED_EMAIL_DOMAINS`를 설정한 경우에만 가입 email domain을 제한하며, 최초 owner는 `ADMIN_EMAILS`에 포함된 로그인 사용자에게 부여된다. 일반 사용자의 가입은 가입 요청으로 처리되며, 운영자 승인 후에만 활성 멤버가 된다. 전역 admin은 설정 화면에서 env 값을 Database override로 관리할 수 있다.
 
 로그인 전후에 `http://localhost:3100/guide`에서 제품 사용 흐름과 기능별 설명을 확인할 수 있다.
 
@@ -64,9 +64,9 @@ pnpm dev
 - 개인·팀·조직 범위 문서 업로드, 처리 상태 확인과 실패 재처리
 - 검색·종류 필터·관계 집중을 제공하는 Knowledge Graph 관계 지도 탐색
 - AI graph 후보의 실제 원문·entity·relationship 비교와 승인·거절
-- 최초 로그인 시 자동 멤버 등록, 정책에 따른 즉시 활성화 또는 승인 대기
+- 가입 요청 접수와 운영자 승인 후 멤버 활성화
 - 조직 회원 목록에서 role·status(승인·차단)·팀 배정 관리, 팀 생성·이름 변경·삭제
-- 조직 설정에서 이름·신규 회원 정책·기본 팀 관리
+- 조직 설정에서 이름·기본 팀 관리
 - MCP 연결 정보 확인
 
 ## 기술 구성

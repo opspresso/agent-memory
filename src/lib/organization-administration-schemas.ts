@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import {
-  newMemberStatuses,
   manageableOrganizationMemberStatuses,
   organizationRoles,
   teamRoles
@@ -40,7 +39,6 @@ const ontologyTermSchema = z.string().trim().min(1).max(100);
 export const updateOrganizationSchema = z
   .object({
     name: z.string().trim().min(1).max(200).optional(),
-    newMemberStatus: z.enum(newMemberStatuses).optional(),
     defaultTeamId: z.uuid().nullable().optional(),
     ontologyMode: z.enum(knowledgeOntologyModes).optional(),
     ontology: z
@@ -50,10 +48,10 @@ export const updateOrganizationSchema = z
       })
       .optional()
   })
+  .strict()
   .refine(
     (value) =>
       value.name !== undefined ||
-      value.newMemberStatus !== undefined ||
       value.defaultTeamId !== undefined ||
       value.ontologyMode !== undefined ||
       value.ontology !== undefined,

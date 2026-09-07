@@ -26,7 +26,6 @@ export function publicOrganization(
     name: organization.name,
     ...(options.canManage
       ? {
-          newMemberStatus: organization.newMemberStatus,
           defaultTeamId: organization.defaultTeamId,
           ontologyMode: organization.ontologyMode,
           ontology: organization.ontology

@@ -51,7 +51,6 @@ export function createInstallationRepository(db: AgentMemoryDatabase): Installat
         const membership = installationMembership({
           isAdmin,
           hasOwner: Boolean(owner),
-          newMemberStatus: organization.newMemberStatus,
           ...(existing ? { existing } : {})
         });
         if (existing?.role === membership.role && existing.status === membership.status) {

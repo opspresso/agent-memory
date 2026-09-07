@@ -51,7 +51,7 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 한 설치는 하나의 조직을 사용한다. 서버 시작 시 조직이 없으면 기본 조직을 만들고, 하나면 기존 데이터를 사용하며, 둘 이상이면 시작을 거부한다. 조직 초기화는 PostgreSQL table lock으로 직렬화한다. 내부 organization ID와 tenant FK는 scope·provenance 검증을 위해 유지한다. 공개 API에는 조직 선택 경로가 없고 `/api/organization`은 조회·설정 변경만 제공한다. MCP 주소는 `/api/mcp`다.
 
-인증 사용자의 콘솔 진입 시 멤버십을 자동 등록한다. 같은 조직 advisory lock 아래에서 최초 owner를 결정하고 기본 팀 배정을 수행한다. owner가 없는 경우에만 전역 admin을 owner로 준비하며, 일반 사용자는 신규 회원 정책을 따른다. 기존 blocked·removed membership은 로그인으로 재활성화하지 않는다.
+인증 사용자의 콘솔 진입 시 멤버십을 자동 등록한다. 같은 조직 advisory lock 아래에서 최초 owner를 결정하고 기본 팀 배정을 수행한다. owner가 없는 경우에만 전역 admin을 owner로 준비하며, 일반 사용자의 가입은 항상 pending 요청으로 처리하며 운영자가 승인해야 active 멤버가 된다. 기존 blocked·removed membership은 로그인으로 재활성화하지 않는다.
 
 ## 요청 경계
 
@@ -80,7 +80,7 @@ Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경
 
 검색·조회 SQL의 scope 필터는 `scope-predicates`(infrastructure repository 공용 builder)가 단일 소유하며, domain의 `canAccessScopedResource`와의 동치성을 integration test로 고정한다. user scope 자원은 검색 결과에서도 본인에게만 보인다 — `admin`·`owner`도 다른 사용자의 user scope 자원을 검색으로 열람할 수 없다.
 
-조직 membership은 사용자에게 노출하는 `active`, `pending`, `blocked`와 접근 회수 tombstone인 내부 `removed` status를 가진다. 조직 접근 조회는 `active` membership만 반환하므로 나머지 사용자는 모든 조직 API에서 `403`을 받는다. 조직은 신규 가입자의 기본 status(`newMemberStatus`, 기본값 `pending`)와 기본 팀(`defaultTeamId`)을 설정할 수 있으며, 멤버가 `active`가 되는 시점에 기본 팀에 `member`로 배정된다. `newMemberStatus`는 DB에서도 `active`·`pending`으로 제한하고 기본 팀은 같은 organization의 team만 composite FK로 참조한다. 조직 설정 변경, 기본 팀 삭제, 가입·활성화는 같은 organization advisory lock을 사용하며 기본 팀 삭제 transaction은 참조를 먼저 해제한다. 조직 온톨로지(`ontology` 사전, `ontologyMode`)를 포함한 조직 설정 변경은 `admin`·`owner`만 수행한다. 마지막 active `owner`는 강등·차단·제거할 수 없고, 자기 자신의 membership 변경은 허용하지 않는다.
+조직 membership은 사용자에게 노출하는 `active`, `pending`, `blocked`와 접근 회수 tombstone인 내부 `removed` status를 가진다. 조직 접근 조회는 `active` membership만 반환하므로 나머지 사용자는 모든 조직 API에서 `403`을 받는다. 조직은 기본 팀(`defaultTeamId`)을 설정할 수 있으며, 멤버가 `active`가 되는 시점에 기본 팀에 `member`로 배정된다. 가입 요청은 항상 pending으로 저장한다. 기본 팀은 같은 organization의 team만 composite FK로 참조한다. 조직 설정 변경, 기본 팀 삭제, 가입·활성화는 같은 organization advisory lock을 사용하며 기본 팀 삭제 transaction은 참조를 먼저 해제한다. 조직 온톨로지(`ontology` 사전, `ontologyMode`)를 포함한 조직 설정 변경은 `admin`·`owner`만 수행한다. 마지막 active `owner`는 강등·차단·제거할 수 없고, 자기 자신의 membership 변경은 허용하지 않는다.
 
 Membership 제거는 row를 삭제하지 않고 `removed`로 전환해 user scope의 Memory, Document, Knowledge resource 소유권을 보존한다. Team membership과 해당 사용자가 발급한 조직 Agent token은 즉시 삭제하고 모든 접근 조회에서 tombstone을 제외한다. 관리자가 다시 추가하면 기존 row를 활성화하므로 보존된 user scope에 다시 접근할 수 있다. `createdBy`, `changedBy`, `grantedBy`, `reviewedBy`, `mergedBy` 같은 audit actor도 stable global user를 참조하므로 감사 기록과 organization·team scope resource를 보존한다.
 

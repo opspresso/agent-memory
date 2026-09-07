@@ -137,7 +137,6 @@ describe("organization administration", () => {
           id: "organization-1",
           slug: "platform",
           name: update.name ?? "Platform",
-          newMemberStatus: update.newMemberStatus ?? "active",
           defaultTeamId: update.defaultTeamId ?? null,
           createdAt: now,
           updatedAt: now
@@ -150,13 +149,12 @@ describe("organization administration", () => {
     });
 
     await expect(
-      update({ ...ownerAccess, role: "member" }, { newMemberStatus: "pending" })
+      update({ ...ownerAccess, role: "member" }, { name: "Changed" })
     ).rejects.toThrow("organization administration access denied");
     await expect(
-      update(ownerAccess, { name: " Platform Guild ", newMemberStatus: "pending" })
+      update(ownerAccess, { name: " Platform Guild " })
     ).resolves.toMatchObject({
-      name: "Platform Guild",
-      newMemberStatus: "pending"
+      name: "Platform Guild"
     });
     expect(updateOrganizationSettings).toHaveBeenCalledWith(
       "organization-1",

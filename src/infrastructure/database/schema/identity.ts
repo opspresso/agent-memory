@@ -1,7 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
-  check,
   foreignKey,
   ForeignKeyBuilder,
   index,
@@ -20,8 +19,7 @@ import {
 import {
   organizationMemberStatuses,
   organizationRoles,
-  teamRoles,
-  type NewMemberStatus
+  teamRoles
 } from "@/domain/identity/organization-access";
 import {
   defaultKnowledgeOntology,
@@ -49,10 +47,6 @@ export const organizations = pgTable(
     id: uuid().primaryKey().default(sql`uuidv7()`),
     slug: text().notNull(),
     name: text().notNull(),
-    newMemberStatus: organizationMemberStatus()
-      .$type<NewMemberStatus>()
-      .notNull()
-      .default("pending"),
     defaultTeamId: uuid(),
     ontologyMode: knowledgeOntologyMode()
       .$type<KnowledgeOntologyMode>()
@@ -67,10 +61,6 @@ export const organizations = pgTable(
   },
   (table): PgTableExtraConfigValue[] => [
     uniqueIndex("organizations_slug_unique").on(table.slug),
-    check(
-      "organizations_new_member_status_check",
-      sql`${table.newMemberStatus} IN ('active', 'pending')`
-    ),
     new ForeignKeyBuilder(() => ({
       columns: [table.id, table.defaultTeamId],
       foreignColumns: [

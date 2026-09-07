@@ -21,7 +21,6 @@ import {
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { NewMemberStatus } from "@/domain/identity/organization-access";
 import type { KnowledgeOntologyMode } from "@/domain/knowledge/knowledge-ontology";
 
 import { WorkspaceHeader } from "../workspace-components";
@@ -40,7 +39,6 @@ interface OrganizationDetail {
   readonly id: string;
   readonly slug: string;
   readonly name: string;
-  readonly newMemberStatus?: NewMemberStatus;
   readonly defaultTeamId?: string | null;
   readonly ontologyMode?: KnowledgeOntologyMode;
   readonly ontology?: {
@@ -94,8 +92,6 @@ function OrganizationSettingsView() {
   const [organization, setOrganization] = useState<OrganizationDetail>();
   const [teams, setTeams] = useState<readonly TeamView[]>([]);
   const [name, setName] = useState("");
-  const [newMemberStatus, setNewMemberStatus] =
-    useState<NewMemberStatus>("pending");
   const [defaultTeamId, setDefaultTeamId] = useState<string | null>(null);
   const [ontologyMode, setOntologyMode] = useState<KnowledgeOntologyMode>("off");
   const [nodeKinds, setNodeKinds] = useState<string[]>([]);
@@ -161,7 +157,6 @@ function OrganizationSettingsView() {
       if (!formInitialized.current) {
         formInitialized.current = true;
         setName(detail.name);
-        setNewMemberStatus(detail.newMemberStatus ?? "pending");
         setDefaultTeamId(detail.defaultTeamId ?? null);
         setOntologyMode(detail.ontologyMode ?? "off");
         setNodeKinds([...(detail.ontology?.nodeKinds ?? [])]);
@@ -188,7 +183,6 @@ function OrganizationSettingsView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          newMemberStatus,
           defaultTeamId,
           ontologyMode,
           ontology: { nodeKinds, edgePredicates }
@@ -201,7 +195,6 @@ function OrganizationSettingsView() {
       );
       setOrganization(detail);
       setName(detail.name);
-      setNewMemberStatus(detail.newMemberStatus ?? "pending");
       setDefaultTeamId(detail.defaultTeamId ?? null);
       setOntologyMode(detail.ontologyMode ?? "off");
       setNodeKinds([...(detail.ontology?.nodeKinds ?? [])]);
@@ -268,21 +261,6 @@ function OrganizationSettingsView() {
             onChange={(event) => setName(event.currentTarget.value)}
             required
             value={name}
-          />
-          <Select
-            allowDeselect={false}
-            data={[
-              { value: "active", label: t("settings.newMember.active") },
-              { value: "pending", label: t("settings.newMember.pending") }
-            ]}
-            description={t("settings.newMember.description")}
-            label={t("settings.newMember.label")}
-            onChange={(value) => {
-              if (value === "active" || value === "pending") {
-                setNewMemberStatus(value);
-              }
-            }}
-            value={newMemberStatus}
           />
           <Select
             clearable

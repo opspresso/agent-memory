@@ -164,7 +164,7 @@ export const ko: Messages = {
 
   "onboarding.title": "접근 승인 대기",
   "onboarding.lede":
-    "이 설치의 조직에 자동으로 등록됩니다. 관리자가 접근을 승인하면 Memory를 사용할 수 있습니다.",
+    "가입이 요청으로 접수되었습니다. 운영자가 승인하면 멤버가 되어 Memory를 사용할 수 있습니다.",
 
 
 
@@ -211,7 +211,7 @@ export const ko: Messages = {
   "teams.deleteBody":
     "{name} 팀을 삭제할까요? 팀 소속과 team scope의 Database record가 영구히 삭제됩니다. 업로드 원본은 storage lifecycle에 따라 별도로 정리됩니다.",
   "settings.title": "조직 설정",
-  "settings.lede": "조직 프로필과 신규 회원 가입 정책을 관리합니다.",
+  "settings.lede": "조직 프로필과 기본 팀을 관리합니다.",
   "settings.general": "일반",
   "settings.save": "설정 저장",
   "settings.saved": "설정을 저장했습니다.",
@@ -230,11 +230,10 @@ export const ko: Messages = {
   "settings.application.saved": "애플리케이션 설정을 저장했습니다.",
   "settings.application.loadFailed": "애플리케이션 설정을 불러오지 못했습니다.",
   "settings.application.saveFailed": "애플리케이션 설정을 저장하지 못했습니다.",
-  "settings.newMember.label": "신규 회원 정책",
-  "settings.newMember.description":
-    "로그인한 사용자가 이 조직에 가입할 때 적용되는 상태입니다.",
-  "settings.newMember.active": "즉시 활성화",
-  "settings.newMember.pending": "승인 대기",
+
+
+
+
   "settings.defaultTeam.label": "기본 팀",
   "settings.defaultTeam.description":
     "신규 회원이 활성화될 때 자동으로 배정되는 팀입니다.",

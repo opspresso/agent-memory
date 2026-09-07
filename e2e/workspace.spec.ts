@@ -117,8 +117,7 @@ test("onboards, approves, and manages members through the console", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "인증 및 접근" }).click();
   await expect(page.getByLabel(/ALLOWED_EMAIL_DOMAINS/)).toHaveValue("nalbam.com");
-  await page.getByRole("combobox", { name: "신규 회원 정책" }).click();
-  await page.getByRole("option", { name: "승인 대기" }).click();
+  await expect(page.getByRole("combobox", { name: "신규 회원 정책" })).toHaveCount(0);
   await page.getByRole("combobox", { name: "기본 팀" }).click();
   await page.getByRole("option", { name: "E2E Default Team" }).click();
   await page.getByRole("combobox", { name: "검증 모드" }).click();
@@ -161,6 +160,9 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(
     memberPage.getByText("조직 관리자의 승인을 기다리고 있습니다.")
   ).toBeVisible();
+  expect((await memberPage.request.get("/api/memories")).status()).toBe(403);
+  await memberPage.reload();
+  await expect(memberPage.getByText("조직 관리자의 승인을 기다리고 있습니다.")).toBeVisible();
 
   await page.goto("/members");
   await expect(page.getByText(memberEmail, { exact: true })).toBeVisible();

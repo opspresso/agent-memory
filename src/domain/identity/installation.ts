@@ -1,6 +1,5 @@
 import type { Organization } from "./organization-administration";
 import type {
-  NewMemberStatus,
   OrganizationMemberStatus,
   OrganizationRole
 } from "./organization-access";
@@ -13,7 +12,6 @@ export interface InstallationRepository {
 export function installationMembership(input: {
   readonly isAdmin: boolean;
   readonly hasOwner: boolean;
-  readonly newMemberStatus: NewMemberStatus;
   readonly existing?: {
     readonly role: OrganizationRole;
     readonly status: OrganizationMemberStatus;
@@ -25,5 +23,5 @@ export function installationMembership(input: {
   if (input.isAdmin && !input.hasOwner) {
     return { role: "owner", status: "active" };
   }
-  return input.existing ?? { role: "member", status: input.newMemberStatus };
+  return input.existing ?? { role: "member", status: "pending" };
 }

@@ -4,7 +4,7 @@
 
 ## 최초 로그인과 조직 가입
 
-설치마다 하나의 조직이 자동으로 준비된다. 최초 전역 admin(`ADMIN_EMAILS`) 로그인 시 owner가 설정된다. 다른 사용자는 첫 로그인 시 신규 회원 정책에 따라 자동 등록되며, 기본은 승인 대기다. 승인 대기 중에는 조직의 지식 API를 사용할 수 없으며, 관리자가 `회원`에서 승인하면 활성화된다. 차단·제거된 사용자는 로그인으로 접근 권한이 복구되지 않는다.
+설치마다 하나의 조직이 자동으로 준비된다. 최초 전역 admin(`ADMIN_EMAILS`) 로그인 시 owner가 설정된다. 다른 사용자의 가입은 가입 요청으로 접수되며 항상 승인 대기 상태다. 승인 대기 중에는 조직의 지식 API를 사용할 수 없으며, 관리자가 `회원`에서 승인하면 활성화된다. 차단·제거된 사용자는 로그인으로 접근 권한이 복구되지 않는다.
 
 ## 활성 조직과 권한
 
@@ -147,7 +147,7 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 - Team `manager`: 자신이 관리하는 팀의 이름 변경, 기존 조직 멤버 배정과 team role 변경, 팀 멤버 제거
 - Team `member`: team scope resource 읽기·쓰기
 
-`설정`에서 조직 이름, 신규 회원 정책(즉시 활성화 또는 승인 대기, 기본은 승인 대기), 기본 팀, Knowledge Graph 온톨로지(검증 모드와 node kind·edge predicate 사전, 빈도 추천·AI 제안 반영)를 관리한다. 전역 admin에게는 env보다 우선하는 애플리케이션 설정도 표시된다. `ALLOWED_EMAIL_DOMAINS`를 비우면 모든 email domain을 허용하고, 각 override의 reset button을 누르면 env fallback으로 되돌린다. 재시작 필요 표시가 있는 설정은 저장 후 모든 instance를 재시작하라. 기본 팀이 설정되면 신규 회원이 활성화될 때 자동으로 해당 팀에 배정된다.
+`설정`에서 조직 이름, 기본 팀, Knowledge Graph 온톨로지(검증 모드와 node kind·edge predicate 사전, 빈도 추천·AI 제안 반영)를 관리한다. 전역 admin에게는 env보다 우선하는 애플리케이션 설정도 표시된다. `ALLOWED_EMAIL_DOMAINS`를 비우면 모든 email domain을 허용하고, 각 override의 reset button을 누르면 env fallback으로 되돌린다. 재시작 필요 표시가 있는 설정은 저장 후 모든 instance를 재시작하라. 기본 팀이 설정되면 신규 회원이 활성화될 때 자동으로 해당 팀에 배정된다.
 
 팀을 삭제해도 S3 호환 storage의 문서 원본 object는 자동으로 제거되지 않는다. 원본 삭제가 필요하면 PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 운영 환경의 object lifecycle을 따른다.
 

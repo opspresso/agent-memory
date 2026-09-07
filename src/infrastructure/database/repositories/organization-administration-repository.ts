@@ -99,9 +99,6 @@ export function createOrganizationAdministrationRepository(
           .update(organizations)
           .set({
             ...(update.name === undefined ? {} : { name: update.name }),
-            ...(update.newMemberStatus === undefined
-              ? {}
-              : { newMemberStatus: update.newMemberStatus }),
             ...(update.defaultTeamId === undefined
               ? {}
               : { defaultTeamId: update.defaultTeamId }),

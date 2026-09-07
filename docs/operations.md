@@ -308,7 +308,7 @@ Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지
 
 서버 시작 시 조직이 없으면 `default` slug와 `Agent Memory` 이름으로 생성한다. 기존 조직이 하나면 ID·이름·멤버십·데이터를 그대로 사용한다. 두 개 이상이면 서버 시작을 중단한다. 기존 다중 조직 설치는 운영자가 조직별 독립 DB·bucket으로 분리하거나 보존할 데이터를 정리한 후 시작하라. 자동 병합·삭제는 수행하지 않는다.
 
-로그인 사용자는 설치 조직에 자동 등록된다. active owner가 없는 경우 `ADMIN_EMAILS`의 사용자가 최초 owner가 된다. 다른 사용자는 `newMemberStatus` 정책을 따른다. blocked·removed membership은 자동으로 복구하지 않는다. 모든 공개 HTTP endpoint는 조직 slug를 받지 않으며 MCP 주소는 `/api/mcp`다.
+가입 후 첫 콘솔 접속은 설치 조직에 대한 가입 요청으로 처리한다. active owner가 없는 경우 `ADMIN_EMAILS`의 사용자가 최초 owner가 된다. 다른 사용자의 가입은 pending 요청으로 처리되며 운영자 승인 후에만 활성 멤버가 된다. blocked·removed membership은 자동으로 복구하지 않는다. 모든 공개 HTTP endpoint는 조직 slug를 받지 않으며 MCP 주소는 `/api/mcp`다.
 
 ## 배포 전 확인
 

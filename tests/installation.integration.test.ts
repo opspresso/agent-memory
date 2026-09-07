@@ -40,14 +40,14 @@ describe("single organization installation", () => {
   it("creates exactly one organization under concurrent startup", async () => {
     const results = await Promise.all(Array.from({ length: 8 }, () => repository.initialize()));
     expect(new Set(results.map((organization) => organization.id)).size).toBe(1);
-    expect(results[0]).toMatchObject({ slug: "default", name: "Agent Memory", newMemberStatus: "pending" });
+    expect(results[0]).toMatchObject({ slug: "default", name: "Agent Memory" });
     expect((await pool.query("SELECT count(*)::int AS count FROM organizations")).rows).toEqual([{ count: 1 }]);
   });
 
   it("preserves the existing organization identity and settings", async () => {
     const id = randomUUID();
-    await pool.query("INSERT INTO organizations(id,slug,name,new_member_status) VALUES($1,'existing','Existing','active')", [id]);
-    expect(await repository.initialize()).toMatchObject({ id, slug: "existing", name: "Existing", newMemberStatus: "active" });
+    await pool.query("INSERT INTO organizations(id,slug,name) VALUES($1,'existing','Existing')", [id]);
+    expect(await repository.initialize()).toMatchObject({ id, slug: "existing", name: "Existing" });
   });
 
   it("rejects multiple organizations without changing either", async () => {
