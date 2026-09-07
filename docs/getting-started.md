@@ -34,11 +34,11 @@ AUTH_PASSWORD_SIGNUP=true
 기본 접근 정책은 다음과 같다.
 
 ```dotenv
-ALLOWED_EMAIL_DOMAINS=nalbam.com
+ALLOWED_EMAIL_DOMAINS=
 ADMIN_EMAILS=me@nalbam.com
 ```
 
-- 가입할 email domain은 `ALLOWED_EMAIL_DOMAINS`에 있어야 한다.
+- `ALLOWED_EMAIL_DOMAINS`가 비어 있거나 미설정이면 모든 email domain으로 가입할 수 있다. 제한하려면 허용 domain을 comma-separated 목록으로 설정한다.
 - 첫 조직을 만들 사용자의 email은 `ADMIN_EMAILS`에 있어야 한다.
 - 다른 domain이나 email을 사용할 경우 두 값을 함께 변경하라.
 - 운영 환경에서는 `.env.example`의 `BETTER_AUTH_SECRET`과 storage credential을 사용하지 마라.

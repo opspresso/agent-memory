@@ -86,7 +86,28 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/or
 
 이 token은 URL의 동일 organization slug에 해당하는 MCP endpoint에서만 인증된다. 일반 HTTP API나 다른 조직에서는 사용할 수 없다. Token 발급자가 현재 active `admin` 또는 `owner`인지 확인한 뒤 `X-User-Email`이 없으면 organization scope만 접근할 수 있는 service principal을 적용한다. 유효한 token과 함께 전달된 `X-User-Email`은 해당 조직의 활성 사용자 권한으로 위임한다. 상세 검증과 신뢰 경계는 MCP 절을 따른다. 발급자가 차단·제거·강등되면 다음 요청부터 인증이 거부된다. `BETTER_AUTH_SECRET`을 변경하면 기존 token은 hash 검증으로 계속 인증되지만 원문을 복호화할 수 없으므로 재생성해야 한다.
 
-인증은 `ALLOWED_EMAIL_DOMAINS`에 설정한 email domain으로 제한한다. `POST /api/organizations`는 `ADMIN_EMAILS`에 설정한 사용자만 호출할 수 있으며, 생성자는 새 조직의 owner가 된다. 이 전역 bootstrap 권한은 기존 조직의 멤버십이나 role을 대체하지 않는다.
+`ALLOWED_EMAIL_DOMAINS`가 미설정 또는 빈 값이면 모든 email domain으로 로그인할 수 있다. 목록을 설정하면 인증을 해당 email domain으로 제한한다. `POST /api/organizations`는 `ADMIN_EMAILS`에 설정한 사용자만 호출할 수 있으며, 생성자는 새 조직의 owner가 된다. 이 전역 bootstrap 권한은 기존 조직의 멤버십이나 role을 대체하지 않는다.
+
+### 전역 애플리케이션 설정
+
+- `GET /api/settings/runtime`: 전역 admin에게 env, Database override, 기본값 중 유효한 설정과 source를 반환한다. Secret은 마스킹한다.
+- `PUT /api/settings/runtime`: `values`의 항목을 Database override로 저장하고 `reset`의 항목은 env fallback으로 되돌린다. `ADMIN_EMAILS`에서 요청자 자신을 제거하거나 `ALLOWED_EMAIL_DOMAINS`에서 요청자의 domain을 제외하는 변경은 거부한다.
+
+요청 예시는 다음과 같다.
+
+```json
+{
+  "values": {
+    "ALLOWED_EMAIL_DOMAINS": "",
+    "ADMIN_EMAILS": "admin@example.com"
+  },
+  "reset": ["RERANKER_MODEL"]
+}
+```
+
+`ALLOWED_EMAIL_DOMAINS`의 빈 문자열은 명시적인 무제한 override다. Override 삭제는 빈 문자열 대신 `reset`을 사용한다.
+
+저장 시 서버 시작과 동일한 runtime 검증을 수행하며 모든 로그인 수단을 비활성화하는 변경은 거부한다. AI endpoint 변경에는 해당 API key의 명시적 입력·제거 또는 env 쌍으로의 reset이 필요하다. 마스킹된 key를 재전송하는 것은 새 endpoint에 대한 credential 입력으로 인정하지 않는다.
 
 오류 응답은 기본적으로 `{ "error": string }`이며 schema validation 오류는 `issues`를 추가할 수 있다.
 

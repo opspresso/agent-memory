@@ -126,7 +126,9 @@ export function AppShellFrame({
         return [group];
       }
       const items = group.items.filter((item) =>
-        item.href === "/teams" ? managesAnyTeam : canManageOrganization
+        item.href === "/teams"
+          ? managesAnyTeam
+          : canManageOrganization || (item.href === "/settings" && user?.isAdmin)
       );
       return items.length > 0
         ? [{ key: group.key, label: group.label, items }]
@@ -255,6 +257,11 @@ export function AppShellFrame({
                     </Menu.Item>
                   ) : null}
                   <Menu.Divider />
+                  {user.isAdmin ? (
+                    <Menu.Item component={Link} href="/settings" leftSection={<IconSettings size={15} />}>
+                      {t("nav.settings")}
+                    </Menu.Item>
+                  ) : null}
                   <Menu.Item
                     color="red"
                     leftSection={<IconLogout size={15} />}

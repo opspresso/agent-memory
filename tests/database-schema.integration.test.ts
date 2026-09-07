@@ -58,6 +58,7 @@ import {
   type DocumentIngestionJob
 } from "@/infrastructure/queue/document-ingestion-queue";
 import { createPostgresAiRequestLimiter } from "@/infrastructure/ai/postgres-request-limiter";
+import { createAppSettingsRepository } from "@/infrastructure/database/repositories/app-settings-repository";
 
 const organizationA = "00000000-0000-0000-0000-000000000001";
 const organizationB = "00000000-0000-0000-0000-000000000002";
@@ -110,6 +111,53 @@ describe("PostgreSQL schema", () => {
          AND column_name IN ('source_memory_id', 'source_chunk_id')`
     );
     expect(legacyProvenanceColumns.rows).toEqual([]);
+  });
+
+  it("stores one global application settings row", async () => {
+    const repository = createAppSettingsRepository(db);
+    const updatedAt = new Date("2026-09-07T00:00:00.000Z");
+
+    await expect(repository.get()).resolves.toBeNull();
+    await expect(
+      repository.save({
+        overrides: { ALLOWED_EMAIL_DOMAINS: "example.com" },
+        updatedAt
+      })
+    ).resolves.toEqual({
+      id: 1,
+      overrides: { ALLOWED_EMAIL_DOMAINS: "example.com" },
+      updatedAt
+    });
+    await expect(
+      repository.save({
+        overrides: { ADMIN_EMAILS: "admin@example.com" },
+        updatedAt
+      })
+    ).resolves.toMatchObject({
+      overrides: { ADMIN_EMAILS: "admin@example.com" }
+    });
+    await expect(
+      pool.query(
+        `INSERT INTO app_settings (id, overrides) VALUES (2, '{}')`
+      )
+    ).rejects.toMatchObject({ constraint: "app_settings_singleton_check" });
+    await Promise.all([
+      repository.update((current) => ({
+        overrides: { ...current?.overrides, LOG_LEVEL: "debug" },
+        updatedAt
+      })),
+      repository.update((current) => ({
+        overrides: { ...current?.overrides, RERANKER_MIN_SCORE: "0.5" },
+        updatedAt
+      }))
+    ]);
+    await expect(repository.get()).resolves.toMatchObject({
+      overrides: {
+        ADMIN_EMAILS: "admin@example.com",
+        LOG_LEVEL: "debug",
+        RERANKER_MIN_SCORE: "0.5"
+      }
+    });
   });
 
   it("deduplicates document ingestion jobs in pg-boss", async () => {

@@ -74,7 +74,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Auth | `BETTER_AUTH_URL` | Application base URL과 trusted origin. Public production origin은 HTTPS 필수 |
 | Auth | `AUTH_PASSWORD` | Email/password 로그인 활성화 |
 | Auth | `AUTH_PASSWORD_SIGNUP` | Self-signup 활성화. `AUTH_PASSWORD=true`가 함께 필요하며 loopback 이외의 production에서는 허용하지 않음 |
-| Auth | `ALLOWED_EMAIL_DOMAINS` | 로그인 허용 email domain의 comma-separated 목록. 기본값 `nalbam.com` |
+| Auth | `ALLOWED_EMAIL_DOMAINS` | 로그인 허용 email domain의 comma-separated 목록. 미설정 또는 빈 값이면 모든 domain 허용 |
 | Auth | `ADMIN_EMAILS` | 첫 조직을 만들 수 있는 email의 comma-separated 목록. 기본값 `me@nalbam.com` |
 | Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google provider. 두 값을 함께 설정 |
 | OIDC | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Generic OIDC provider. 세 값을 함께 설정 |
@@ -107,9 +107,21 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Telemetry | `LANGFUSE_EXPORT_MODE` | `batched` 또는 `immediate`. Vercel runtime(`VERCEL` 자동 설정)에서는 기본값 `immediate` |
 | Telemetry | `LANGFUSE_TRACING_ENVIRONMENT` | Trace 환경 이름 |
 
-`ALLOWED_EMAIL_DOMAINS`는 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. 명시적으로 빈 값으로 설정하면 모든 domain을 허용한다. `ADMIN_EMAILS`는 조직 bootstrap 권한만 제어하고 기존 조직의 tenant role을 우회하지 않는다. 빈 값으로 설정하면 누구도 새 조직을 만들 수 없다.
+`ALLOWED_EMAIL_DOMAINS`는 미설정하거나 빈 값이면 모든 domain을 허용한다. 목록을 설정하면 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. `ADMIN_EMAILS`는 조직 bootstrap 권한과 전역 설정 관리 권한만 제어하고 기존 조직의 tenant role을 우회하지 않는다. 빈 값으로 설정하면 누구도 새 조직을 만들거나 전역 설정을 관리할 수 없다.
 
-`NODE_ENV=production`에서는 `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `ALLOWED_EMAIL_DOMAINS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`이 필수다. `BETTER_AUTH_SECRET`은 32자 이상이어야 하고 public `BETTER_AUTH_URL`은 HTTPS를 사용해야 한다. 하나라도 유효하지 않으면 서버가 시작 시점에 실패한다 — 개발용 기본값으로의 무경고 fallback은 개발 환경에서만 동작한다.
+`NODE_ENV=production`에서는 `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`이 필수다. `ALLOWED_EMAIL_DOMAINS`는 production에서도 선택 항목이다. `BETTER_AUTH_SECRET`은 32자 이상이어야 하고 public `BETTER_AUTH_URL`은 HTTPS를 사용해야 한다. 하나라도 유효하지 않으면 서버가 시작 시점에 실패한다 — 개발용 기본값으로의 무경고 fallback은 개발 환경에서만 동작한다.
+
+### Database 설정 override
+
+저장과 서버 시작은 같은 runtime 검증기를 사용한다. URL은 credential을 포함하지 않는 절대 HTTP(S) 주소여야 하며 빈 log level과 Langfuse export mode는 거부한다. 환경 변수 기본값으로 복귀하려면 빈 문자열을 저장하지 말고 override를 reset한다. 최소 한 개의 Google·OIDC·password 로그인 수단을 유지해야 한다. 이 검증은 설정 형식을 확인하며 외부 provider의 실제 인증 성공까지 보장하지 않는다.
+
+Embedding·reranker·knowledge extraction endpoint를 바꿀 때 기존 credential이 있으면 해당 API key를 명시적으로 입력하거나 빈 값으로 제거해야 한다. Endpoint와 API key를 함께 reset하면 env의 쌍으로 복귀한다. 새 endpoint에 이전 provider credential을 자동 전달하지 않는다.
+
+전역 admin은 계정 메뉴의 `설정`에서 조직 가입 여부와 관계없이 애플리케이션 설정을 관리한다. 저장된 값은 env보다 우선하며, override를 reset하면 다시 env와 기본값 순으로 fallback한다. `ALLOWED_EMAIL_DOMAINS`에 빈 override를 저장하면 env에 제한 목록이 있어도 모든 domain을 허용한다. 설정 변경은 DB transaction에서 최신 관리자 권한을 확인하고 직렬화해 동시에 저장한 다른 항목의 변경을 보존한다.
+
+Secret 항목은 `BETTER_AUTH_SECRET`에서 파생한 key로 암호화해 저장하고 화면과 API 응답에서는 마스킹한다. `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN`은 현재 instance에 즉시 반영된다. 인증 provider, AI service, worker, object storage, logging, telemetry처럼 process 초기화 시 구성되는 항목은 모든 instance를 재시작한 뒤 반영된다. 여러 replica에서 접근 정책 override는 최대 5초 안에 다시 읽는다.
+
+`DATABASE_URL`, `BETTER_AUTH_SECRET`, `MIGRATE_ON_START`, `NODE_ENV`는 Database 접근·설정 암호화·migration·runtime 선택에 먼저 필요하므로 override 대상이 아닌 bootstrap env다. `NEXT_RUNTIME`, `NEXT_PHASE`, `VERCEL`, `CI`, `E2E_*` 같은 framework·배포·검사 변수도 전역 설정에서 관리하지 않는다.
 
 Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 동시 실행·분당 호출 제한을 공유하고, PostgreSQL의 organization·user 분당 quota도 함께 적용받는다. Replica를 늘려도 같은 조직·사용자의 durable quota는 늘어나지 않는다. Provider account 전체 예산은 조직별 quota와 별도로 설정하라.
 

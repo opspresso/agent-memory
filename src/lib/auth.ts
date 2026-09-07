@@ -1,6 +1,7 @@
 import { getAllowedEmailDomains } from "./access-control";
-import { database } from "./container";
 import { createAuth } from "./create-auth";
+import { database } from "./database";
+import { getEffectiveAllowedEmailDomains } from "./runtime-settings";
 
 const buildOnlySecret = "agent-memory-build-only-secret-000000000000";
 
@@ -45,6 +46,7 @@ if ((oidcClient && !oidcIssuer) || (!oidcClient && oidcIssuer)) {
 
 export const auth = createAuth({
   allowedEmailDomains: getAllowedEmailDomains(),
+  getAllowedEmailDomains: getEffectiveAllowedEmailDomains,
   database: database.db,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3100",
   secret: requiredAuthSecret(),

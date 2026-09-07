@@ -27,6 +27,7 @@ interface OidcClient extends OAuthClient {
 
 export interface CreateAuthOptions {
   readonly allowedEmailDomains?: readonly string[];
+  readonly getAllowedEmailDomains?: () => Promise<readonly string[]>;
   readonly baseURL: string;
   readonly database: AgentMemoryDatabase;
   readonly secret: string;
@@ -42,8 +43,11 @@ export function createAuth(options: CreateAuthOptions) {
   const oidc = options.oidc;
   const allowedEmailDomains = options.allowedEmailDomains ?? [];
 
-  function assertAllowedEmailDomain(email: string): void {
-    if (!isAllowedEmailDomain(email, allowedEmailDomains)) {
+  async function assertAllowedEmailDomain(email: string): Promise<void> {
+    const domains = options.getAllowedEmailDomains
+      ? await options.getAllowedEmailDomains()
+      : allowedEmailDomains;
+    if (!isAllowedEmailDomain(email, domains)) {
       throw new APIError("FORBIDDEN", {
         code: "EMAIL_DOMAIN_NOT_ALLOWED",
         message: "Email domain is not allowed"
@@ -75,7 +79,7 @@ export function createAuth(options: CreateAuthOptions) {
       user: {
         create: {
           before: async (user) => {
-            assertAllowedEmailDomain(user.email);
+            await assertAllowedEmailDomain(user.email);
             return { data: user };
           }
         }
@@ -87,7 +91,7 @@ export function createAuth(options: CreateAuthOptions) {
               session.userId
             );
             if (user) {
-              assertAllowedEmailDomain(user.email);
+              await assertAllowedEmailDomain(user.email);
             }
             return { data: session };
           }

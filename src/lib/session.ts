@@ -4,6 +4,7 @@ import {
   authenticationHeaders,
   hasTrustedMutationOrigin
 } from "./request-security";
+import { getEffectiveAdminEmails } from "./runtime-settings";
 
 export interface SessionUser {
   readonly email: string;
@@ -28,7 +29,10 @@ export async function getSessionUser(
     email: session.user.email,
     id: session.user.id,
     image: session.user.image ?? null,
-    isAdmin: isAdminEmail(session.user.email),
+    isAdmin: isAdminEmail(
+      session.user.email,
+      await getEffectiveAdminEmails()
+    ),
     name: session.user.name
   };
 }

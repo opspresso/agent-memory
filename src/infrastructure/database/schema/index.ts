@@ -5,3 +5,4 @@ export * from "./identity";
 export * from "./knowledge-candidates";
 export * from "./knowledge-graph";
 export * from "./memories";
+export * from "./settings";

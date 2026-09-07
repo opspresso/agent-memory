@@ -7,6 +7,21 @@ export async function register() {
     return;
   }
 
+  const { assertProductionBootstrapConfiguration } = await import(
+    "./lib/production-config"
+  );
+  assertProductionBootstrapConfiguration();
+
+  if (process.env.MIGRATE_ON_START === "true") {
+    const { migrateOnStart } = await import("./lib/migrate-on-start");
+    await migrateOnStart();
+  }
+
+  const { applyRuntimeSettingsOverrides } = await import(
+    "./lib/runtime-settings"
+  );
+  await applyRuntimeSettingsOverrides();
+
   const { assertProductionConfiguration } = await import(
     "./lib/production-config"
   );
@@ -52,11 +67,6 @@ export async function register() {
   readMetricsToken();
 
   initializeTelemetry();
-
-  if (process.env.MIGRATE_ON_START === "true") {
-    const { migrateOnStart } = await import("./lib/migrate-on-start");
-    await migrateOnStart();
-  }
 
   if (process.env.DOCUMENT_WORKER_ENABLED === "true") {
     const { startDocumentWorker } = await import("./lib/document-worker");

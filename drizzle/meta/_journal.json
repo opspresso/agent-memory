@@ -169,6 +169,13 @@
       "when": 1788515292390,
       "tag": "0023_dizzy_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788761602576,
+      "tag": "0024_left_james_howlett",
+      "breakpoints": true
     }
   ]
 }

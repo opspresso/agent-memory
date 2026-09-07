@@ -1,4 +1,4 @@
-const defaultAllowedEmailDomains = ["nalbam.com"] as const;
+const defaultAllowedEmailDomains: readonly string[] = [];
 const defaultAdminEmails = ["me@nalbam.com"] as const;
 
 interface AccessControlEnvironment {

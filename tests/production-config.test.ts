@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { assertProductionConfiguration } from "@/lib/production-config";
+import {
+  assertProductionBootstrapConfiguration,
+  assertProductionConfiguration
+} from "@/lib/production-config";
 
 const complete = {
   NODE_ENV: "production",
@@ -16,8 +19,28 @@ const complete = {
 };
 
 describe("production configuration", () => {
+  it("requires database and encryption bootstrap settings before loading overrides", () => {
+    expect(() =>
+      assertProductionBootstrapConfiguration({ NODE_ENV: "production" })
+    ).toThrow(
+      "production bootstrap configuration is incomplete: DATABASE_URL, BETTER_AUTH_SECRET must be set"
+    );
+    expect(() =>
+      assertProductionBootstrapConfiguration({ NODE_ENV: "development" })
+    ).not.toThrow();
+  });
+
   it("accepts a fully configured production environment", () => {
     expect(() => assertProductionConfiguration(complete)).not.toThrow();
+  });
+
+  it("allows unrestricted email domains in production", () => {
+    expect(() =>
+      assertProductionConfiguration({
+        ...complete,
+        ALLOWED_EMAIL_DOMAINS: undefined
+      })
+    ).not.toThrow();
   });
 
   it("fails fast when required production settings are missing", () => {
