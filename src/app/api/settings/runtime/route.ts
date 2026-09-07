@@ -44,7 +44,9 @@ export async function GET(request: Request) {
   if (!authentication.authenticated) {
     return authentication.response;
   }
-  return Response.json(await appSettingsUseCases.getView());
+  return Response.json(await appSettingsUseCases.getView(), {
+    headers: { "Cache-Control": "no-store" }
+  });
 }
 
 export async function PUT(request: Request) {
@@ -70,7 +72,7 @@ export async function PUT(request: Request) {
     );
     invalidateRuntimeSettingsCache();
     await applyLiveRuntimeSettingsOverrides();
-    return Response.json(view);
+    return Response.json(view, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof InvalidAppSettingsError) {
       return Response.json({ error: error.message }, { status: 400 });

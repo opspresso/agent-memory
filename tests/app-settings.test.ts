@@ -15,6 +15,10 @@ import { createAppSettingsSecretCipher } from "@/infrastructure/security/app-set
 function dependencies(environment: Readonly<Record<string, string | undefined>>) {
   let stored: AppSettings | null = null;
   const repository: AppSettingsRepository = {
+    async update(mutate) {
+      stored = mutate(stored);
+      return stored;
+    },
     async get() {
       return stored;
     },
@@ -146,6 +150,13 @@ describe("application settings", () => {
     });
   });
 
+  it("does not let a removed admin restore their access using a stale session", async () => {
+    const { useCases } = dependencies({ ADMIN_EMAILS: "admin@example.com, old@example.com" });
+    await useCases.update({ values: { ADMIN_EMAILS: "admin@example.com" } }, "admin@example.com");
+    await expect(useCases.update({ values: { ADMIN_EMAILS: "old@example.com" } }, "old@example.com"))
+      .rejects.toThrow("Application settings access denied");
+  });
+
   it("encrypts secret overrides with field-bound authenticated encryption", () => {
     const cipher = createAppSettingsSecretCipher(
       () => "test-better-auth-secret-with-at-least-32-characters"
@@ -157,5 +168,8 @@ describe("application settings", () => {
     expect(encrypted).not.toContain("client-secret");
     expect(cipher.decrypt(encrypted, name)).toBe("client-secret");
     expect(() => cipher.decrypt(encrypted, "OIDC_CLIENT_SECRET")).toThrow();
+    expect(cipher.decrypt(cipher.encrypt("", name), name)).toBe("");
+    expect(cipher.mask("abc")).not.toContain("abc");
+    expect(cipher.mask("abc")).toBe(cipher.mask("a much longer secret"));
   });
 });

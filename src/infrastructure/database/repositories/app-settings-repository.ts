@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import type {
   AppSettings,
@@ -8,9 +8,16 @@ import type { AgentMemoryDatabase } from "@/infrastructure/database/client";
 import { appSettings } from "@/infrastructure/database/schema";
 
 export function createAppSettingsRepository(
-  database: AgentMemoryDatabase
+  database: Pick<AgentMemoryDatabase, "select" | "insert" | "transaction">
 ): AppSettingsRepository {
   return {
+    async update(mutate) {
+      return database.transaction(async (transaction) => {
+        await transaction.execute(sql`SELECT pg_advisory_xact_lock(173529, 1)`);
+        const repository = createAppSettingsRepository(transaction);
+        return repository.save(mutate(await repository.get()));
+      });
+    },
     async get() {
       const [settings] = await database
         .select()

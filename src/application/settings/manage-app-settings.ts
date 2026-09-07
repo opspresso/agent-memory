@@ -152,50 +152,58 @@ export function createAppSettingsUseCases(dependencies: Dependencies) {
       update: AppSettingsUpdate,
       userEmail: string
     ): Promise<AppSettingsView> {
-      const current = await dependencies.repository.get();
-      const next: AppSettings = {
-        overrides: normalizedOverrides(current, update, dependencies),
-        updatedAt: dependencies.clock()
-      };
-      const effective = effectiveEnvironment(next, dependencies);
-      try {
-        dependencies.validate(effective);
-      } catch (error) {
-        throw new InvalidAppSettingsError(
-          error instanceof Error ? error.message : "Invalid app settings"
+      const saved = await dependencies.repository.update((current) => {
+        const currentAdmins = (fieldValue("ADMIN_EMAILS", current, dependencies) ?? "me@nalbam.com")
+          .split(",")
+          .map((email) => email.trim().toLowerCase());
+        if (!currentAdmins.includes(userEmail.trim().toLowerCase())) {
+          throw new InvalidAppSettingsError("Application settings access denied");
+        }
+        const next: AppSettings = {
+          overrides: normalizedOverrides(current, update, dependencies),
+          updatedAt: dependencies.clock()
+        };
+        const effective = effectiveEnvironment(next, dependencies);
+        try {
+          dependencies.validate(effective);
+        } catch (error) {
+          throw new InvalidAppSettingsError(
+            error instanceof Error ? error.message : "Invalid app settings"
+          );
+        }
+        const adminDefinition = appSettingDefinitions.find(
+          (definition) => definition.name === "ADMIN_EMAILS"
         );
-      }
-      const adminDefinition = appSettingDefinitions.find(
-        (definition) => definition.name === "ADMIN_EMAILS"
-      );
-      const admins = (
-        effective.ADMIN_EMAILS ??
-        (adminDefinition && "defaultValue" in adminDefinition
-          ? adminDefinition.defaultValue
-          : "")
-      )
-        .split(",")
-        .map((email) => email.trim().toLowerCase())
-        .filter(Boolean);
-      if (!admins.includes(userEmail.trim().toLowerCase())) {
-        throw new InvalidAppSettingsError(
-          "ADMIN_EMAILS must include your email address"
-        );
-      }
-      const allowedDomains = (effective.ALLOWED_EMAIL_DOMAINS ?? "")
-        .split(",")
-        .map((domain) => domain.trim().toLowerCase())
-        .filter(Boolean);
-      const userDomain = userEmail.trim().toLowerCase().split("@")[1];
-      if (
-        allowedDomains.length > 0 &&
-        (!userDomain || !allowedDomains.includes(userDomain))
-      ) {
-        throw new InvalidAppSettingsError(
-          "ALLOWED_EMAIL_DOMAINS must include your email domain"
-        );
-      }
-      return toView(await dependencies.repository.save(next), dependencies);
+        const admins = (
+          effective.ADMIN_EMAILS ??
+          (adminDefinition && "defaultValue" in adminDefinition
+            ? adminDefinition.defaultValue
+            : "")
+        )
+          .split(",")
+          .map((email) => email.trim().toLowerCase())
+          .filter(Boolean);
+        if (!admins.includes(userEmail.trim().toLowerCase())) {
+          throw new InvalidAppSettingsError(
+            "ADMIN_EMAILS must include your email address"
+          );
+        }
+        const allowedDomains = (effective.ALLOWED_EMAIL_DOMAINS ?? "")
+          .split(",")
+          .map((domain) => domain.trim().toLowerCase())
+          .filter(Boolean);
+        const userDomain = userEmail.trim().toLowerCase().split("@")[1];
+        if (
+          allowedDomains.length > 0 &&
+          (!userDomain || !allowedDomains.includes(userDomain))
+        ) {
+          throw new InvalidAppSettingsError(
+            "ALLOWED_EMAIL_DOMAINS must include your email domain"
+          );
+        }
+        return next;
+      });
+      return toView(saved, dependencies);
     }
   };
 }

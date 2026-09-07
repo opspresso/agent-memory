@@ -129,7 +129,10 @@ let cache:
     }
   | undefined;
 
+let cacheGeneration = 0;
+
 export function invalidateRuntimeSettingsCache(): void {
+  cacheGeneration += 1;
   cache = undefined;
 }
 
@@ -138,8 +141,13 @@ export async function getEffectiveRuntimeEnvironment(): Promise<
 > {
   const now = Date.now();
   if (!cache || now - cache.fetchedAt > cacheTtlMilliseconds) {
+    const generation = cacheGeneration;
+    const environment = await appSettingsUseCases.getEffectiveEnvironment();
+    if (generation !== cacheGeneration) {
+      return getEffectiveRuntimeEnvironment();
+    }
     cache = {
-      environment: await appSettingsUseCases.getEffectiveEnvironment(),
+      environment,
       fetchedAt: now
     };
   }

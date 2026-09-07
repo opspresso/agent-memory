@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { version as appVersion } from "../package.json";
 
+vi.mock("@/lib/runtime-settings", () => ({
+  getEffectiveRuntimeEnvironment: vi.fn(async () => process.env)
+}));
+
 vi.mock("@/lib/process-metrics", () => ({
   processMetricsSnapshot: () => ({
     residentMemoryBytes: 100,
@@ -15,6 +19,7 @@ vi.mock("@/lib/process-metrics", () => ({
 }));
 
 import { GET } from "@/app/api/metrics/route";
+import { getEffectiveRuntimeEnvironment } from "@/lib/runtime-settings";
 
 describe("metrics route", () => {
   afterEach(() => {
@@ -22,7 +27,7 @@ describe("metrics route", () => {
   });
 
   it("does not expose metrics when the token is absent or invalid", async () => {
-    const disabled = GET(new Request("https://memory.example.com/api/metrics"));
+    const disabled = await GET(new Request("https://memory.example.com/api/metrics"));
     expect(disabled.status).toBe(404);
     expect(disabled.headers.get("cache-control")).toBe("no-store");
 
@@ -30,7 +35,7 @@ describe("metrics route", () => {
       "METRICS_BEARER_TOKEN",
       "agent-memory-metrics-token-000000000000"
     );
-    const unauthorized = GET(
+    const unauthorized = await GET(
       new Request("https://memory.example.com/api/metrics", {
         headers: { authorization: "Bearer wrong-token" }
       })
@@ -38,10 +43,10 @@ describe("metrics route", () => {
     expect(unauthorized.status).toBe(404);
   });
 
-  it("returns dependency-free process metrics in Prometheus format", async () => {
+  it("returns process metrics in Prometheus format", async () => {
     const token = "agent-memory-metrics-token-000000000000";
     vi.stubEnv("METRICS_BEARER_TOKEN", token);
-    const response = GET(
+    const response = await GET(
       new Request("https://memory.example.com/api/metrics", {
         headers: { authorization: `Bearer ${token}` }
       })
@@ -61,11 +66,25 @@ describe("metrics route", () => {
     expect(body).not.toContain("user_id");
   });
 
-  it("rejects an unsafe configured token", () => {
+  it("rejects an unsafe configured token", async () => {
     vi.stubEnv("METRICS_BEARER_TOKEN", "short-token");
 
-    expect(() =>
+    await expect(
       GET(new Request("https://memory.example.com/api/metrics"))
-    ).toThrow("METRICS_BEARER_TOKEN must contain at least 32 characters");
+    ).rejects.toThrow("METRICS_BEARER_TOKEN must contain at least 32 characters");
+  });
+
+  it("uses a rotated DB token even when this replica still has the old env token", async () => {
+    const oldToken = "old-metrics-token-0000000000000000";
+    const newToken = "new-metrics-token-0000000000000000";
+    vi.stubEnv("METRICS_BEARER_TOKEN", oldToken);
+    vi.mocked(getEffectiveRuntimeEnvironment)
+      .mockResolvedValueOnce({ METRICS_BEARER_TOKEN: newToken })
+      .mockResolvedValueOnce({ METRICS_BEARER_TOKEN: newToken });
+    const request = (token: string) => new Request("https://memory.example.com/api/metrics", {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    expect((await GET(request(oldToken))).status).toBe(404);
+    expect((await GET(request(newToken))).status).toBe(200);
   });
 });

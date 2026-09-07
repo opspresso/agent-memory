@@ -141,6 +141,23 @@ describe("PostgreSQL schema", () => {
         `INSERT INTO app_settings (id, overrides) VALUES (2, '{}')`
       )
     ).rejects.toMatchObject({ constraint: "app_settings_singleton_check" });
+    await Promise.all([
+      repository.update((current) => ({
+        overrides: { ...current?.overrides, LOG_LEVEL: "debug" },
+        updatedAt
+      })),
+      repository.update((current) => ({
+        overrides: { ...current?.overrides, RERANKER_MIN_SCORE: "0.5" },
+        updatedAt
+      }))
+    ]);
+    await expect(repository.get()).resolves.toMatchObject({
+      overrides: {
+        ADMIN_EMAILS: "admin@example.com",
+        LOG_LEVEL: "debug",
+        RERANKER_MIN_SCORE: "0.5"
+      }
+    });
   });
 
   it("deduplicates document ingestion jobs in pg-boss", async () => {

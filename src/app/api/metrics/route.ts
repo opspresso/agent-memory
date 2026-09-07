@@ -2,11 +2,12 @@ import { version as appVersion } from "../../../../package.json";
 
 import { hasMetricsAccess, readMetricsToken } from "@/lib/metrics-auth";
 import { processMetricsSnapshot } from "@/lib/process-metrics";
+import { getEffectiveRuntimeEnvironment } from "@/lib/runtime-settings";
 
 const responseHeaders = { "Cache-Control": "no-store" };
 
-export function GET(request: Request): Response {
-  const token = readMetricsToken();
+export async function GET(request: Request): Promise<Response> {
+  const token = readMetricsToken(await getEffectiveRuntimeEnvironment());
   if (!token || !hasMetricsAccess(request, token)) {
     return Response.json(
       { error: "Not found" },

@@ -54,6 +54,7 @@ export interface AppSettings {
 export interface AppSettingsRepository {
   get(): Promise<AppSettings | null>;
   save(settings: AppSettings): Promise<AppSettings>;
+  update(mutate: (current: AppSettings | null) => AppSettings): Promise<AppSettings>;
 }
 
 export interface AppSettingsSecretCipher {

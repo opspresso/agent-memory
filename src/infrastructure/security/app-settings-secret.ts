@@ -47,7 +47,7 @@ export function createAppSettingsSecretCipher(
         throw new Error(`Invalid ${name} settings ciphertext`);
       }
       const payload = Buffer.from(value.slice(encryptionPrefix.length), "base64");
-      if (payload.length <= ivLength + authTagLength) {
+      if (payload.length < ivLength + authTagLength) {
         throw new Error(`Invalid ${name} settings ciphertext`);
       }
       const decipher = createDecipheriv(
@@ -65,11 +65,8 @@ export function createAppSettingsSecretCipher(
     isMasked(value) {
       return value.startsWith(maskPrefix);
     },
-    mask(value) {
-      const visible = value.startsWith(encryptionPrefix) ? 0 : Math.min(4, value.length);
-      return `${maskPrefix}${visible > 0 ? value.slice(0, visible) : ""}${"•".repeat(
-        Math.max(8, value.length - visible)
-      )}`;
+    mask() {
+      return `${maskPrefix}${"•".repeat(8)}`;
     }
   };
 }

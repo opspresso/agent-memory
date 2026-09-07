@@ -16,7 +16,7 @@ import { IconDeviceFloppy, IconRotateClockwise } from "@tabler/icons-react";
 import { useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 
-import type { AppSettingName } from "@/domain/settings/app-settings";
+import { appSettingDefinitions, type AppSettingName } from "@/domain/settings/app-settings";
 
 import type { MessageKey } from "../_i18n/messages/en";
 import { useT } from "../_i18n/provider";
@@ -38,7 +38,7 @@ interface SettingsView {
 
 const settingsViewSchema = z.object({
   fields: z.record(
-    z.string(),
+    z.enum(appSettingDefinitions.map((definition) => definition.name)),
     z.object({
       value: z.string(),
       source: z.enum(["override", "env", "default", "unset"]),
@@ -147,7 +147,7 @@ export function ApplicationSettings({ isAdmin }: { readonly isAdmin: boolean }) 
       )
       .then((body) => {
         if (!cancelled) {
-          applyView(body as SettingsView);
+          applyView(body);
         }
       })
       .catch((caught: unknown) => {
@@ -190,7 +190,7 @@ export function ApplicationSettings({ isAdmin }: { readonly isAdmin: boolean }) 
         t("settings.application.saveFailed"),
         settingsViewSchema
       );
-      applyView(body as SettingsView);
+      applyView(body);
       setMessage(t("settings.application.saved"));
     } catch (caught) {
       setError(
