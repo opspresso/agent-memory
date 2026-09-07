@@ -47,7 +47,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const locale = await resolveLocale();
   const user = await getSessionUser(new Headers(await headers()));
   const organizations = user
-    ? await listOrganizationMemberships(user.id)
+    ? await listOrganizationMemberships(user)
     : [];
 
   return (

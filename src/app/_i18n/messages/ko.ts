@@ -21,7 +21,7 @@ export const ko: Messages = {
   "nav.settings": "설정",
   "shell.toggleNavigation": "내비게이션 열기/닫기",
   "shell.userMenu": "계정 메뉴",
-  "shell.joinOrganization": "다른 조직 가입",
+
   "home.badge": "공유 Context",
   "home.eyebrow": "AI Agent를 위한 공유 Context 인프라",
   "home.title": "에이전트가 기억하고,",
@@ -157,19 +157,14 @@ export const ko: Messages = {
   "organization.memberEmail": "조직 멤버 이메일",
   "organization.teamRole": "팀 역할",
   "organization.saveTeamMember": "팀 멤버 저장",
-  "organization.createFailed": "조직을 만들지 못했습니다.",
-  "organization.firstTitle": "첫 조직 만들기",
-  "organization.firstBody":
-    "현재 계정이 owner가 되며 이후 멤버와 팀을 관리할 수 있습니다.",
+
   "organization.name": "조직 이름",
   "organization.slug": "조직 slug",
-  "organization.slugDescription":
-    "소문자, 숫자, 하이픈만 사용할 수 있습니다.",
-  "organization.create": "조직 만들기",
+
   "onboarding.eyebrow": "시작하기",
-  "onboarding.title": "참여할 조직을 선택하세요",
+  "onboarding.title": "접근 승인 대기",
   "onboarding.lede":
-    "가입할 조직을 선택하세요. 조직 정책에 따라 즉시 활성화되거나 승인 대기 상태가 됩니다.",
+    "이 설치의 조직에 자동으로 등록됩니다. 관리자가 접근을 승인하면 Memory를 사용할 수 있습니다.",
   "onboarding.loadFailed": "가입 가능한 조직을 불러오지 못했습니다.",
   "onboarding.joinFailed": "가입 요청에 실패했습니다.",
   "onboarding.join": "가입",
@@ -245,15 +240,13 @@ export const ko: Messages = {
   "settings.defaultTeam.description":
     "신규 회원이 활성화될 때 자동으로 배정되는 팀입니다.",
   "settings.defaultTeam.placeholder": "기본 팀 없음",
-  "settings.newOrganization": "새 조직 만들기",
-  "settings.danger": "위험 구역",
-  "settings.deleteBody":
-    "조직을 삭제하면 Database record가 영구히 제거됩니다. 업로드 원본은 storage lifecycle에 따라 별도로 정리됩니다.",
-  "settings.deleteOrganization": "조직 삭제",
-  "settings.deleteTitle": "조직 삭제",
-  "settings.deleteConfirmBody":
-    "{name} 조직의 Database record가 영구히 삭제됩니다. 업로드 원본은 storage lifecycle 정리 전까지 남으며 이 작업은 되돌릴 수 없습니다.",
-  "settings.deleteConfirmLabel": "확인을 위해 {slug} 입력",
+
+
+
+
+
+
+
   "settings.ontology.title": "온톨로지",
   "settings.ontology.body":
     "Knowledge Graph에서 허용할 node kind와 edge predicate를 정의합니다.",
@@ -281,7 +274,7 @@ export const ko: Messages = {
   "settings.ontology.suggest.title": "AI 추천 용어",
   "settings.ontology.suggest.empty": "모델이 새로 제안할 용어를 찾지 못했습니다.",
   "workspace.resultFallback": "검색 결과",
-  "workspace.selectOrganization": "조직을 선택하세요",
+  "workspace.selectOrganization": "조직 접근 권한을 확인하세요",
   "workspace.searchFailed": "검색에 실패했습니다.",
   "workspace.graphFailed": "관계 지도를 불러오지 못했습니다.",
   "workspace.uploadFailed": "업로드에 실패했습니다.",
@@ -293,7 +286,7 @@ export const ko: Messages = {
   "workspace.title": "공유 Context를 한곳에서 관리합니다.",
   "workspace.signOut": "로그아웃",
   "workspace.noOrganization": "접근 가능한 조직이 없습니다.",
-  "workspace.createFirst": "첫 조직을 만들어 시작하세요.",
+
   "workspace.requestMembership": "관리자에게 멤버십을 요청하세요.",
   "workspace.activeOrganization": "활성 조직",
   "workspace.tab.search": "통합 검색",

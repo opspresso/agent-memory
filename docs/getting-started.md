@@ -1,6 +1,6 @@
 # 시작 가이드
 
-이 문서는 로컬에서 인증 가능한 Agent Memory를 시작하고 첫 조직과 Memory를 만든 뒤 검색 결과를 확인하는 절차를 설명한다.
+이 문서는 로컬에서 인증 가능한 Agent Memory를 시작하고 자동으로 준비된 조직에 Memory를 만든 뒤 검색 결과를 확인하는 절차를 설명한다.
 
 ## 준비 사항
 
@@ -39,7 +39,7 @@ ADMIN_EMAILS=me@nalbam.com
 ```
 
 - `ALLOWED_EMAIL_DOMAINS`가 비어 있거나 미설정이면 모든 email domain으로 가입할 수 있다. 제한하려면 허용 domain을 comma-separated 목록으로 설정한다.
-- 첫 조직을 만들 사용자의 email은 `ADMIN_EMAILS`에 있어야 한다.
+- 최초 owner가 될 사용자의 email은 `ADMIN_EMAILS`에 있어야 한다.
 - 다른 domain이나 email을 사용할 경우 두 값을 함께 변경하라.
 - 운영 환경에서는 `.env.example`의 `BETTER_AUTH_SECRET`과 storage credential을 사용하지 마라.
 
@@ -68,13 +68,13 @@ curl -i http://localhost:3100/api/health
 { "status": "ok", "checks": { "database": "ok" } }
 ```
 
-## 3. 가입과 첫 조직 생성
+## 3. 가입과 자동 등록
 
 1. `http://localhost:3100`을 연다.
 2. `가입`을 선택한다.
 3. `ADMIN_EMAILS`에 등록한 email로 계정을 만든다.
-4. 로그인하면 조직 선택 화면으로 이동한다. `첫 조직 만들기`에서 이름과 slug를 입력한다.
-5. 생성한 사용자는 해당 조직의 `owner`가 된다. 이후 가입하는 사용자는 조직 선택 화면에서 조직을 골라 가입하며, 조직 설정에 따라 즉시 활성화되거나 승인 대기 상태가 된다.
+4. 서버가 준비한 기본 조직의 최초 `owner`가 되어 통합 검색 화면으로 이동한다. 조직 이름은 `설정`에서 변경한다.
+5. 이후 로그인하는 사용자는 자동으로 멤버 등록되며, 신규 회원 정책에 따라 즉시 활성화되거나 승인 대기 상태가 된다. 차단·제거된 사용자는 자동으로 복구되지 않는다.
 
 로그인 provider가 화면에 나타나지 않으면 `.env.local`에서 provider 설정을 확인하고 `pnpm dev`를 다시 시작하라. Password 가입에는 `AUTH_PASSWORD=true`와 `AUTH_PASSWORD_SIGNUP=true`가 모두 필요하다.
 

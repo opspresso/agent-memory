@@ -1,6 +1,6 @@
 # Agent Memory
 
-Agent Memory는 여러 AI Agent가 조직 경계 안에서 장기 Memory, RAG 문서, Knowledge Graph를 안전하게 공유하도록 지원하는 설치형 Context 플랫폼이다. 독립적으로 실행하거나 Agent Studio 같은 실행 환경에 HTTP API와 MCP로 연결할 수 있다.
+Agent Memory는 설치당 하나의 조직에서 여러 AI Agent가 조직 경계 안에서 장기 Memory, RAG 문서, Knowledge Graph를 안전하게 공유하도록 지원하는 설치형 Context 플랫폼이다. 독립적으로 실행하거나 Agent Studio 같은 실행 환경에 HTTP API와 MCP로 연결할 수 있다.
 
 ## 핵심 흐름
 
@@ -46,7 +46,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-`http://localhost:3100`에서 가입한 뒤 첫 조직을 생성한다. `ALLOWED_EMAIL_DOMAINS`를 설정한 경우에만 가입 email domain을 제한하며, 첫 조직 생성자는 `ADMIN_EMAILS`에 포함되어야 한다. 전역 admin은 설정 화면에서 env 값을 Database override로 관리할 수 있다.
+서버 시작 시 기본 조직이 자동 생성된다. `http://localhost:3100`에서 가입하면 이 조직에 자동 등록된다. `ALLOWED_EMAIL_DOMAINS`를 설정한 경우에만 가입 email domain을 제한하며, 최초 owner는 `ADMIN_EMAILS`에 포함된 로그인 사용자에게 부여된다. 일반 사용자는 기본적으로 관리자 승인을 기다린다. 전역 admin은 설정 화면에서 env 값을 Database override로 관리할 수 있다.
 
 로그인 전후에 `http://localhost:3100/guide`에서 제품 사용 흐름과 기능별 설명을 확인할 수 있다.
 
@@ -58,15 +58,15 @@ pnpm dev
 
 운영 콘솔은 다음 작업을 제공한다.
 
-- 좌측 메뉴와 상단 메뉴로 구성된 셸에서 조직을 전환하며 작업
+- 좌측 메뉴와 상단 메뉴로 구성된 셸에서 설치의 지식을 관리
 - Memory·문서·Knowledge Graph 통합 검색과 검색 근거 확인
 - Memory 목록·생성·읽기 상세, revision 생성, version 이력 확인, archive
 - 개인·팀·조직 범위 문서 업로드, 처리 상태 확인과 실패 재처리
 - 검색·종류 필터·관계 집중을 제공하는 Knowledge Graph 관계 지도 탐색
 - AI graph 후보의 실제 원문·entity·relationship 비교와 승인·거절
-- 최초 로그인 시 가입할 조직 선택, 조직 정책에 따른 즉시 활성화 또는 승인 대기
+- 최초 로그인 시 자동 멤버 등록, 정책에 따른 즉시 활성화 또는 승인 대기
 - 조직 회원 목록에서 role·status(승인·차단)·팀 배정 관리, 팀 생성·이름 변경·삭제
-- 조직 설정에서 신규 회원 정책·기본 팀 관리, 조직 생성(전역 admin)·삭제(owner)
+- 조직 설정에서 이름·신규 회원 정책·기본 팀 관리
 - MCP 연결 정보 확인
 
 ## 기술 구성
@@ -81,7 +81,7 @@ pnpm dev
 
 | 문서 | 대상 | 내용 |
 | --- | --- | --- |
-| [시작 가이드](docs/getting-started.md) | 처음 설치하는 사용자 | 인증 가능한 로컬 환경, 첫 조직, 첫 검색, 선택 기능 활성화 |
+| [시작 가이드](docs/getting-started.md) | 처음 설치하는 사용자 | 인증 가능한 로컬 환경, 자동 조직 준비, 첫 검색, 선택 기능 활성화 |
 | [사용자 가이드](docs/user-guide.md) | 운영자·Agent 통합 개발자 | 콘솔, Memory lifecycle, 문서, Graph, AI 검토, MCP 연결 |
 | [Workspace UI](docs/ui-workspace.md) | 제품·UI 개발자 | 정보 구조, 디자인 기준, 전후 화면과 검증 범위 |
 | [Architecture](docs/architecture.md) | 개발자·보안 검토자 | 계층, 요청 경계, 권한, 데이터 흐름, 불변 조건 |

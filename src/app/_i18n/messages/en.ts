@@ -19,7 +19,7 @@ export const en = {
   "nav.settings": "Settings",
   "shell.toggleNavigation": "Toggle navigation",
   "shell.userMenu": "Account menu",
-  "shell.joinOrganization": "Join another organization",
+
   "home.badge": "Shared Context",
   "home.eyebrow": "Shared context infrastructure for AI agents",
   "home.title": "Agents remember,",
@@ -155,19 +155,14 @@ export const en = {
   "organization.memberEmail": "Organization member email",
   "organization.teamRole": "Team role",
   "organization.saveTeamMember": "Save team member",
-  "organization.createFailed": "The organization could not be created.",
-  "organization.firstTitle": "Create your first organization",
-  "organization.firstBody":
-    "Your account becomes the owner and can then manage members and teams.",
+
   "organization.name": "Organization name",
   "organization.slug": "Organization slug",
-  "organization.slugDescription":
-    "Use lowercase letters, numbers, and hyphens only.",
-  "organization.create": "Create organization",
+
   "onboarding.eyebrow": "Get started",
-  "onboarding.title": "Choose your organization",
+  "onboarding.title": "Access approval",
   "onboarding.lede":
-    "Select an organization to join. Depending on its policy you become active immediately or wait for approval.",
+    "You are enrolled automatically in this installation. An administrator must approve access before you can use Memory.",
   "onboarding.loadFailed": "Available organizations could not be loaded.",
   "onboarding.joinFailed": "The join request failed.",
   "onboarding.join": "Join",
@@ -244,15 +239,13 @@ export const en = {
   "settings.defaultTeam.description":
     "New members are added to this team when they become active.",
   "settings.defaultTeam.placeholder": "No default team",
-  "settings.newOrganization": "Create a new organization",
-  "settings.danger": "Danger zone",
-  "settings.deleteBody":
-    "Deleting the organization permanently removes its database records. Uploaded source objects remain subject to the storage lifecycle.",
-  "settings.deleteOrganization": "Delete organization",
-  "settings.deleteTitle": "Delete organization",
-  "settings.deleteConfirmBody":
-    "This permanently deletes the database records for {name}. Uploaded source objects remain until storage lifecycle cleanup. This cannot be undone.",
-  "settings.deleteConfirmLabel": "Type {slug} to confirm",
+
+
+
+
+
+
+
   "settings.ontology.title": "Ontology",
   "settings.ontology.body":
     "Define the node kinds and edge predicates allowed in the Knowledge Graph.",
@@ -281,7 +274,7 @@ export const en = {
   "settings.ontology.suggest.empty":
     "The model found nothing new to suggest.",
   "workspace.resultFallback": "Search result",
-  "workspace.selectOrganization": "Select an organization",
+  "workspace.selectOrganization": "Organization access is required",
   "workspace.searchFailed": "Search failed.",
   "workspace.graphFailed": "The relationship map could not be loaded.",
   "workspace.uploadFailed": "Upload failed.",
@@ -293,7 +286,7 @@ export const en = {
   "workspace.title": "Manage shared context in one place.",
   "workspace.signOut": "Sign out",
   "workspace.noOrganization": "You do not have access to an organization.",
-  "workspace.createFirst": "Create your first organization to get started.",
+
   "workspace.requestMembership": "Ask an administrator for membership.",
   "workspace.activeOrganization": "Active organization",
   "workspace.tab.search": "Unified search",

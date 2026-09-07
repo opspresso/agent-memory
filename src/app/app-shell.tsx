@@ -11,7 +11,6 @@ import {
   Image,
   Menu,
   ScrollArea,
-  Select,
   Stack,
   Text,
   ThemeIcon,
@@ -30,8 +29,7 @@ import {
   IconSettings,
   IconShieldCheck,
   IconUsers,
-  IconUsersGroup,
-  IconUsersPlus
+  IconUsersGroup
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -107,11 +105,9 @@ export function AppShellFrame({
   const {
     activeOrganization,
     activeOrganizations,
-    organizationId,
     access,
     accessStatus,
-    reloadAccess,
-    selectOrganization
+    reloadAccess
   } = useOrganization();
 
   const showNav = user !== null && activeOrganizations.length > 0;
@@ -187,26 +183,7 @@ export function AppShellFrame({
               </Stack>
             </Group>
           </UnstyledButton>
-          {showNav && activeOrganizations.length > 0 ? (
-            <Select
-              allowDeselect={false}
-              aria-label={t("workspace.activeOrganization")}
-              data={activeOrganizations.map((organization) => ({
-                value: organization.id,
-                label: organization.name
-              }))}
-              onChange={(value) => {
-                if (value) {
-                  selectOrganization(value);
-                  router.replace(pathname, { scroll: false });
-                }
-              }}
-              size="xs"
-              value={organizationId}
-              visibleFrom="sm"
-              w={200}
-            />
-          ) : null}
+          {showNav ? <Text size="sm" c="dimmed" visibleFrom="sm">{activeOrganization?.name}</Text> : null}
           <Group gap="xs" ml="auto" wrap="nowrap">
             {!showNav ? (
               <Button
@@ -247,15 +224,7 @@ export function AppShellFrame({
                       </Group>
                     </Menu.Label>
                   ) : null}
-                  {activeOrganizations.length > 0 ? (
-                    <Menu.Item
-                      component={Link}
-                      href="/onboarding"
-                      leftSection={<IconUsersPlus size={15} />}
-                    >
-                      {t("shell.joinOrganization")}
-                    </Menu.Item>
-                  ) : null}
+
                   <Menu.Divider />
                   {user.isAdmin ? (
                     <Menu.Item component={Link} href="/settings" leftSection={<IconSettings size={15} />}>
@@ -279,23 +248,7 @@ export function AppShellFrame({
       <AppShell.Navbar className={classes.navbar}>
         {showNav ? (
           <>
-            <Select
-              allowDeselect={false}
-              aria-label={t("workspace.activeOrganization")}
-              data={activeOrganizations.map((organization) => ({
-                value: organization.id,
-                label: organization.name
-              }))}
-              hiddenFrom="sm"
-              onChange={(value) => {
-                if (value) {
-                  selectOrganization(value);
-                  router.replace(pathname, { scroll: false });
-                }
-              }}
-              size="xs"
-              value={organizationId}
-            />
+
             <ScrollArea scrollbarSize={4} style={{ flex: 1 }}>
               <Stack gap="xl">
                 {visibleGroups.map((group) => (

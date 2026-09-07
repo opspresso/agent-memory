@@ -81,9 +81,9 @@ interface KnowledgeCandidateReviewProps {
   readonly organizationSlug: string;
 }
 
-async function requestCandidates(organizationSlug: string, fallback: string) {
+async function requestCandidates(fallback: string) {
   const response = await fetch(
-    `/api/organizations/${organizationSlug}/knowledge/candidates?limit=100`
+    `/api/knowledge/candidates?limit=100`
   );
   const body = await responseJson(
     response,
@@ -149,7 +149,6 @@ export function KnowledgeCandidateReview({
     setError(undefined);
     try {
       const next = await requestCandidates(
-        organizationSlug,
         t("candidate.requestFailed")
       );
       setCandidates(next);
@@ -172,7 +171,7 @@ export function KnowledgeCandidateReview({
   useEffect(() => {
     let active = true;
     const loadMessages = getLoadMessages();
-    requestCandidates(organizationSlug, loadMessages.requestFailed)
+    requestCandidates(loadMessages.requestFailed)
       .then((next) => {
         if (active) {
           setCandidates(next);
@@ -202,7 +201,7 @@ export function KnowledgeCandidateReview({
     const controller = new AbortController();
     const loadMessages = getLoadMessages();
     fetch(
-      `/api/organizations/${organizationSlug}/knowledge/candidates/${selected.id}/duplicates`,
+      `/api/knowledge/candidates/${selected.id}/duplicates`,
       { signal: controller.signal }
     )
       .then((response) =>
@@ -241,7 +240,7 @@ export function KnowledgeCandidateReview({
     setMessage(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationSlug}/knowledge/candidates/${selected.id}/${action}`,
+        `/api/knowledge/candidates/${selected.id}/${action}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

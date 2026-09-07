@@ -96,14 +96,14 @@ function MemberManagementView() {
     }
     try {
       const [membersBody, teamsBody] = await Promise.all([
-        fetch(`/api/organizations/${organizationSlug}/members`).then((response) =>
+        fetch(`/api/members`).then((response) =>
           responseJson(
             response,
             t("organization.requestFailed"),
             organizationMembersResponseSchema
           )
         ),
-        fetch(`/api/organizations/${organizationSlug}/teams`).then((response) =>
+        fetch(`/api/teams`).then((response) =>
           responseJson(
             response,
             t("organization.requestFailed"),
@@ -114,7 +114,7 @@ function MemberManagementView() {
       const teamMemberships = await Promise.all(
         teamsBody.teams.map(async (team) => {
           const body = await fetch(
-            `/api/organizations/${organizationSlug}/teams/${team.id}/members`
+            `/api/teams/${team.id}/members`
           ).then((response) =>
             responseJson(
               response,
@@ -176,7 +176,7 @@ function MemberManagementView() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     await runMutation(async () => {
-      await requestJson(`/api/organizations/${organizationSlug}/members`, {
+      await requestJson(`/api/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -192,7 +192,7 @@ function MemberManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationSlug}/members/${member.userId}`,
+          `/api/members/${member.userId}`,
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -210,7 +210,7 @@ function MemberManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationSlug}/members/${member.userId}`,
+          `/api/members/${member.userId}`,
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -229,7 +229,7 @@ function MemberManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationSlug}/teams/${teamId}/members`,
+          `/api/teams/${teamId}/members`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -244,7 +244,7 @@ function MemberManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationSlug}/teams/${teamId}/members/${member.userId}`,
+          `/api/teams/${teamId}/members/${member.userId}`,
           { method: "DELETE" }
         ),
       t("members.teamRemoved")
@@ -258,7 +258,7 @@ function MemberManagementView() {
     const target = removeTarget;
     await runMutation(async () => {
       await requestJson(
-        `/api/organizations/${organizationSlug}/members/${target.userId}`,
+        `/api/members/${target.userId}`,
         { method: "DELETE" }
       );
       setRemoveTarget(undefined);

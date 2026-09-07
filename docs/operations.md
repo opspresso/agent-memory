@@ -75,7 +75,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Auth | `AUTH_PASSWORD` | Email/password 로그인 활성화 |
 | Auth | `AUTH_PASSWORD_SIGNUP` | Self-signup 활성화. `AUTH_PASSWORD=true`가 함께 필요하며 loopback 이외의 production에서는 허용하지 않음 |
 | Auth | `ALLOWED_EMAIL_DOMAINS` | 로그인 허용 email domain의 comma-separated 목록. 미설정 또는 빈 값이면 모든 domain 허용 |
-| Auth | `ADMIN_EMAILS` | 첫 조직을 만들 수 있는 email의 comma-separated 목록. 기본값 `me@nalbam.com` |
+| Auth | `ADMIN_EMAILS` | 최초 owner와 전역 설정 관리자를 지정하는 email의 comma-separated 목록. 기본값 `me@nalbam.com` |
 | Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google provider. 두 값을 함께 설정 |
 | OIDC | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Generic OIDC provider. 세 값을 함께 설정 |
 | OIDC | `OIDC_SCOPES` | 공백으로 구분한 scope. 기본값 `openid email profile` |
@@ -303,6 +303,12 @@ Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지
 | `428` | Memory PATCH·DELETE의 `If-Match` header |
 | `429` | AI instance·organization·user quota와 `Retry-After` header, 또는 document storage·backlog·upload quota |
 | `503` | PostgreSQL 연결·migration 상태 또는 온톨로지 AI 제안 model 설정 |
+
+## 단일 조직 설치
+
+서버 시작 시 조직이 없으면 `default` slug와 `Agent Memory` 이름으로 생성한다. 기존 조직이 하나면 ID·이름·멤버십·데이터를 그대로 사용한다. 두 개 이상이면 서버 시작을 중단한다. 기존 다중 조직 설치는 운영자가 조직별 독립 DB·bucket으로 분리하거나 보존할 데이터를 정리한 후 시작하라. 자동 병합·삭제는 수행하지 않는다.
+
+로그인 사용자는 설치 조직에 자동 등록된다. active owner가 없는 경우 `ADMIN_EMAILS`의 사용자가 최초 owner가 된다. 다른 사용자는 `newMemberStatus` 정책을 따른다. blocked·removed membership은 자동으로 복구하지 않는다. 모든 공개 HTTP endpoint는 조직 slug를 받지 않으며 MCP 주소는 `/api/mcp`다.
 
 ## 배포 전 확인
 

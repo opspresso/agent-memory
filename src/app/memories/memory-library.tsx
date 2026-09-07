@@ -59,8 +59,8 @@ function MemoryLibraryView({ selected, creating }: { readonly selected?: string;
     async function load() {
       try {
         const response = await fetch(activeQuery
-          ? `/api/organizations/${organizationSlug}/memories?q=${encodeURIComponent(activeQuery)}&limit=100`
-          : `/api/organizations/${organizationSlug}/memories/library?limit=25&offset=${offset}`, { signal: controller.signal });
+          ? `/api/memories?q=${encodeURIComponent(activeQuery)}&limit=100`
+          : `/api/memories/library?limit=25&offset=${offset}`, { signal: controller.signal });
         if (activeQuery) {
           const body = await responseJson(response, t("memoryUi.loadFailed"), searchResponseSchema);
           if (!controller.signal.aborted) { setRows(body.hits.flatMap((hit) => hit.memory ? [hit.memory] : [])); setNextOffset(null); }

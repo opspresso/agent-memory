@@ -28,7 +28,7 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 | 저장소 | 역할과 소유 범위 |
 | --- | --- |
 | `../agent-studio` | 기업 내부 설치형 Agent 실행 플랫폼이다. Project·version·publish, LLM/tool loop, subagent, chat, MCP·skill binding, 채널 연동, 비용·trace, 실행 artifact를 소유한다. 한 설치는 한 기업이며 필수 경로는 폐쇄망에서도 동작한다. |
-| `../agent-memory` | 독립 실행 가능한 조직 단위 Context 플랫폼이다. 장기 Memory·revision·ACL, RAG 문서·chunk, provenance 기반 Knowledge Graph, AI 후보 검토, 통합 검색과 HTTP/MCP를 소유한다. |
+| `../agent-memory` | 설치당 단일 조직을 사용하는 독립 실행 가능한 Context 플랫폼이다. 장기 Memory·revision·ACL, RAG 문서·chunk, provenance 기반 Knowledge Graph, AI 후보 검토, 통합 검색과 HTTP/MCP를 소유한다. |
 | `../agent-models` | 모델 family·provider offering, 가격, context/output 한도, capability, `id`와 `wireId`의 정적 JSON 카탈로그를 소유한다. 모델 실행 서버가 아니며 Studio는 카탈로그를 소비하고 offline snapshot을 유지한다. |
 | `../agent-plugins` | Agent Studio용 도메인별 plugin 콘텐츠를 소유한다. `plugin.json`, `mcp.json`, `skills/*/SKILL.md`와 참고 자료를 묶으며 기존 agent-skills·agent-tools를 대체한다. Sync와 실행은 Studio가 담당한다. |
 | `../mcp-memory` | 프로젝트·대화 범위의 간단한 기억 저장과 의미 검색을 제공한다. `recall`, `remember`, `list_memories`, `forget`, `memory_stats`와 PostgreSQL·pgvector 저장소를 소유하며 RAG·Graph·object storage는 다루지 않는다. |
@@ -59,7 +59,7 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 
 ## 보안과 데이터 불변 조건
 
-- 모든 조직 resource는 route의 `organizationId`, 인증 사용자, 조직 멤버십을 함께 검증하라. 요청 body의 tenant 식별자를 신뢰하지 마라.
+- 모든 조직 resource는 서버가 결정한 설치 조직, 인증 사용자, 조직 멤버십을 함께 검증하라. 공개 API에서 조직 식별자를 받지 마라. 요청 body의 tenant 식별자를 신뢰하지 마라.
 - organization scope 쓰기·관리는 `admin`과 `owner`만 허용하라. team scope는 해당 팀 멤버에게, user scope는 본인에게만 허용하라. team `manage`는 `manager` 이상으로 제한하라.
 - 브라우저 mutation은 trusted same-origin만 허용하고 Agent 요청은 Bearer 인증을 사용하라.
 - memory 수정과 archive는 `If-Match` version을 요구해 낙관적 동시성 제어를 유지하라.

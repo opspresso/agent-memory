@@ -102,7 +102,7 @@ function TeamManagementView() {
     teamsRequest.current = controller;
     try {
       const body = await fetch(
-        `/api/organizations/${organizationSlug}/teams`,
+        `/api/teams`,
         { signal: controller.signal }
       ).then((response) =>
         responseJson(
@@ -158,7 +158,7 @@ function TeamManagementView() {
       setTeamMembersError(undefined);
       try {
         const response = await fetch(
-          `/api/organizations/${organizationSlug}/teams/${selectedTeamId}/members`,
+          `/api/teams/${selectedTeamId}/members`,
           { signal: controller.signal }
         );
         const body = await responseJson(
@@ -219,7 +219,7 @@ function TeamManagementView() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     await runMutation(async () => {
-      await requestJson(`/api/organizations/${organizationSlug}/teams`, {
+      await requestJson(`/api/teams`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -240,7 +240,7 @@ function TeamManagementView() {
     const form = new FormData(formElement);
     await runMutation(async () => {
       await requestJson(
-        `/api/organizations/${organizationSlug}/teams/${selectedTeamId}/members`,
+        `/api/teams/${selectedTeamId}/members`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -258,7 +258,7 @@ function TeamManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationSlug}/teams/${member.teamId}/members`,
+          `/api/teams/${member.teamId}/members`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -273,7 +273,7 @@ function TeamManagementView() {
     void runMutation(
       () =>
         requestJson(
-          `/api/organizations/${organizationSlug}/teams/${member.teamId}/members/${member.userId}`,
+          `/api/teams/${member.teamId}/members/${member.userId}`,
           { method: "DELETE" }
         ),
       t("members.teamRemoved")
@@ -287,7 +287,7 @@ function TeamManagementView() {
     const target = renameTarget;
     await runMutation(async () => {
       await requestJson(
-        `/api/organizations/${organizationSlug}/teams/${target.id}`,
+        `/api/teams/${target.id}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -305,7 +305,7 @@ function TeamManagementView() {
     const target = deleteTarget;
     await runMutation(async () => {
       await requestJson(
-        `/api/organizations/${organizationSlug}/teams/${target.id}`,
+        `/api/teams/${target.id}`,
         { method: "DELETE" }
       );
       setDeleteTarget(undefined);

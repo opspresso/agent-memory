@@ -7,7 +7,7 @@ import {
   organizationAccessRepository,
   organizationAgentTokenUseCases
 } from "./container";
-import { organizationSlugSchema } from "./organization-administration-schemas";
+import { installationRepository } from "./installation";
 import { authenticateRequest, type SessionUser } from "./session";
 
 export type OrganizationAuthorizationResult =
@@ -41,48 +41,23 @@ export async function authorizeOrganizationRequest(
   return { authorized: true, access, user: authentication.user };
 }
 
-export async function authorizeOrganizationRoute(
-  request: Request,
-  organizationSlug: string
-): Promise<OrganizationAuthorizationResult> {
-  const parsed = organizationSlugSchema.safeParse(organizationSlug);
-  if (!parsed.success) {
-    return {
-      authorized: false,
-      response: Response.json(
-        { error: "Invalid organization slug" },
-        { status: 400 }
-      )
-    };
-  }
-  return authorizeOrganizationRequest(request, parsed.data);
+export async function authorizeOrganizationRoute(request: Request): Promise<OrganizationAuthorizationResult> {
+  const organization = await installationRepository.initialize();
+  return authorizeOrganizationRequest(request, organization.slug);
 }
 
 export type OrganizationMcpAuthorizationResult =
   | Readonly<{ authorized: true; access: OrganizationAccess }>
   | Readonly<{ authorized: false; response: Response }>;
 
-export async function authorizeOrganizationMcpRoute(
-  request: Request,
-  organizationSlug: string
-): Promise<OrganizationMcpAuthorizationResult> {
-  const parsed = organizationSlugSchema.safeParse(organizationSlug);
-  if (!parsed.success) {
-    return {
-      authorized: false,
-      response: Response.json(
-        { error: "Invalid organization slug" },
-        { status: 400 }
-      )
-    };
-  }
-
+export async function authorizeOrganizationMcpRoute(request: Request): Promise<OrganizationMcpAuthorizationResult> {
+  const organization = await installationRepository.initialize();
   const bearer = /^Bearer\s+(\S+)$/i.exec(
     request.headers.get("authorization") ?? ""
   )?.[1];
   if (bearer?.startsWith(organizationAgentTokenPrefix)) {
     const credential = await organizationAgentTokenUseCases.verify(
-      parsed.data,
+      organization.slug,
       bearer
     );
     if (!credential) {
@@ -136,7 +111,7 @@ export async function authorizeOrganizationMcpRoute(
     };
   }
 
-  const authorization = await authorizeOrganizationRequest(request, parsed.data);
+  const authorization = await authorizeOrganizationRequest(request, organization.slug);
   return authorization.authorized
     ? { authorized: true, access: authorization.access }
     : authorization;

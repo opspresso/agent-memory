@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { resetInstallationFixture } from "./installation-fixture";
+
 const authenticatedE2e = process.env.E2E_AUTHENTICATED === "true";
 
 test("explains the product workflow in the public guide", async ({ page }) => {
@@ -50,6 +52,7 @@ test("onboards, approves, and manages members through the console", async ({
 }, testInfo) => {
   test.skip(!authenticatedE2e, "requires a disposable migrated PostgreSQL database");
   test.setTimeout(90_000);
+  await resetInstallationFixture();
   const runId = process.env.E2E_RUN_ID;
   if (!runId) {
     throw new Error("E2E_RUN_ID must be configured by Playwright");
@@ -58,9 +61,6 @@ test("onboards, approves, and manages members through the console", async ({
   const adminEmail = `e2e-admin2+${runId}-${testInfo.retry}@nalbam.com`;
   const memberEmail = `e2e-member+${runId}-${testInfo.retry}@nalbam.com`;
   const password = "agent-memory-e2e-password";
-  // Retries reuse the same database, so the display name must be unique
-  // per attempt or the onboarding card locator matches stale organizations.
-  const approvalOrganizationName = `E2E Approval Organization ${runId} R${testInfo.retry}`;
 
   await page.context().addCookies([
     { name: "agent-memory-locale", value: "ko", domain: "127.0.0.1", path: "/" }
@@ -72,10 +72,9 @@ test("onboards, approves, and manages members through the console", async ({
   await page.getByLabel("비밀번호").fill(password);
   await page.getByRole("button", { name: "계정 만들기" }).click();
   await expect(
-    page.getByRole("heading", { name: "참여할 조직을 선택하세요" })
+    page.getByRole("heading", { name: "통합 검색", exact: true })
   ).toBeVisible();
 
-  const approvalOrganizationSlug = `e2e-approval-${runId}-${testInfo.retry}`;
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "애플리케이션 설정" })).toBeVisible();
   await page.getByRole("button", { name: "인증 및 접근" }).click();
@@ -102,17 +101,10 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(page.getByText("애플리케이션 설정을 저장했습니다.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "LOG_LEVEL에 환경 변수 값 사용", exact: true })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: /LOG_LEVEL/ })).toHaveValue("info");
-  await postJson<{ id: string }>(
-    page,
-    "/api/organizations",
-    {
-      name: approvalOrganizationName,
-      slug: approvalOrganizationSlug
-    }
-  );
+
   const defaultTeam = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${approvalOrganizationSlug}/teams`,
+    `/api/teams`,
     { name: "E2E Default Team", slug: `e2e-default-${runId}-${testInfo.retry}` }
   );
 
@@ -164,12 +156,8 @@ test("onboards, approves, and manages members through the console", async ({
   await memberPage.getByLabel("비밀번호").fill(password);
   await memberPage.getByRole("button", { name: "계정 만들기" }).click();
   await expect(
-    memberPage.getByRole("heading", { name: "참여할 조직을 선택하세요" })
+    memberPage.getByRole("heading", { name: "접근 승인 대기" })
   ).toBeVisible();
-  await memberPage
-    .locator(".mantine-Paper-root", { hasText: approvalOrganizationName })
-    .getByRole("button", { name: "가입" })
-    .click();
   await expect(
     memberPage.getByText("조직 관리자의 승인을 기다리고 있습니다.")
   ).toBeVisible();
@@ -190,13 +178,13 @@ test("onboards, approves, and manages members through the console", async ({
   await page.keyboard.press("Space");
   const otherTeam = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${approvalOrganizationSlug}/teams`,
+    `/api/teams`,
     { name: "E2E Other Team", slug: `e2e-other-team-${runId}-${testInfo.retry}` }
   );
   const delayedMembers = Promise.withResolvers<void>();
   const membersRequested = Promise.withResolvers<void>();
-  const defaultMembersPath = `**/api/organizations/${approvalOrganizationSlug}/teams/${defaultTeam.id}/members`;
-  const otherMembersPath = `**/api/organizations/${approvalOrganizationSlug}/teams/${otherTeam.id}/members`;
+  const defaultMembersPath = `**/api/teams/${defaultTeam.id}/members`;
+  const otherMembersPath = `**/api/teams/${otherTeam.id}/members`;
   await page.route(defaultMembersPath, async (route) => {
     const response = await route.fetch();
     membersRequested.resolve();
@@ -225,7 +213,7 @@ test("onboards, approves, and manages members through the console", async ({
   await page.unroute(otherMembersPath);
   const delayedTeams = Promise.withResolvers<void>();
   const teamsRequested = Promise.withResolvers<void>();
-  const teamsPath = `**/api/organizations/${approvalOrganizationSlug}/teams`;
+  const teamsPath = `**/api/teams`;
   let delayNextTeamList = true;
   await page.route(teamsPath, async (route) => {
     if (route.request().method() !== "GET" || !delayNextTeamList) {
@@ -264,23 +252,7 @@ test("onboards, approves, and manages members through the console", async ({
     memberPage.getByRole("heading", { name: "통합 검색", exact: true })
   ).toBeVisible();
 
-  const secondOrganizationName = `E2E Second Organization ${runId} R${testInfo.retry}`;
-  await postJson<{ id: string }>(page, "/api/organizations", {
-    name: secondOrganizationName,
-    slug: `e2e-second-${runId}-${testInfo.retry}`
-  });
-  await memberPage.getByRole("button", { name: "계정 메뉴" }).click();
-  await memberPage.getByRole("menuitem", { name: "다른 조직 가입" }).click();
-  await expect(
-    memberPage.getByRole("heading", { name: "참여할 조직을 선택하세요" })
-  ).toBeVisible();
-  await memberPage
-    .locator(".mantine-Paper-root", { hasText: secondOrganizationName })
-    .getByRole("button", { name: "가입" })
-    .click();
-  await expect(
-    memberPage.getByText("조직 관리자의 승인을 기다리고 있습니다.")
-  ).toBeVisible();
+  await expect(memberPage.getByRole("combobox", { name: "활성 조직" })).toHaveCount(0);
 
   await page.getByRole("button", { name: `${memberEmail}에 대한 작업` }).click();
   await page.getByRole("menuitem", { name: "차단" }).click();
@@ -306,6 +278,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
 }, testInfo) => {
   test.skip(!authenticatedE2e, "requires a disposable migrated PostgreSQL database");
   test.setTimeout(90_000);
+  await resetInstallationFixture();
   const runId = process.env.E2E_RUN_ID;
   if (!runId) {
     throw new Error("E2E_RUN_ID must be configured by Playwright");
@@ -333,27 +306,20 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByRole("button", { name: "계정 만들기" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "참여할 조직을 선택하세요" })
+    page.getByRole("heading", { name: "통합 검색", exact: true })
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "첫 조직 만들기" })).toBeVisible();
-  const organizationSlug = `e2e-organization-${runId}-${testInfo.retry}`;
-  const organization = await postJson<{ id: string }>(
-    page,
-    "/api/organizations",
-    {
-      name: "E2E Organization",
-      slug: organizationSlug
-    }
-  );
+  await expect(page.getByRole("heading", { name: "첫 조직 만들기" })).toHaveCount(0);
+  const organizationSlug = "default";
+  const response = await page.request.get("/api/organization");
+  expect(response.ok()).toBe(true);
+  const organization = await response.json() as { id: string };
+  expect((await page.request.post("/api/organization", { data: { name: "Forbidden", slug: "other" } })).status()).toBe(405);
+  expect((await page.request.delete("/api/organization")).status()).toBe(405);
   const team = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organizationSlug}/teams`,
+    `/api/teams`,
     { name: "E2E Team", slug: `e2e-team-${runId}-${testInfo.retry}` }
   );
-  await postJson<{ id: string }>(page, "/api/organizations", {
-    name: "E2E Other Organization",
-    slug: `e2e-other-organization-${runId}-${testInfo.retry}`
-  });
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "통합 검색", exact: true })
@@ -386,7 +352,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     buffer: Buffer.from("# Team guide")
   });
   await page.route(
-    `**/api/organizations/${organizationSlug}/documents`,
+    `**/api/documents`,
     async (route) => {
       const payload = route.request().postData() ?? "";
       expect(payload).toContain('name="scopeKind"');
@@ -402,16 +368,10 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   );
   await page.getByRole("button", { name: "수집 시작" }).click();
   await expect(page.getByText("문서를 업로드했습니다. 상세 화면에서 처리 상태를 확인하세요.")).toBeVisible();
-  await page.getByRole("combobox", { name: "활성 조직" }).click();
-  await page.getByRole("option", { name: "E2E Other Organization" }).click();
-  await expect(
-    page.getByText("문서를 업로드했습니다. 상세 화면에서 처리 상태를 확인하세요.")
-  ).not.toBeVisible();
-  await page.getByRole("combobox", { name: "활성 조직" }).click();
-  await page.getByRole("option", { name: "E2E Organization" }).click();
+  await expect(page.getByRole("combobox", { name: "활성 조직" })).toHaveCount(0);
 
   await page.getByRole("link", { name: "Agent 연결" }).click();
-  const mcpEndpoint = `${new URL(page.url()).origin}/api/organizations/${organizationSlug}/mcp`;
+  const mcpEndpoint = `${new URL(page.url()).origin}/api/mcp`;
   const registrationTemplate = page.getByRole("region", {
     name: "Agent Studio 등록 템플릿"
   });
@@ -428,26 +388,16 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(
     "이 Content는 모델에 전달되지 않는 운영자 메모다."
   );
-  await page.getByRole("combobox", { name: "활성 조직" }).click();
-  await page.getByRole("option", { name: "E2E Other Organization" }).click();
-  const otherSlug = `e2e-other-organization-${runId}-${testInfo.retry}`;
-  await expect(registrationTemplate.getByText(`${otherSlug}-memory`, { exact: true })).toBeVisible();
-  await expect(registrationTemplate.getByText(mcpEndpoint, { exact: true })).not.toBeVisible();
-  await registrationTemplate.getByRole("button", { name: "등록 템플릿 URL 복사" }).click();
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
-    `${new URL(page.url()).origin}/api/organizations/${otherSlug}/mcp`
-  );
   const accessRequested = Promise.withResolvers<void>();
   const releaseAccess = Promise.withResolvers<void>();
-  const accessPath = `**/api/organizations/${organizationSlug}/me`;
+  const accessPath = `**/api/me`;
   await page.route(accessPath, async (route) => {
     const response = await route.fetch();
     accessRequested.resolve();
     await releaseAccess.promise;
     await route.fulfill({ response });
   });
-  await page.getByRole("combobox", { name: "활성 조직" }).click();
-  await page.getByRole("option", { name: "E2E Organization" }).click();
+  await page.reload();
   await accessRequested.promise;
   await expect(registrationTemplate.getByText(mcpEndpoint, { exact: true })).toBeVisible();
   const endpointCopy = page.getByRole("button", { name: "MCP endpoint 복사" });
@@ -497,7 +447,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const englishTemplate = page.getByRole("region", {
     name: "Agent Studio registration template"
   });
-  await expect(englishTemplate).toContainText(`knowledge relationships in the ${organizationSlug} organization`);
+  await expect(englishTemplate).toContainText(`knowledge relationships stored in the ${organizationSlug} organization`);
   await expect(englishTemplate).toContainText("optional Content is shown only to operators.");
   await englishTemplate.getByRole("button", { name: "Copy template Name", exact: true }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${organizationSlug}-memory`);
@@ -509,7 +459,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const candidateId = "80000000-0000-4000-8000-000000000099";
   let duplicateRequests = 0;
   await page.route(
-    `**/api/organizations/${organizationSlug}/knowledge/candidates?limit=100`,
+    `**/api/knowledge/candidates?limit=100`,
     (route) =>
       route.fulfill({
         contentType: "application/json",
@@ -546,7 +496,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
       })
   );
   await page.route(
-    `**/api/organizations/${organizationSlug}/knowledge/candidates/${candidateId}/duplicates`,
+    `**/api/knowledge/candidates/${candidateId}/duplicates`,
     (route) => {
       duplicateRequests += 1;
       return route.fulfill({
@@ -595,7 +545,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
 
   const memory = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organizationSlug}/memories`,
+    `/api/memories`,
     {
       kind: "decision",
       scope: { kind: "user" },
@@ -633,7 +583,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
 
   const archivedDocumentId = "40000000-0000-0000-0000-000000000099";
   await page.route(
-    `**/api/organizations/${organizationSlug}/documents?q=*`,
+    `**/api/documents?q=*`,
     async (route) => {
       await route.fulfill({
         contentType: "application/json",
@@ -658,7 +608,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     }
   );
   await page.route(
-    `**/api/organizations/${organizationSlug}/documents/${archivedDocumentId}`,
+    `**/api/documents/${archivedDocumentId}`,
     async (route) => {
       if (route.request().method() === "DELETE") await route.fulfill({ status: 204 });
       else await route.fulfill({ json: { id: archivedDocumentId, title: "Archived team guide", mimeType: "text/markdown", scope: { kind: "organization", organizationId }, sizeBytes: 10, status: "ready", processingAttempts: 1, createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z" } });
@@ -683,7 +633,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.goto("/");
   const firstNode = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organizationSlug}/knowledge/nodes`,
+    `/api/knowledge/nodes`,
     {
       scope: { kind: "user" },
       kind: "service",
@@ -694,7 +644,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   );
   const secondNode = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organizationSlug}/knowledge/nodes`,
+    `/api/knowledge/nodes`,
     {
       scope: { kind: "user" },
       kind: "database",
@@ -705,7 +655,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   );
   const edge = await postJson<{ id: string }>(
     page,
-    `/api/organizations/${organizationSlug}/knowledge/edges`,
+    `/api/knowledge/edges`,
     {
       scope: { kind: "user" },
       sourceNodeId: firstNode.id,
@@ -715,6 +665,9 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     }
   );
 
+  const graphSearch = await page.request.get("/api/knowledge/nodes?q=Checkout%20API");
+  expect(graphSearch.ok()).toBe(true);
+  expect(await graphSearch.json()).toMatchObject({ hits: [expect.objectContaining({ node: expect.objectContaining({ id: firstNode.id }) })] });
   await page.getByRole("radiogroup").getByText("Graph", { exact: true }).click();
   await expect(page).toHaveURL(/kind=knowledge%2Fnodes/);
   await expect(page.getByRole("radio", { name: "Graph", exact: true })).toBeChecked();
@@ -739,7 +692,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const edgeDeleteResponse = page.waitForResponse(
     (response) =>
       response.url().endsWith(
-        `/api/organizations/${organizationSlug}/knowledge/edges/${edge.id}`
+        `/api/knowledge/edges/${edge.id}`
       ) && response.request().method() === "DELETE"
   );
   await page.getByRole("button", { name: "관계 삭제" }).click();
@@ -752,7 +705,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const nodeDeleteResponse = page.waitForResponse(
     (response) =>
       response.url().endsWith(
-        `/api/organizations/${organizationSlug}/knowledge/nodes/${secondNode.id}`
+        `/api/knowledge/nodes/${secondNode.id}`
       ) && response.request().method() === "DELETE"
   );
   await page.getByRole("button", { name: "Node 삭제" }).click();
@@ -765,7 +718,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByRole("button", { name: "검색 결과로 돌아가기" }).click();
   await postJson(
     page,
-    `/api/organizations/${organizationSlug}/knowledge/nodes`,
+    `/api/knowledge/nodes`,
     {
       scope: { kind: "user" },
       kind: "concept",
@@ -775,7 +728,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   );
   await postJson(
     page,
-    `/api/organizations/${organizationSlug}/knowledge/nodes`,
+    `/api/knowledge/nodes`,
     {
       scope: { kind: "user" },
       kind: "service",
@@ -804,7 +757,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await lifecycle.getByRole("tab", { name: "수정", exact: true }).click();
   await lifecycle.getByRole("button", { name: "Archive", exact: true }).click();
   const refreshedMemories = page.waitForResponse((response) =>
-    response.url().includes(`/api/organizations/${organizationSlug}/memories?q=`) &&
+    response.url().includes(`/api/memories?q=`) &&
     response.request().method() === "GET"
   );
   await lifecycle.getByRole("button", { name: "Archive 확인", exact: true }).click();
