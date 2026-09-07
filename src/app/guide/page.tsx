@@ -133,6 +133,13 @@ export default async function GuidePage() {
                 <ChapterLabel>{`01 · ${t("guide.chapter.start")}`}</ChapterLabel>
                 <Title order={2}>{t("guide.start.title")}</Title>
                 <Text c="dimmed">{t("guide.start.body")}</Text>
+                <div className={classes.steps}>
+                  <div><IconFileText size={20} /><strong>{t("guide.start.request")}</strong><span>{t("guide.start.requestNote")}</span></div>
+                  <div><IconShieldCheck size={20} /><strong>{t("guide.start.approve")}</strong><span>{t("guide.start.approveNote")}</span></div>
+                  <div><IconSearch size={20} /><strong>{t("guide.start.use")}</strong><span>{t("guide.start.useNote")}</span></div>
+                </div>
+                <Text c="dimmed" size="sm">{t("guide.start.operatorNote")}</Text>
+                <Title order={3}>{t("guide.scope.title")}</Title>
                 <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
                   {scopes.map((scope) => (
                     <Paper className={classes.scopeCard} key={scope.name} p="lg" radius="lg">
@@ -238,6 +245,7 @@ export default async function GuidePage() {
                 <ChapterLabel>{`07 · ${t("guide.chapter.connect")}`}</ChapterLabel>
                 <Title order={2}>{t("guide.connect.title")}</Title>
                 <Text c="dimmed">{t("guide.connect.body")}</Text>
+                <Code block>/api/mcp</Code>
                 <Paper className={classes.endpoint} p="lg" radius="lg">
                   <IconPlugConnected size={21} />
                   <Text size="sm">{t("guide.connect.note")}</Text>

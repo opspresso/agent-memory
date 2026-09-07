@@ -4,7 +4,7 @@ import { resetInstallationFixture } from "./installation-fixture";
 
 const authenticatedE2e = process.env.E2E_AUTHENTICATED === "true";
 
-test("explains the product workflow in the public guide", async ({ page }) => {
+test("explains the product workflow in the public guide", async ({ page }, testInfo) => {
   await page.goto("/guide");
 
   await expect(
@@ -13,6 +13,13 @@ test("explains the product workflow in the public guide", async ({ page }) => {
     })
   ).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Guide contents" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Start with a membership request and approval." })).toBeVisible();
+  await expect(page.getByText("Operator approval", { exact: true })).toBeVisible();
+  await expect(page.getByText("/api/mcp", { exact: true })).toBeVisible();
+  await page.locator("#start").screenshot({ path: testInfo.outputPath("guide-start-desktop-en.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.locator("#start").screenshot({ path: testInfo.outputPath("guide-start-mobile-en.png") });
   await expect(
     page.getByRole("heading", { name: "Follow relationships without losing the evidence." })
   ).toBeVisible();
@@ -260,6 +267,9 @@ test("onboards, approves, and manages members through the console", async ({
   await page.getByRole("menuitem", { name: "차단" }).click();
   await expect(page.getByText("회원을 차단했습니다.")).toBeVisible();
   await expect(page.getByRole("row").filter({ hasText: memberEmail }).getByText("차단됨", { exact: true })).toBeVisible();
+  await memberPage.goto("/");
+  await expect(memberPage.getByRole("heading", { name: "접근이 제한되었습니다" })).toBeVisible();
+  await expect(memberPage.getByText("가입이 요청으로 접수되었습니다.", { exact: false })).toHaveCount(0);
 
   await page.route("**/api/auth/sign-out", (route) =>
     route.fulfill({

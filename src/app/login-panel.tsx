@@ -113,6 +113,7 @@ export function LoginPanel({
           <Text c="dimmed" size="sm">
             {t("login.lede")}
           </Text>
+          <Text size="sm">{t("login.approvalNotice")}</Text>
         </Stack>
 
         {error ? (

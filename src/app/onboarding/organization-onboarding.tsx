@@ -12,7 +12,10 @@ export function OrganizationOnboarding({ pending }: { readonly pending: boolean 
   const router = useRouter();
   return (
     <Stack gap="lg" maw={640} mx="auto">
-      <WorkspaceHeader title={t("onboarding.title")} description={t("onboarding.lede")} />
+      <WorkspaceHeader
+        title={t(pending ? "onboarding.title" : "onboarding.deniedTitle")}
+        description={t(pending ? "onboarding.lede" : "onboarding.deniedBody")}
+      />
       <Alert color={pending ? "yellow" : "red"} icon={<IconClockPause size={18} />}>
         {t(pending ? "onboarding.pendingNotice" : "members.accessDenied")}
       </Alert>
