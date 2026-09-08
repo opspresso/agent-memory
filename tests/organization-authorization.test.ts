@@ -204,7 +204,7 @@ describe("organization route authorization", () => {
       };
       const server = createAgentMemoryMcpServer(authorization.access, {
         searchDocuments: buildSearchDocuments({ repository }),
-        searchContext: vi.fn(), createMemory: vi.fn(), archiveMemory: vi.fn(), searchMemories: vi.fn(),
+        searchContext: vi.fn(), createMemory: vi.fn(), archiveMemory: vi.fn(), recallMemories: vi.fn(),
         searchKnowledge: vi.fn(), getKnowledgeNeighborhood: vi.fn()
       });
       const client = new Client({ name: "delegation-test", version: "1.0.0" });

@@ -160,7 +160,7 @@ describe("unified context search", () => {
     expect(configured.searchMemories).toHaveBeenCalledWith(
       access,
       "rollback",
-      4,
+      12,
       undefined
     );
     expect(result.hits.map((hit) => hit.sourceType)).toEqual([
@@ -185,6 +185,55 @@ describe("unified context search", () => {
         "Knowledge system\nName: Release service"
       ]
     });
+  });
+
+  it.each([10, 100])("fills the rerank budget when only documents match (limit=%s)", async (limit) => {
+    const total = Math.min(100, Math.max(12, limit * 4));
+    const hits = Array.from({ length: 100 }, (_, index) => ({
+      document,
+      chunk: { ...chunk, id: `chunk-${index}` },
+      lexicalScore: 1 - index / 100,
+      vectorScore: 0,
+      score: 1 - index / 100
+    }));
+    const rerank = vi.fn(async (input: { documents: readonly string[] }) =>
+      input.documents.map((_, index) => index === total - 1 ? 1 : 0.1));
+    const configured = dependencies({
+      searchDocuments: vi.fn(async (_access, _query, count) => hits.slice(0, count)),
+      rerankerService: { rerank }
+    });
+    const result = await buildSearchContext(configured)(access, "rollback", limit);
+    expect(rerank.mock.calls[0]?.[0].documents).toHaveLength(total);
+    expect(result.hits[0]).toMatchObject({ chunk: { id: `chunk-${total - 1}` } });
+    expect(result.hits).toHaveLength(limit);
+  });
+
+  it.each(["success", "unavailable", "disabled"])("recalls only memories with reranker %s", async (mode) => {
+    const embedding = { model: "embedding-model", values: [1, 0] };
+    const embed = vi.fn().mockResolvedValue(embedding);
+    const rerank = mode === "unavailable"
+      ? vi.fn().mockRejectedValue(new TextRerankerUnavailableError("unavailable"))
+      : vi.fn().mockResolvedValue([0.2, 0.9]);
+    const configured = dependencies({
+      embeddingService: { embed, embedMany: vi.fn() },
+      searchMemories: vi.fn().mockResolvedValue([
+        { memory, lexicalScore: 0.9, vectorScore: 0, score: 0.9 },
+        { memory: { ...memory, id: "other-memory" }, lexicalScore: 0.5, vectorScore: 0, score: 0.5 }
+      ]),
+      ...(mode === "disabled" ? {} : { rerankerService: { rerank } }),
+      minimumRerankScore: 0.5
+    });
+    const result = await buildSearchContext(configured, ["memory"])(access, "rollback", 1);
+    expect(configured.searchDocuments).not.toHaveBeenCalled();
+    expect(configured.searchKnowledge).not.toHaveBeenCalled();
+    expect(embed).toHaveBeenCalledOnce();
+    expect(configured.searchMemories).toHaveBeenCalledWith(
+      access, "rollback", mode === "disabled" ? 1 : 12, embedding
+    );
+    expect(result.ranking).toBe(mode === "success" ? "rerank" : "hybrid");
+    expect(result.hits).toHaveLength(1);
+    expect(result.hits[0]).toMatchObject({ memory: { id: mode === "success" ? "other-memory" : memory.id } });
+    expect(result.counts).toEqual({ memories: 2, documents: 0, knowledge: 0 });
   });
 
   it("bounds the query and candidate text sent to the reranker", async () => {

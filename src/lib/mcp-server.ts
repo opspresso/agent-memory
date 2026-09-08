@@ -22,7 +22,6 @@ import type {
 } from "@/domain/knowledge/knowledge-graph-repository";
 import type { Memory } from "@/domain/memory/memory";
 import { InvalidMemoryError } from "@/domain/memory/memory";
-import type { MemorySearchHit } from "@/domain/memory/memory-repository";
 import { AiRequestLimitExceededError } from "@/domain/shared/ai-request-limiter";
 
 import { publicDocumentHit } from "./document-http";
@@ -50,11 +49,11 @@ export interface AgentMemoryMcpOperations {
     expectedVersion: number,
     changeReason?: string
   ): Promise<void>;
-  searchMemories(
+  recallMemories(
     access: OrganizationAccess,
     query: string,
     limit: number
-  ): Promise<readonly MemorySearchHit[]>;
+  ): Promise<ContextSearchResult>;
   searchDocuments(
     access: OrganizationAccess,
     query: string,
@@ -151,21 +150,11 @@ export function createAgentMemoryMcpServer(
       annotations: { readOnlyHint: true, idempotentHint: true }
     },
     async ({ query, limit }) => executeMcpTool(async () => {
-      const hits = await operations.searchMemories(access, query, limit ?? 10);
-      const remembered = contextRecallText({
-        hits: hits.map((hit) => ({
-          ...hit,
-          sourceType: "memory" as const,
-          candidateScore: hit.score
-        })),
-        counts: { memories: hits.length, documents: 0, knowledge: 0 },
-        ranking: "hybrid"
-      });
+      const result = await operations.recallMemories(access, query, limit ?? 10);
+      const remembered = contextRecallText(result);
       return textResult(remembered, {
         remembered,
-        count: hits.length,
-        ranking: "hybrid",
-        hits: hits.map((hit) => ({ ...hit, memory: publicMemory(hit.memory) }))
+        ...publicContextSearchResult(result)
       });
     })
   );

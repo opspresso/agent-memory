@@ -121,7 +121,7 @@ EMBEDDING_MODEL=openai/text-embedding-3-small
 
 ### Context reranking
 
-통합 Context 검색(`context_search`)의 1차 후보를 다시 정렬하려면 OpenRouter 또는 vLLM-compatible reranker를 설정하라.
+통합 Context 검색(`context_search`)과 Memory 회상(`recall`)의 1차 후보를 다시 정렬하려면 OpenRouter 또는 vLLM-compatible reranker를 설정하라.
 
 ```dotenv
 RERANKER_BASE_URL=https://openrouter.ai/api/v1

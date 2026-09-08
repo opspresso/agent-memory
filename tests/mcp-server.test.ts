@@ -7,6 +7,7 @@ import { version as appVersion } from "../package.json";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { buildArchiveMemory } from "@/application/memory/archive-memory";
 import { buildCreateMemory } from "@/application/memory/create-memory";
+import { buildSearchContext } from "@/application/context/search-context";
 import { buildSearchMemories } from "@/application/memory/search-memories";
 import { MemoryNotFoundError } from "@/application/memory/get-memory";
 import { MemoryVersionConflictError } from "@/application/memory/revise-memory";
@@ -46,7 +47,9 @@ function operations(
       }),
     createMemory: vi.fn(),
     archiveMemory: vi.fn(),
-    searchMemories: vi.fn().mockResolvedValue([]),
+    recallMemories: vi.fn().mockResolvedValue({
+      hits: [], counts: { memories: 0, documents: 0, knowledge: 0 }, ranking: "hybrid"
+    }),
     searchDocuments: vi.fn().mockResolvedValue([]),
     searchKnowledge: vi.fn().mockResolvedValue([]),
     getKnowledgeNeighborhood: vi
@@ -73,7 +76,7 @@ async function connectedClient(
 describe("agent memory MCP server", () => {
   it.each([
     ["context_search", "searchContext", { query: "incident" }],
-    ["recall", "searchMemories", { query: "incident" }],
+    ["recall", "recallMemories", { query: "incident" }],
     ["document_search", "searchDocuments", { query: "incident" }],
     ["knowledge_search", "searchKnowledge", { query: "incident" }],
     ["knowledge_neighborhood", "getKnowledgeNeighborhood", {
@@ -147,12 +150,22 @@ describe("agent memory MCP server", () => {
       arguments: { query: "rollback", limit: 5 }
     });
 
-    expect(mcpOperations.searchMemories).toHaveBeenCalledWith(access, "rollback", 5);
+    expect(mcpOperations.recallMemories).toHaveBeenCalledWith(access, "rollback", 5);
     expect(mcpOperations.searchContext).not.toHaveBeenCalled();
     expect(mcpOperations.searchDocuments).not.toHaveBeenCalled();
     expect(mcpOperations.searchKnowledge).not.toHaveBeenCalled();
     expect(result.content).toEqual([{ type: "text", text: "" }]);
-    expect(result.structuredContent).toEqual({ remembered: "", count: 0, ranking: "hybrid", hits: [] });
+    expect(result.structuredContent).toEqual({ remembered: "", count: 0, counts: { memories: 0, documents: 0, knowledge: 0 }, ranking: "hybrid", hits: [] });
+  });
+
+  it("preserves reranker metadata in recall responses", async () => {
+    const recallMemories = vi.fn().mockResolvedValue({
+      hits: [], counts: { memories: 2, documents: 0, knowledge: 0 }, ranking: "rerank"
+    });
+    const client = await connectedClient(operations({ recallMemories }));
+    const result = await client.callTool({ name: "recall", arguments: { query: "rollback" } });
+    expect(recallMemories).toHaveBeenCalledWith(access, "rollback", 10);
+    expect(result.structuredContent).toMatchObject({ ranking: "rerank", count: 0 });
   });
 
   it.each([{}, { expectedVersion: 0 }, { expectedVersion: 1.5 }, { expectedVersion: "1" }])(
@@ -202,7 +215,11 @@ describe("agent memory MCP server", () => {
     const dependencies = { repository, clock: () => now };
     const client = await connectedClient(operations({
       createMemory: buildCreateMemory({ ...dependencies, generateId: () => memoryId }),
-      searchMemories: buildSearchMemories(dependencies),
+      recallMemories: buildSearchContext({
+        searchMemories: buildSearchMemories(dependencies),
+        searchDocuments: vi.fn(),
+        searchKnowledge: vi.fn()
+      }, ["memory"]),
       archiveMemory: buildArchiveMemory(dependencies)
     }), principal);
     const remembered = await client.callTool({

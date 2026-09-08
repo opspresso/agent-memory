@@ -170,7 +170,7 @@ function candidateLimits(limit: number, rerank: boolean) {
   );
   return {
     total,
-    perSource: Math.min(100, Math.max(limit, Math.ceil(total / 3)))
+    perSource: total
   };
 }
 
@@ -249,7 +249,10 @@ async function rankCandidates(
   }
 }
 
-export function buildSearchContext(dependencies: ContextSearchDependencies) {
+export function buildSearchContext(
+  dependencies: ContextSearchDependencies,
+  sourceTypes: readonly ContextSearchHit["sourceType"][] = ["memory", "document", "knowledge"]
+) {
   return async function execute(
     access: OrganizationAccess,
     query: string,
@@ -278,24 +281,15 @@ export function buildSearchContext(dependencies: ContextSearchDependencies) {
       dependencies.rerankerService !== undefined
     );
     const [memories, documents, knowledge] = await Promise.all([
-      dependencies.searchMemories(
-        access,
-        normalizedQuery,
-        limits.perSource,
-        queryEmbedding
-      ),
-      dependencies.searchDocuments(
-        access,
-        normalizedQuery,
-        limits.perSource,
-        queryEmbedding
-      ),
-      dependencies.searchKnowledge(
-        access,
-        normalizedQuery,
-        limits.perSource,
-        queryEmbedding
-      )
+      sourceTypes.includes("memory")
+        ? dependencies.searchMemories(access, normalizedQuery, limits.perSource, queryEmbedding)
+        : [],
+      sourceTypes.includes("document")
+        ? dependencies.searchDocuments(access, normalizedQuery, limits.perSource, queryEmbedding)
+        : [],
+      sourceTypes.includes("knowledge")
+        ? dependencies.searchKnowledge(access, normalizedQuery, limits.perSource, queryEmbedding)
+        : []
     ]);
     const candidates = contextCandidates(memories, documents, knowledge);
     const selected = dependencies.rerankerService
