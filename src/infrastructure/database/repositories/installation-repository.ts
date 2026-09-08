@@ -6,10 +6,23 @@ import type { Organization } from "@/domain/identity/organization-administration
 import type { AgentMemoryDatabase } from "../client";
 import { organizations, organizationMembers, teamMembers } from "../schema";
 
-function singleOrganization(rows: readonly Organization[]): Organization | undefined {
-  if (rows.length > 1) {
+function assertSingleOrganizationCount(count: number): void {
+  if (count > 1) {
     throw new Error("Agent Memory requires a single organization. Separate existing organizations into independent installations before starting; no data has been changed.");
   }
+}
+
+export async function assertSingleOrganizationBeforeMigration(db: AgentMemoryDatabase): Promise<void> {
+  const table = await db.execute<{ exists: boolean }>(sql`select to_regclass('public.organizations') is not null as exists`);
+  if (!table.rows[0]?.exists) {
+    return;
+  }
+  const organizations = await db.execute(sql`select id from public.organizations limit 2`);
+  assertSingleOrganizationCount(organizations.rows.length);
+}
+
+function singleOrganization(rows: readonly Organization[]): Organization | undefined {
+  assertSingleOrganizationCount(rows.length);
   return rows[0];
 }
 

@@ -18,16 +18,16 @@ Compose: postgres, MinIO ─────┘      └── pg-boss
 | 환경 | Application | PostgreSQL·Object storage | 진입점 |
 | --- | --- | --- | --- |
 | Local 개발 | host `pnpm dev` | 독립 `agent-memory-local` PostgreSQL 18·MinIO | `http://localhost:3100` |
-| IDC | `../dockpad` | 배포 저장소가 소유 | 배포 저장소가 소유 |
-| EKS | `../argocd-env-demo` | GitOps 저장소가 소유 | GitOps 저장소가 소유 |
+| IDC (운영) | `../dockpad` | 배포 저장소가 소유 | `https://memory.opspresso.com/` |
+| EKS (중지) | 배포·검증 대상에서 제외 | — | — |
 
 이 저장소는 IDC Compose나 Kubernetes manifest를 보관하지 않는다. Release workflow는 image 게시 후 `argocd-env-demo`에 tag만 전달한다.
 
-IDC와 EKS에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
+IDC에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
 
-`v*` tag를 push하면 release workflow가 GitHub-hosted Ubuntu 24.04 runner에서 `pnpm verify`, PostgreSQL integration test, 인증 E2E test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 immutable tag를 배포한다.
+`v*` tag를 push하면 release workflow가 GitHub-hosted Ubuntu 24.04 runner에서 `pnpm verify`, PostgreSQL integration test, 인증 E2E test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 Dockpad가 사용하는 alpha image version 목록을 갱신한다.
 
-Release 완료 조건은 tag와 GitHub Release만 만드는 것이 아니다. Workflow 성공, ECR·GHCR image 게시, GitOps dispatch와 Argo CD sync를 확인한 뒤 container image, health endpoint, 공개 화면의 version을 검증하라. IDC rollout과 관측성은 `../dockpad`, EKS rollout은 `../argocd-env-demo`에서 확인한다.
+Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, Dockpad가 읽는 `argocd-env-demo`의 alpha version 목록 갱신, IDC rollout 완료다. EKS는 중지 상태이므로 Argo CD sync나 EKS 접속은 요구하지 않는다. `../dockpad/scripts/remote.sh deploy-selected alpha agent-memory`로 백업 후 Agent Memory를 배포하고, 실제 container image, `https://memory.opspresso.com/api/health`, 공개 화면의 version을 검증하라.
 
 ### 로컬 개발
 
@@ -306,7 +306,7 @@ Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지
 
 ## 단일 조직 설치
 
-서버 시작 시 조직이 없으면 `default` slug와 `Agent Memory` 이름으로 생성한다. 기존 조직이 하나면 ID·이름·멤버십·데이터를 그대로 사용한다. 두 개 이상이면 서버 시작을 중단한다. 기존 다중 조직 설치는 운영자가 조직별 독립 DB·bucket으로 분리하거나 보존할 데이터를 정리한 후 시작하라. 자동 병합·삭제는 수행하지 않는다.
+서버 시작 시 조직이 없으면 `default` slug와 `Agent Memory` 이름으로 생성한다. 기존 조직이 하나면 ID·이름·멤버십·데이터를 그대로 사용한다. 두 개 이상이면 서버 시작을 중단한다. `MIGRATE_ON_START=true`일 때는 schema 변경 전에 기존 조직 수를 검사해 다중 조직 설치를 거부한다. 기존 다중 조직 설치는 운영자가 조직별 독립 DB·bucket으로 분리하거나 보존할 데이터를 정리한 후 시작하라. 자동 병합·삭제는 수행하지 않는다.
 
 가입 후 첫 콘솔 접속은 설치 조직에 대한 가입 요청으로 처리한다. active owner가 없는 경우 `ADMIN_EMAILS`의 사용자가 최초 owner가 된다. 다른 사용자의 가입은 pending 요청으로 처리되며 운영자 승인 후에만 활성 멤버가 된다. blocked·removed membership은 자동으로 복구하지 않는다. 모든 공개 HTTP endpoint는 조직 slug를 받지 않으며 MCP 주소는 `/api/mcp`다.
 

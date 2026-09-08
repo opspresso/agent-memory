@@ -29,7 +29,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-이 저장소는 application image와 localdev 설정만 소유한다. IDC 배포는 `../dockpad`, EKS/Kubernetes 배포는 `../argocd-env-demo`가 관리한다. Release workflow의 GitOps tag 전달은 유지한다.
+이 저장소는 application image와 localdev 설정을 소유한다. 운영 서비스는 `https://memory.opspresso.com/`이며 `../dockpad`로 IDC에 배포한다. EKS는 중지 상태다. Release workflow는 Dockpad의 버전 원본인 `../argocd-env-demo`에 image tag를 전달한다.
 
 로컬에서 로그인하려면 `.env.local`에서 password provider와 signup을 활성화하라.
 

@@ -39,7 +39,8 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 - Agent Memory와 MCP Memory는 scope·인증·도구 계약이 다른 별도 서비스다. Plugin의 기본 `memory`는 MCP Memory이며 Agent Memory 연동에는 설치의 `/api/mcp` URL과 Bearer credential을 별도로 설정한다.
 - Studio의 capability catalog 검색과 Agent Memory의 조직 지식 검색을 구분하라. Agent 실행 기능은 Studio에, 공유 Memory·RAG·Graph 기능은 Agent Memory에 둔다.
 - Plugin은 사용 지침과 MCP 선언을, 설치 측은 credential·서비스 URL·model 선택·version binding을 소유한다. Studio용 skill은 shell·filesystem·network를 직접 사용할 수 있다고 가정하지 않는다.
-- IDC에서는 PostgreSQL·MinIO 인프라를 공유하되 database(`agent_studio`, `mcp_memory`, `agent_memory`)와 bucket(`agent-studio`, `agent-memory`)을 분리한다. Application image와 localdev는 각 앱, IDC 배포는 Dockpad, EKS/Kubernetes 배포는 `../argocd-env-demo`가 소유한다.
+- 운영 배포 대상은 IDC이며 `../dockpad`로 배포한다. 서비스 주소는 `https://memory.opspresso.com/`이다. EKS는 중지 상태이므로 릴리즈 검증에 EKS·Argo CD 접속을 요구하지 마라.
+- IDC에서는 PostgreSQL·MinIO 인프라를 공유하되 database(`agent_studio`, `mcp_memory`, `agent_memory`)와 bucket(`agent-studio`, `agent-memory`)을 분리한다. Application image와 localdev는 각 앱, IDC 배포는 Dockpad가 소유한다. `../argocd-env-demo`는 Dockpad가 읽는 image version 목록을 제공하므로 release의 tag 전달은 유지한다.
 
 ## Toolchain
 
