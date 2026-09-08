@@ -74,11 +74,11 @@ AUTH_PASSWORD_SIGNUP=true
 ```
 
 ```bash
-docker compose up -d postgres minio minio-init
-docker compose exec postgres pg_isready -U agent_memory -d agent_memory
+docker compose up --wait postgres minio
+docker compose run --rm minio-init
 ```
 
-PostgreSQL readiness가 성공하고 `minio-init`이 bucket 생성을 완료한 뒤 migration과 서버를 실행하라. DB 주소를 기본 Compose 값에서 바꿨다면 먼저 [CLI의 환경 변수 처리](#database와-migration)를 확인한다.
+`up --wait`가 PostgreSQL·MinIO의 health를 확인하고 `run --rm minio-init`이 bucket 생성을 완료한 뒤 migration과 서버를 실행하라. 앞 명령이 실패하면 이후 단계로 진행하지 마라. DB 주소를 기본 Compose 값에서 바꿨다면 먼저 [CLI의 환경 변수 처리](#database와-migration)를 확인한다.
 
 ```bash
 pnpm db:migrate

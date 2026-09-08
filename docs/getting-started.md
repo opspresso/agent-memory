@@ -48,11 +48,12 @@ ADMIN_EMAILS=your-admin@example.com
 아래 명령은 기본 Compose DB 주소를 사용한다. 사용자 지정 DB를 쓰면 먼저 [migration 환경 설정](operations.md#database와-migration)에 따라 shell의 `DATABASE_URL`도 지정하라.
 
 ```bash
-docker compose up -d postgres minio minio-init
+docker compose up --wait postgres minio
+docker compose run --rm minio-init
 pnpm db:migrate
 ```
 
-PostgreSQL은 `localhost:5433`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. Migration이 완료되면 application을 시작하라.
+`up --wait`는 PostgreSQL·MinIO가 healthy일 때 완료되고 `run --rm minio-init`은 bucket 초기화가 끝날 때 종료된다. 앞 명령이 실패하면 migration을 진행하지 마라. PostgreSQL은 `localhost:5433`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. Migration이 완료되면 application을 시작하라.
 
 ```bash
 pnpm dev

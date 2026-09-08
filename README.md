@@ -34,7 +34,8 @@ ADMIN_EMAILS=your-admin@example.com
 ```
 
 ```bash
-docker compose up -d postgres minio minio-init
+docker compose up --wait postgres minio
+docker compose run --rm minio-init
 pnpm db:migrate
 pnpm dev
 ```
