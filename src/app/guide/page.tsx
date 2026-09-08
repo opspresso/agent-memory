@@ -169,6 +169,7 @@ export default async function GuidePage() {
                 <Text c="dimmed" size="sm">
                   {t("guide.search.note")}
                 </Text>
+                <Text c="dimmed">{t("guide.search.reranker")}</Text>
               </section>
 
               <section className={classes.chapter} id="memory">

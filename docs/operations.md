@@ -27,7 +27,7 @@ IDC에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라
 
 `v*` tag를 push하면 release workflow가 GitHub-hosted Ubuntu 24.04 runner에서 `pnpm verify`, PostgreSQL integration test, 인증 E2E test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 Dockpad가 사용하는 alpha image version 목록을 갱신한다.
 
-Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, Dockpad가 읽는 `argocd-env-demo`의 alpha version 목록 갱신, IDC rollout 완료다. EKS는 중지 상태이므로 Argo CD sync나 EKS 접속은 요구하지 않는다. `../dockpad/scripts/remote.sh deploy-selected alpha agent-memory`로 백업 후 Agent Memory를 배포하고, 실제 container image, `https://memory.opspresso.com/api/health`, 공개 화면의 version을 검증하라.
+Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, Dockpad가 읽는 `argocd-env-demo`의 alpha version 목록 갱신, IDC rollout 완료다. EKS는 중지 상태이므로 Argo CD sync나 EKS 접속은 요구하지 않는다. `../dockpad/scripts/remote.sh deploy-selected alpha agent-memory`로 백업 후 Agent Memory를 배포하고, 실제 container image, `https://memory.opspresso.com/api/health`, 공개 화면의 version을 검증하라. 선택 배포는 다른 서비스의 image tag를 유지하지만 공통 Compose 설정 적용 중 해당 서비스가 같은 버전으로 재기동될 수 있다.
 
 ### 로컬 개발
 
@@ -71,7 +71,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Build | `NEXT_DIST_DIR` | Next.js 출력 디렉터리. 기본값 `.next`, Playwright 서버는 `.next-e2e` 사용 |
 | Startup | `MIGRATE_ON_START` | Node.js runtime 시작 시 migration 실행 |
 | Worker | `DOCUMENT_WORKER_ENABLED` | 같은 process에서 pg-boss document worker 시작 |
-| Auth | `BETTER_AUTH_SECRET` | Better Auth secret, 32자 이상. 조직 Agent token 암호화 key도 HKDF로 파생하므로 값을 변경하면 기존 token을 reveal할 수 없음 |
+| Auth | `BETTER_AUTH_SECRET` | Better Auth secret, 32자 이상. 조직 Agent token·설정 override의 암호화 root. 변경 시 기존 암호문 복호화 불가 |
 | Auth | `BETTER_AUTH_URL` | Application base URL과 trusted origin. Public production origin은 HTTPS 필수 |
 | Auth | `AUTH_PASSWORD` | Email/password 로그인 활성화 |
 | Auth | `AUTH_PASSWORD_SIGNUP` | Self-signup 활성화. `AUTH_PASSWORD=true`가 함께 필요하며 loopback 이외의 production에서는 허용하지 않음 |
@@ -120,7 +120,7 @@ Embedding·reranker·knowledge extraction endpoint를 바꿀 때 기존 credenti
 
 전역 admin은 계정 메뉴의 `설정`에서 조직 가입 여부와 관계없이 애플리케이션 설정을 관리한다. 저장된 값은 env보다 우선하며, override를 reset하면 다시 env와 기본값 순으로 fallback한다. `ALLOWED_EMAIL_DOMAINS`에 빈 override를 저장하면 env에 제한 목록이 있어도 모든 domain을 허용한다. 설정 변경은 DB transaction에서 최신 관리자 권한을 확인하고 직렬화해 동시에 저장한 다른 항목의 변경을 보존한다.
 
-Secret 항목은 `BETTER_AUTH_SECRET`에서 파생한 key로 암호화해 저장하고 화면과 API 응답에서는 마스킹한다. `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN`은 현재 instance에 즉시 반영된다. 인증 provider, AI service, worker, object storage, logging, telemetry처럼 process 초기화 시 구성되는 항목은 모든 instance를 재시작한 뒤 반영된다. 여러 replica에서 접근 정책 override는 최대 5초 안에 다시 읽는다.
+Secret 항목은 `BETTER_AUTH_SECRET`에서 파생한 key로 암호화해 저장하고 화면과 API 응답에서는 마스킹한다. 이 root secret을 변경하면 기존 secret override를 복호화할 수 없어 서버 시작도 실패할 수 있다. 교체 전에 기존 key로 override를 복원할 수 있는 절차와 각 provider credential을 확보하라. `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN`은 현재 instance에 즉시 반영된다. 인증 provider, AI service, worker, object storage, logging, telemetry처럼 process 초기화 시 구성되는 항목은 모든 instance를 재시작한 뒤 반영된다. 여러 replica에서 접근 정책 override는 최대 5초 안에 다시 읽는다.
 
 `DATABASE_URL`, `BETTER_AUTH_SECRET`, `MIGRATE_ON_START`, `NODE_ENV`는 Database 접근·설정 암호화·migration·runtime 선택에 먼저 필요하므로 override 대상이 아닌 bootstrap env다. `NEXT_DIST_DIR`, `NEXT_RUNTIME`, `NEXT_PHASE`, `VERCEL`, `CI`, `E2E_*` 같은 framework·배포·검사 변수도 전역 설정에서 관리하지 않는다.
 
@@ -145,6 +145,8 @@ Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 �
 운영에서는 `.env.example`과 Compose의 개발용 credential을 사용하지 말고 secret manager에서 주입하라. Password provider가 필요하지 않으면 비활성화하고 OIDC 또는 Google만 구성하라.
 
 ## Database와 migration
+
+`pnpm db:migrate`, `pnpm db:generate`, `pnpm db:studio`는 `.env.local`을 자동으로 읽지 않는다. Drizzle CLI는 `.env`를 읽고, 이미 shell에 있는 `DATABASE_URL`을 우선한다. 미설정 시 `drizzle.config.ts`의 로컬 Compose 주소를 사용한다. `.env.local`에서 DB 주소를 변경했다면 같은 값을 shell의 `DATABASE_URL`로 명시한 뒤 명령을 실행하라. 운영 credential은 secret manager에서 주입하고 명령 기록에 직접 남기지 마라.
 
 Schema source는 `src/infrastructure/database/schema/`, 생성된 migration은 `drizzle/`에 있다.
 
@@ -229,7 +231,7 @@ worker instance: MIGRATE_ON_START=false, DOCUMENT_WORKER_ENABLED=true
 - PostgreSQL: 조직, 인증, Memory, revision, document metadata·chunk, Graph, candidate, queue 상태
 - S3 호환 storage: 업로드한 원본 문서 object
 
-Database만 복원하고 object storage를 복원하지 않으면 document metadata는 남지만 원본 재처리가 실패할 수 있다. Object storage만 복원하면 권한·상태·chunk·provenance를 복구할 수 없다. 두 저장소의 보존 시점과 복원 절차를 함께 관리하라.
+Database만 복원하고 object storage를 복원하지 않으면 document metadata는 남지만 원본 재처리가 실패할 수 있다. Object storage만 복원하면 권한·상태·chunk·provenance를 복구할 수 없다. 두 저장소의 보존 시점과 복원 절차를 함께 관리하라. 암호화된 설정과 Agent token을 복원하려면 백업 당시의 `BETTER_AUTH_SECRET`도 필요하다. 이 값은 DB·object backup과 별도의 secret manager에서 보존하라.
 
 팀 삭제는 PostgreSQL resource만 cascade 삭제하고 S3 호환 storage의 문서 원본 object는 제거하지 않는다. PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 별도로 구성한 object storage lifecycle로 제거하라. 조직 삭제 UI·API는 제공하지 않는다. 운영자가 DB를 직접 초기화할 때도 object storage와 queue의 정리는 별도로 관리해야 한다.
 
@@ -278,7 +280,7 @@ Worker가 비활성화된 상태에서 upload한 문서는 자동으로 `ready`�
 
 Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node 생성 또는 문서 처리와 semantic query를 실패시킬 수 있다. Provider를 사용하지 않을 계획이면 `EMBEDDING_MODEL`을 비워 lexical-only 모드로 실행하라. Reranker 장애는 통합 검색·Memory 회상을 실패시키지 않고 권한 필터가 적용된 hybrid 순위로 복귀한다. 반복 fallback은 `context reranking unavailable` log와 provider 상태를 확인하라.
 
-모든 embedding, reranker, extraction, ontology suggestion 호출은 instance-local concurrency·minute limit를 먼저 거친 뒤 PostgreSQL의 organization·user minute bucket을 소비한다. 여러 replica와 background worker가 같은 durable quota를 공유하며 초과 요청은 `429` 또는 queue retry로 처리한다. Bucket은 입력·본문 없이 organization ID와 내부 principal key, minute, count만 저장하고 하루가 지난 row를 후속 요청에서 정리한다.
+모든 embedding, reranker, extraction, ontology suggestion 호출은 instance-local concurrency·minute limit를 먼저 거친 뒤 PostgreSQL의 organization·user minute bucket을 소비한다. 여러 replica와 background worker가 같은 durable quota를 공유하며 초과 요청은 `429` 또는 queue retry로 처리한다. Reranker의 quota 초과는 예외적으로 hybrid 순위 복귀로 처리한다. Bucket은 입력·본문 없이 organization ID와 내부 principal key, minute, count만 저장하고 하루가 지난 row를 후속 요청에서 정리한다.
 
 ### AI 후보가 생성되지 않음
 

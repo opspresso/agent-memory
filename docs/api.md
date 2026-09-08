@@ -125,13 +125,15 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 | `GET` | `/api/metrics` | `METRICS_BEARER_TOKEN`으로 보호된 Prometheus process·build 지표 조회 |
 | `GET`, `POST` | `/api/auth/*` | Better Auth 인증 endpoint |
 | `GET`, `PATCH` | `/api/organization` | 설치 조직 조회, 설정 변경(admin·owner) |
+| `GET`, `PUT` | `/api/settings/runtime` | 애플리케이션 설정 조회·override 변경(전역 admin) |
 | `GET` | `/api/me` | 현재 멤버십과 팀 역할 조회 |
 | `GET`, `POST`, `DELETE` | `/api/agent-token` | MCP 전용 Agent token 상태 조회·생성·폐기(admin·owner) |
 | `POST` | `/api/agent-token/reveal` | 저장된 MCP Agent token 원문 조회(admin·owner) |
 | `GET`, `POST` | `/api/members` | 조직 멤버 조회·추가 |
 | `PATCH`, `DELETE` | `/api/members/:userId` | 멤버 role·status 변경, 멤버 제거 |
 | `GET`, `POST` | `/api/teams` | 팀 조회·생성 |
-| `PATCH`, `DELETE` | `/api/teams/:teamId` | 팀 이름 변경, 팀 삭제(admin·owner) |
+| `PATCH` | `/api/teams/:teamId` | 팀 이름 변경(team manager·조직 admin·owner) |
+| `DELETE` | `/api/teams/:teamId` | 팀 삭제(조직 admin·owner) |
 | `GET`, `PUT` | `/api/teams/:teamId/members` | 팀 멤버 조회, 기존 조직 멤버를 팀에 추가·역할 변경 |
 | `DELETE` | `/api/teams/:teamId/members/:userId` | 팀 멤버 제거 |
 | `GET`, `POST` | `/api/memories` | Memory 검색·생성 |
@@ -287,11 +289,11 @@ curl -i \
   "$AGENT_MEMORY_URL/api/memories/<memoryId>?reason=Superseded%20policy"
 ```
 
-`If-Match`가 없거나 잘못되면 `428`, version이 충돌하면 `409`를 반환한다. `PATCH`로 변경할 수 있는 필드는 `title`, `content`, `source`, `accessGrants`, `expiresAt`이며 `changeReason` 자체는 변경 필드로 계산하지 않는다. 선택형 `changeReason`은 1–1,000자다.
+`If-Match`가 없거나 잘못되면 `428`, version이 충돌하면 `409`를 반환한다. `PATCH`로 변경할 수 있는 필드는 `title`, `content`, `source`, `accessGrants`, `expiresAt`이며 `changeReason` 자체는 변경 필드로 계산하지 않는다. 선택형 `changeReason`은 1–1,000자다. `expiresAt: null`은 만료를 해제한다. 만료일을 지정하면 `validFrom`보다 뒤여야 한다.
 
 HTTP의 Memory 조회·검색 응답은 호출자 기준 `capabilities.write`와 `capabilities.manage`를 포함한다. `accessGrants`는 `manage` 권한이 있는 호출자에게만 노출한다.
 
-Revision은 `GET .../versions?limit=<1-100>&before=<version>`으로 역순 조회한다. 기본 limit은 50이며 `manage` 권한이 필요하다.
+Revision은 `GET .../versions?limit=<1-100>&before=<version>`으로 역순 조회한다. 기본 limit은 50이며 `manage` 권한이 필요하다. `before`는 2 이상의 정수다. 응답은 `{ versions, nextBefore? }`이며 다음 페이지가 있으면 반환된 `nextBefore`를 다음 요청의 `before`로 사용한다.
 
 ## 문서
 
@@ -307,7 +309,7 @@ Revision은 `GET .../versions?limit=<1-100>&before=<version>`으로 역순 조�
 | `sourceUri` | 아니요 | 원본 URI, 최대 2,048자 |
 | `metadata` | 아니요 | JSON object 문자열, 최대 32 KiB |
 
-지원 MIME type은 `text/plain`, `text/markdown`, `text/csv`, `application/json`, `application/xml`, `text/xml`이다. 서버는 `Content-Length`와 실제 request stream을 모두 10 MiB로 제한하고, 추출 결과는 문서당 최대 512개 chunk로 제한한다. Chunk 제한을 넘으면 provider를 호출하지 않고 문서를 `failed`로 전환한다. 업로드는 organization 누적 storage, `pending`·`processing` backlog, 사용자별 최근 1시간 업로드 quota를 PostgreSQL transaction에서 검사한다. 한도를 넘으면 저장한 원본을 정리하고 `429`를 반환한다. 정상 업로드는 `202`와 상태 조회용 `Location`을 반환한다. Queue 등록에 실패해도 저장된 document ID와 `failed` 상태를 반환하므로 같은 ID로 retry할 수 있다. 검색은 `GET .../documents?q=<query>&limit=<1-100>`을 사용하고 `ready` 상태의 접근 가능한 chunk만 반환한다. query는 1–10,000자이며 `failed` 문서만 retry할 수 있다.
+지원 MIME type은 `text/plain`, `text/markdown`, `text/csv`, `application/json`, `application/xml`, `text/xml`이다. 파일은 10 MiB로, `Content-Length`와 실제 request stream은 multipart overhead를 포함해 10 MiB + 64 KiB로 제한하고, 추출 결과는 문서당 최대 512개 chunk로 제한한다. Chunk 제한을 넘으면 provider를 호출하지 않고 문서를 `failed`로 전환한다. 업로드는 organization 누적 storage, `pending`·`processing` backlog, 사용자별 최근 1시간 업로드 quota를 PostgreSQL transaction에서 검사한다. 한도를 넘으면 저장한 원본을 정리하고 `429`를 반환한다. 정상 업로드는 `202`와 상태 조회용 `Location`을 반환한다. Queue 등록에 실패해도 저장된 document ID와 `failed` 상태를 반환하므로 같은 ID로 retry할 수 있다. 검색은 `GET .../documents?q=<query>&limit=<1-100>`을 사용하고 `ready` 상태의 접근 가능한 chunk만 반환한다. query는 1–10,000자이며 `failed` 문서만 retry할 수 있다.
 
 User scope 문서 업로드 예시는 다음과 같다. `curl`이 파일 MIME type을 올바르게 전송하도록 `type`을 명시하라.
 
@@ -431,7 +433,7 @@ Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity�
 - `GET .../knowledge/candidates?limit=<1-100>`은 pending candidate를 오래된 순으로 반환하며 기본 limit은 50이다.
 - `GET .../knowledge/candidates/<candidateId>/duplicates`는 후보의 모든 entity를 한 번에 조회하고 entity key별로 같은 canonical name·scope의 읽기 가능한 기존 node를 반환한다. Semantic embedding을 생성하지 않는다.
 - 후보 조회와 승인은 source scope의 `manage` 권한을 따른다. Organization scope는 `admin`·`owner`, team scope는 team `manager` 이상, user scope는 본인만 검토한다.
-- `POST .../accept`와 `POST .../reject` body는 선택형 `{ "reason": string }`을 받으며 reason은 2,000자 이하다.
+- `POST .../accept`와 `POST .../reject` JSON object body는 필수이며 `reason`만 선택 항목이다. 사유가 없으면 `{}`를 보내고, 있으면 `{ "reason": string }`을 보낸다. reason은 2,000자 이하다.
 - 승인은 node·edge, candidate→resource 관계, reviewer audit을 하나의 transaction으로 저장한다. 이미 거절된 후보를 승인하거나 승인된 후보를 거절하면 `409`를 반환한다. Source 문서가 archive 등으로 `ready`가 아니면 `409` `{ "error": "knowledge candidate source document is not ready" }`를 반환한다. 이미 승인된 후보의 재승인은 멱등하며 현재 surviving resource로 해석한 기존 승인 결과를 반환한다.
 
 Pending 후보를 조회하고 승인하는 예시는 다음과 같다.
@@ -506,9 +508,11 @@ Streamable HTTP endpoint는 `/api/mcp`다. Better Auth session Bearer token은 s
 | `knowledge_search` | Knowledge node 검색 | `query`, `limit?` |
 | `knowledge_neighborhood` | Graph neighborhood 조회 | `nodeId`, `depth?`, `limit?` |
 
-검색 query는 1–10,000자, limit은 1–100이며 기본값은 10이다. `recall`은 권한이 있고 현재 유효한 Memory만 검색한다. `remembered` text는 각 항목에 `[memory id=<UUID> version=<현재 version>]`을 포함해 text만 읽는 MCP client도 잊을 대상을 지정할 수 있게 한다. 결과 하나를 최대 1,200자, 전체를 최대 4,000자로 제한한다. Structured content는 `{ remembered, count, counts, ranking, hits }`이며 각 hit는 공개 `memory`와 `lexicalScore`, `vectorScore`, `candidateScore`, `score`를 포함한다. Reranker 성공 시 `ranking: "rerank"`와 `rerankScore`를 반환하며 미설정·실패 시 `ranking: "hybrid"`로 복귀한다. `counts`는 재정렬 전 후보 수다. `memory.id`와 `memory.version`으로 잊을 대상을 식별한다. RAG·Graph를 함께 조회하려면 `context_search`를 사용하며 reranker는 통합 검색과 Memory 회상에 적용된다. `knowledge_neighborhood`의 depth와 limit은 HTTP API와 같은 제한을 사용한다.
+HTTP 개별 Memory·문서·Knowledge 검색과 MCP `document_search`·`knowledge_search`는 hybrid 검색을 사용한다. Reranker와 최소 relevance 하한은 HTTP 통합 검색, MCP `context_search`·`recall`에 적용한다. 하한은 재정렬 성공 시에만 적용하며 후보가 있어도 결과가 비어 있을 수 있다. 실패 시 hybrid 복귀에는 하한을 적용하지 않는다.
 
-`remember`는 HTTP Memory 생성과 같은 입력·scope·권한 검증을 사용하고 `{ memory }`를 반환한다. `forget`은 해당 Memory의 `manage` 권한과 현재 version을 요구한다. `expectedVersion`은 1 이상의 정수이며 HTTP `If-Match`와 같은 낙관적 동시성 계약이다. `changeReason`은 선택형 1–1,000자 문자열이다. 성공하면 `{ memoryId, forgotten: true }`를 반환한다. 없는 기억·이미 archive된 기억, 권한 부족, version 충돌은 `isError: true`로 반환한다. Archive는 원본과 revision을 보존하며 영구 삭제를 수행하지 않는다.
+검색 query는 1–10,000자, limit은 1–100이며 기본값은 10이다. `recall`은 권한이 있고 현재 유효한 Memory만 검색한다. `remembered` text는 각 항목에 `[memory id=<UUID> version=<현재 version>]`을 포함해 text만 읽는 MCP client도 잊을 대상을 지정할 수 있게 한다. 결과 하나를 최대 1,200자, 전체를 최대 4,000자로 제한한다. Structured content는 `{ remembered, count, counts, ranking, hits }`이며 각 hit는 공개 `memory`와 `lexicalScore`, `vectorScore`, `candidateScore`, `score`를 포함한다. Reranker 성공 시 `ranking: "rerank"`와 `rerankScore`를 반환하며 미설정·실패 시 `ranking: "hybrid"`로 복귀한다. `counts`는 종류별 조회 후보 수이며 실제 reranker 입력 수와 다를 수 있다. 재정렬 입력은 조회 후보에서 균형 있게 선택한 최대 100개다. `memory.id`와 `memory.version`으로 잊을 대상을 식별한다. RAG·Graph를 함께 조회하려면 `context_search`를 사용하며 reranker는 통합 검색과 Memory 회상에 적용된다. `knowledge_neighborhood`의 depth와 limit은 HTTP API와 같은 제한을 사용한다.
+
+`remember`는 HTTP Memory 생성과 같은 입력·scope 정책을 사용하고 `{ memory }`를 반환한다. 사용자 위임 없는 조직 Agent token은 organization scope만 사용하며 `accessGrants`를 생략해야 한다. 빈 배열도 허용하지 않는다. 사용자 요청에서 `accessGrants`를 명시하면 해당 scope의 `manage` 권한이 필요하다. MCP Memory 응답은 `capabilities`와 `accessGrants`를 포함하지 않는다. `forget`은 해당 Memory의 `manage` 권한과 현재 version을 요구한다. `expectedVersion`은 1 이상의 정수이며 HTTP `If-Match`와 같은 낙관적 동시성 계약이다. `changeReason`은 선택형 1–1,000자 문자열이다. 성공하면 `{ memoryId, forgotten: true }`를 반환한다. 없는 기억·이미 archive된 기억, 권한 부족, version 충돌은 `isError: true`로 반환한다. Archive는 원본과 revision을 보존하며 영구 삭제를 수행하지 않는다.
 
 서비스는 다음 순서로 도구를 호출한다.
 

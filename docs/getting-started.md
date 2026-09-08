@@ -50,7 +50,7 @@ docker compose up -d postgres minio minio-init
 pnpm db:migrate
 ```
 
-PostgreSQL은 `localhost:5433`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. Migration이 완료되면 application을 시작하라.
+PostgreSQL은 `localhost:5433`에서 열린다. `pnpm db:*`는 `.env.local`을 자동으로 읽지 않으므로 사용자 지정 DB 주소는 shell의 `DATABASE_URL`로도 지정하라. 상세 우선순위는 [migration 환경 설정](operations.md#database와-migration)을 따른다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. Migration이 완료되면 application을 시작하라.
 
 ```bash
 pnpm dev
@@ -79,7 +79,7 @@ curl -i http://localhost:3100/api/health
 
 최초 owner 준비는 active owner가 없는 설치에만 적용한다. Owner가 이미 있다면 `ADMIN_EMAILS`에 포함된 신규 사용자도 운영자 승인을 받아야 한다. Google·OIDC와 운영 환경의 password 가입 제한은 [운영 가이드](operations.md#환경-변수)를 확인하라.
 
-로그인 provider가 화면에 나타나지 않으면 `.env.local`에서 provider 설정을 확인하고 `pnpm dev`를 다시 시작하라. Password 가입에는 `AUTH_PASSWORD=true`와 `AUTH_PASSWORD_SIGNUP=true`가 모두 필요하다.
+로그인 provider가 화면에 나타나지 않으면 `.env.local`에서 provider 설정을 확인하고 `pnpm dev`를 다시 시작하라. 기존 설치의 [DB override](operations.md#database-설정-override)는 env보다 우선하므로 전역 설정에서 값의 출처를 확인하고 필요하면 override를 reset하라. Password 가입에는 `AUTH_PASSWORD=true`와 `AUTH_PASSWORD_SIGNUP=true`가 모두 필요하다.
 
 ## 4. 첫 Memory와 검색
 
@@ -129,7 +129,7 @@ RERANKER_API_KEY=replace-with-provider-key
 RERANKER_MODEL=voyageai/rerank-2.5-lite
 ```
 
-Reranker는 권한 필터가 끝난 후보만 받는다. 설정하지 않거나 provider가 실패하면 통합 검색은 기존 hybrid 순위를 사용한다.
+Reranker는 권한 필터가 끝난 후보만 받는다. 설정하지 않거나 provider가 실패하면 통합 검색과 Memory 회상은 기존 hybrid 순위를 사용한다.
 
 ### AI Knowledge extraction
 

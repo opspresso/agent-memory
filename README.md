@@ -40,7 +40,7 @@ AUTH_PASSWORD_SIGNUP=true
 ADMIN_EMAILS=your-admin@example.com
 ```
 
-그다음 Database migration과 application을 실행하라.
+그다음 Database migration과 application을 실행하라. 아래 명령은 기본 Compose DB 주소를 사용한다. `.env.local`의 `DATABASE_URL`을 바꿨다면 [migration 환경 설정](docs/operations.md#database와-migration)에 따라 같은 값을 shell에도 지정하라.
 
 ```bash
 docker compose up -d postgres minio minio-init

@@ -1,6 +1,6 @@
 # 사용자 가이드
 
-운영 콘솔은 조직의 Memory, RAG 문서, Knowledge Graph를 검색하고 관리하는 화면이다. 좌측 메뉴에서 `통합 검색`, `Memory`, `문서 수집`, `Knowledge Graph`, `AI 후보 검토`, `Agent 연결`으로 이동하고, 조직 `admin`·`owner`에게는 `회원`, `팀`, `설정` 관리 메뉴가, team `manager`에게는 `팀` 메뉴가 추가로 표시된다. 모든 화면은 로그인 사용자와 활성 조직의 멤버십·scope 권한을 적용한다. 같은 내용을 사이트에서 읽으려면 로그인 전후에 `/guide`를 열거나 좌측 메뉴 하단의 `가이드`를 선택하라.
+운영 콘솔은 조직의 Memory, RAG 문서, Knowledge Graph를 검색하고 관리하는 화면이다. 좌측 메뉴에서 `통합 검색`, `Memory`, `문서 수집`, `Knowledge Graph`, `AI 후보 검토`, `Agent 연결`으로 이동하고, 조직 `admin`·`owner`에게는 `회원`, `팀`, `설정` 관리 메뉴가, team `manager`에게는 `팀` 메뉴가 추가로 표시된다. 지식 화면은 로그인 사용자와 활성 조직의 멤버십·scope 권한을 적용한다. 전역 admin은 조직 가입 상태와 관계없이 상단 계정 메뉴의 `설정`에서 애플리케이션 설정을 관리할 수 있다. 같은 내용을 사이트에서 읽으려면 로그인 전후에 `/guide`를 열거나 좌측 메뉴 하단의 `가이드`를 선택하라.
 
 ## 최초 로그인과 가입 요청
 
@@ -33,7 +33,7 @@ Memory는 HTTP API의 `accessGrants`로 같은 조직의 사용자·팀에 추�
 
 검색어와 종류는 URL에 보존되어 링크 공유와 뒤로·앞으로 이동에 사용할 수 있다. 처음 방문한 상태와 검색 결과가 없는 상태는 서로 다른 안내를 제공한다. 모바일에서는 목록과 선택한 상세를 전환하고 `목록으로 돌아가기`로 탐색을 이어간다.
 
-Knowledge·문서 상세의 `검색 진단 정보`를 펼치면 상대 관련도와 lexical·vector score를 확인한다. 상대 관련도는 현재 결과 집합에서 가장 높은 최종 score를 100%로 정규화한 표시이며 정확도나 신뢰 확률이 아니다. Reranker가 설정되면 reranker relevance, 그렇지 않거나 provider fallback이 발생하면 hybrid score를 사용한다.
+Knowledge·문서 상세의 `검색 진단 정보`를 펼치면 상대 관련도와 lexical·vector score를 확인한다. 상대 관련도는 현재 결과 집합에서 가장 높은 최종 score를 100%로 정규화한 표시이며 정확도나 신뢰 확률이 아니다. reranker는 `모든 지식` 검색과 MCP `recall`에 적용한다. 개별 `Memory`·`Documents`·`Graph` 검색은 hybrid score를 사용한다. 재정렬이 성공하면 최종 score는 reranker relevance이며, 미설정·실패 시 hybrid score를 사용한다. 최소 relevance 설정은 재정렬 성공 시에만 적용하며 결과가 모두 제외될 수 있다.
 
 ## Memory lifecycle
 
@@ -44,7 +44,7 @@ Knowledge·문서 상세의 `검색 진단 정보`를 펼치면 상대 관련도
 ### Revision 생성
 
 1. 상세의 `수정` 탭에서 title 또는 content를 수정한다.
-2. 다음 사용자가 변경 이유를 이해할 수 있도록 `변경 사유`를 입력한다.
+2. 필요하면 다음 사용자가 변경 이유를 이해할 수 있도록 선택 항목인 `변경 사유`를 입력한다.
 3. `Revision 저장`을 선택한다.
 
 저장 요청은 화면을 열 때 받은 현재 version을 `If-Match`로 전송한다. 다른 사용자가 먼저 수정했다면 `409` 충돌을 표시하며 최신 상태를 다시 불러와야 한다.
