@@ -140,7 +140,7 @@ AI candidate는 graph와 분리된 검토 queue다. 거절은 graph를 변경하
 
 통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node 후보를 각각 검색한다. Semantic search가 활성화되어도 query embedding은 한 번만 생성해 세 저장소 검색에 공유한다. Reranker가 설정되면 최종 limit의 최대 4배이자 총 100개 이하인 후보를 source별로 균형 있게 구성하고, 권한 필터가 완료된 후보만 외부 reranker에 보낸다. Reranker 입력은 query 4,000자, 후보당 8,000자로 제한한다. 성공하면 relevance score로 최종 순위를 정하고, timeout·provider 오류·잘못된 응답이면 기존 hybrid score 순위로 복귀한다. 모든 AI call은 인증 access 또는 document creator에서 organization·user quota key를 만들고, instance-local limiter와 PostgreSQL minute bucket을 모두 통과해야 한다. 따라서 여러 replica와 worker가 같은 tenant·principal budget을 공유한다. API와 MCP는 동일한 application operation을 사용한다.
 
-MCP `recall`은 같은 통합 검색 결과를 Agent 실행 전 prompt에 넣기 위한 compact text로 변환한다. 결과 하나는 최대 1,200자, 전체 응답은 최대 4,000자이며 HTTP와 일반 `context_search`의 구조화 결과를 대체하지 않는다.
+서비스의 기억 lifecycle은 MCP `remember`·`recall`·`forget`으로 제공한다. `remember`는 Memory 생성 use case를, `forget`은 manage 권한과 현재 version을 검증하는 archive use case를 사용한다. Archive 후에는 회상·검색에서 제외하고 revision과 provenance는 보존한다. `recall`은 통합 검색 대신 Memory 검색 use case를 사용하며, 결과 하나 최대 1,200자·전체 최대 4,000자의 `remembered` text와 ID·version을 포함한 구조화 Memory 검색 결과를 반환한다. RAG·Knowledge Graph를 함께 검색하려면 `context_search`를 사용한다.
 
 Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같은 instance-local request limiter를 공유한다. 동시 실행 수와 분당 합산 호출 수를 넘으면 provider를 호출하지 않는다. Embedding 기반 HTTP 요청은 `429`와 `Retry-After`를 반환하고, reranker는 hybrid 순위로 복귀하며, worker의 제한 초과는 pg-boss retry로 복구한다.
 

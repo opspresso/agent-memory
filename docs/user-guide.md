@@ -179,12 +179,12 @@ MCP에서 제공하는 tool은 다음과 같다.
 
 - `context_search`
 - `recall`
-- `memory_search`
-- `memory_create`
+- `remember`
+- `forget`
 - `document_search`
 - `knowledge_search`
 - `knowledge_neighborhood`
 
-Agent Studio에서 version에 서버를 직접 bind하고 `memoryRecall`을 켜면 실행 전 `recall`을 호출해 관련 Context를 system prompt에 넣는다. Binding의 도구 선택에서 `recall`을 허용해야 하며 dynamic discovery만으로 추가된 서버는 자동 회상 대상이 아니다. 이 응답은 전체 4,000자로 제한되며 reranker가 활성화된 배포에서는 통합 순위를 사용한다. Reranker가 실패해도 권한이 적용된 hybrid 결과로 복귀한다.
+Agent Studio에서 version에 서버를 직접 bind하고 `memoryRecall`을 켜면 실행 전 `recall`을 호출해 관련 Memory를 system prompt에 넣는다. Binding의 도구 선택에서 `recall`을 허용해야 하며 dynamic discovery만으로 추가된 서버는 자동 회상 대상이 아니다. `remembered` text는 전체 4,000자로 제한된다. 서비스는 `remember`로 기억을 저장하고, `recall` 결과의 Memory ID·version을 `forget`에 전달해 기억을 archive한다. 잊기에는 해당 Memory의 manage 권한이 필요하다. RAG·Graph와 reranker를 포함한 통합 검색은 `context_search`를 사용한다.
 
 재생성은 이전 token을 즉시 무효화하며 폐기하면 연결된 Agent가 더 이상 인증되지 않는다. Hash만 저장된 기존 token은 한 번 재생성해야 `Token 보기`를 사용할 수 있다. Token lifecycle과 MCP client 설정 예시는 [HTTP API와 MCP](api.md#조직-agent-token)를 따른다.

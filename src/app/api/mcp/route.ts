@@ -8,6 +8,7 @@ import {
 } from "@/lib/knowledge-service";
 import { createAgentMemoryMcpServer } from "@/lib/mcp-server";
 import {
+  archiveMemoryRecord,
   createMemoryRecord,
   searchMemoryRecords
 } from "@/lib/memory-service";
@@ -25,6 +26,7 @@ async function handleMcpRequest(request: Request) {
   const server = createAgentMemoryMcpServer(authorization.access, {
     searchContext: searchContextRecords,
     createMemory: createMemoryRecord,
+    archiveMemory: archiveMemoryRecord,
     searchMemories: searchMemoryRecords,
     searchDocuments: searchDocumentRecords,
     searchKnowledge: searchKnowledgeNodeRecords,

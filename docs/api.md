@@ -499,14 +499,26 @@ Streamable HTTP endpoint는 `/api/mcp`다. Better Auth session Bearer token은 s
 | Tool | 역할 | 주요 입력 |
 | --- | --- | --- |
 | `context_search` | 전체 Context 통합 검색 | `query`, `limit?` |
-| `recall` | Agent 실행 전 prompt에 넣을 compact Context 회상 | `query`, `limit?` |
-| `memory_search` | Memory 검색 | `query`, `limit?` |
-| `memory_create` | Scoped memory 생성 | Memory 생성 입력 |
+| `remember` | Scoped Memory 저장 | Memory 생성 입력 |
+| `recall` | Memory 회상: compact text와 구조화 검색 결과 | `query`, `limit?` |
+| `forget` | Memory archive로 회상·검색에서 제외 | `memoryId`, `expectedVersion`, `changeReason?` |
 | `document_search` | 처리된 문서 chunk 검색 | `query`, `limit?` |
 | `knowledge_search` | Knowledge node 검색 | `query`, `limit?` |
 | `knowledge_neighborhood` | Graph neighborhood 조회 | `nodeId`, `depth?`, `limit?` |
 
-검색 query는 1–10,000자, limit은 1–100이며 기본값은 10이다. `recall`은 통합 Context 검색을 사용하되 결과 하나를 최대 1,200자, 전체 text를 최대 4,000자로 제한하고 `{ remembered, count, ranking }` structured content를 함께 반환한다. `knowledge_neighborhood`의 depth와 limit은 HTTP API와 같은 제한을 사용한다.
+검색 query는 1–10,000자, limit은 1–100이며 기본값은 10이다. `recall`은 권한이 있고 현재 유효한 Memory만 검색한다. `remembered` text는 결과 하나를 최대 1,200자, 전체를 최대 4,000자로 제한한다. Structured content는 `{ remembered, count, ranking: "hybrid", hits }`이며 각 hit는 공개 `memory`와 `lexicalScore`, `vectorScore`, `score`를 포함한다. `memory.id`와 `memory.version`으로 잊을 대상을 식별한다. RAG·Graph를 함께 조회하려면 `context_search`를 사용하며 reranker는 통합 검색에 적용된다. `knowledge_neighborhood`의 depth와 limit은 HTTP API와 같은 제한을 사용한다.
+
+`remember`는 HTTP Memory 생성과 같은 입력·scope·권한 검증을 사용하고 `{ memory }`를 반환한다. `forget`은 해당 Memory의 `manage` 권한과 현재 version을 요구한다. `expectedVersion`은 1 이상의 정수이며 HTTP `If-Match`와 같은 낙관적 동시성 계약이다. `changeReason`은 선택형 1–1,000자 문자열이다. 성공하면 `{ memoryId, forgotten: true }`를 반환한다. 없는 기억·이미 archive된 기억, 권한 부족, version 충돌은 `isError: true`로 반환한다. Archive는 원본과 revision을 보존하며 영구 삭제를 수행하지 않는다.
+
+서비스는 다음 순서로 도구를 호출한다.
+
+```jsonl
+{"name":"remember","arguments":{"kind":"fact","scope":{"kind":"organization"},"title":"Release policy","content":"Deploy after verification.","source":{"type":"agent","agentId":"release-service"}}}
+{"name":"recall","arguments":{"query":"Release policy","limit":5}}
+{"name":"forget","arguments":{"memoryId":"<returned memory.id>","expectedVersion":1,"changeReason":"Superseded"}}
+```
+
+`forget`의 ID와 version은 실제 `remember` 또는 `recall` 응답에서 가져온다. 서비스 principal은 organization scope만 사용하며 사용자 위임은 아래 인증 계약을 따른다.
 
 MCP client에는 endpoint와 Agent token Bearer header를 함께 설정하라. 실제 설정 형식은 사용하는 client가 지원하는 Streamable HTTP server 형식을 따른다.
 
