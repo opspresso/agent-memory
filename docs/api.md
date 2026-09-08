@@ -722,3 +722,14 @@ Token은 client의 secret 또는 environment variable 기능으로 주입하고 
 ### 문서 본문 페이지
 
 `GET /api/documents/{documentId}/chunks?limit=25&offset=0`는 ready 문서의 처리된 본문을 순서대로 읽는다. 응답은 `{ document, chunks: [{ id, ordinal, content, metadata }], count, nextOffset }`이며 Document는 기존 공개 응답 형식이다. `ordinal` 오름차순(ID로 동률 정렬)으로 조회하며 `limit`·`offset` 범위와 `count`·`nextOffset` 의미는 위 library endpoint와 같다. 마지막 page 이후에는 `chunks: []`, `nextOffset: null`을 반환한다. 문서 조회와 본문 page는 같은 읽기 transaction snapshot을 사용한다. 다른 조직, 읽기 권한 없음, archived·pending·processing·failed source는 모두 `404`로 처리한다. 원본 파일 bytes나 object key, embedding은 반환하지 않는다.
+
+## 멱등 수집
+
+Memory 생성 HTTP API와 MCP `remember`는 선택적 `idempotencyKey`(trim 후 1–256자)를 받는다.
+같은 설치 조직·인증 사용자·operation·key에 같은 payload를 다시 보내면 기존 Memory를 반환한다.
+다른 payload는 HTTP 409 또는 MCP tool error다. 현재 scope 권한을 다시 확인하며 archived resource를
+새로 만들지 않는다. 인증 방식은 기존 session 또는 조직 Agent Bearer + 검증된 email 위임을 유지한다.
+
+문서 업로드 유스케이스도 같은 receipt 계약을 제공한다. 문서 수집 MCP 노출과 멱등 retry 도구는
+후속 개발 대상이며 현재 공개 도구 목록에는 포함되지 않는다. 저장된 pending 문서의 업로드를
+재호출하면 같은 문서 ID로 queue 등록을 복구한다. 새 원본·문서를 만들지 않는다.

@@ -11,11 +11,14 @@ import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import type { MemoryEmbedding } from "@/domain/memory/memory";
 import { observeRetrieval } from "@/infrastructure/observability/telemetry";
 
-import { memoryRepository, textEmbeddingService } from "./container";
+import { memoryRepository, textEmbeddingService, ingestionReceiptRepository } from "./container";
+import { ingestionFingerprint } from "./ingestion-fingerprint";
 
 const clock = () => new Date();
 
 export const createMemoryRecord = buildCreateMemory({
+  receipts: ingestionReceiptRepository,
+  fingerprint: ingestionFingerprint,
   clock,
   generateId: randomUUID,
   repository: memoryRepository,

@@ -3,6 +3,7 @@ import { MemoryNotFoundError } from "@/application/memory/get-memory";
 import { MemoryVersionConflictError } from "@/application/memory/revise-memory";
 import { InvalidMemorySearchError } from "@/application/memory/search-memories";
 import { InvalidMemoryError } from "@/domain/memory/memory";
+import { IngestionConflictError } from "@/domain/shared/ingestion-receipt";
 import type { Memory } from "@/domain/memory/memory";
 import type { MemoryVersionSnapshot } from "@/domain/memory/memory";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
@@ -13,6 +14,7 @@ import { aiErrorResponse } from "./ai-http";
 export { readJsonBody } from "./json-body";
 
 export function memoryErrorResponse(error: unknown): Response | null {
+  if (error instanceof IngestionConflictError) return Response.json({ error: error.message }, { status: 409 });
   const aiResponse = aiErrorResponse(error);
   if (aiResponse) {
     return aiResponse;

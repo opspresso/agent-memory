@@ -38,6 +38,7 @@ export async function POST(request: Request) {
 
   try {
     const memory = await createMemoryRecord({
+      ...(parsed.data.idempotencyKey ? { idempotencyKey: parsed.data.idempotencyKey } : {}),
       access: authorization.access,
       kind: parsed.data.kind,
       scope,

@@ -58,6 +58,7 @@ export const memoryAccessGrantsSchema = z
   );
 
 export const createMemorySchema = z.object({
+  idempotencyKey: z.string().trim().min(1).max(256).optional(),
   kind: z.enum(memoryKinds),
   scope: memoryScopeSchema,
   title: z.string().trim().min(1).max(500),

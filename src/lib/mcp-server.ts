@@ -23,6 +23,7 @@ import type {
 import type { Memory } from "@/domain/memory/memory";
 import { InvalidMemoryError } from "@/domain/memory/memory";
 import { AiRequestLimitExceededError } from "@/domain/shared/ai-request-limiter";
+import { IngestionConflictError } from "@/domain/shared/ingestion-receipt";
 
 import { publicDocumentHit } from "./document-http";
 import { publicContextSearchResult } from "./context-http";
@@ -91,6 +92,7 @@ async function executeMcpTool<T>(execute: () => Promise<T>) {
     return await execute();
   } catch (error) {
     const publicError =
+      error instanceof IngestionConflictError ||
       error instanceof InvalidContextSearchError ||
       error instanceof InvalidDocumentSearchError ||
       error instanceof KnowledgeNodeNotFoundError ||
@@ -169,6 +171,7 @@ export function createAgentMemoryMcpServer(
     },
     async (input) => executeMcpTool(async () => {
       const memory = await operations.createMemory({
+        ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
         access,
         kind: input.kind,
         scope: resolveScopedResource(

@@ -1,4 +1,9 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { randomUUID, createHash } from "node:crypto";
+import { buildCreateMemory } from "@/application/memory/create-memory";
+import { buildUploadDocument } from "@/application/document/upload-document";
+import { createIngestionReceiptRepository } from "@/infrastructure/database/repositories/ingestion-receipt-repository";
+import { ingestionFingerprint } from "@/lib/ingestion-fingerprint";
 import { and, eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
@@ -2397,4 +2402,45 @@ describe("PostgreSQL schema", () => {
       constraint: "memories_organization_team_fk"
     });
   });
+  it("atomically deduplicates memory and document resources with their ingestion receipts", async () => {
+    const organizationId = randomUUID();
+    const userId = randomUUID();
+    const now = new Date("2026-09-09T00:00:00Z");
+    await pool.query("INSERT INTO users (id, email, name) VALUES ($1, $2, 'Ingestion User')", [userId, `${userId}@example.test`]);
+    await seedOrganization(createOrganization({ id: organizationId, slug: `ingestion-${organizationId}`, name: "Ingestion", now }), userId);
+    const access: OrganizationAccess = { organizationId, userId, role: "owner", teams: [] };
+    const scope = { kind: "user" as const, organizationId, userId };
+    const receipts = createIngestionReceiptRepository(db);
+    const memoryRepository = createMemoryRepository(db);
+    const create = buildCreateMemory({ clock: () => now, generateId: randomUUID, repository: memoryRepository,
+      receipts, fingerprint: ingestionFingerprint });
+    const input = { access, scope, idempotencyKey: "memory-event", kind: "fact" as const,
+      title: "A fact", content: "Grounded content", source: { type: "agent" as const } };
+    const memories = await Promise.all(Array.from({ length: 8 }, () => create(input)));
+    expect(new Set(memories.map((memory) => memory.id)).size).toBe(1);
+    await expect(create({ ...input, content: "Different content" })).rejects.toThrow("different payload");
+    expect((await receipts.find({ organizationId, userId, operation: "memory.create", key: "memory-event" }))?.resourceId).toBe(memories[0]?.id);
+
+    const objects = new Map<string, Uint8Array>();
+    const upload = buildUploadDocument({ clock: () => now, generateId: randomUUID,
+      checksum: (bytes) => createHash("sha256").update(bytes).digest("hex"), receipts, fingerprint: ingestionFingerprint,
+      objectStorage: { put: async (key, bytes) => { objects.set(key, bytes); },
+        get: async (key) => { const bytes = objects.get(key); if (!bytes) throw new Error("missing"); return bytes; },
+        delete: async (key) => { objects.delete(key); } },
+      repository: createDocumentRepository(db), queue: { enqueue: async () => "queued" },
+      limits: { maximumOrganizationStorageBytes: 1000, maximumPendingDocuments: 1, maximumUserUploadsPerHour: 1 } });
+    const documentInput = { access, scope, idempotencyKey: "document-event", title: "Transcript",
+      mimeType: "text/markdown", content: new TextEncoder().encode("Transcript text") };
+    const documents = await Promise.all(Array.from({ length: 8 }, () => upload(documentInput)));
+    expect(new Set(documents.map((document) => document.id)).size).toBe(1);
+    expect(objects.size).toBe(1);
+    await expect(upload({ ...documentInput, title: "Other title" })).rejects.toThrow("different payload");
+    expect((await receipts.find({ organizationId, userId, operation: "document.upload", key: "document-event" }))?.resourceId).toBe(documents[0]?.id);
+    const failedId = randomUUID();
+    await expect(memoryRepository.save({ ...memories[0]!, id: failedId, scope: { kind: "team", organizationId, teamId: randomUUID() } }, {
+      organizationId, userId, operation: "memory.create", key: "rollback", payloadHash: "a".repeat(64), resourceId: failedId, createdAt: now
+    })).rejects.toThrow();
+    expect(await receipts.find({ organizationId, userId, operation: "memory.create", key: "rollback" })).toBeNull();
+  });
+
 });

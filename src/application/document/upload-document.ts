@@ -16,8 +16,11 @@ import type {
   DocumentIngestionQueue,
   DocumentObjectStorage
 } from "@/domain/document/document-services";
+import { IngestionConflictError, IngestionReplayError, type IngestionReceipt,
+  type IngestionReceiptRepository } from "@/domain/shared/ingestion-receipt";
 
 export interface UploadDocumentInput {
+  readonly idempotencyKey?: string;
   readonly access: OrganizationAccess;
   readonly scope: DocumentScope;
   readonly title: string;
@@ -28,6 +31,8 @@ export interface UploadDocumentInput {
 }
 
 export interface UploadDocumentDependencies {
+  readonly receipts?: IngestionReceiptRepository;
+  readonly fingerprint?: (input: unknown) => string;
   readonly checksum: (content: Uint8Array) => string;
   readonly clock: () => Date;
   readonly generateId: () => string;
@@ -58,6 +63,26 @@ export function buildUploadDocument(dependencies: UploadDocumentDependencies) {
     }
 
     const now = dependencies.clock();
+    const identity = input.idempotencyKey ? { organizationId: input.access.organizationId, userId: input.access.userId,
+      operation: "document.upload" as const, key: input.idempotencyKey } : undefined;
+    if (identity && (!dependencies.receipts || !dependencies.fingerprint)) throw new Error("idempotent document upload is not configured");
+    const checksum = dependencies.checksum(input.content);
+    const payloadHash = identity ? dependencies.fingerprint!({ scope: input.scope, title: input.title,
+      sourceUri: input.sourceUri, mimeType: input.mimeType, checksum, metadata: input.metadata ?? {} }) : undefined;
+    const reuse = async (receipt: IngestionReceipt): Promise<Document> => {
+      if (receipt.payloadHash !== payloadHash) throw new IngestionConflictError();
+      const document = await dependencies.repository.findById(input.access.organizationId, receipt.resourceId);
+      if (!document || document.status === "archived" || !canAccessScopedResource(input.access, "read", document.scope)) {
+        throw new DocumentAccessDeniedError();
+      }
+      // Repair a crash between the resource transaction and queue publication.
+      if (document.status === "pending") await dependencies.queue.enqueue(input.access.organizationId, document.id);
+      return document;
+    };
+    if (identity) {
+      const previous = await dependencies.receipts!.find(identity);
+      if (previous) return reuse(previous);
+    }
     const documentId = dependencies.generateId();
     const objectKey = `organizations/${input.access.organizationId}/documents/${documentId}/source`;
     const document = createDocument({
@@ -66,7 +91,7 @@ export function buildUploadDocument(dependencies: UploadDocumentDependencies) {
       title: input.title,
       ...(input.sourceUri ? { sourceUri: input.sourceUri } : {}),
       objectKey,
-      checksum: dependencies.checksum(input.content),
+      checksum,
       mimeType: input.mimeType,
       sizeBytes: input.content.byteLength,
       ...(input.metadata ? { metadata: input.metadata } : {}),
@@ -80,14 +105,20 @@ export function buildUploadDocument(dependencies: UploadDocumentDependencies) {
       document.mimeType
     );
     try {
-      const saved = await dependencies.repository.save(
-        document,
-        dependencies.limits
-      );
+      const saved = identity
+        ? await dependencies.repository.save(document, dependencies.limits,
+          { ...identity, payloadHash: payloadHash!, resourceId: document.id, createdAt: now })
+        : await dependencies.repository.save(document, dependencies.limits);
       if (saved !== "saved") {
         throw new DocumentQuotaExceededError(saved);
       }
     } catch (error) {
+      if (identity) {
+        // A failed COMMIT response does not prove rollback. Keep bytes if the
+        // resource committed, or if the database cannot establish its outcome.
+        const committed = await dependencies.receipts!.find(identity);
+        if (committed?.resourceId === document.id) return reuse(committed);
+      }
       try {
         await dependencies.objectStorage.delete(document.objectKey);
       } catch (cleanupError) {
@@ -96,6 +127,7 @@ export function buildUploadDocument(dependencies: UploadDocumentDependencies) {
           "document persistence and object cleanup both failed"
         );
       }
+      if (error instanceof IngestionReplayError) return reuse(error.receipt);
       throw error;
     }
 

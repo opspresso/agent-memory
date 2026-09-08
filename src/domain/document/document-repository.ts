@@ -1,4 +1,5 @@
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import type { IngestionReceipt } from "@/domain/shared/ingestion-receipt";
 
 import type { Document, DocumentChunk } from "./document";
 
@@ -45,7 +46,8 @@ export type SaveDocumentResult =
 export interface DocumentRepository {
   save(
     document: Document,
-    limits?: DocumentUploadLimits
+    limits?: DocumentUploadLimits,
+    receipt?: IngestionReceipt
   ): Promise<SaveDocumentResult>;
   findById(organizationId: string, documentId: string): Promise<Document | null>;
   findChunkById(

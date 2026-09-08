@@ -30,6 +30,8 @@ import type {
 import { documentProcessingLeaseMilliseconds } from "@/domain/document/document-services";
 
 import type { AgentMemoryDatabase } from "../client";
+import { assertIngestionResource, type IngestionReceipt } from "@/domain/shared/ingestion-receipt";
+import { insertIngestionReceipt, refuseIngestionReplay } from "./ingestion-receipt-repository";
 import { documentChunks, documents } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
 import { scopedReadPredicate } from "./scope-predicates";
@@ -134,12 +136,14 @@ export function createDocumentRepository(
 
   async function saveWithinLimits(
     document: Document,
-    limits: DocumentUploadLimits
+    limits: DocumentUploadLimits,
+    receipt?: IngestionReceipt
   ): Promise<SaveDocumentResult> {
     return db.transaction(async (transaction) => {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${document.scope.organizationId}, 0))`
       );
+      if (receipt) await refuseIngestionReplay(transaction, receipt);
       const oneHourBefore = new Date(document.createdAt.getTime() - 3_600_000);
       const [usage] = await transaction
         .select({
@@ -171,15 +175,24 @@ export function createDocumentRepository(
       ) {
         return "user_rate_exceeded";
       }
+      if (receipt) await insertIngestionReceipt(transaction, receipt);
       await transaction.insert(documents).values(documentValues(document));
       return "saved";
     });
   }
 
   return {
-    async save(document, limits) {
+    async save(document, limits, receipt) {
+      if (receipt) assertIngestionResource(receipt, "document.upload", document.scope.organizationId, document.createdBy, document.id);
       if (limits) {
-        return saveWithinLimits(document, limits);
+        return saveWithinLimits(document, limits, receipt);
+      }
+      if (receipt) {
+        return db.transaction(async (transaction) => {
+          await insertIngestionReceipt(transaction, receipt);
+          await transaction.insert(documents).values(documentValues(document));
+          return "saved" as const;
+        });
       }
       await db.insert(documents).values(documentValues(document));
       return "saved";

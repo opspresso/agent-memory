@@ -10,8 +10,12 @@ import type { MemoryRepository } from "@/domain/memory/memory-repository";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
+import { canAccessMemory } from "@/domain/memory/memory-access";
+import { IngestionConflictError, IngestionReplayError, type IngestionReceipt,
+  type IngestionReceiptRepository } from "@/domain/shared/ingestion-receipt";
 
 export interface CreateMemoryInput {
+  readonly idempotencyKey?: string;
   readonly access: OrganizationAccess;
   readonly kind: MemoryKind;
   readonly scope: MemoryScope;
@@ -24,6 +28,8 @@ export interface CreateMemoryInput {
 }
 
 export interface CreateMemoryDependencies {
+  readonly receipts?: IngestionReceiptRepository;
+  readonly fingerprint?: (input: unknown) => string;
   readonly clock: () => Date;
   readonly generateId: () => string;
   readonly embeddingService?: TextEmbeddingService;
@@ -49,6 +55,23 @@ export function buildCreateMemory(dependencies: CreateMemoryDependencies) {
     const action = input.accessGrants === undefined ? "write" : "manage";
     if (!canAccessScopedResource(input.access, action, input.scope)) {
       throw new MemoryAccessDeniedError();
+    }
+
+    const identity = input.idempotencyKey ? { organizationId: input.access.organizationId, userId: input.access.userId,
+      operation: "memory.create" as const, key: input.idempotencyKey } : undefined;
+    if (identity && (!dependencies.receipts || !dependencies.fingerprint)) throw new Error("idempotent memory creation is not configured");
+    const payloadHash = identity ? dependencies.fingerprint!({ kind: input.kind, scope: input.scope,
+      title: input.title, content: input.content, source: input.source, accessGrants: input.accessGrants ?? [],
+      validFrom: input.validFrom?.toISOString(), expiresAt: input.expiresAt?.toISOString() }) : undefined;
+    const reuse = async (receipt: IngestionReceipt): Promise<Memory> => {
+      if (receipt.payloadHash !== payloadHash) throw new IngestionConflictError();
+      const memory = await dependencies.repository.findById(input.access.organizationId, receipt.resourceId);
+      if (!memory || memory.status !== "active" || !canAccessMemory(input.access, "read", memory)) throw new MemoryAccessDeniedError();
+      return memory;
+    };
+    if (identity) {
+      const previous = await dependencies.receipts!.find(identity);
+      if (previous) return reuse(previous);
     }
 
     const memoryWithoutEmbedding = createMemory({
@@ -92,7 +115,16 @@ export function buildCreateMemory(dependencies: CreateMemoryDependencies) {
         })
       : memoryWithoutEmbedding;
 
-    await dependencies.repository.save(memory);
+    try {
+      if (identity) {
+        await dependencies.repository.save(memory, { ...identity, payloadHash: payloadHash!, resourceId: memory.id, createdAt: now });
+      } else {
+        await dependencies.repository.save(memory);
+      }
+    } catch (error) {
+      if (error instanceof IngestionReplayError) return reuse(error.receipt);
+      throw error;
+    }
 
     return memory;
   };
