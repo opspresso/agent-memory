@@ -293,7 +293,7 @@ curl -i \
 
 HTTP의 Memory 조회·검색 응답은 호출자 기준 `capabilities.write`와 `capabilities.manage`를 포함한다. `accessGrants`는 `manage` 권한이 있는 호출자에게만 노출한다.
 
-Revision은 `GET .../versions?limit=<1-100>&before=<version>`으로 역순 조회한다. 기본 limit은 50이며 `manage` 권한이 필요하다. `before`는 2 이상의 정수다. 응답은 `{ versions, nextBefore? }`이며 다음 페이지가 있으면 반환된 `nextBefore`를 다음 요청의 `before`로 사용한다.
+Revision은 `GET .../versions?limit=<1-100>&before=<version>`으로 역순 조회한다. 기본 limit은 50이며 `manage` 권한이 필요하다. `before`는 2 이상의 정수다. 응답은 `{ versions, nextBefore? }`이며 `nextBefore`가 있으면 다음 요청의 `before`로 사용한다. 최초 version인 1에 도달하거나 페이지가 limit보다 짧으면 `nextBefore`를 생략한다.
 
 ## 문서
 
