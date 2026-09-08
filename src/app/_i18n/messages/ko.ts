@@ -334,12 +334,12 @@ export const ko: Messages = {
   "workspace.studioTemplateDescription":
     "{organizationSlug} 조직에 저장된 결정·규칙·경험, 문서 근거, 지식 간 관계를 확인할 때 사용합니다. Memory·RAG·Knowledge Graph를 검색하고 공유할 정보를 조직 범위 Memory로 저장합니다.",
   "workspace.studioTemplateContent":
-    "# {organizationSlug} 조직 Agent Memory 운영 메모\n\n- 접근 범위: 조직 Agent token은 organization scope만 허용한다. Studio의 project·사용자·대화 header로 개인·팀 범위가 부여되지 않는다.\n- 제공 기능: Memory 생성·검색, RAG 문서 검색, Knowledge Graph 검색·관계 탐색이다. 문서 수집과 Graph 관리는 Agent Memory 콘솔에서 수행한다.\n- 연결 확인: Test connection은 도구 목록 조회를 검사한다. 저장 후 사용할 project의 version에 서버를 직접 연결하고 실제 실행도 확인한다.\n- 자동 회상: version의 memoryRecall을 켜고 recall 도구를 허용한다. 자동 검색으로 추가된 서버는 실행 전 회상 대상이 아니다.\n- Token 변경: 재생성하면 Studio의 Authorization header를 갱신한다. Version에 같은 header를 덮어쓴 경우 해당 값도 갱신한다.\n\n이 Content는 모델에 전달되지 않는 운영자 메모다. 정보 저장 조건과 응답 규칙은 version의 system prompt 또는 연결한 Skill에 작성한다.",
+    "# {organizationSlug} 조직 Agent Memory 운영 메모\n\n- 접근 범위: 조직 Agent token은 organization scope만 허용한다. Studio의 project·사용자·대화 header로 개인·팀 범위가 부여되지 않는다.\n- 제공 기능: Memory 저장·회상·잊기(remember·recall·forget), RAG 문서 검색, Knowledge Graph 검색·관계 탐색이다. 문서 수집과 Graph 관리는 Agent Memory 콘솔에서 수행한다.\n- 연결 확인: Test connection은 도구 목록 조회를 검사한다. 저장 후 사용할 project의 version에 서버를 직접 연결하고 실제 실행도 확인한다.\n- 자동 회상: version의 memoryRecall을 켜고 recall 도구를 허용한다. 자동 검색으로 추가된 서버는 실행 전 회상 대상이 아니다.\n- Token 변경: 재생성하면 Studio의 Authorization header를 갱신한다. Version에 같은 header를 덮어쓴 경우 해당 값도 갱신한다.\n\n이 Content는 모델에 전달되지 않는 운영자 메모다. 정보 저장 조건과 응답 규칙은 version의 system prompt 또는 연결한 Skill에 작성한다.",
   "workspace.studioTemplateCopyField": "등록 템플릿 {field} 복사",
   "workspace.studioTemplateTokenHint":
     "Headers의 Key는 Authorization, Value는 Bearer 뒤에 공백과 실제 Agent token을 입력합니다. <amt_token>을 위에서 생성하거나 확인한 token으로 교체하세요.",
   "workspace.studioTemplateNextSteps":
-    "등록 후 Test connection으로 도구 목록을 확인하고 사용할 project의 version에 서버를 직접 연결하세요. 실행 전 Context 조회가 필요하면 memoryRecall을 켜고 recall 도구를 허용하세요. 모델이 따라야 할 저장·응답 규칙은 version의 system prompt 또는 Skill에 작성하세요.",
+    "등록 후 Test connection으로 도구 목록을 확인하고 사용할 project의 version에 서버를 직접 연결하세요. 실행 전 Memory 회상이 필요하면 memoryRecall을 켜고 recall 도구를 허용하세요. 모델이 따라야 할 저장·응답 규칙은 version의 system prompt 또는 Skill에 작성하세요.",
   "workspace.agentTokenTitle": "Agent token",
   "workspace.agentTokenBody":
     "Agent Studio에서 사용할 Bearer token을 생성합니다. MCP는 발급자의 현재 조직 관리자 권한으로 조직 범위에만 접근합니다.",

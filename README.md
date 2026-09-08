@@ -17,6 +17,7 @@ Agent Memory는 설치당 하나의 조직에서 여러 AI Agent가 장기 Memor
 - PostgreSQL Full-Text Search와 선택형 pgvector를 결합해 후보를 찾고, 선택형 reranker로 Memory, 문서 chunk, Knowledge node의 통합 순위를 정한다.
 - Knowledge node와 edge마다 읽을 수 있는 Memory 또는 document chunk provenance를 요구한다.
 - AI가 추출한 graph 후보는 scope 관리자가 승인하기 전까지 공유 Graph에 반영하지 않는다.
+- 서비스는 MCP `remember`, `recall`, `forget`으로 장기 기억을 저장·회상·잊는다. RAG 문서와 Knowledge Graph는 Agent Memory에서 관리하며 `context_search`로 통합 검색한다.
 - 운영 콘솔, HTTP API, Streamable HTTP MCP가 같은 application operation과 권한 정책을 사용한다.
 
 ## 빠른 시작

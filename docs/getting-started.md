@@ -83,7 +83,7 @@ curl -i http://localhost:3100/api/health
 
 ## 4. 첫 Memory와 검색
 
-운영 콘솔의 `Memory → 새 Memory`에서 종류·제목·내용·공유 범위를 입력해 첫 Memory를 만든다. 기본값은 개인 범위이며 조직·팀 범위는 쓰기 권한에 따라 선택한다. Agent는 HTTP API나 MCP의 `memory_create`로 같은 기능을 사용한다.
+운영 콘솔의 `Memory → 새 Memory`에서 종류·제목·내용·공유 범위를 입력해 첫 Memory를 만든다. 기본값은 개인 범위이며 조직·팀 범위는 쓰기 권한에 따라 선택한다. Agent는 HTTP API나 MCP의 `remember`로 같은 기능을 사용한다.
 
 Memory를 만든 뒤 운영 콘솔에서 다음 순서로 확인한다.
 
@@ -121,7 +121,7 @@ EMBEDDING_MODEL=openai/text-embedding-3-small
 
 ### Context reranking
 
-통합 Context 검색과 MCP `recall`의 1차 후보를 다시 정렬하려면 OpenRouter 또는 vLLM-compatible reranker를 설정하라.
+통합 Context 검색(`context_search`)과 Memory 회상(`recall`)의 1차 후보를 다시 정렬하려면 OpenRouter 또는 vLLM-compatible reranker를 설정하라.
 
 ```dotenv
 RERANKER_BASE_URL=https://openrouter.ai/api/v1

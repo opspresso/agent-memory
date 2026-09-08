@@ -8,6 +8,8 @@ import { InvalidContextSearchError } from "@/application/context/search-context"
 import { InvalidDocumentSearchError } from "@/application/document/search-documents";
 import { KnowledgeNodeNotFoundError } from "@/application/knowledge/create-knowledge-edge";
 import { InvalidKnowledgeSearchError } from "@/application/knowledge/search-knowledge-nodes";
+import { MemoryNotFoundError } from "@/application/memory/get-memory";
+import { MemoryVersionConflictError } from "@/application/memory/revise-memory";
 import { MemoryAccessDeniedError } from "@/application/memory/create-memory";
 import { InvalidMemorySearchError } from "@/application/memory/search-memories";
 import type { ContextSearchResult } from "@/application/context/search-context";
@@ -20,7 +22,6 @@ import type {
 } from "@/domain/knowledge/knowledge-graph-repository";
 import type { Memory } from "@/domain/memory/memory";
 import { InvalidMemoryError } from "@/domain/memory/memory";
-import type { MemorySearchHit } from "@/domain/memory/memory-repository";
 import { AiRequestLimitExceededError } from "@/domain/shared/ai-request-limiter";
 
 import { publicDocumentHit } from "./document-http";
@@ -42,11 +43,17 @@ export interface AgentMemoryMcpOperations {
     limit: number
   ): Promise<ContextSearchResult>;
   createMemory(input: CreateMemoryInput): Promise<Memory>;
-  searchMemories(
+  archiveMemory(
+    access: OrganizationAccess,
+    memoryId: string,
+    expectedVersion: number,
+    changeReason?: string
+  ): Promise<void>;
+  recallMemories(
     access: OrganizationAccess,
     query: string,
     limit: number
-  ): Promise<readonly MemorySearchHit[]>;
+  ): Promise<ContextSearchResult>;
   searchDocuments(
     access: OrganizationAccess,
     query: string,
@@ -89,6 +96,8 @@ async function executeMcpTool<T>(execute: () => Promise<T>) {
       error instanceof KnowledgeNodeNotFoundError ||
       error instanceof InvalidKnowledgeSearchError ||
       error instanceof MemoryAccessDeniedError ||
+      error instanceof MemoryNotFoundError ||
+      error instanceof MemoryVersionConflictError ||
       error instanceof InvalidMemorySearchError ||
       error instanceof InvalidMemoryError ||
       error instanceof AiRequestLimitExceededError;
@@ -134,42 +143,24 @@ export function createAgentMemoryMcpServer(
   server.registerTool(
     "recall",
     {
-      title: "Recall relevant agent context",
+      title: "Recall long-term memories",
       description:
-        "Recall compact, ranked context for inclusion before an agent run.",
+        "Recall accessible long-term memories. Returns compact text and memory IDs/versions for forget. Use context_search for RAG and Knowledge Graph context.",
       inputSchema: searchInputSchema,
       annotations: { readOnlyHint: true, idempotentHint: true }
     },
     async ({ query, limit }) => executeMcpTool(async () => {
-      const result = await operations.searchContext(access, query, limit ?? 10);
+      const result = await operations.recallMemories(access, query, limit ?? 10);
       const remembered = contextRecallText(result);
       return textResult(remembered, {
         remembered,
-        count: result.hits.length,
-        ranking: result.ranking
+        ...publicContextSearchResult(result)
       });
     })
   );
 
   server.registerTool(
-    "memory_search",
-    {
-      title: "Search agent memories",
-      description:
-        "Search accessible long-term memories with lexical and semantic ranking.",
-      inputSchema: searchInputSchema,
-      annotations: { readOnlyHint: true, idempotentHint: true }
-    },
-    async ({ query, limit }) => executeMcpTool(async () => {
-      const hits = await operations.searchMemories(access, query, limit ?? 10);
-      return jsonResult({
-        hits: hits.map((hit) => ({ ...hit, memory: publicMemory(hit.memory) }))
-      });
-    })
-  );
-
-  server.registerTool(
-    "memory_create",
+    "remember",
     {
       title: "Create agent memory",
       description: "Create a scoped, durable long-term memory with provenance.",
@@ -195,6 +186,25 @@ export function createAgentMemoryMcpServer(
         ...(input.expiresAt ? { expiresAt: new Date(input.expiresAt) } : {})
       });
       return jsonResult({ memory: publicMemory(memory) });
+    })
+  );
+
+  server.registerTool(
+    "forget",
+    {
+      title: "Forget a long-term memory",
+      description:
+        "Archive a memory so it is excluded from recall and search. Requires manage permission and the current version from remember or recall. Preserves revision history and provenance.",
+      inputSchema: {
+        memoryId: z.uuid(),
+        expectedVersion: z.number().int().min(1),
+        changeReason: z.string().trim().min(1).max(1_000).optional()
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
+    },
+    async ({ memoryId, expectedVersion, changeReason }) => executeMcpTool(async () => {
+      await operations.archiveMemory(access, memoryId, expectedVersion, changeReason);
+      return jsonResult({ memoryId, forgotten: true });
     })
   );
 

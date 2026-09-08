@@ -254,8 +254,8 @@ export default async function GuidePage() {
                   {[
                     "context_search",
                     "recall",
-                    "memory_search",
-                    "memory_create",
+                    "remember",
+                    "forget",
                     "document_search",
                     "knowledge_search",
                     "knowledge_neighborhood"

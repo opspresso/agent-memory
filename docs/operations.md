@@ -85,7 +85,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Embedding | `EMBEDDING_MODEL` | 설정 시 Memory, document chunk, Knowledge node embedding과 semantic search 활성화 |
 | Reranker | `RERANKER_BASE_URL` | `/rerank`를 제공하는 OpenRouter 또는 vLLM-compatible API base URL |
 | Reranker | `RERANKER_API_KEY` | Reranker provider의 선택형 Bearer credential |
-| Reranker | `RERANKER_MODEL` | 설정 시 권한 필터된 통합 Context 후보의 2차 정렬 활성화 |
+| Reranker | `RERANKER_MODEL` | 설정 시 권한 필터된 통합 Context·Memory 회상 후보의 2차 정렬 활성화 |
 | Reranker | `RERANKER_TIMEOUT_MS` | Reranker 요청 timeout. 기본값 `5000` |
 | Reranker | `RERANKER_MIN_SCORE` | 선택형 relevance 하한. `0`부터 `1` 사이이며 미설정 시 순위만 적용 |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_BASE_URL` | OpenAI-compatible chat completions API base URL |
@@ -276,7 +276,7 @@ Worker가 비활성화된 상태에서 upload한 문서는 자동으로 `ready`�
 - 저장된 resource와 query가 같은 embedding model을 사용하는지 확인한다.
 - Provider가 OpenAI-compatible embeddings API를 지원하는지 확인한다.
 
-Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node 생성 또는 문서 처리와 semantic query를 실패시킬 수 있다. Provider를 사용하지 않을 계획이면 `EMBEDDING_MODEL`을 비워 lexical-only 모드로 실행하라. Reranker 장애는 통합 검색을 실패시키지 않고 권한 필터가 적용된 hybrid 순위로 복귀한다. 반복 fallback은 `context reranking unavailable` log와 provider 상태를 확인하라.
+Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node 생성 또는 문서 처리와 semantic query를 실패시킬 수 있다. Provider를 사용하지 않을 계획이면 `EMBEDDING_MODEL`을 비워 lexical-only 모드로 실행하라. Reranker 장애는 통합 검색·Memory 회상을 실패시키지 않고 권한 필터가 적용된 hybrid 순위로 복귀한다. 반복 fallback은 `context reranking unavailable` log와 provider 상태를 확인하라.
 
 모든 embedding, reranker, extraction, ontology suggestion 호출은 instance-local concurrency·minute limit를 먼저 거친 뒤 PostgreSQL의 organization·user minute bucket을 소비한다. 여러 replica와 background worker가 같은 durable quota를 공유하며 초과 요청은 `429` 또는 queue retry로 처리한다. Bucket은 입력·본문 없이 organization ID와 내부 principal key, minute, count만 저장하고 하루가 지난 row를 후속 요청에서 정리한다.
 

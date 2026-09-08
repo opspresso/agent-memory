@@ -163,7 +163,7 @@ function McpEndpointPanel({ mcpEndpoint, origin, organizationSlug }: {
             </CopyButton>
           </Group>
           <Text c="dimmed" size="sm">
-            context_search · recall · memory_search · memory_create ·
+            context_search · recall · remember · forget ·
             document_search · knowledge_search · knowledge_neighborhood
           </Text>
         </Stack>

@@ -5,6 +5,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { version as appVersion } from "../package.json";
 
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import { buildArchiveMemory } from "@/application/memory/archive-memory";
+import { buildCreateMemory } from "@/application/memory/create-memory";
+import { buildSearchContext } from "@/application/context/search-context";
+import { buildSearchMemories } from "@/application/memory/search-memories";
+import { MemoryNotFoundError } from "@/application/memory/get-memory";
+import { MemoryVersionConflictError } from "@/application/memory/revise-memory";
+import type { Memory } from "@/domain/memory/memory";
+import type { MemoryRepository } from "@/domain/memory/memory-repository";
 import { MemoryAccessDeniedError } from "@/application/memory/create-memory";
 import {
   createAgentMemoryMcpServer,
@@ -38,7 +46,10 @@ function operations(
         ranking: "hybrid"
       }),
     createMemory: vi.fn(),
-    searchMemories: vi.fn().mockResolvedValue([]),
+    archiveMemory: vi.fn(),
+    recallMemories: vi.fn().mockResolvedValue({
+      hits: [], counts: { memories: 0, documents: 0, knowledge: 0 }, ranking: "hybrid"
+    }),
     searchDocuments: vi.fn().mockResolvedValue([]),
     searchKnowledge: vi.fn().mockResolvedValue([]),
     getKnowledgeNeighborhood: vi
@@ -48,8 +59,11 @@ function operations(
   };
 }
 
-async function connectedClient(mcpOperations: AgentMemoryMcpOperations) {
-  const server = createAgentMemoryMcpServer(access, mcpOperations);
+async function connectedClient(
+  mcpOperations: AgentMemoryMcpOperations,
+  principal: OrganizationAccess = access
+) {
+  const server = createAgentMemoryMcpServer(principal, mcpOperations);
   const client = new Client({ name: "agent-memory-test", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   servers.push(server);
@@ -62,14 +76,16 @@ async function connectedClient(mcpOperations: AgentMemoryMcpOperations) {
 describe("agent memory MCP server", () => {
   it.each([
     ["context_search", "searchContext", { query: "incident" }],
-    ["recall", "searchContext", { query: "incident" }],
-    ["memory_search", "searchMemories", { query: "incident" }],
+    ["recall", "recallMemories", { query: "incident" }],
     ["document_search", "searchDocuments", { query: "incident" }],
     ["knowledge_search", "searchKnowledge", { query: "incident" }],
     ["knowledge_neighborhood", "getKnowledgeNeighborhood", {
       nodeId: "60000000-0000-4000-8000-000000000001"
     }],
-    ["memory_create", "createMemory", {
+    ["forget", "archiveMemory", {
+      memoryId: "30000000-0000-4000-8000-000000000001", expectedVersion: 1
+    }],
+    ["remember", "createMemory", {
       kind: "fact", scope: { kind: "user" }, title: "Fact",
       content: "private-memory-content", source: { type: "user" }
     }]
@@ -95,7 +111,7 @@ describe("agent memory MCP server", () => {
       createMemory: vi.fn().mockRejectedValue(new MemoryAccessDeniedError())
     }));
     const result = await client.callTool({
-      name: "memory_create",
+      name: "remember",
       arguments: {
         kind: "fact", scope: { kind: "organization" }, title: "Fact",
         content: "Content", source: { type: "user" }
@@ -118,47 +134,147 @@ describe("agent memory MCP server", () => {
     expect(tools.tools.map((tool) => tool.name)).toEqual([
       "context_search",
       "recall",
-      "memory_search",
-      "memory_create",
+      "remember",
+      "forget",
       "document_search",
       "knowledge_search",
       "knowledge_neighborhood"
     ]);
   });
 
-  it("returns compact context through the Agent Studio recall contract", async () => {
-    const searchContext = vi.fn().mockResolvedValue({
-      hits: [],
-      counts: { memories: 0, documents: 0, knowledge: 0 },
-      ranking: "rerank"
-    });
-    const client = await connectedClient(operations({ searchContext }));
-
+  it("recalls only memories with authenticated access and the requested limit", async () => {
+    const mcpOperations = operations();
+    const client = await connectedClient(mcpOperations);
     const result = await client.callTool({
       name: "recall",
-      arguments: { query: "incident" }
-    });
-
-    expect(searchContext).toHaveBeenCalledWith(access, "incident", 10);
-    expect(result.content).toEqual([{ type: "text", text: "" }]);
-    expect(result.structuredContent).toEqual({
-      remembered: "",
-      count: 0,
-      ranking: "rerank"
-    });
-  });
-
-  it("executes search with the authenticated organization access", async () => {
-    const searchMemories = vi.fn().mockResolvedValue([]);
-    const client = await connectedClient(operations({ searchMemories }));
-
-    const result = await client.callTool({
-      name: "memory_search",
       arguments: { query: "rollback", limit: 5 }
     });
 
-    expect(searchMemories).toHaveBeenCalledWith(access, "rollback", 5);
-    expect(result.structuredContent).toEqual({ hits: [] });
+    expect(mcpOperations.recallMemories).toHaveBeenCalledWith(access, "rollback", 5);
+    expect(mcpOperations.searchContext).not.toHaveBeenCalled();
+    expect(mcpOperations.searchDocuments).not.toHaveBeenCalled();
+    expect(mcpOperations.searchKnowledge).not.toHaveBeenCalled();
+    expect(result.content).toEqual([{ type: "text", text: "" }]);
+    expect(result.structuredContent).toEqual({ remembered: "", count: 0, counts: { memories: 0, documents: 0, knowledge: 0 }, ranking: "hybrid", hits: [] });
+  });
+
+  it("preserves reranker metadata in recall responses", async () => {
+    const recallMemories = vi.fn().mockResolvedValue({
+      hits: [], counts: { memories: 2, documents: 0, knowledge: 0 }, ranking: "rerank"
+    });
+    const client = await connectedClient(operations({ recallMemories }));
+    const result = await client.callTool({ name: "recall", arguments: { query: "rollback" } });
+    expect(recallMemories).toHaveBeenCalledWith(access, "rollback", 10);
+    expect(result.structuredContent).toMatchObject({ ranking: "rerank", count: 0 });
+  });
+
+  it.each([{}, { expectedVersion: 0 }, { expectedVersion: 1.5 }, { expectedVersion: "1" }])(
+    "rejects forget without a valid current version: %j", async (input) => {
+      const mcpOperations = operations();
+      const client = await connectedClient(mcpOperations);
+      const result = await client.callTool({
+        name: "forget",
+        arguments: { memoryId: "30000000-0000-4000-8000-000000000001", ...input }
+      });
+      expect(result.isError).toBe(true);
+      expect(mcpOperations.archiveMemory).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([new MemoryAccessDeniedError(), new MemoryNotFoundError(), new MemoryVersionConflictError()])(
+    "returns actionable forget errors: %s", async (error) => {
+      const client = await connectedClient(operations({ archiveMemory: vi.fn().mockRejectedValue(error) }));
+      const result = await client.callTool({
+        name: "forget",
+        arguments: { memoryId: "30000000-0000-4000-8000-000000000001", expectedVersion: 1 }
+      });
+      expect(result).toMatchObject({ isError: true, content: [{ type: "text", text: error.message }] });
+    }
+  );
+
+  it.each(["user", "organization"] as const)(
+    "remembers, recalls, and forgets for %s scope through the application lifecycle", async (scopeKind) => {
+    const principal: OrganizationAccess = scopeKind === "organization"
+      ? { ...access, role: "admin", principalKind: "organization-agent" }
+      : access;
+    const now = new Date("2026-09-08T00:00:00Z");
+    const memoryId = "30000000-0000-4000-8000-000000000001";
+    let stored: Memory | undefined;
+    const repository: MemoryRepository = {
+      save: vi.fn(async (memory) => { stored = memory; }),
+      findById: vi.fn(async (organizationId, id) =>
+        stored && stored.scope.organizationId === organizationId && stored.id === id ? stored : null),
+      listVersions: vi.fn().mockResolvedValue([]),
+      saveRevision: vi.fn(async (memory, expectedVersion) => {
+        if (stored?.version !== expectedVersion) return "conflict";
+        stored = memory;
+        return "saved";
+      }),
+      search: vi.fn(async () => stored ? [{ memory: stored, lexicalScore: 1, vectorScore: 0, score: 1 }] : [])
+    };
+    const dependencies = { repository, clock: () => now };
+    const client = await connectedClient(operations({
+      createMemory: buildCreateMemory({ ...dependencies, generateId: () => memoryId }),
+      recallMemories: buildSearchContext({
+        searchMemories: buildSearchMemories(dependencies),
+        searchDocuments: vi.fn(),
+        searchKnowledge: vi.fn()
+      }, ["memory"]),
+      archiveMemory: buildArchiveMemory(dependencies)
+    }), principal);
+    const remembered = await client.callTool({
+      name: "remember",
+      arguments: {
+        kind: "decision", scope: { kind: scopeKind }, title: "Rollback",
+        content: "Use the previous release.", source: { type: "agent", agentId: "service" }
+      }
+    });
+    expect(remembered.isError).not.toBe(true);
+    expect(remembered.structuredContent).toMatchObject({ memory: {
+      id: memoryId, version: 1,
+      scope: { kind: scopeKind, organizationId: access.organizationId }
+    } });
+    const recalled = await client.callTool({ name: "recall", arguments: { query: "rollback" } });
+    expect(recalled.content).toEqual([{ type: "text", text: `[memory id=${memoryId} version=1] Rollback\nUse the previous release.` }]);
+    expect(recalled.structuredContent).toMatchObject({ count: 1, hits: [{ memory: { id: memoryId, version: 1 } }] });
+
+    const otherOrganization = await connectedClient(operations({
+      archiveMemory: buildArchiveMemory(dependencies)
+    }), { ...principal, organizationId: "90000000-0000-4000-8000-000000000001" });
+    const missing = await otherOrganization.callTool({
+      name: "forget", arguments: { memoryId, expectedVersion: 1 }
+    });
+    expect(missing).toMatchObject({ isError: true, content: [{ type: "text", text: "memory not found" }] });
+    expect(repository.saveRevision).not.toHaveBeenCalled();
+
+    const otherUser = await connectedClient(operations({
+      archiveMemory: buildArchiveMemory(dependencies)
+    }), { ...access, userId: "20000000-0000-4000-8000-000000000001" });
+    const denied = await otherUser.callTool({ name: "forget", arguments: { memoryId, expectedVersion: 1 } });
+    expect(denied).toMatchObject({ isError: true, content: [{ type: "text", text: "memory access denied" }] });
+    expect(repository.saveRevision).not.toHaveBeenCalled();
+
+    const stale = await client.callTool({ name: "forget", arguments: { memoryId, expectedVersion: 2 } });
+    expect(stale.isError).toBe(true);
+    expect(repository.saveRevision).not.toHaveBeenCalled();
+    const content = recalled.content as { type: string; text: string }[];
+    const reference = content[0]?.text.match(/\[memory id=([0-9a-f-]+) version=(\d+)\]/);
+    expect(reference).not.toBeNull();
+    const forgotten = await client.callTool({
+      name: "forget",
+      arguments: {
+        memoryId: reference?.[1],
+        expectedVersion: Number(reference?.[2]),
+        changeReason: "Superseded"
+      }
+    });
+    expect(forgotten.structuredContent).toEqual({ memoryId, forgotten: true });
+    expect(repository.saveRevision).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "archived", version: 2, content: "Use the previous release." }),
+      1, access.userId, "Superseded"
+    );
+    const after = await client.callTool({ name: "recall", arguments: { query: "rollback" } });
+    expect(after.structuredContent).toMatchObject({ count: 0, hits: [], remembered: "" });
   });
 
   it("executes unified context search", async () => {

@@ -1,4 +1,4 @@
-import { buildSearchContext } from "@/application/context/search-context";
+import { buildSearchContext, type ContextSearchDependencies } from "@/application/context/search-context";
 import { logger } from "@/infrastructure/observability/logger";
 
 import { searchDocumentRecords } from "./document-service";
@@ -10,7 +10,7 @@ import {
   textRerankerService
 } from "./container";
 
-export const searchContextRecords = buildSearchContext({
+const contextSearchDependencies: ContextSearchDependencies = {
   searchMemories: searchMemoryRecords,
   searchDocuments: searchDocumentRecords,
   searchKnowledge: searchKnowledgeNodeRecords,
@@ -22,4 +22,7 @@ export const searchContextRecords = buildSearchContext({
   onRerankerUnavailable(error) {
     logger.warn({ err: error }, "context reranking unavailable; using hybrid ranking");
   }
-});
+};
+
+export const searchContextRecords = buildSearchContext(contextSearchDependencies);
+export const recallMemoryRecords = buildSearchContext(contextSearchDependencies, ["memory"]);

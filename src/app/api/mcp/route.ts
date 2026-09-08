@@ -1,6 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
-import { searchContextRecords } from "@/lib/context-service";
+import { recallMemoryRecords, searchContextRecords } from "@/lib/context-service";
 import { searchDocumentRecords } from "@/lib/document-service";
 import {
   getKnowledgeNeighborhoodRecord,
@@ -8,8 +8,8 @@ import {
 } from "@/lib/knowledge-service";
 import { createAgentMemoryMcpServer } from "@/lib/mcp-server";
 import {
-  createMemoryRecord,
-  searchMemoryRecords
+  archiveMemoryRecord,
+  createMemoryRecord
 } from "@/lib/memory-service";
 import { authorizeOrganizationMcpRoute } from "@/lib/organization-authorization";
 
@@ -25,7 +25,8 @@ async function handleMcpRequest(request: Request) {
   const server = createAgentMemoryMcpServer(authorization.access, {
     searchContext: searchContextRecords,
     createMemory: createMemoryRecord,
-    searchMemories: searchMemoryRecords,
+    archiveMemory: archiveMemoryRecord,
+    recallMemories: recallMemoryRecords,
     searchDocuments: searchDocumentRecords,
     searchKnowledge: searchKnowledgeNodeRecords,
     getKnowledgeNeighborhood: getKnowledgeNeighborhoodRecord
