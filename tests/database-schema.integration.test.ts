@@ -2243,6 +2243,27 @@ describe("PostgreSQL schema", () => {
       node: { id: sourceNodeId },
       lexicalScore: expect.any(Number)
     });
+    const applicationClock = new Date("2101-01-01T00:00:00Z");
+    const clockedRepository = createKnowledgeGraphRepository(db, () => applicationClock);
+    await pool.query(
+      "UPDATE memories SET valid_from=$3, expires_at=$4 WHERE organization_id=$1 AND id IN ($2,$5)",
+      [organization, sourceMemoryId, new Date("2100-01-01"), new Date("2102-01-01"), corroboratingMemoryId]
+    );
+    expect((await clockedRepository.searchNodes({ access, query: "checkout purchases", limit: 10 }))[0]?.node.id).toBe(sourceNodeId);
+    expect(await clockedRepository.findNodesByCanonicalNames(access, scope, ["Checkout API"]))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ id: sourceNodeId })]));
+    expect((await clockedRepository.findNeighborhood(access, sourceNodeId, 2, 10)).edges)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ id: edge.id })]));
+    const expiredRepository = createKnowledgeGraphRepository(db, () => new Date("2103-01-01"));
+    expect(await expiredRepository.searchNodes({ access, query: "checkout purchases", limit: 10 })).toEqual([]);
+    expect(await expiredRepository.findNodesByCanonicalNames(access, scope, ["Checkout API"])).toEqual([]);
+    expect(await expiredRepository.findNeighborhood(access, sourceNodeId, 2, 10)).toEqual({ nodes: [], edges: [] });
+    const futureRepository = createKnowledgeGraphRepository(db, () => new Date("2099-01-01"));
+    expect(await futureRepository.searchNodes({ access, query: "checkout purchases", limit: 10 })).toEqual([]);
+    await pool.query(
+      "UPDATE memories SET valid_from=$3, expires_at=NULL WHERE organization_id=$1 AND id IN ($2,$4)",
+      [organization, sourceMemoryId, createdAt, corroboratingMemoryId]
+    );
     const hybridHits = await repository.searchNodes({
       access,
       query: "unrelated terms",

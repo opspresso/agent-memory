@@ -122,6 +122,8 @@ Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `documen
 
 ## Knowledge Graph와 통합 검색
 
+Graph 검색·이름 기반 중복 조회·관계 탐색은 각 작업 시작 시의 애플리케이션 시각으로 출처 Memory의 유효기간을 검사한다. 한 작업의 node·edge·source 조회에는 같은 시각을 사용하며, DB 서버의 시각을 별도 기준으로 사용하지 않는다.
+
 Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenance 행은 DB constraint로 정확히 하나의 memory 또는 document chunk를 참조한다. Canonical resource가 여러 근거에서 발견되면 resource를 중복 생성하지 않고 provenance를 누적한다. 생성 시 호출자가 source를 읽을 수 있어야 하고 graph scope는 source scope보다 넓을 수 없다. 검색·Neighborhood·node 및 edge 생성은 source의 현재 권한과 active·유효·ready 상태를 다시 확인한다. Memory의 유효성은 domain의 `isMemoryActiveAt` 정책으로 정의하며 `validFrom <= now`이고 `expiresAt`이 없거나 `now < expiresAt`인 active Memory만 검색과 Graph 근거로 허용한다.
 
 Graph의 검색·중복 후보 조회·Neighborhood repository port는 읽을 수 있고 현재 유효한 provenance만 반환한다. Resource 선택과 개별 source 필터는 같은 SQL predicate를 사용하며, source를 다시 조회하는 사이 유효한 근거가 사라진 resource는 결과에서 제외한다. 내부 mutation을 위한 `findNodeById`와 `findEdgeById`는 전체 provenance를 보존하므로 공개 검색 결과로 직접 사용하지 않는다.
