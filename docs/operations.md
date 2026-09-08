@@ -39,20 +39,25 @@ IDC에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라
 
 ### 릴리즈와 IDC 배포
 
+릴리즈는 tag·GitHub Release·image 게시·alpha version 목록 갱신까지다. IDC 배포는 사용자가 `../dockpad`에서 직접 명령하는 별도 작업이다. Agent는 릴리즈 요청만으로 Dockpad 배포나 운영 서비스 재시작·재생성을 실행하지 않는다.
+
 릴리즈는 다음 순서로 진행한다.
 
 1. `v*` tag push가 `.github/workflows/release.yml`을 시작한다. GitHub-hosted Ubuntu 24.04 runner에서 `pnpm verify`, PostgreSQL integration, 인증 E2E를 실행한다.
 2. 검증 후 GitHub Release 생성과 image build가 독립 job으로 실행된다. Image는 ECR·GHCR에 `<tag>`와 `latest`로 게시한다.
 3. Image 게시 성공 후 GitHub App installation token으로 `argocd-env-demo`에 project `agent-memory`, container `app`, phase `alpha`의 GitOps dispatch를 보낸다. Dockpad가 읽는 alpha image version 목록이 갱신됐는지 확인한다.
-4. 다음 명령으로 IDC의 기존 설치를 백업하고 배포 설정을 동기화한 뒤 Agent Memory image tag를 갱신한다.
+
+릴리즈 완료 후 IDC 배포가 필요하면 사용자가 다음 절차를 직접 수행한다.
+
+1. 다음 명령으로 IDC의 기존 설치를 백업하고 배포 설정을 동기화한 뒤 Agent Memory image tag를 갱신한다.
 
    ```bash
    ../dockpad/scripts/remote.sh deploy-selected alpha agent-memory
    ```
 
-5. 실제 container image와 `https://memory.opspresso.com/api/health`, 공개 화면의 version을 확인한다.
+2. 실제 container image와 `https://memory.opspresso.com/api/health`, 공개 화면의 version을 확인한다.
 
-Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, alpha version 목록 갱신, IDC rollout 완료다. GitHub Release 생성만으로 운영 배포가 완료되는 것은 아니다. EKS는 중지 상태이므로 Argo CD sync나 EKS 접속은 요구하지 않는다.
+Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, alpha version 목록 갱신이다. IDC rollout은 별도 사용자 작업이며 릴리즈 완료 조건에 포함하지 않는다. EKS는 중지 상태이므로 Argo CD sync나 EKS 접속은 요구하지 않는다.
 
 선택 배포는 다른 서비스의 image tag를 유지한다. 다만 Dockpad는 공통 Compose 설정도 적용하므로 다른 서비스가 같은 버전으로 재기동될 수 있다. 백업·health check 역시 공유 설치를 대상으로 한다.
 
