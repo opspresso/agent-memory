@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import { updateOrganizationSchema } from "@/lib/organization-administration-schemas";
 
 describe("organization administration HTTP boundary", () => {
+  it("rejects a policy that bypasses membership approval", () => {
+    expect(updateOrganizationSchema.safeParse({ name: "Organization", newMemberStatus: "active" }).success).toBe(false);
+  });
   it("accepts ontology settings within the documented bounds", () => {
     expect(
       updateOrganizationSchema.safeParse({

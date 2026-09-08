@@ -28,7 +28,7 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 | 저장소 | 역할과 소유 범위 |
 | --- | --- |
 | `../agent-studio` | 기업 내부 설치형 Agent 실행 플랫폼이다. Project·version·publish, LLM/tool loop, subagent, chat, MCP·skill binding, 채널 연동, 비용·trace, 실행 artifact를 소유한다. 한 설치는 한 기업이며 필수 경로는 폐쇄망에서도 동작한다. |
-| `../agent-memory` | 독립 실행 가능한 조직 단위 Context 플랫폼이다. 장기 Memory·revision·ACL, RAG 문서·chunk, provenance 기반 Knowledge Graph, AI 후보 검토, 통합 검색과 HTTP/MCP를 소유한다. |
+| `../agent-memory` | 설치당 단일 조직을 사용하는 독립 실행 가능한 Context 플랫폼이다. 장기 Memory·revision·ACL, RAG 문서·chunk, provenance 기반 Knowledge Graph, AI 후보 검토, 통합 검색과 HTTP/MCP를 소유한다. |
 | `../agent-models` | 모델 family·provider offering, 가격, context/output 한도, capability, `id`와 `wireId`의 정적 JSON 카탈로그를 소유한다. 모델 실행 서버가 아니며 Studio는 카탈로그를 소비하고 offline snapshot을 유지한다. |
 | `../agent-plugins` | Agent Studio용 도메인별 plugin 콘텐츠를 소유한다. `plugin.json`, `mcp.json`, `skills/*/SKILL.md`와 참고 자료를 묶으며 기존 agent-skills·agent-tools를 대체한다. Sync와 실행은 Studio가 담당한다. |
 | `../mcp-memory` | 프로젝트·대화 범위의 간단한 기억 저장과 의미 검색을 제공한다. `recall`, `remember`, `list_memories`, `forget`, `memory_stats`와 PostgreSQL·pgvector 저장소를 소유하며 RAG·Graph·object storage는 다루지 않는다. |
@@ -36,10 +36,11 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 | `../mcp-youtube` | YouTube 자막과 동영상 metadata를 제공하는 MCP 서버다. `get_transcript`와 `get_video_info`를 소유하며 자막과 metadata의 근거를 구분한다. |
 | `../dockpad` | 단일 호스트 Docker Compose 배포·운영 관리자다. Studio·Memory·MCP의 독립 배포, 공통 Caddy·PostgreSQL·MinIO, health check·backup과 DGX Spark의 LLM·embedding·reranker 운영을 소유한다. |
 
-- Agent Memory와 MCP Memory는 scope·인증·도구 계약이 다른 별도 서비스다. Plugin의 기본 `memory`는 MCP Memory이며 Agent Memory 연동에는 조직별 MCP URL과 Bearer credential을 별도로 설정한다.
+- Agent Memory와 MCP Memory는 scope·인증·도구 계약이 다른 별도 서비스다. Plugin의 기본 `memory`는 MCP Memory이며 Agent Memory 연동에는 설치의 `/api/mcp` URL과 Bearer credential을 별도로 설정한다.
 - Studio의 capability catalog 검색과 Agent Memory의 조직 지식 검색을 구분하라. Agent 실행 기능은 Studio에, 공유 Memory·RAG·Graph 기능은 Agent Memory에 둔다.
-- Plugin은 사용 지침과 MCP 선언을, 설치 측은 credential·조직 URL·model 선택·version binding을 소유한다. Studio용 skill은 shell·filesystem·network를 직접 사용할 수 있다고 가정하지 않는다.
-- IDC에서는 PostgreSQL·MinIO 인프라를 공유하되 database(`agent_studio`, `mcp_memory`, `agent_memory`)와 bucket(`agent-studio`, `agent-memory`)을 분리한다. Application image와 localdev는 각 앱, IDC 배포는 Dockpad, EKS/Kubernetes 배포는 `../argocd-env-demo`가 소유한다.
+- Plugin은 사용 지침과 MCP 선언을, 설치 측은 credential·서비스 URL·model 선택·version binding을 소유한다. Studio용 skill은 shell·filesystem·network를 직접 사용할 수 있다고 가정하지 않는다.
+- 운영 배포 대상은 IDC이며 `../dockpad`로 배포한다. 서비스 주소는 `https://memory.opspresso.com/`이다. EKS는 중지 상태이므로 릴리즈 검증에 EKS·Argo CD 접속을 요구하지 마라.
+- IDC에서는 PostgreSQL·MinIO 인프라를 공유하되 database(`agent_studio`, `mcp_memory`, `agent_memory`)와 bucket(`agent-studio`, `agent-memory`)을 분리한다. Application image와 localdev는 각 앱, IDC 배포는 Dockpad가 소유한다. `../argocd-env-demo`는 Dockpad가 읽는 image version 목록을 제공하므로 release의 tag 전달은 유지한다.
 
 ## Toolchain
 
@@ -59,8 +60,9 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 
 ## 보안과 데이터 불변 조건
 
-- 모든 조직 resource는 route의 `organizationId`, 인증 사용자, 조직 멤버십을 함께 검증하라. 요청 body의 tenant 식별자를 신뢰하지 마라.
-- organization scope 쓰기·관리는 `admin`과 `owner`만 허용하라. team scope는 해당 팀 멤버에게, user scope는 본인에게만 허용하라. team `manage`는 `manager` 이상으로 제한하라.
+- 모든 조직 resource는 서버가 결정한 설치 조직, 인증 사용자, 조직 멤버십을 함께 검증하라. 공개 API에서 조직 식별자를 받지 마라. 요청 body의 tenant 식별자를 신뢰하지 마라.
+- 일반 사용자의 첫 콘솔 접속은 `pending` 가입 요청으로 처리하고 운영자 승인 후에만 `active` 멤버로 접근을 허용하라. 최초 owner bootstrap 외에 로그인만으로 권한을 부여하거나 blocked·removed 멤버십을 복구하지 마라.
+- 기본 scope 정책에서 organization 쓰기·관리는 `admin`과 `owner`만 허용하라. team scope는 해당 팀 멤버와 조직 관리자에게, user scope는 본인에게만 허용하라. team `manage`는 팀 `manager` 또는 조직 관리자로 제한하라. Memory의 명시적 user·team access grant는 별도 정책으로 적용하며, 모든 경로에서 활성 조직 멤버십을 요구하라.
 - 브라우저 mutation은 trusted same-origin만 허용하고 Agent 요청은 Bearer 인증을 사용하라.
 - memory 수정과 archive는 `If-Match` version을 요구해 낙관적 동시성 제어를 유지하라.
 - Knowledge Graph의 source는 정확히 하나의 memory 또는 document chunk를 참조하게 하라. source를 읽을 수 없는 사용자의 연결을 허용하거나 source보다 넓은 scope로 승격하지 마라.

@@ -42,7 +42,7 @@ function DocumentContents({ documentId }: { readonly documentId: string }) {
     const controller = new AbortController();
     async function load() {
       try {
-        const response = await fetch(`/api/organizations/${organizationSlug}/documents/${documentId}/chunks?limit=25&offset=${request.offset}`, { signal: controller.signal });
+        const response = await fetch(`/api/documents/${documentId}/chunks?limit=25&offset=${request.offset}`, { signal: controller.signal });
         if (controller.signal.aborted) return;
         if (response.status === 403 || response.status === 404) {
           setChunks([]);
@@ -164,7 +164,7 @@ function DocumentLibraryView({ selectedId }: { readonly selectedId?: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/organizations/${organizationSlug}/documents/library?limit=25&offset=${page.offset}`, { signal: controller.signal })
+    fetch(`/api/documents/library?limit=25&offset=${page.offset}`, { signal: controller.signal })
       .then((response) => responseJson(response, t("documentUi.loadFailed"), documentLibraryResponseSchema))
       .then((body) => {
         if (controller.signal.aborted) return;
@@ -190,7 +190,7 @@ function DocumentLibraryView({ selectedId }: { readonly selectedId?: string }) {
       if (document.visibilityState === "hidden") { timer = setTimeout(() => void load(), 5_000); return; }
       try {
         requests += 1;
-        const response = await fetch(`/api/organizations/${organizationSlug}/documents/${id}`, { signal: controller.signal });
+        const response = await fetch(`/api/documents/${id}`, { signal: controller.signal });
         const value = await responseJson(response, t("documentUi.loadFailed"), documentDetailResponseSchema);
         if (controller.signal.aborted) return;
         setDetail({ id: id!, value });
@@ -233,7 +233,7 @@ function DocumentLibraryView({ selectedId }: { readonly selectedId?: string }) {
     setMutationError(undefined);
     setFeedback(undefined);
     try {
-      const response = await fetch(`/api/organizations/${organizationSlug}/documents/${selected.id}${action === "retry" ? "/retry" : ""}`, { method: action === "retry" ? "POST" : "DELETE", signal: controller.signal });
+      const response = await fetch(`/api/documents/${selected.id}${action === "retry" ? "/retry" : ""}`, { method: action === "retry" ? "POST" : "DELETE", signal: controller.signal });
       await responseOk(response, t("documentUi.actionFailed"));
       if (controller.signal.aborted) return;
       if (action === "archive") {

@@ -9,10 +9,13 @@ import { createAgentMemoryMcpServer } from "@/lib/mcp-server";
 
 const mocks = vi.hoisted(() => ({
   authenticateRequest: vi.fn(),
+  getInstallation: vi.fn(),
   findBySlug: vi.fn(),
   findByEmail: vi.fn(),
   verifyAgentToken: vi.fn()
 }));
+
+vi.mock("@/lib/installation", () => ({ installationRepository: { get: mocks.getInstallation } }));
 
 vi.mock("@/lib/container", () => ({
   organizationAccessRepository: {
@@ -47,10 +50,19 @@ const access = {
 
 describe("organization route authorization", () => {
   beforeEach(() => {
+    mocks.getInstallation.mockResolvedValue({ id: access.organizationId, slug: "opspresso" });
     mocks.authenticateRequest.mockReset();
     mocks.findBySlug.mockReset();
     mocks.findByEmail.mockReset();
     mocks.verifyAgentToken.mockReset();
+  });
+
+  it.each([authorizeOrganizationRoute, authorizeOrganizationMcpRoute])("rejects unauthenticated requests before touching the installation", async (authorize) => {
+    const response = Response.json({ error: "Authentication required" }, { status: 401 });
+    mocks.authenticateRequest.mockResolvedValue({ authenticated: false, response });
+    mocks.getInstallation.mockClear();
+    await expect(authorize(new Request("https://memory.example.com/api/me"))).resolves.toEqual({ authorized: false, response });
+    expect(mocks.getInstallation).not.toHaveBeenCalled();
   });
 
   it("resolves a public organization slug to UUID-backed access", async () => {
@@ -61,27 +73,21 @@ describe("organization route authorization", () => {
     mocks.findBySlug.mockResolvedValue(access);
 
     const result = await authorizeOrganizationRoute(
-      new Request("https://memory.example.com/api/organizations/opspresso/me", {
+      new Request("https://memory.example.com/api/me", {
         headers: { "x-user-email": "delegated@example.com" }
-      }),
-      "opspresso"
+      })
     );
 
     expect(result).toEqual({ authorized: true, access, user: sessionUser });
     expect(mocks.findBySlug).toHaveBeenCalledWith("opspresso", sessionUser.id);
   });
 
-  it("rejects an invalid organization slug before authentication", async () => {
-    const result = await authorizeOrganizationRoute(
-      new Request("https://memory.example.com/api/organizations/bad_slug/me"),
-      "bad_slug"
-    );
-
-    expect(result.authorized).toBe(false);
-    if (!result.authorized) {
-      expect(result.response.status).toBe(400);
-    }
-    expect(mocks.authenticateRequest).not.toHaveBeenCalled();
+  it("uses the installation organization instead of a caller-supplied tenant", async () => {
+    mocks.authenticateRequest.mockResolvedValue({ authenticated: true, user: sessionUser });
+    mocks.findBySlug.mockResolvedValue(access);
+    const result = await authorizeOrganizationRoute(new Request("https://memory.example.com/api/me?organizationId=other"));
+    expect(result.authorized).toBe(true);
+    expect(mocks.findBySlug).toHaveBeenCalledWith("opspresso", sessionUser.id);
   });
 
   it("uses a restricted service principal for organization Agent token access", async () => {
@@ -91,7 +97,7 @@ describe("organization route authorization", () => {
       role: access.role
     });
     const request = new Request(
-      "https://memory.example.com/api/organizations/opspresso/mcp",
+      "https://memory.example.com/api/mcp",
       {
         method: "POST",
         headers: {
@@ -100,7 +106,7 @@ describe("organization route authorization", () => {
       }
     );
 
-    const result = await authorizeOrganizationMcpRoute(request, "opspresso");
+    const result = await authorizeOrganizationMcpRoute(request);
 
     expect(result).toEqual({
       authorized: true,
@@ -128,14 +134,13 @@ describe("organization route authorization", () => {
     };
     mocks.findByEmail.mockResolvedValue(memberAccess);
     const result = await authorizeOrganizationMcpRoute(
-      new Request("https://memory.example.com/api/organizations/opspresso/mcp", {
+      new Request("https://memory.example.com/api/mcp", {
         method: "POST",
         headers: {
           authorization: "Bearer amt_secret",
           "X-User-Email": "  Delegated@Example.com  "
         }
-      }),
-      "opspresso"
+      })
     );
 
     expect(result).toEqual({ authorized: true, access: memberAccess });
@@ -153,13 +158,12 @@ describe("organization route authorization", () => {
       const memberAccess = { ...access, userId: "reader", role: "member", teams: [] };
       mocks.findByEmail.mockResolvedValue(memberAccess);
       const authorization = await authorizeOrganizationMcpRoute(
-        new Request("https://memory.example.com/api/organizations/opspresso/mcp", {
+        new Request("https://memory.example.com/api/mcp", {
           headers: {
             authorization: "Bearer amt_secret",
             ...(delegated ? { "X-User-Email": "reader@example.com" } : {})
           }
-        }),
-        "opspresso"
+        })
       );
       expect(authorization.authorized).toBe(true);
       if (!authorization.authorized) throw new Error("Expected authorized MCP request");
@@ -232,10 +236,9 @@ describe("organization route authorization", () => {
     async (email) => {
       mocks.verifyAgentToken.mockResolvedValue(access);
       const result = await authorizeOrganizationMcpRoute(
-        new Request("https://memory.example.com/api/organizations/opspresso/mcp", {
+        new Request("https://memory.example.com/api/mcp", {
           headers: { authorization: "Bearer amt_secret", "X-User-Email": email }
-        }),
-        "opspresso"
+        })
       );
       expect(result.authorized).toBe(false);
       if (!result.authorized) expect(result.response.status).toBe(400);
@@ -247,13 +250,12 @@ describe("organization route authorization", () => {
     mocks.verifyAgentToken.mockResolvedValue(access);
     mocks.findByEmail.mockResolvedValue(null);
     const result = await authorizeOrganizationMcpRoute(
-      new Request("https://memory.example.com/api/organizations/opspresso/mcp", {
+      new Request("https://memory.example.com/api/mcp", {
         headers: {
           authorization: "Bearer amt_secret",
           "X-User-Email": "outsider@example.com"
         }
-      }),
-      "opspresso"
+      })
     );
     expect(result.authorized).toBe(false);
     if (!result.authorized) expect(result.response.status).toBe(403);
@@ -264,10 +266,9 @@ describe("organization route authorization", () => {
     mocks.authenticateRequest.mockResolvedValue({ authenticated: true, user: sessionUser });
     mocks.findBySlug.mockResolvedValue(access);
     const result = await authorizeOrganizationMcpRoute(
-      new Request("https://memory.example.com/api/organizations/opspresso/mcp", {
+      new Request("https://memory.example.com/api/mcp", {
         headers: { authorization: "Bearer session-token", "X-User-Email": "other@example.com" }
-      }),
-      "opspresso"
+      })
     );
     expect(result).toEqual({ authorized: true, access });
     expect(mocks.findByEmail).not.toHaveBeenCalled();
@@ -284,11 +285,11 @@ describe("organization route authorization", () => {
       response: unauthenticated
     });
     const request = new Request(
-      "https://memory.example.com/api/organizations/opspresso/me",
+      "https://memory.example.com/api/me",
       { headers: { authorization: "Bearer amt_secret" } }
     );
 
-    const result = await authorizeOrganizationRoute(request, "opspresso");
+    const result = await authorizeOrganizationRoute(request);
 
     expect(result).toEqual({ authorized: false, response: unauthenticated });
     expect(mocks.verifyAgentToken).not.toHaveBeenCalled();
@@ -297,11 +298,10 @@ describe("organization route authorization", () => {
   it("returns 401 for a revoked or mismatched Agent token", async () => {
     mocks.verifyAgentToken.mockResolvedValue(null);
     const result = await authorizeOrganizationMcpRoute(
-      new Request("https://memory.example.com/api/organizations/opspresso/mcp", {
+      new Request("https://memory.example.com/api/mcp", {
         method: "POST",
         headers: { authorization: "Bearer amt_revoked", "X-User-Email": "user@example.com" }
-      }),
-      "opspresso"
+      })
     );
 
     expect(result.authorized).toBe(false);

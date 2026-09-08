@@ -1,6 +1,5 @@
 import type {
   OrganizationAccess,
-  OrganizationMemberStatus,
   OrganizationRole,
   TeamRole
 } from "@/domain/identity/organization-access";
@@ -10,7 +9,6 @@ import type {
   OrganizationSettingsUpdate
 } from "@/domain/identity/organization-administration-repository";
 import {
-  createOrganization,
   createTeam,
   normalizedOrganizationName,
   type Organization,
@@ -24,13 +22,6 @@ export class OrganizationAdministrationAccessDeniedError extends Error {
   constructor() {
     super("organization administration access denied");
     this.name = "OrganizationAdministrationAccessDeniedError";
-  }
-}
-
-export class OrganizationSlugConflictError extends Error {
-  constructor() {
-    super("organization slug already exists");
-    this.name = "OrganizationSlugConflictError";
   }
 }
 
@@ -107,32 +98,6 @@ function canManageTeam(access: OrganizationAccess, teamId: string): boolean {
   );
 }
 
-export function buildCreateOrganization(dependencies: CreateDependencies) {
-  return async function execute(
-    actor: Readonly<{ userId: string; isAdmin: boolean }>,
-    slug: string,
-    name: string
-  ): Promise<Organization> {
-    if (!actor.isAdmin) {
-      throw new OrganizationAdministrationAccessDeniedError();
-    }
-    const organization = createOrganization({
-      id: dependencies.generateId(),
-      slug,
-      name,
-      now: dependencies.clock()
-    });
-    const result = await dependencies.repository.createOrganization(
-      organization,
-      actor.userId
-    );
-    if (result.status === "slug_conflict") {
-      throw new OrganizationSlugConflictError();
-    }
-    return result.organization;
-  };
-}
-
 export function buildGetOrganization(
   repository: OrganizationAdministrationRepository
 ) {
@@ -179,20 +144,6 @@ export function buildUpdateOrganizationSettings(
       throw new TeamNotFoundError();
     }
     return result.organization;
-  };
-}
-
-export function buildDeleteOrganization(
-  repository: OrganizationAdministrationRepository
-) {
-  return async function execute(access: OrganizationAccess): Promise<void> {
-    if (access.role !== "owner") {
-      throw new OrganizationAdministrationAccessDeniedError();
-    }
-    const deleted = await repository.deleteOrganization(access.organizationId);
-    if (!deleted) {
-      throw new OrganizationNotFoundError();
-    }
   };
 }
 
@@ -458,34 +409,5 @@ export function buildRemoveTeamMember(
     if (!removed) {
       throw new OrganizationMemberNotFoundError();
     }
-  };
-}
-
-export function buildListJoinableOrganizations(
-  repository: OrganizationAdministrationRepository
-) {
-  return async function execute(userId: string) {
-    return repository.listJoinableOrganizations(userId);
-  };
-}
-
-export function buildJoinOrganization(
-  repository: OrganizationAdministrationRepository
-) {
-  return async function execute(
-    userId: string,
-    organizationSlug: string
-  ): Promise<OrganizationMemberStatus> {
-    const result = await repository.joinOrganizationBySlug(
-      organizationSlug,
-      userId
-    );
-    if (result.status === "organization_not_found") {
-      throw new OrganizationNotFoundError();
-    }
-    if (result.status === "already_member") {
-      throw new AlreadyOrganizationMemberError();
-    }
-    return result.membershipStatus;
   };
 }

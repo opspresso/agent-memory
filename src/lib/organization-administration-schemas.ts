@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import {
-  newMemberStatuses,
   manageableOrganizationMemberStatuses,
   organizationRoles,
   teamRoles
@@ -15,11 +14,6 @@ export const organizationSlugSchema = z
   .min(1)
   .max(63)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
-
-export const createOrganizationSchema = z.object({
-  slug: organizationSlugSchema,
-  name: z.string().trim().min(1).max(200)
-});
 
 export const organizationMemberSchema = z.object({
   email: z.email().trim().toLowerCase(),
@@ -45,7 +39,6 @@ const ontologyTermSchema = z.string().trim().min(1).max(100);
 export const updateOrganizationSchema = z
   .object({
     name: z.string().trim().min(1).max(200).optional(),
-    newMemberStatus: z.enum(newMemberStatuses).optional(),
     defaultTeamId: z.uuid().nullable().optional(),
     ontologyMode: z.enum(knowledgeOntologyModes).optional(),
     ontology: z
@@ -55,10 +48,10 @@ export const updateOrganizationSchema = z
       })
       .optional()
   })
+  .strict()
   .refine(
     (value) =>
       value.name !== undefined ||
-      value.newMemberStatus !== undefined ||
       value.defaultTeamId !== undefined ||
       value.ontologyMode !== undefined ||
       value.ontology !== undefined,

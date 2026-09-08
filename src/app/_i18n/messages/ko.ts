@@ -21,25 +21,25 @@ export const ko: Messages = {
   "nav.settings": "설정",
   "shell.toggleNavigation": "내비게이션 열기/닫기",
   "shell.userMenu": "계정 메뉴",
-  "shell.joinOrganization": "다른 조직 가입",
+
   "home.badge": "공유 Context",
-  "home.eyebrow": "AI Agent를 위한 공유 Context 인프라",
+  "home.eyebrow": "사람과 Agent가 함께 쓰는 조직 지식",
   "home.title": "에이전트가 기억하고,",
   "home.titleSecond": "더 나은 답을 만듭니다.",
   "home.lede":
-    "AI Agent의 장기 기억, RAG, Knowledge Graph를 하나의 Context로 연결합니다. MCP endpoint로 바로 활용하고, 필요하면 Agent Studio와 함께 사용할 수 있습니다.",
+    "한 기업의 장기 Memory, 문서 근거, Knowledge Graph를 연결하는 설치형 Context 플랫폼입니다. 독립적으로 사용하거나 Agent Studio에 연결하고, 승인된 멤버와 Agent가 권한에 맞는 지식을 공유합니다.",
   "home.capability.memory": "Long-term Memory",
   "home.capability.memoryBody":
     "규칙, 결정, 경험을 revision과 유효기간까지 보존합니다.",
   "home.capability.rag": "Hybrid RAG",
   "home.capability.ragBody":
-    "문서를 수집하고 Full-Text Search와 vector ranking을 결합합니다.",
+    "문서를 수집해 본문을 검색합니다. Embedding 모델을 설정하면 의미 검색을 함께 사용할 수 있습니다.",
   "home.capability.graph": "Knowledge Graph",
   "home.capability.graphBody":
     "엔터티 관계를 탐색하고 원본 memory와 chunk를 역참조합니다.",
   "home.capability.sharing": "Flexible Sharing",
   "home.capability.sharingBody":
-    "조직, 팀, 개인에 맞춰 필요한 Context를 자연스럽게 공유합니다.",
+    "운영자가 멤버를 승인하고 조직·팀·개인 범위별로 읽기와 관리 권한을 적용합니다.",
   "login.eyebrow": "MEMORY WORKSPACE",
   "login.title": "Agent Memory 시작하기",
   "login.lede": "필요한 Memory와 Context를 한곳에서 만나보세요.",
@@ -57,7 +57,7 @@ export const ko: Messages = {
   "login.providerUrlMissing": "인증 제공자 URL을 받지 못했습니다.",
   "login.failed": "로그인에 실패했습니다.",
   "login.notConfigured":
-    "인증 제공자가 설정되지 않았습니다. OIDC 또는 Google 환경 변수를 구성하세요.",
+    "로그인 수단이 설정되지 않았습니다. 운영자에게 로그인 설정을 요청하세요.",
   "guide.metaDescription":
     "Agent Memory의 검색, Memory, 문서, Knowledge Graph와 MCP 사용 가이드",
   "guide.metaTitle": "사용 가이드 · Agent Memory",
@@ -66,7 +66,7 @@ export const ko: Messages = {
   "guide.title": "기억을 넣는 법보다,",
   "guide.titleSecond": "다시 믿고 쓰는 법.",
   "guide.lede":
-    "Memory와 문서, Knowledge Graph를 출처와 함께 연결해 다음 Agent가 바로 활용할 수 있는 Context로 만듭니다.",
+    "한 설치에서 한 기업의 지식을 관리합니다. 가입 요청과 운영자 승인부터 Memory·문서·Graph 활용, Agent 연결까지 안내합니다.",
   "guide.flowLabel": "Agent Memory Context 흐름",
   "guide.flow.store": "근거와 scope를 함께 저장",
   "guide.flow.discover": "필요한 Context를 정확하게 발견",
@@ -80,9 +80,21 @@ export const ko: Messages = {
   "guide.chapter.graph": "Graph 탐색",
   "guide.chapter.review": "AI 후보 검토",
   "guide.chapter.connect": "Agent 연결",
-  "guide.start.title": "Scope를 먼저 선택합니다.",
+  "login.approvalNotice": "신규 가입은 가입 요청으로 처리됩니다. 운영자 승인 후 조직 지식을 사용할 수 있습니다.",
+  "guide.start.request": "가입 요청",
+  "guide.start.requestNote": "설정된 로그인 수단으로 계정을 만듭니다.",
+  "guide.start.approve": "운영자 승인",
+  "guide.start.approveNote": "운영자가 회원 화면에서 요청을 검토하고 승인합니다.",
+  "guide.start.use": "지식 활용",
+  "guide.start.useNote": "승인 후 권한에 맞는 Memory·문서·Graph를 사용합니다.",
+  "guide.start.operatorNote": "승인 대기 화면에서 새로고침으로 상태를 확인하세요. 최초 운영자는 설치 관리자가 설정하며, 차단·제거된 계정은 운영자의 접근 복구가 필요합니다.",
+  "guide.scope.title": "저장할 때 기본 공유 범위를 선택합니다.",
+  "onboarding.deniedTitle": "접근이 제한되었습니다",
+  "onboarding.deniedBody": "현재 계정은 이 설치의 지식을 사용할 수 없습니다. 운영자에게 접근 권한 확인을 요청하세요.",
+  "guide.start.title":
+    "가입 요청과 승인부터 시작합니다.",
   "guide.start.body":
-    "모든 Memory, 문서, Knowledge node와 edge는 하나의 조직과 하나의 scope에 속합니다. 저장하기 전에 누가 이 Context를 함께 사용할지 결정하세요.",
+    "가입은 이 설치의 멤버가 되기 위한 요청입니다. 운영자가 승인하기 전에는 조직의 지식을 읽거나 저장할 수 없습니다. 별도로 조직을 만들거나 선택할 필요는 없습니다.",
   "guide.scope.organizationAudience": "조직 멤버",
   "guide.scope.teamAudience": "해당 팀 멤버",
   "guide.scope.userAudience": "본인",
@@ -91,7 +103,7 @@ export const ko: Messages = {
   "guide.scope.read": "읽기 · {audience}",
   "guide.scope.manage": "관리 · {manager}",
   "guide.start.note":
-    "선택한 scope에 맞는 Context를 검색하고, 현재 활용할 수 있는 Source와 연결된 Graph를 함께 보여줍니다.",
+    "조직 전체에 쓰기·관리하려면 admin 또는 owner 권한이 필요합니다. 팀 범위는 팀 멤버와 조직 관리자가 접근하며, 개인 범위는 기본적으로 본인에게만 허용됩니다. Memory에 명시적인 ACL을 부여하면 지정한 사용자·팀도 허용된 작업을 수행할 수 있습니다.",
   "guide.search.title": "질문에 맞는 검색 면을 고릅니다.",
   "guide.search.body":
     "모든 지식에서 Memory, 문서 조각과 Knowledge node를 함께 검색하거나 결과 종류를 좁힙니다. 결과를 선택하면 목록을 유지한 채 전체 내용과 출처를 확인할 수 있습니다.",
@@ -130,7 +142,7 @@ export const ko: Messages = {
   "guide.review.rejectNote": "Graph를 변경하지 않고 거절을 기록합니다. 거절한 후보는 나중에 승인할 수 없습니다.",
   "guide.connect.title": "MCP로 Agent와 Context를 연결합니다.",
   "guide.connect.body":
-    "Agent 연결의 세 단계를 따릅니다. 조직 MCP endpoint를 복사하고 인증 정보를 설정한 뒤 Agent Studio 등록 템플릿을 복사합니다. Description은 모델에 서버 사용 시점을 알립니다. 선택 입력인 Content는 운영자 메모이며 모델에 전달되지 않습니다.",
+    "Agent 연결 화면에서 /api/mcp 주소와 인증 설정을 확인하세요. Agent Studio 등록 템플릿을 복사한 뒤 연결을 테스트하고 사용할 version에 서버를 연결합니다.",
   "guide.connect.note":
     "조직 admin·owner는 Agent token을 관리할 수 있습니다. 템플릿의 자리표시자를 실제 인증 정보로 바꾸고 Studio에서 연결을 테스트한 뒤 version에 서버를 직접 연결합니다. 자동 회상에는 memoryRecall 설정과 recall 도구 허용도 필요합니다.",
   "guide.next.title": "이제 실제 Context를 탐색하세요.",
@@ -157,26 +169,20 @@ export const ko: Messages = {
   "organization.memberEmail": "조직 멤버 이메일",
   "organization.teamRole": "팀 역할",
   "organization.saveTeamMember": "팀 멤버 저장",
-  "organization.createFailed": "조직을 만들지 못했습니다.",
-  "organization.firstTitle": "첫 조직 만들기",
-  "organization.firstBody":
-    "현재 계정이 owner가 되며 이후 멤버와 팀을 관리할 수 있습니다.",
+
   "organization.name": "조직 이름",
   "organization.slug": "조직 slug",
-  "organization.slugDescription":
-    "소문자, 숫자, 하이픈만 사용할 수 있습니다.",
-  "organization.create": "조직 만들기",
-  "onboarding.eyebrow": "시작하기",
-  "onboarding.title": "참여할 조직을 선택하세요",
+
+
+  "onboarding.title": "접근 승인 대기",
   "onboarding.lede":
-    "가입할 조직을 선택하세요. 조직 정책에 따라 즉시 활성화되거나 승인 대기 상태가 됩니다.",
-  "onboarding.loadFailed": "가입 가능한 조직을 불러오지 못했습니다.",
-  "onboarding.joinFailed": "가입 요청에 실패했습니다.",
-  "onboarding.join": "가입",
-  "onboarding.pendingBadge": "승인 대기",
+    "가입이 요청으로 접수되었습니다. 운영자가 승인하면 멤버가 되어 Memory를 사용할 수 있습니다.",
+
+
+
+
   "onboarding.pendingNotice": "조직 관리자의 승인을 기다리고 있습니다.",
-  "onboarding.empty":
-    "아직 가입할 수 있는 조직이 없습니다. 관리자에게 멤버십을 요청하세요.",
+
   "members.title": "회원 관리",
   "members.lede": "회원을 확인하고 역할·팀을 변경하거나 접근을 관리합니다.",
   "members.accessDenied": "조직 관리자만 볼 수 있는 페이지입니다.",
@@ -199,7 +205,7 @@ export const ko: Messages = {
   "members.removed": "회원을 제거했습니다.",
   "members.removeTitle": "회원 제거",
   "members.removeBody":
-    "{email}을(를) 조직에서 제거할까요? 팀 소속과 접근 권한은 제거되지만 user scope 데이터는 재가입을 위해 보존됩니다.",
+    "{email}을(를) 조직에서 제거할까요? 팀 소속과 접근 권한은 제거되지만 user scope 데이터는 관리자의 재등록을 위해 보존됩니다.",
   "members.assignTeam": "{email}을(를) 팀에 배정",
   "members.addTeam": "팀 추가",
   "members.removeFromTeam": "{team}에서 제거",
@@ -217,7 +223,7 @@ export const ko: Messages = {
   "teams.deleteBody":
     "{name} 팀을 삭제할까요? 팀 소속과 team scope의 Database record가 영구히 삭제됩니다. 업로드 원본은 storage lifecycle에 따라 별도로 정리됩니다.",
   "settings.title": "조직 설정",
-  "settings.lede": "조직 프로필과 신규 회원 가입 정책을 관리합니다.",
+  "settings.lede": "조직 프로필과 기본 팀을 관리합니다.",
   "settings.general": "일반",
   "settings.save": "설정 저장",
   "settings.saved": "설정을 저장했습니다.",
@@ -236,24 +242,21 @@ export const ko: Messages = {
   "settings.application.saved": "애플리케이션 설정을 저장했습니다.",
   "settings.application.loadFailed": "애플리케이션 설정을 불러오지 못했습니다.",
   "settings.application.saveFailed": "애플리케이션 설정을 저장하지 못했습니다.",
-  "settings.newMember.label": "신규 회원 정책",
-  "settings.newMember.description":
-    "로그인한 사용자가 이 조직에 가입할 때 적용되는 상태입니다.",
-  "settings.newMember.active": "즉시 활성화",
-  "settings.newMember.pending": "승인 대기",
+
+
+
+
   "settings.defaultTeam.label": "기본 팀",
   "settings.defaultTeam.description":
     "신규 회원이 활성화될 때 자동으로 배정되는 팀입니다.",
   "settings.defaultTeam.placeholder": "기본 팀 없음",
-  "settings.newOrganization": "새 조직 만들기",
-  "settings.danger": "위험 구역",
-  "settings.deleteBody":
-    "조직을 삭제하면 Database record가 영구히 제거됩니다. 업로드 원본은 storage lifecycle에 따라 별도로 정리됩니다.",
-  "settings.deleteOrganization": "조직 삭제",
-  "settings.deleteTitle": "조직 삭제",
-  "settings.deleteConfirmBody":
-    "{name} 조직의 Database record가 영구히 삭제됩니다. 업로드 원본은 storage lifecycle 정리 전까지 남으며 이 작업은 되돌릴 수 없습니다.",
-  "settings.deleteConfirmLabel": "확인을 위해 {slug} 입력",
+
+
+
+
+
+
+
   "settings.ontology.title": "온톨로지",
   "settings.ontology.body":
     "Knowledge Graph에서 허용할 node kind와 edge predicate를 정의합니다.",
@@ -281,7 +284,7 @@ export const ko: Messages = {
   "settings.ontology.suggest.title": "AI 추천 용어",
   "settings.ontology.suggest.empty": "모델이 새로 제안할 용어를 찾지 못했습니다.",
   "workspace.resultFallback": "검색 결과",
-  "workspace.selectOrganization": "조직을 선택하세요",
+  "workspace.selectOrganization": "조직 접근 권한을 확인하세요",
   "workspace.searchFailed": "검색에 실패했습니다.",
   "workspace.graphFailed": "관계 지도를 불러오지 못했습니다.",
   "workspace.uploadFailed": "업로드에 실패했습니다.",
@@ -293,7 +296,7 @@ export const ko: Messages = {
   "workspace.title": "공유 Context를 한곳에서 관리합니다.",
   "workspace.signOut": "로그아웃",
   "workspace.noOrganization": "접근 가능한 조직이 없습니다.",
-  "workspace.createFirst": "첫 조직을 만들어 시작하세요.",
+
   "workspace.requestMembership": "관리자에게 멤버십을 요청하세요.",
   "workspace.activeOrganization": "활성 조직",
   "workspace.tab.search": "통합 검색",

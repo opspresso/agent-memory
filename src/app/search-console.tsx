@@ -152,7 +152,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
     if (!initialQuery) return;
     const controller = new AbortController();
     searchRequest.current = controller;
-    fetch(`/api/organizations/${organizationSlug}/${searchKind}?q=${encodeURIComponent(initialQuery)}`, { signal: controller.signal })
+    fetch(`/api/${searchKind}?q=${encodeURIComponent(initialQuery)}`, { signal: controller.signal })
       .then((response) => responseJson(response, t("workspace.searchFailed"), searchResponseSchema))
       .then((body) => { if (!controller.signal.aborted) setHits(body.hits); })
       .catch((error: unknown) => {
@@ -203,7 +203,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
     setSearchError(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationSlug}/${searchKind}?q=${encodeURIComponent(query)}`,
+        `/api/${searchKind}?q=${encodeURIComponent(query)}`,
         { signal: controller.signal }
       );
       const body = await responseJson(
@@ -252,7 +252,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
     setGraphError(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationSlug}/knowledge/nodes/${nodeId}/neighborhood?depth=2&limit=100`,
+        `/api/knowledge/nodes/${nodeId}/neighborhood?depth=2&limit=100`,
         { signal: controller.signal }
       );
       const body = await responseJson(
@@ -302,7 +302,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
           : `knowledge/${action.kind === "node" ? "nodes" : "edges"}/${action.id}`;
     try {
       const response = await fetch(
-        `/api/organizations/${organizationSlug}/${path}`,
+        `/api/${path}`,
         action.kind === "merge"
           ? {
               method: "POST",

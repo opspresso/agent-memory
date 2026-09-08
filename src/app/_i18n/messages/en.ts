@@ -19,25 +19,25 @@ export const en = {
   "nav.settings": "Settings",
   "shell.toggleNavigation": "Toggle navigation",
   "shell.userMenu": "Account menu",
-  "shell.joinOrganization": "Join another organization",
+
   "home.badge": "Shared Context",
-  "home.eyebrow": "Shared context infrastructure for AI agents",
+  "home.eyebrow": "One organization. Shared knowledge.",
   "home.title": "Agents remember,",
   "home.titleSecond": "and create better answers.",
   "home.lede":
-    "Connect long-term memory, RAG, and knowledge graphs into one context for AI agents. Use it directly through an MCP endpoint or together with Agent Studio.",
+    "A self-hosted context platform for one organization’s long-term Memory, document evidence, and Knowledge Graph. Use it independently or connect Agent Studio, with access scoped to approved members and agents.",
   "home.capability.memory": "Long-term Memory",
   "home.capability.memoryBody":
     "Preserve rules, decisions, and experience with revisions and validity periods.",
   "home.capability.rag": "Hybrid RAG",
   "home.capability.ragBody":
-    "Ingest documents and combine full-text search with vector ranking.",
+    "Ingest documents and search their text. Configure an embedding model to add semantic search.",
   "home.capability.graph": "Knowledge Graph",
   "home.capability.graphBody":
     "Explore entity relationships and trace them back to source memories and chunks.",
   "home.capability.sharing": "Flexible Sharing",
   "home.capability.sharingBody":
-    "Share the context people need across organizations, teams, and individuals.",
+    "Operators approve members, with access controlled across organization, team, and personal scopes.",
   "login.eyebrow": "MEMORY WORKSPACE",
   "login.title": "Get started with Agent Memory",
   "login.lede": "Find the memory and context you need in one place.",
@@ -55,7 +55,7 @@ export const en = {
   "login.providerUrlMissing": "The identity provider URL was not returned.",
   "login.failed": "Sign-in failed.",
   "login.notConfigured":
-    "No identity provider is configured. Configure OIDC or Google environment variables.",
+    "No sign-in method is configured. Ask your operator to configure access.",
   "guide.metaDescription":
     "A guide to Agent Memory search, memories, documents, knowledge graphs, and MCP",
   "guide.metaTitle": "Guide · Agent Memory",
@@ -64,7 +64,7 @@ export const en = {
   "guide.title": "More than storing memory,",
   "guide.titleSecond": "make it trustworthy and reusable.",
   "guide.lede":
-    "Connect memories, documents, and knowledge graphs to their sources, creating context the next agent can use immediately.",
+    "Manage one organization’s knowledge in each installation. Follow membership approval, Memory, documents, Graph, and agent connection from start to finish.",
   "guide.flowLabel": "Agent Memory context flow",
   "guide.flow.store": "Store evidence and scope together",
   "guide.flow.discover": "Find the right context precisely",
@@ -78,9 +78,21 @@ export const en = {
   "guide.chapter.graph": "Explore Graph",
   "guide.chapter.review": "Review AI candidates",
   "guide.chapter.connect": "Connect Agents",
-  "guide.start.title": "Choose a scope first.",
+  "login.approvalNotice": "New signups are membership requests. An operator must approve access before you can use organization knowledge.",
+  "guide.start.request": "Request membership",
+  "guide.start.requestNote": "Create an account using a configured sign-in method.",
+  "guide.start.approve": "Operator approval",
+  "guide.start.approveNote": "An operator reviews and approves the request in Members.",
+  "guide.start.use": "Use knowledge",
+  "guide.start.useNote": "Access Memory, documents, and Graph within your permissions.",
+  "guide.start.operatorNote": "Refresh the approval screen to check your status. The installation administrator configures the first operator. Blocked or removed accounts need an operator to restore access.",
+  "guide.scope.title": "Choose a default sharing scope when saving.",
+  "onboarding.deniedTitle": "Access is restricted",
+  "onboarding.deniedBody": "This account cannot currently use the installation’s knowledge. Ask an operator to review your access.",
+  "guide.start.title":
+    "Start with a membership request and approval.",
   "guide.start.body":
-    "Every memory, document, knowledge node, and edge belongs to one organization and one scope. Decide who will use this context together before saving it.",
+    "Signing up requests membership in this installation. An operator must approve it before you can read or save organization knowledge. There is no separate organization to create or choose.",
   "guide.scope.organizationAudience": "organization members",
   "guide.scope.teamAudience": "team members",
   "guide.scope.userAudience": "you",
@@ -89,7 +101,7 @@ export const en = {
   "guide.scope.read": "Read · {audience}",
   "guide.scope.manage": "Manage · {manager}",
   "guide.start.note":
-    "Search context within the selected scope and see the currently available sources together with their connected graph.",
+    "Organization-wide writes and management require admin or owner access. Team members and organization administrators can access team content; personal content defaults to its owner. Explicit Memory ACL grants can also permit named users or teams to perform specific actions.",
   "guide.search.title": "Choose the search surface that fits your question.",
   "guide.search.body":
     "Choose All knowledge to search Memory, document chunks and Knowledge nodes together, or narrow the result type. Select a result to read its full content and sources without losing the list.",
@@ -128,7 +140,7 @@ export const en = {
   "guide.review.rejectNote": "Record the rejection without changing the Graph; a rejected candidate cannot be accepted later.",
   "guide.connect.title": "Connect Agents to Context through MCP.",
   "guide.connect.body":
-    "Follow the three sections on Agent connection: copy the organization MCP endpoint, configure credentials, and copy the Agent Studio registration template. Description tells the model when to use this server. Optional Content is an operator note and is not sent to the model.",
+    "Open Agent connection to get the /api/mcp address and authentication settings. Copy the Agent Studio registration template, test the connection, and bind the server to the version that will use it.",
   "guide.connect.note":
     "An organization admin or owner can manage an Agent token. Replace the template placeholder with the actual credential, test the connection in Studio, then bind the server to a version. Automatic recall also requires memoryRecall and the recall tool to be enabled.",
   "guide.next.title": "Explore real context now.",
@@ -141,7 +153,7 @@ export const en = {
   "organization.teamCreated": "Team created.",
   "organization.teamMemberSaved": "Team member saved.",
   "organization.manageTitle": "Manage organization",
-  "organization.manageBody": "Assign registered accounts to organizations and teams.",
+  "organization.manageBody": "Manage access and teams for registered accounts.",
   "organization.refresh": "Refresh",
   "organization.members": "Organization members",
   "organization.registeredEmail": "Registered user email",
@@ -155,27 +167,21 @@ export const en = {
   "organization.memberEmail": "Organization member email",
   "organization.teamRole": "Team role",
   "organization.saveTeamMember": "Save team member",
-  "organization.createFailed": "The organization could not be created.",
-  "organization.firstTitle": "Create your first organization",
-  "organization.firstBody":
-    "Your account becomes the owner and can then manage members and teams.",
+
   "organization.name": "Organization name",
   "organization.slug": "Organization slug",
-  "organization.slugDescription":
-    "Use lowercase letters, numbers, and hyphens only.",
-  "organization.create": "Create organization",
-  "onboarding.eyebrow": "Get started",
-  "onboarding.title": "Choose your organization",
+
+
+  "onboarding.title": "Access approval",
   "onboarding.lede":
-    "Select an organization to join. Depending on its policy you become active immediately or wait for approval.",
-  "onboarding.loadFailed": "Available organizations could not be loaded.",
-  "onboarding.joinFailed": "The join request failed.",
-  "onboarding.join": "Join",
-  "onboarding.pendingBadge": "Awaiting approval",
+    "Your signup is a membership request. You can use Memory after an administrator approves it.",
+
+
+
+
   "onboarding.pendingNotice":
     "Your membership is awaiting approval by an organization administrator.",
-  "onboarding.empty":
-    "There is no organization you can join yet. Ask an administrator for membership.",
+
   "members.title": "Members",
   "members.lede": "Review members, change roles and teams, and moderate access.",
   "members.accessDenied": "Only organization administrators can view this page.",
@@ -198,7 +204,7 @@ export const en = {
   "members.removed": "The member was removed.",
   "members.removeTitle": "Remove member",
   "members.removeBody":
-    "Remove {email} from this organization? Team memberships and access are removed, while user-scoped data is retained for a future rejoin.",
+    "Remove {email} from this organization? Team memberships and access are removed, while user-scoped data is retained if an administrator restores membership.",
   "members.assignTeam": "Assign {email} to a team",
   "members.addTeam": "Add team",
   "members.removeFromTeam": "Remove from {team}",
@@ -216,7 +222,7 @@ export const en = {
   "teams.deleteBody":
     "Delete {name}? Team memberships and team-scoped database records are permanently deleted. Uploaded source objects remain subject to the storage lifecycle.",
   "settings.title": "Organization settings",
-  "settings.lede": "Control the organization profile and how new members join.",
+  "settings.lede": "Manage the organization profile and default team.",
   "settings.general": "General",
   "settings.save": "Save settings",
   "settings.saved": "Settings saved.",
@@ -235,24 +241,21 @@ export const en = {
   "settings.application.saved": "Application settings saved.",
   "settings.application.loadFailed": "Application settings could not be loaded.",
   "settings.application.saveFailed": "Application settings could not be saved.",
-  "settings.newMember.label": "New member policy",
-  "settings.newMember.description":
-    "How a signed-in user who joins this organization is treated.",
-  "settings.newMember.active": "Activate immediately",
-  "settings.newMember.pending": "Hold for approval",
+
+
+
+
   "settings.defaultTeam.label": "Default team",
   "settings.defaultTeam.description":
     "New members are added to this team when they become active.",
   "settings.defaultTeam.placeholder": "No default team",
-  "settings.newOrganization": "Create a new organization",
-  "settings.danger": "Danger zone",
-  "settings.deleteBody":
-    "Deleting the organization permanently removes its database records. Uploaded source objects remain subject to the storage lifecycle.",
-  "settings.deleteOrganization": "Delete organization",
-  "settings.deleteTitle": "Delete organization",
-  "settings.deleteConfirmBody":
-    "This permanently deletes the database records for {name}. Uploaded source objects remain until storage lifecycle cleanup. This cannot be undone.",
-  "settings.deleteConfirmLabel": "Type {slug} to confirm",
+
+
+
+
+
+
+
   "settings.ontology.title": "Ontology",
   "settings.ontology.body":
     "Define the node kinds and edge predicates allowed in the Knowledge Graph.",
@@ -281,7 +284,7 @@ export const en = {
   "settings.ontology.suggest.empty":
     "The model found nothing new to suggest.",
   "workspace.resultFallback": "Search result",
-  "workspace.selectOrganization": "Select an organization",
+  "workspace.selectOrganization": "Organization access is required",
   "workspace.searchFailed": "Search failed.",
   "workspace.graphFailed": "The relationship map could not be loaded.",
   "workspace.uploadFailed": "Upload failed.",
@@ -293,7 +296,7 @@ export const en = {
   "workspace.title": "Manage shared context in one place.",
   "workspace.signOut": "Sign out",
   "workspace.noOrganization": "You do not have access to an organization.",
-  "workspace.createFirst": "Create your first organization to get started.",
+
   "workspace.requestMembership": "Ask an administrator for membership.",
   "workspace.activeOrganization": "Active organization",
   "workspace.tab.search": "Unified search",

@@ -5,7 +5,6 @@ import {
   Badge,
   Button,
   Group,
-  Modal,
   Paper,
   Select,
   SimpleGrid,
@@ -16,15 +15,12 @@ import {
   Title
 } from "@mantine/core";
 import {
-  IconAlertTriangle,
   IconDeviceFloppy,
-  IconSparkles,
-  IconTrash
+  IconSparkles
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { NewMemberStatus } from "@/domain/identity/organization-access";
 import type { KnowledgeOntologyMode } from "@/domain/knowledge/knowledge-ontology";
 
 import { WorkspaceHeader } from "../workspace-components";
@@ -36,15 +32,13 @@ import {
   organizationDetailResponseSchema,
   teamsResponseSchema
 } from "../api-response-schemas";
-import { responseJson, responseOk } from "../http-response";
-import { OrganizationBootstrap } from "../organization-bootstrap";
+import { responseJson } from "../http-response";
 import { useOrganization } from "../organization-context";
 
 interface OrganizationDetail {
   readonly id: string;
   readonly slug: string;
   readonly name: string;
-  readonly newMemberStatus?: NewMemberStatus;
   readonly defaultTeamId?: string | null;
   readonly ontologyMode?: KnowledgeOntologyMode;
   readonly ontology?: {
@@ -83,31 +77,21 @@ interface OntologySuggestion {
   readonly edgePredicates: readonly string[];
 }
 
-export function OrganizationSettings({
-  isAdmin
-}: {
-  readonly isAdmin: boolean;
-}) {
+export function OrganizationSettings() {
   const { organizationSlug } = useOrganization();
   if (!organizationSlug) {
     return null;
   }
-  return <OrganizationSettingsView isAdmin={isAdmin} key={organizationSlug} />;
+  return <OrganizationSettingsView key={organizationSlug} />;
 }
 
-function OrganizationSettingsView({
-  isAdmin
-}: {
-  readonly isAdmin: boolean;
-}) {
+function OrganizationSettingsView() {
   const t = useT();
   const router = useRouter();
-  const { organizationSlug, access, activeOrganization } = useOrganization();
+  const { organizationSlug, access } = useOrganization();
   const [organization, setOrganization] = useState<OrganizationDetail>();
   const [teams, setTeams] = useState<readonly TeamView[]>([]);
   const [name, setName] = useState("");
-  const [newMemberStatus, setNewMemberStatus] =
-    useState<NewMemberStatus>("pending");
   const [defaultTeamId, setDefaultTeamId] = useState<string | null>(null);
   const [ontologyMode, setOntologyMode] = useState<KnowledgeOntologyMode>("off");
   const [nodeKinds, setNodeKinds] = useState<string[]>([]);
@@ -119,11 +103,8 @@ function OrganizationSettingsView({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
-  const [deleteOpened, setDeleteOpened] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   const canManage = access?.role === "admin" || access?.role === "owner";
-  const isOwner = access?.role === "owner";
   const formInitialized = useRef(false);
   const recommendedKinds =
     recommendation?.nodeKinds.filter(
@@ -146,14 +127,14 @@ function OrganizationSettingsView({
     }
     try {
       const [detail, teamsBody, recommendationBody] = await Promise.all([
-        fetch(`/api/organizations/${organizationSlug}`).then((response) =>
+        fetch(`/api/organization`).then((response) =>
           responseJson(
             response,
             t("organization.loadFailed"),
             organizationDetailResponseSchema
           )
         ),
-        fetch(`/api/organizations/${organizationSlug}/teams`).then((response) =>
+        fetch(`/api/teams`).then((response) =>
           responseJson(
             response,
             t("organization.loadFailed"),
@@ -161,7 +142,7 @@ function OrganizationSettingsView({
           )
         ),
         fetch(
-          `/api/organizations/${organizationSlug}/knowledge/ontology/recommendations`
+          `/api/knowledge/ontology/recommendations`
         ).then((response) =>
           responseJson(
             response,
@@ -176,7 +157,6 @@ function OrganizationSettingsView({
       if (!formInitialized.current) {
         formInitialized.current = true;
         setName(detail.name);
-        setNewMemberStatus(detail.newMemberStatus ?? "pending");
         setDefaultTeamId(detail.defaultTeamId ?? null);
         setOntologyMode(detail.ontologyMode ?? "off");
         setNodeKinds([...(detail.ontology?.nodeKinds ?? [])]);
@@ -198,12 +178,11 @@ function OrganizationSettingsView({
     setError(undefined);
     setMessage(undefined);
     try {
-      const response = await fetch(`/api/organizations/${organizationSlug}`, {
+      const response = await fetch(`/api/organization`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          newMemberStatus,
           defaultTeamId,
           ontologyMode,
           ontology: { nodeKinds, edgePredicates }
@@ -216,7 +195,6 @@ function OrganizationSettingsView({
       );
       setOrganization(detail);
       setName(detail.name);
-      setNewMemberStatus(detail.newMemberStatus ?? "pending");
       setDefaultTeamId(detail.defaultTeamId ?? null);
       setOntologyMode(detail.ontologyMode ?? "off");
       setNodeKinds([...(detail.ontology?.nodeKinds ?? [])]);
@@ -237,7 +215,7 @@ function OrganizationSettingsView({
     setError(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationSlug}/knowledge/ontology/suggestions`,
+        `/api/knowledge/ontology/suggestions`,
         { method: "POST" }
       );
       const body = await responseJson(
@@ -254,25 +232,6 @@ function OrganizationSettingsView({
       );
     } finally {
       setSuggestionPending(false);
-    }
-  }
-
-  async function confirmDelete() {
-    setPending(true);
-    setError(undefined);
-    try {
-      const response = await fetch(`/api/organizations/${organizationSlug}`, {
-        method: "DELETE"
-      });
-      await responseOk(response, t("organization.requestFailed"));
-      setDeleteOpened(false);
-      router.push("/");
-      router.refresh();
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : t("organization.requestFailed")
-      );
-      setPending(false);
     }
   }
 
@@ -302,21 +261,6 @@ function OrganizationSettingsView({
             onChange={(event) => setName(event.currentTarget.value)}
             required
             value={name}
-          />
-          <Select
-            allowDeselect={false}
-            data={[
-              { value: "active", label: t("settings.newMember.active") },
-              { value: "pending", label: t("settings.newMember.pending") }
-            ]}
-            description={t("settings.newMember.description")}
-            label={t("settings.newMember.label")}
-            onChange={(value) => {
-              if (value === "active" || value === "pending") {
-                setNewMemberStatus(value);
-              }
-            }}
-            value={newMemberStatus}
           />
           <Select
             clearable
@@ -504,95 +448,6 @@ function OrganizationSettingsView({
         </Paper>
       ) : null}
 
-      {isAdmin ? (
-        <Paper p="lg" radius="lg" withBorder>
-          <Stack gap="md">
-            <Title order={3}>{t("settings.newOrganization")}</Title>
-            <OrganizationBootstrap />
-          </Stack>
-        </Paper>
-      ) : null}
-
-      {isOwner ? (
-        <Paper
-          p="lg"
-          radius="lg"
-          style={{
-            borderColor:
-              "color-mix(in oklab, var(--mantine-color-red-6) 40%, transparent)"
-          }}
-          withBorder
-        >
-          <Stack gap="md">
-            <Group gap="xs">
-              <IconAlertTriangle color="var(--mantine-color-red-6)" size={20} />
-              <Title order={3}>{t("settings.danger")}</Title>
-            </Group>
-            <Text c="dimmed" size="sm">
-              {t("settings.deleteBody")}
-            </Text>
-            <Group>
-              <Button
-                color="red"
-                leftSection={<IconTrash size={16} />}
-                onClick={() => {
-                  setDeleteConfirmation("");
-                  setDeleteOpened(true);
-                }}
-                variant="light"
-              >
-                {t("settings.deleteOrganization")}
-              </Button>
-            </Group>
-          </Stack>
-        </Paper>
-      ) : null}
-
-      <Modal
-        centered
-        onClose={() => {
-          if (!pending) {
-            setDeleteOpened(false);
-          }
-        }}
-        opened={deleteOpened}
-        title={t("settings.deleteTitle")} attributes={{ content: { "aria-label": t("settings.deleteTitle") } }}
-      >
-        <Stack gap="md">
-          <Text size="sm">
-            {t("settings.deleteConfirmBody", {
-              name: activeOrganization?.name ?? ""
-            })}
-          </Text>
-          <TextInput
-            label={t("settings.deleteConfirmLabel", {
-              slug: organization?.slug ?? ""
-            })}
-            onChange={(event) =>
-              setDeleteConfirmation(event.currentTarget.value)
-            }
-            value={deleteConfirmation}
-          />
-          <Group justify="flex-end">
-            <Button
-              disabled={pending}
-              onClick={() => setDeleteOpened(false)}
-              variant="default"
-            >
-              {t("resource.cancel")}
-            </Button>
-            <Button
-              color="red"
-              disabled={deleteConfirmation !== (organization?.slug ?? "")}
-              leftSection={<IconTrash size={16} />}
-              loading={pending}
-              onClick={() => void confirmDelete()}
-            >
-              {t("settings.deleteOrganization")}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
     </Stack>
   );
 }

@@ -15,7 +15,7 @@ vi.mock("@/lib/container", () => ({
   organizationAgentTokenUseCases: { reveal: mocks.reveal }
 }));
 
-import { POST } from "@/app/api/organizations/[organizationSlug]/agent-token/reveal/route";
+import { POST } from "@/app/api/agent-token/reveal/route";
 
 const access = {
   organizationId: "00000000-0000-4000-8000-000000000001",
@@ -43,10 +43,9 @@ describe("organization Agent token reveal route", () => {
 
     const response = await POST(
       new Request(
-        "https://memory.example.com/api/organizations/opspresso/agent-token/reveal",
+        "https://memory.example.com/api/agent-token/reveal",
         { method: "POST" }
-      ),
-      { params: Promise.resolve({ organizationSlug: "opspresso" }) }
+      )
     );
 
     expect(response.status).toBe(200);
@@ -65,10 +64,9 @@ describe("organization Agent token reveal route", () => {
 
     const response = await POST(
       new Request(
-        "https://memory.example.com/api/organizations/opspresso/agent-token/reveal",
+        "https://memory.example.com/api/agent-token/reveal",
         { method: "POST" }
-      ),
-      { params: Promise.resolve({ organizationSlug: "opspresso" }) }
+      )
     );
 
     expect(response.status).toBe(409);

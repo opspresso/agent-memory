@@ -43,7 +43,7 @@ function EvidenceContent({ memoryId, chunkId, organizationSlug }: SourceEvidence
     const controller = new AbortController();
     async function load() {
       try {
-        const base = `/api/organizations/${organizationSlug}`;
+        const base = `/api`;
         let next: Evidence;
         if (memoryId) {
           const value = await fetch(`${base}/memories/${memoryId}`, { signal: controller.signal })

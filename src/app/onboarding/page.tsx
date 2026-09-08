@@ -13,17 +13,9 @@ export default async function OnboardingPage() {
   if (!user) {
     redirect("/");
   }
-  const organizations = await listOrganizationMemberships(user.id);
-  return (
-    <OrganizationOnboarding
-      isAdmin={user.isAdmin}
-      pendingOrganizations={organizations
-        .filter((organization) => organization.status === "pending")
-        .map((organization) => ({
-          id: organization.id,
-          name: organization.name,
-          slug: organization.slug
-        }))}
-    />
-  );
+  const organizations = await listOrganizationMemberships(user);
+  if (organizations.some((organization) => organization.status === "active")) {
+    redirect("/");
+  }
+  return <OrganizationOnboarding pending={organizations.some((organization) => organization.status === "pending")} />;
 }

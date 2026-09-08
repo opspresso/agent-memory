@@ -88,7 +88,8 @@ function documentSourceAccessPredicate(access: OrganizationAccess): SQL {
 
 function visibleSourcePredicate(
   access: OrganizationAccess,
-  sources: typeof knowledgeNodeSources | typeof knowledgeEdgeSources
+  sources: typeof knowledgeNodeSources | typeof knowledgeEdgeSources,
+  now: Date
 ): SQL {
   return sql`(
     EXISTS (
@@ -96,8 +97,8 @@ function visibleSourcePredicate(
       WHERE ${memories.organizationId} = ${sources.organizationId}
         AND ${memories.id} = ${sources.memoryId}
         AND ${memories.status} = 'active'
-        AND ${memories.validFrom} <= CURRENT_TIMESTAMP
-        AND (${memories.expiresAt} IS NULL OR ${memories.expiresAt} > CURRENT_TIMESTAMP)
+        AND ${memories.validFrom} <= ${now.toISOString()}::timestamptz
+        AND (${memories.expiresAt} IS NULL OR ${memories.expiresAt} > ${now.toISOString()}::timestamptz)
         AND ${memoryReadPredicate(access)}
     ) OR EXISTS (
       SELECT 1 FROM ${documentChunks}
@@ -112,21 +113,21 @@ function visibleSourcePredicate(
   )`;
 }
 
-function nodeHasVisibleSource(access: OrganizationAccess): SQL {
+function nodeHasVisibleSource(access: OrganizationAccess, now: Date): SQL {
   return sql`EXISTS (
     SELECT 1 FROM ${knowledgeNodeSources}
     WHERE ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
       AND ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
-      AND ${visibleSourcePredicate(access, knowledgeNodeSources)}
+      AND ${visibleSourcePredicate(access, knowledgeNodeSources, now)}
   )`;
 }
 
-function edgeHasVisibleSource(access: OrganizationAccess): SQL {
+function edgeHasVisibleSource(access: OrganizationAccess, now: Date): SQL {
   return sql`EXISTS (
     SELECT 1 FROM ${knowledgeEdgeSources}
     WHERE ${knowledgeEdgeSources.organizationId} = ${knowledgeEdges.organizationId}
       AND ${knowledgeEdgeSources.edgeId} = ${knowledgeEdges.id}
-      AND ${visibleSourcePredicate(access, knowledgeEdgeSources)}
+      AND ${visibleSourcePredicate(access, knowledgeEdgeSources, now)}
   )`;
 }
 
@@ -187,7 +188,8 @@ function nodeScopePredicate(scope: ScopedResource) {
 }
 
 export function createKnowledgeGraphRepository(
-  db: AgentMemoryDatabase
+  db: AgentMemoryDatabase,
+  clock: () => Date = () => new Date()
 ): KnowledgeGraphRepository {
   return {
     async saveNode(node) {
@@ -197,6 +199,7 @@ export function createKnowledgeGraphRepository(
     },
 
     async findNodesByCanonicalNames(access, scope, canonicalNames) {
+      const now = clock();
       const canonicalNameKeys = [
         ...new Set(canonicalNames.map(knowledgeCanonicalNameKey))
       ];
@@ -211,7 +214,7 @@ export function createKnowledgeGraphRepository(
             eq(knowledgeNodes.organizationId, access.organizationId),
             nodeScopePredicate(scope),
             nodeAccessPredicate(access),
-            nodeHasVisibleSource(access),
+            nodeHasVisibleSource(access, now),
             inArray(knowledgeNodes.canonicalNameKey, canonicalNameKeys)
           )
         )
@@ -223,7 +226,7 @@ export function createKnowledgeGraphRepository(
             .where(
               and(
                 eq(knowledgeNodeSources.organizationId, access.organizationId),
-                visibleSourcePredicate(access, knowledgeNodeSources),
+                visibleSourcePredicate(access, knowledgeNodeSources, now),
                 inArray(
                   knowledgeNodeSources.nodeId,
                   rows.map((row) => row.id)
@@ -620,6 +623,7 @@ export function createKnowledgeGraphRepository(
     },
 
     async searchNodes(input) {
+      const now = clock();
       const scores = scoreExpressions(input);
       const rows = await db
         .select({
@@ -633,7 +637,7 @@ export function createKnowledgeGraphRepository(
           and(
             eq(knowledgeNodes.organizationId, input.access.organizationId),
             nodeAccessPredicate(input.access),
-            nodeHasVisibleSource(input.access),
+            nodeHasVisibleSource(input.access, now),
             scores.matches
           )
         )
@@ -649,7 +653,7 @@ export function createKnowledgeGraphRepository(
                   knowledgeNodeSources.organizationId,
                   input.access.organizationId
                 ),
-                visibleSourcePredicate(input.access, knowledgeNodeSources),
+                visibleSourcePredicate(input.access, knowledgeNodeSources, now),
                 inArray(
                   knowledgeNodeSources.nodeId,
                   rows.map((row) => row.node.id)
@@ -670,6 +674,7 @@ export function createKnowledgeGraphRepository(
     },
 
     async findNeighborhood(access, nodeId, depth, limit) {
+      const now = clock();
       const rootRows = await db
         .select()
         .from(knowledgeNodes)
@@ -678,7 +683,7 @@ export function createKnowledgeGraphRepository(
             eq(knowledgeNodes.organizationId, access.organizationId),
             eq(knowledgeNodes.id, nodeId),
             nodeAccessPredicate(access),
-            nodeHasVisibleSource(access)
+            nodeHasVisibleSource(access, now)
           )
         )
         .limit(1);
@@ -698,7 +703,7 @@ export function createKnowledgeGraphRepository(
             and(
               eq(knowledgeEdges.organizationId, access.organizationId),
               edgeAccessPredicate(access),
-              edgeHasVisibleSource(access),
+              edgeHasVisibleSource(access, now),
               or(
                 inArray(knowledgeEdges.sourceNodeId, frontier),
                 inArray(knowledgeEdges.targetNodeId, frontier)
@@ -728,7 +733,7 @@ export function createKnowledgeGraphRepository(
               eq(knowledgeNodes.organizationId, access.organizationId),
               inArray(knowledgeNodes.id, [...candidateIds]),
               nodeAccessPredicate(access),
-              nodeHasVisibleSource(access)
+              nodeHasVisibleSource(access, now)
             )
           )
           .limit(remaining);
@@ -751,7 +756,7 @@ export function createKnowledgeGraphRepository(
           .where(
             and(
               eq(knowledgeNodeSources.organizationId, access.organizationId),
-              visibleSourcePredicate(access, knowledgeNodeSources),
+              visibleSourcePredicate(access, knowledgeNodeSources, now),
               inArray(knowledgeNodeSources.nodeId, nodeRows.map((row) => row.id))
             )
           ),
@@ -765,7 +770,7 @@ export function createKnowledgeGraphRepository(
                     knowledgeEdgeSources.organizationId,
                     access.organizationId
                   ),
-                  visibleSourcePredicate(access, knowledgeEdgeSources),
+                  visibleSourcePredicate(access, knowledgeEdgeSources, now),
                   inArray(
                     knowledgeEdgeSources.edgeId,
                     edgeRows.map((row) => row.id)

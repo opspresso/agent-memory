@@ -89,7 +89,6 @@ interface LoadedMemory {
 class MemoryUnavailableError extends Error {}
 
 async function requestMemory(
-  organizationSlug: string,
   memoryId: string,
   fallback: string,
   etagMissing: string,
@@ -97,7 +96,7 @@ async function requestMemory(
   signal?: AbortSignal
 ): Promise<LoadedMemory> {
   const response = await fetch(
-    `/api/organizations/${organizationSlug}/memories/${memoryId}`,
+    `/api/memories/${memoryId}`,
     { signal }
   );
   if (response.status === 403 || response.status === 404) {
@@ -116,7 +115,7 @@ async function requestMemory(
     return { memory, etag, versions: [] };
   }
   const versionsResponse = await fetch(
-    `/api/organizations/${organizationSlug}/memories/${memoryId}/versions?limit=100`,
+    `/api/memories/${memoryId}/versions?limit=100`,
     { signal }
   );
   const versionsBody = await responseJson(
@@ -187,7 +186,6 @@ export function MemoryLifecycle({
     setError(undefined);
     try {
       const next = await requestMemory(
-        organizationSlug,
         memoryId,
         t("memory.requestFailed"),
         t("memory.etagMissing"),
@@ -211,7 +209,6 @@ export function MemoryLifecycle({
     const controller = new AbortController();
     const loadMessages = getLoadMessages();
     requestMemory(
-      organizationSlug,
       memoryId,
       loadMessages.requestFailed,
       loadMessages.etagMissing,
@@ -257,7 +254,7 @@ export function MemoryLifecycle({
     setMessage(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationSlug}/memories/${memoryId}`,
+        `/api/memories/${memoryId}`,
         {
           method: "PATCH",
           signal: controller.signal,
@@ -310,7 +307,7 @@ export function MemoryLifecycle({
         ? `?reason=${encodeURIComponent(reason.trim())}`
         : "";
       const response = await fetch(
-        `/api/organizations/${organizationSlug}/memories/${memoryId}${query}`,
+        `/api/memories/${memoryId}${query}`,
         { method: "DELETE", headers: { "If-Match": loaded.etag }, signal: controller.signal }
       );
       if (response.status === 409) {

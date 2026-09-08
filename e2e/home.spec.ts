@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("renders the anonymous memory platform landing page", async ({ page }) => {
+test("renders the anonymous memory platform landing page", async ({ page }, testInfo) => {
   const response = await page.goto("/");
 
   expect(response?.headers()["content-security-policy"]).toContain(
@@ -23,9 +23,15 @@ test("renders the anonymous memory platform landing page", async ({ page }) => {
   await expect(page.getByText("Hybrid RAG", { exact: true })).toBeVisible();
   await expect(page.getByText("Knowledge Graph", { exact: true })).toBeVisible();
   await expect(page.getByText("Flexible Sharing")).toBeVisible();
+  await expect(page.getByText(/A self-hosted context platform for one organization/)).toBeVisible();
+  await expect(page.getByText(/New signups are membership requests/)).toBeVisible();
   await expect(
     page.getByRole("img", { name: "Agent Memory logo" })
   ).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("home-desktop-en.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("home-mobile-en.png"), fullPage: true });
   await expect(page.getByLabel("Email")).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "Password", exact: true })
@@ -65,6 +71,7 @@ test("switches to Korean and keeps the preference across pages", async ({
   await page.getByRole("menuitem", { name: "한국어" }).click();
 
   await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+  await expect(page.getByText("신규 가입은 가입 요청으로 처리됩니다. 운영자 승인 후 조직 지식을 사용할 수 있습니다.")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: /에이전트가 기억하고/ })
   ).toBeVisible();

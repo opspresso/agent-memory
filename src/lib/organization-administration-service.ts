@@ -1,13 +1,9 @@
 import { randomUUID } from "node:crypto";
 
 import {
-  buildCreateOrganization,
   buildCreateTeam,
-  buildDeleteOrganization,
   buildDeleteTeam,
   buildGetOrganization,
-  buildJoinOrganization,
-  buildListJoinableOrganizations,
   buildListOrganizationMembers,
   buildListTeamMembers,
   buildListTeams,
@@ -28,16 +24,11 @@ const createDependencies = {
   repository: organizationAdministrationRepository
 };
 
-export const createOrganizationRecord =
-  buildCreateOrganization(createDependencies);
 export const getOrganizationRecord = buildGetOrganization(
   organizationAdministrationRepository
 );
 export const updateOrganizationSettingsRecord = buildUpdateOrganizationSettings(
   createDependencies
-);
-export const deleteOrganizationRecord = buildDeleteOrganization(
-  organizationAdministrationRepository
 );
 export const listOrganizationMemberRecords = buildListOrganizationMembers(
   organizationAdministrationRepository
@@ -68,11 +59,5 @@ export const upsertTeamMemberRecord = buildUpsertTeamMember(
   organizationAdministrationRepository
 );
 export const removeTeamMemberRecord = buildRemoveTeamMember(
-  organizationAdministrationRepository
-);
-export const listJoinableOrganizationRecords = buildListJoinableOrganizations(
-  organizationAdministrationRepository
-);
-export const joinOrganizationRecord = buildJoinOrganization(
   organizationAdministrationRepository
 );

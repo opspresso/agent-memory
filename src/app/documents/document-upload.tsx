@@ -61,7 +61,7 @@ function DocumentUploadView({ onUploaded, onUploadingChange }: DocumentUploadPro
       return;
     }
     const controller = new AbortController();
-    fetch(`/api/organizations/${organizationSlug}/teams`, {
+    fetch(`/api/teams`, {
       signal: controller.signal
     })
       .then((response) =>
@@ -115,7 +115,7 @@ function DocumentUploadView({ onUploaded, onUploadingChange }: DocumentUploadPro
     }
     try {
       const response = await fetch(
-        `/api/organizations/${organizationSlug}/documents`,
+        `/api/documents`,
         { method: "POST", body: form, signal: controller.signal }
       );
       const body = await responseJson(

@@ -5,7 +5,6 @@ import {
   OrganizationNotFoundError,
   OrganizationOwnerImmutableError,
   OrganizationSelfManagementError,
-  OrganizationSlugConflictError,
   TeamNotFoundError,
   TeamSlugConflictError
 } from "@/application/identity/manage-organization";
@@ -27,7 +26,6 @@ export function publicOrganization(
     name: organization.name,
     ...(options.canManage
       ? {
-          newMemberStatus: organization.newMemberStatus,
           defaultTeamId: organization.defaultTeamId,
           ontologyMode: organization.ontologyMode,
           ontology: organization.ontology
@@ -47,7 +45,6 @@ export function organizationAdministrationErrorResponse(
     );
   }
   if (
-    error instanceof OrganizationSlugConflictError ||
     error instanceof TeamSlugConflictError ||
     error instanceof OrganizationOwnerImmutableError ||
     error instanceof OrganizationSelfManagementError ||

@@ -31,7 +31,7 @@ export function MemoryCreate({ onClose, onCreated }: MemoryCreateProps) {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/organizations/${organizationSlug}/teams`, { signal: controller.signal })
+    fetch(`/api/teams`, { signal: controller.signal })
       .then((response) => responseJson(response, t("organization.requestFailed"), teamsResponseSchema))
       .then((body) => { if (!controller.signal.aborted) setTeams(body.teams); })
       .catch(() => { if (!controller.signal.aborted) setTeamError(true); });
@@ -50,7 +50,7 @@ export function MemoryCreate({ onClose, onCreated }: MemoryCreateProps) {
     setSaving(true);
     setError(undefined);
     try {
-      const response = await fetch(`/api/organizations/${organizationSlug}/memories`, {
+      const response = await fetch(`/api/memories`, {
         method: "POST",
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },

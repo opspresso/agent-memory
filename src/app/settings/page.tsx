@@ -17,7 +17,7 @@ export default async function SettingsPage() {
   return (
     <Stack gap="lg">
       <ApplicationSettings isAdmin={user.isAdmin} />
-      <OrganizationSettings isAdmin={user.isAdmin} />
+      <OrganizationSettings />
     </Stack>
   );
 }

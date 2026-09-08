@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { Client } from "pg";
 
+import { resetInstallationFixture } from "./installation-fixture";
+
 async function jsonRequest<T>(page: Page, url: string, method = "GET", body?: Record<string, unknown>): Promise<T> {
   return page.evaluate(async ({ url, method, body }) => {
     const response = await fetch(url, { method, ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
@@ -20,7 +22,7 @@ async function signup(page: Page, email: string, name: string) {
   await page.getByLabel("이메일").fill(email);
   await page.getByLabel("비밀번호").fill("agent-memory-e2e-password");
   await page.getByRole("button", { name: "계정 만들기" }).click();
-  await expect(page.getByRole("heading", { name: "참여할 조직을 선택하세요" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: name === "Knowledge Operator" ? "통합 검색" : "접근 승인 대기", exact: true })).toBeVisible();
 }
 
 async function noOverflow(page: Page) {
@@ -30,6 +32,7 @@ async function noOverflow(page: Page) {
 test("completes knowledge work with real evidence, scoped access and responsive views", async ({ page, browser }, testInfo) => {
   test.skip(process.env.E2E_AUTHENTICATED !== "true", "requires a disposable migrated PostgreSQL database");
   test.setTimeout(240_000);
+  await resetInstallationFixture();
   page.setDefaultTimeout(15_000);
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl || !/_(e2e|test)$/.test(new URL(databaseUrl).pathname.slice(1))) {
@@ -38,8 +41,6 @@ test("completes knowledge work with real evidence, scoped access and responsive 
   const runId = process.env.E2E_RUN_ID;
   if (!runId) throw new Error("E2E_RUN_ID is required");
   const suffix = `${runId}-${testInfo.retry}`;
-  const slug = `e2e-ux-${suffix}`;
-  const organizationName = `Knowledge UX ${suffix}`;
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => { if ((message.type() === "error" || message.type() === "warning") && /hydration|cannot be a descendant|same key|unique.*key/i.test(message.text())) errors.push(message.text()); });
@@ -47,7 +48,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
   // Synthetic clients stay isolated without changing production auth policy.
   await page.setExtraHTTPHeaders({ "x-forwarded-for": "192.0.2.31" });
   await signup(page, `e2e-ux+${suffix}@nalbam.com`, "Knowledge Operator");
-  const organization = await jsonRequest<{ id: string }>(page, "/api/organizations", "POST", { name: organizationName, slug });
+  const organization = await jsonRequest<{ id: string }>(page, "/api/organization");
   await page.goto("/memories");
   await page.getByRole("button", { name: "새 Memory", exact: true }).first().click();
   const create = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "새 Memory", exact: true }) });
@@ -74,9 +75,9 @@ test("completes knowledge work with real evidence, scoped access and responsive 
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: testInfo.outputPath("after-memory-desktop-ko.png"), fullPage: true });
 
-  const unavailableFixture = await jsonRequest<{ id: string }>(page, `/api/organizations/${slug}/memories`, "POST", { kind: "fact", scope: { kind: "user" }, title: "Unavailable response fixture", content: "Original synthetic content", source: { type: "user" } });
+  const unavailableFixture = await jsonRequest<{ id: string }>(page, `/api/memories`, "POST", { kind: "fact", scope: { kind: "user" }, title: "Unavailable response fixture", content: "Original synthetic content", source: { type: "user" } });
   let refuseNextRead = false;
-  const unavailablePath = `**/api/organizations/${slug}/memories/${unavailableFixture.id}`;
+  const unavailablePath = `**/api/memories/${unavailableFixture.id}`;
   // The mutation is real; only its follow-up read simulates access being revoked.
   await page.route(unavailablePath, async (route) => {
     if (route.request().method() === "PATCH") {
@@ -102,12 +103,12 @@ test("completes knowledge work with real evidence, scoped access and responsive 
   await expect(unavailableDetail.getByRole("heading", { name: "Unavailable response fixture", exact: true })).toBeVisible();
   await expect(unavailableDetail.getByText("Saved synthetic content after access change", { exact: true })).toBeVisible();
 
-  const shared = await jsonRequest<{ id: string }>(page, `/api/organizations/${slug}/memories`, "POST", { kind: "decision", scope: { kind: "organization" }, title: "Shared release standard", content: "Every release has an accountable owner.", source: { type: "user" } });
-  const delayedMemory = await jsonRequest<{ id: string }>(page, `/api/organizations/${slug}/memories`, "POST", { kind: "fact", scope: { kind: "user" }, title: "Delayed archive fixture", content: "Synthetic disposable memory", source: { type: "user" } });
+  const shared = await jsonRequest<{ id: string }>(page, `/api/memories`, "POST", { kind: "decision", scope: { kind: "organization" }, title: "Shared release standard", content: "Every release has an accountable owner.", source: { type: "user" } });
+  const delayedMemory = await jsonRequest<{ id: string }>(page, `/api/memories`, "POST", { kind: "fact", scope: { kind: "user" }, title: "Delayed archive fixture", content: "Synthetic disposable memory", source: { type: "user" } });
   const archiveStarted = Promise.withResolvers<void>();
   const releaseArchive = Promise.withResolvers<void>();
   const archiveDelivered = Promise.withResolvers<void>();
-  const delayedPath = `**/api/organizations/${slug}/memories/${delayedMemory.id}`;
+  const delayedPath = `**/api/memories/${delayedMemory.id}`;
   await page.route(delayedPath, async (route) => {
     if (route.request().method() !== "DELETE") { await route.continue(); return; }
     const response = await route.fetch();
@@ -128,7 +129,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
   await expect(page.getByRole("heading", { name: "Shared release standard", exact: true })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`memory=${shared.id}`));
   await page.unroute(delayedPath);
-  const me = await jsonRequest<{ user: { id: string } }>(page, `/api/organizations/${slug}/me`);
+  const me = await jsonRequest<{ user: { id: string } }>(page, `/api/me`);
   const database = new Client({ connectionString: databaseUrl });
   await database.connect();
   const readyId = randomUUID();
@@ -206,7 +207,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await page.getByRole("button", { name: "거절", exact: true }).click();
     expect((await rejectResponse).status()).toBe(200);
 
-    await jsonRequest(page, `/api/organizations/${slug}/knowledge/nodes`, "POST", { scope: { kind: "organization" }, kind: "service", canonicalName: "Evidence API", source: { memoryId: shared.id } });
+    await jsonRequest(page, `/api/knowledge/nodes`, "POST", { scope: { kind: "organization" }, kind: "service", canonicalName: "Evidence API", source: { memoryId: shared.id } });
     await page.goto("/?q=Evidence%20API&kind=knowledge%2Fnodes");
     await page.getByRole("button", { name: /Evidence API/ }).click();
     await expect(page.getByText("Evidence API stores release records in Evidence Database. The source requires an accountable release owner.", { exact: true })).toBeVisible();
@@ -229,9 +230,8 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     try {
       const member = await memberContext.newPage();
       await signup(member, `e2e-ux-member+${suffix}@nalbam.com`, "Knowledge Reader");
-      await jsonRequest(member, `/api/organizations/${slug}/join`, "POST");
       const session = await jsonRequest<{ user: { id: string } }>(member, "/api/auth/get-session");
-      await jsonRequest(page, `/api/organizations/${slug}/members/${session.user.id}`, "PATCH", { status: "active" });
+      await jsonRequest(page, `/api/members/${session.user.id}`, "PATCH", { status: "active" });
       await member.goto(`/memories?memory=${shared.id}`);
       await expect(member.getByRole("heading", { name: "Shared release standard", exact: true })).toBeVisible();
       await expect(member.getByRole("tab", { name: "수정", exact: true })).toHaveCount(0);
@@ -241,7 +241,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
       await expect(member.getByRole("option", { name: "조직 · 모든 조직 멤버와 공유" })).toHaveCount(0);
       await member.keyboard.press("Escape");
       await member.keyboard.press("Escape");
-      const blockedWrite = await member.evaluate(async (slug) => (await fetch(`/api/organizations/${slug}/memories`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "fact", title: "Disallowed organization write", content: "Must not persist", scope: { kind: "organization" }, source: { type: "user" } }) })).status, slug);
+      const blockedWrite = await member.evaluate(async () => (await fetch(`/api/memories`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "fact", title: "Disallowed organization write", content: "Must not persist", scope: { kind: "organization" }, source: { type: "user" } }) })).status);
       expect(blockedWrite).toBe(403);
       await member.goto(`/memories?memory=${memoryId}`);
       await expect(member.getByRole("heading", { name: "UI rollback policy", exact: true })).toHaveCount(0);
@@ -286,15 +286,10 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await page.screenshot({ path: testInfo.outputPath("after-graph-mobile-en-dark.png"), fullPage: true });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.context().addCookies([{ name: "agent-memory-locale", value: "ko", domain: "127.0.0.1", path: "/" }]);
-    const other = await jsonRequest<{ id: string }>(page, "/api/organizations", "POST", { name: `UX isolated ${suffix}`, slug: `e2e-ux-other-${suffix}` });
-    expect(other.id).not.toBe(organization.id);
     await page.goto(`/documents?document=${readyId}`);
     await expect(page.getByRole("heading", { name: "Release source guide", exact: true })).toBeVisible();
-    await page.getByRole("combobox", { name: "활성 조직" }).click();
-    await page.getByRole("option", { name: `UX isolated ${suffix}`, exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Release source guide", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "첫 원문 문서를 추가하세요", exact: true })).toBeVisible();
-    await expect(page).not.toHaveURL(/document=/);
+    await expect(page.getByRole("combobox", { name: "활성 조직" })).toHaveCount(0);
+    expect((await page.request.get("/api/organizations/not-this-installation/documents")).status()).toBe(404);
     expect(errors).toEqual([]);
   } finally { await database.end(); }
 });

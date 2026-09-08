@@ -59,7 +59,7 @@ export default async function Home() {
   const user = await getSessionUser(new Headers(await headers()));
 
   if (user) {
-    const organizations = await listOrganizationMemberships(user.id);
+    const organizations = await listOrganizationMemberships(user);
     const activeOrganizations = organizations.filter(
       (organization) => organization.status === "active"
     );

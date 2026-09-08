@@ -22,6 +22,9 @@ export async function register() {
   );
   await applyRuntimeSettingsOverrides();
 
+  const { installationRepository } = await import("./lib/installation");
+  await installationRepository.initialize();
+
   const { assertProductionConfiguration } = await import(
     "./lib/production-config"
   );

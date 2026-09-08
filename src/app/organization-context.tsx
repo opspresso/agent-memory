@@ -7,7 +7,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  useSyncExternalStore,
   type ReactNode
 } from "react";
 
@@ -17,7 +16,6 @@ import type { OrganizationMembership } from "@/domain/identity/organization-acce
 import { organizationAccessResponseSchema } from "./api-response-schemas";
 import { responseJson } from "./http-response";
 
-const ACTIVE_ORGANIZATION_STORAGE_KEY = "agent-memory-active-organization";
 
 interface OrganizationContextValue {
   readonly organizations: readonly OrganizationMembership[];
@@ -28,7 +26,6 @@ interface OrganizationContextValue {
   readonly access: OrganizationAccess | undefined;
   readonly accessStatus: "idle" | "loading" | "ready" | "error";
   readonly reloadAccess: () => void;
-  readonly selectOrganization: (organizationId: string) => void;
 }
 
 type OrganizationAccessState =
@@ -43,19 +40,6 @@ const OrganizationContext = createContext<OrganizationContextValue | null>(
   null
 );
 
-function subscribeToStorage(onStoreChange: () => void): () => void {
-  window.addEventListener("storage", onStoreChange);
-  return () => window.removeEventListener("storage", onStoreChange);
-}
-
-function readStoredOrganizationId(): string | null {
-  try {
-    return window.localStorage.getItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
 export function OrganizationProvider({
   children,
   organizations
@@ -68,24 +52,8 @@ export function OrganizationProvider({
       organizations.filter((organization) => organization.status === "active"),
     [organizations]
   );
-  const [selectedId, setSelectedId] = useState<string>();
-  const storedId = useSyncExternalStore(
-    subscribeToStorage,
-    readStoredOrganizationId,
-    () => null
-  );
-  const organizationId =
-    [selectedId, storedId, activeOrganizations[0]?.id].find(
-      (candidate) =>
-        candidate &&
-        activeOrganizations.some(
-          (organization) => organization.id === candidate
-        )
-    ) ?? "";
-  const organizationSlug =
-    activeOrganizations.find(
-      (organization) => organization.id === organizationId
-    )?.slug ?? "";
+  const organizationId = activeOrganizations[0]?.id ?? "";
+  const organizationSlug = activeOrganizations[0]?.slug ?? "";
   const [accessState, setAccessState] = useState<OrganizationAccessState>();
   const [accessRequestVersion, setAccessRequestVersion] = useState(0);
 
@@ -94,7 +62,7 @@ export function OrganizationProvider({
       return;
     }
     const controller = new AbortController();
-    fetch(`/api/organizations/${organizationSlug}/me`, {
+    fetch(`/api/me`, {
       signal: controller.signal
     })
       .then(async (response) => {
@@ -145,28 +113,6 @@ export function OrganizationProvider({
     setAccessRequestVersion((current) => current + 1);
   }, [organizationId]);
 
-  const selectOrganization = useCallback(
-    (nextOrganizationId: string) => {
-      if (
-        !activeOrganizations.some(
-          (organization) => organization.id === nextOrganizationId
-        )
-      ) {
-        return;
-      }
-      setSelectedId(nextOrganizationId);
-      try {
-        window.localStorage.setItem(
-          ACTIVE_ORGANIZATION_STORAGE_KEY,
-          nextOrganizationId
-        );
-      } catch {
-        // per-browser convenience only
-      }
-    },
-    [activeOrganizations]
-  );
-
   const value = useMemo<OrganizationContextValue>(
     () => ({
       organizations,
@@ -178,8 +124,7 @@ export function OrganizationProvider({
       organizationSlug,
       access,
       accessStatus,
-      reloadAccess,
-      selectOrganization
+      reloadAccess
     }),
     [
       access,
@@ -188,8 +133,7 @@ export function OrganizationProvider({
       organizationId,
       organizationSlug,
       organizations,
-      reloadAccess,
-      selectOrganization
+      reloadAccess
     ]
   );
 

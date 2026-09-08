@@ -1,6 +1,6 @@
 # 시작 가이드
 
-이 문서는 로컬에서 인증 가능한 Agent Memory를 시작하고 첫 조직과 Memory를 만든 뒤 검색 결과를 확인하는 절차를 설명한다.
+이 문서는 로컬에서 인증 가능한 Agent Memory를 시작하고 자동으로 준비된 조직에 Memory를 만든 뒤 검색 결과를 확인하는 절차를 설명한다.
 
 ## 준비 사항
 
@@ -39,8 +39,8 @@ ADMIN_EMAILS=me@nalbam.com
 ```
 
 - `ALLOWED_EMAIL_DOMAINS`가 비어 있거나 미설정이면 모든 email domain으로 가입할 수 있다. 제한하려면 허용 domain을 comma-separated 목록으로 설정한다.
-- 첫 조직을 만들 사용자의 email은 `ADMIN_EMAILS`에 있어야 한다.
-- 다른 domain이나 email을 사용할 경우 두 값을 함께 변경하라.
+- 최초 owner가 될 사용자의 email은 `ADMIN_EMAILS`에 있어야 한다.
+- `ADMIN_EMAILS`는 실제 운영자 email로 바꾸고, domain 제한을 설정했다면 해당 email의 domain을 허용 목록에 포함하라.
 - 운영 환경에서는 `.env.example`의 `BETTER_AUTH_SECRET`과 storage credential을 사용하지 마라.
 
 ## 2. Database 시작과 migration
@@ -68,13 +68,16 @@ curl -i http://localhost:3100/api/health
 { "status": "ok", "checks": { "database": "ok" } }
 ```
 
-## 3. 가입과 첫 조직 생성
+## 3. 최초 운영자 준비와 가입 요청
 
 1. `http://localhost:3100`을 연다.
 2. `가입`을 선택한다.
 3. `ADMIN_EMAILS`에 등록한 email로 계정을 만든다.
-4. 로그인하면 조직 선택 화면으로 이동한다. `첫 조직 만들기`에서 이름과 slug를 입력한다.
-5. 생성한 사용자는 해당 조직의 `owner`가 된다. 이후 가입하는 사용자는 조직 선택 화면에서 조직을 골라 가입하며, 조직 설정에 따라 즉시 활성화되거나 승인 대기 상태가 된다.
+4. 서버가 준비한 기본 조직의 최초 `owner`가 되어 통합 검색 화면으로 이동한다. 조직 이름은 `설정`에서 변경한다.
+5. 이후 사용자는 계정을 만들거나 Google·OIDC로 로그인한 뒤 첫 콘솔 접속 시 가입 요청이 접수된다. 승인 대기 중에는 지식에 접근할 수 없다.
+6. 운영자는 `회원`에서 승인 대기 요청을 확인하고 `승인`을 선택한다. 사용자는 승인 후 콘솔을 새로고침해 이용한다. 차단·제거된 사용자는 다시 로그인해도 자동으로 복구되지 않는다.
+
+최초 owner 준비는 active owner가 없는 설치에만 적용한다. Owner가 이미 있다면 `ADMIN_EMAILS`에 포함된 신규 사용자도 운영자 승인을 받아야 한다. Google·OIDC와 운영 환경의 password 가입 제한은 [운영 가이드](operations.md#환경-변수)를 확인하라.
 
 로그인 provider가 화면에 나타나지 않으면 `.env.local`에서 provider 설정을 확인하고 `pnpm dev`를 다시 시작하라. Password 가입에는 `AUTH_PASSWORD=true`와 `AUTH_PASSWORD_SIGNUP=true`가 모두 필요하다.
 

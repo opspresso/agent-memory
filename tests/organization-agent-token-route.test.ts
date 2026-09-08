@@ -25,7 +25,7 @@ import {
   DELETE,
   GET,
   POST
-} from "@/app/api/organizations/[organizationSlug]/agent-token/route";
+} from "@/app/api/agent-token/route";
 
 const access = {
   organizationId: "00000000-0000-4000-8000-000000000001",
@@ -33,7 +33,6 @@ const access = {
   role: "admin" as const,
   teams: []
 };
-const context = { params: Promise.resolve({ organizationSlug: "opspresso" }) };
 
 describe("organization Agent token route", () => {
   beforeEach(() => {
@@ -57,8 +56,7 @@ describe("organization Agent token route", () => {
     });
 
     const response = await GET(
-      new Request("https://memory.example.com/api/organizations/opspresso/agent-token"),
-      context
+      new Request("https://memory.example.com/api/agent-token")
     );
 
     expect(response.status).toBe(200);
@@ -74,10 +72,9 @@ describe("organization Agent token route", () => {
     });
 
     const response = await POST(
-      new Request("https://memory.example.com/api/organizations/opspresso/agent-token", {
+      new Request("https://memory.example.com/api/agent-token", {
         method: "POST"
-      }),
-      context
+      })
     );
 
     expect(response.status).toBe(201);
@@ -87,10 +84,9 @@ describe("organization Agent token route", () => {
 
   it("revokes the current organization token", async () => {
     const response = await DELETE(
-      new Request("https://memory.example.com/api/organizations/opspresso/agent-token", {
+      new Request("https://memory.example.com/api/agent-token", {
         method: "DELETE"
-      }),
-      context
+      })
     );
 
     expect(response.status).toBe(204);

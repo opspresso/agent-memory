@@ -2,15 +2,15 @@
 
 운영 콘솔은 조직의 Memory, RAG 문서, Knowledge Graph를 검색하고 관리하는 화면이다. 좌측 메뉴에서 `통합 검색`, `Memory`, `문서 수집`, `Knowledge Graph`, `AI 후보 검토`, `Agent 연결`으로 이동하고, 조직 `admin`·`owner`에게는 `회원`, `팀`, `설정` 관리 메뉴가, team `manager`에게는 `팀` 메뉴가 추가로 표시된다. 모든 화면은 로그인 사용자와 활성 조직의 멤버십·scope 권한을 적용한다. 같은 내용을 사이트에서 읽으려면 로그인 전후에 `/guide`를 열거나 좌측 메뉴 하단의 `가이드`를 선택하라.
 
-## 최초 로그인과 조직 가입
+## 최초 로그인과 가입 요청
 
-active 상태의 조직 membership이 없는 사용자는 로그인하면 조직 선택 화면으로 이동한다. 가입 가능한 조직을 선택하면 조직의 신규 회원 정책에 따라 즉시 활성화되거나 승인 대기 상태가 된다. 승인 대기 중에는 조직 화면과 API를 사용할 수 없으며, 조직 관리자가 `회원`에서 승인하면 활성화된다. 전역 admin(`ADMIN_EMAILS`)은 이 화면과 `설정` 화면에서 새 조직을 만들 수 있다.
+설치마다 하나의 조직이 자동으로 준비된다. Active owner가 없을 때 전역 admin(`ADMIN_EMAILS`)이 콘솔에 접속하면 최초 owner가 설정된다. 그 외 신규 사용자는 첫 콘솔 접속 시 가입 요청이 접수되며 승인 대기 상태가 된다. 승인 대기 중에는 조직의 지식 API를 사용할 수 없으며, 관리자가 `회원`에서 승인하면 활성화된다. 승인 후 콘솔을 새로고침해 이용하라. 차단·제거된 사용자는 로그인으로 접근 권한이 복구되지 않는다.
 
-## 활성 조직과 권한
+## 설치 조직과 권한
 
-상단의 `활성 조직`에서 작업할 조직을 선택한다. 조직을 바꾸면 검색 결과, 팀, 후보 검토 권한과 MCP endpoint가 모두 선택한 조직 기준으로 바뀐다.
+상단에는 설치의 조직 이름이 표시된다. 조직 선택·생성·삭제 기능은 제공하지 않는다. 팀·개인 공유 범위와 역할에 따른 권한은 그대로 적용한다.
 
-Resource scope는 다음과 같이 동작한다.
+Resource scope의 기본 권한은 다음과 같다. 모든 접근에는 활성 멤버십이 필요하다.
 
 | Scope | 읽기 | 쓰기 | 관리 |
 | --- | --- | --- | --- |
@@ -18,7 +18,7 @@ Resource scope는 다음과 같이 동작한다.
 | team | 팀 멤버, 조직 관리자 | 팀 멤버, 조직 관리자 | team `manager`, 조직 관리자 |
 | user | 본인 | 본인 | 본인 |
 
-읽을 수 없는 resource는 검색과 관계 지도에 나타나지 않는다. 권한을 잃거나 source가 archive·만료되면 이전에 보이던 Knowledge Graph 관계도 더 이상 반환되지 않을 수 있다.
+Memory는 HTTP API의 `accessGrants`로 같은 조직의 사용자·팀에 추가 읽기·쓰기·관리 권한을 부여할 수 있다. 명시적 grant가 없다면 관리자가 다른 사용자의 개인 자료를 볼 수 없다. 읽을 수 없는 resource는 검색과 관계 지도에 나타나지 않는다. 권한을 잃거나 source가 archive·만료되면 이전에 보이던 Knowledge Graph 관계도 더 이상 반환되지 않을 수 있다.
 
 ## 통합 검색
 
@@ -39,7 +39,7 @@ Knowledge·문서 상세의 `검색 진단 정보`를 펼치면 상대 관련도
 
 `Memory`에서 현재 유효하고 읽을 수 있는 Memory를 최신순으로 둘러보거나 검색한다. `새 Memory`에서 종류·제목·내용·공유 범위를 입력하면 사용자 출처의 Memory가 생성된다. 기본 범위는 개인이며 조직과 팀 범위는 현재 쓰기 권한에 따라 선택한다.
 
-목록에서 항목을 선택하면 상세 패널의 `내용과 출처`, `수정`, `Version 이력` 탭을 사용한다. 읽기 권한만 있으면 내용과 출처만 표시된다. 상세 URL의 `memory` 값으로 직접 진입할 수 있으며 조직을 바꾸면 이전 조직의 선택과 검색을 초기화한다.
+목록에서 항목을 선택하면 상세 패널의 `내용과 출처`, `수정`, `Version 이력` 탭을 사용한다. 읽기 권한만 있으면 내용과 출처만 표시된다. 상세 URL의 `memory` 값으로 직접 진입할 수 있다.
 
 ### Revision 생성
 
@@ -79,7 +79,7 @@ upload → pending → processing → ready
 
 문서 상세에서 상태와 처리 시도 횟수, 실패 사유를 확인한다. 쓰기 권한이 있으면 `failed` 문서의 재처리를 요청할 수 있다. 재처리 요청 성공은 처리 완료를 뜻하지 않는다. 화면은 실제 상태를 최대 2분 동안 확인하며 비활성 탭에서는 조회를 쉬고, 이후에는 새로고침으로 다시 확인한다. 문서가 `pending`에 머물면 document worker가 실행 중인지 확인한다. 원본은 S3 호환 storage에 있고 검색용 chunk와 상태는 PostgreSQL에 저장된다.
 
-`사용 가능` 문서를 선택하면 상세의 `문서 내용`에서 처리된 원문을 본문 순서대로 읽는다. 한 번에 25개 본문을 불러오며 `본문 더 보기`로 이어서 읽는다. 원본 파일 다운로드가 아니라 검색·Graph에서 사용하는 처리된 원문의 조회다. 다른 문서나 조직을 선택하면 이전 본문을 지우고 접근 권한을 다시 확인한다.
+`사용 가능` 문서를 선택하면 상세의 `문서 내용`에서 처리된 원문을 본문 순서대로 읽는다. 한 번에 25개 본문을 불러오며 `본문 더 보기`로 이어서 읽는다. 원본 파일 다운로드가 아니라 검색·Graph에서 사용하는 처리된 원문의 조회다. 다른 문서를 선택하면 이전 본문을 지우고 접근 권한을 다시 확인한다.
 
 문서 삭제는 원본과 provenance를 보존하는 archive다. Archive된 문서는 검색, 상태 조회, retry, AI 후보 검토에서 제외되며 해당 scope의 `manage` 권한이 필요하다.
 
@@ -139,7 +139,7 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 
 - 조직 `admin`, `owner`: 멤버 추가, 조직 role 변경, 승인 대기 멤버 승인, 차단·차단 해제, 조직에서 제거, 팀 배정·해제
 - `owner` role 부여와 `owner` 멤버 변경·제거는 `owner`만 가능하다. 마지막 owner와 자기 자신은 변경할 수 없다.
-- 조직에서 제거하면 팀 소속과 접근 권한은 즉시 해제되지만 user scope의 Memory, Document, Knowledge resource는 보존된다. 같은 사용자가 다시 가입하면 기존 user scope를 다시 사용할 수 있다.
+- 조직에서 제거하면 팀 소속과 접근 권한은 즉시 해제되지만 user scope의 Memory, Document, Knowledge resource는 보존된다. 관리자가 같은 사용자를 다시 추가하면 기존 user scope를 다시 사용할 수 있다.
 
 `팀`에서 팀을 관리한다.
 
@@ -147,18 +147,18 @@ Knowledge extraction이 활성화되면 ready document chunk에서 entity와 rel
 - Team `manager`: 자신이 관리하는 팀의 이름 변경, 기존 조직 멤버 배정과 team role 변경, 팀 멤버 제거
 - Team `member`: team scope resource 읽기·쓰기
 
-`설정`에서 조직 이름, 신규 회원 정책(즉시 활성화 또는 승인 대기, 기본은 승인 대기), 기본 팀, Knowledge Graph 온톨로지(검증 모드와 node kind·edge predicate 사전, 빈도 추천·AI 제안 반영)를 관리한다. 전역 admin에게는 env보다 우선하는 애플리케이션 설정도 표시된다. `ALLOWED_EMAIL_DOMAINS`를 비우면 모든 email domain을 허용하고, 각 override의 reset button을 누르면 env fallback으로 되돌린다. 재시작 필요 표시가 있는 설정은 저장 후 모든 instance를 재시작하라. 기본 팀이 설정되면 신규 회원이 활성화될 때 자동으로 해당 팀에 배정된다. 조직 삭제는 `owner`만 가능하며 조직의 멤버십, 팀, Memory, 문서 record·chunk, Knowledge Graph를 PostgreSQL에서 함께 제거한다.
+`설정`에서 조직 이름, 기본 팀, Knowledge Graph 온톨로지(검증 모드와 node kind·edge predicate 사전, 빈도 추천·AI 제안 반영)를 관리한다. 전역 admin에게는 env보다 우선하는 애플리케이션 설정도 표시된다. `ALLOWED_EMAIL_DOMAINS`를 비우면 모든 email domain을 허용하고, 각 override의 reset button을 누르면 env fallback으로 되돌린다. 재시작 필요 표시가 있는 설정은 저장 후 모든 instance를 재시작하라. 기본 팀이 설정되면 신규 회원이 활성화될 때 자동으로 해당 팀에 배정된다.
 
-팀과 조직을 삭제해도 S3 호환 storage의 문서 원본 object는 자동으로 제거되지 않는다. 원본 삭제가 필요하면 PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 운영 환경의 object lifecycle을 따른다.
+팀을 삭제해도 S3 호환 storage의 문서 원본 object는 자동으로 제거되지 않는다. 원본 삭제가 필요하면 PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 운영 환경의 object lifecycle을 따른다.
 
-`ADMIN_EMAILS`의 전역 권한은 새 조직 생성과 애플리케이션 설정 관리만 허용한다. 기존 조직 안에서는 항상 실제 organization membership과 role을 사용한다.
+`ADMIN_EMAILS`의 전역 권한은 최초 owner 준비와 애플리케이션 설정 관리를 허용한다. 기존 조직 안에서는 항상 실제 organization membership과 role을 사용한다.
 
 ## Agent 연결
 
-`Agent 연결`에는 현재 사이트 주소와 활성 organization slug가 포함된 전체 Streamable HTTP MCP endpoint가 표시된다. `복사`를 선택해 client 설정에 붙여 넣어라.
+`Agent 연결`에는 현재 사이트 주소에 `/api/mcp`를 붙인 전체 Streamable HTTP MCP endpoint가 표시된다. 조직 slug나 조직 선택 parameter는 사용하지 않는다. `복사`를 선택해 client 설정에 붙여 넣어라.
 
 ```text
-http://localhost:3100/api/organizations/<organizationSlug>/mcp
+http://localhost:3100/api/mcp
 ```
 
 Organization `admin` 또는 `owner`는 같은 화면에서 MCP 전용 Agent token을 생성한다. 생성된 원문을 복사해 Agent Studio MCP registry entry의 `Authorization` header에 저장하라. 이후 `Token 보기`로 원문을 다시 확인하고 `Token 숨기기`로 화면에서 제거할 수 있다.
@@ -167,11 +167,11 @@ Organization `admin` 또는 `owner`는 같은 화면에서 MCP 전용 Agent toke
 Authorization: Bearer <amt_token>
 ```
 
-같은 화면의 `Agent Studio 등록 템플릿`은 활성 organization slug와 현재 사이트 주소로 Name, URL, Description, Headers의 Key·Value, 선택 입력인 Content 예시를 만든다. 각 항목의 복사 버튼으로 Agent Studio의 `Tools → Register MCP server`에 붙여 넣어라. Name 기본값은 `<organizationSlug>-memory`이며 필요하면 변경한다. Headers 예시의 `<amt_token>`은 위에서 생성하거나 확인한 실제 token으로 교체한다. 템플릿 자체에는 실제 token을 포함하지 않는다.
+같은 화면의 `Agent Studio 등록 템플릿`은 Name, URL, Description, Headers의 Key·Value, 선택 입력인 Content 예시를 만든다. 각 항목의 복사 버튼으로 Agent Studio의 `Tools → Register MCP server`에 붙여 넣어라. Name 기본값은 내부 조직 slug를 사용한 `<organizationSlug>-memory`(새 설치는 `default-memory`)이며 필요하면 변경한다. URL은 사이트의 `/api/mcp`로 고정되며 Name을 바꿔도 영향을 받지 않는다. Headers 예시의 `<amt_token>`은 위에서 생성하거나 확인한 실제 token으로 교체한다. 템플릿 자체에는 실제 token을 포함하지 않는다.
 
 Name은 version이 참조하는 registry 식별자다. Description은 모델의 `Connected MCP Servers` 표와 capability 검색에 사용되므로 서버를 사용할 상황과 기능을 설명한다. Content는 콘솔에만 표시되는 운영자 메모이며 모델에 전달되지 않는다. 모델의 정보 저장 조건·응답 규칙은 version의 system prompt 또는 연결한 Skill에 작성하라. 개별 tool의 설명과 입력 schema는 MCP 서버에서 자동으로 읽으므로 Content에 적어도 tool 계약이 바뀌지 않는다.
 
-등록 후 `Test connection`으로 도구 목록 조회를 확인하고 사용할 project의 version에 해당 MCP server를 bind한 뒤 실제 실행을 확인하라. 조직을 전환하면 템플릿의 이름·URL·설명·Content도 해당 조직에 맞게 바뀐다. Version의 header override는 registry header보다 우선하므로 token 재생성 시 override도 확인하라.
+등록 후 `Test connection`으로 도구 목록 조회를 확인하고 사용할 project의 version에 해당 MCP server를 bind한 뒤 실제 실행을 확인하라. Version의 header override는 registry header보다 우선하므로 token 재생성 시 override도 확인하라.
 
 Agent token만 전달하면 발급자에게 귀속되는 organization service principal로 동작하며 organization scope만 검색·변경할 수 있다. Agent Studio는 로그인 사용자의 `X-User-Email`을 함께 전달하므로 해당 조직의 활성 멤버 권한으로 개인·팀 문서와 허용된 Memory도 검색한다. 다른 client는 실제 사용자의 email을 이 header로 전달하거나 해당 사용자의 Better Auth Bearer token을 사용하라. 조직 Agent token은 조직 내 사용자를 대신할 수 있으므로 사용자 신원을 검증하는 신뢰된 server-side client에만 제공하라. 잘못된 email은 `400`, 활성 멤버가 아닌 email은 `403`으로 거부한다.
 

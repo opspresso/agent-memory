@@ -18,16 +18,16 @@ Compose: postgres, MinIO ─────┘      └── pg-boss
 | 환경 | Application | PostgreSQL·Object storage | 진입점 |
 | --- | --- | --- | --- |
 | Local 개발 | host `pnpm dev` | 독립 `agent-memory-local` PostgreSQL 18·MinIO | `http://localhost:3100` |
-| IDC | `../dockpad` | 배포 저장소가 소유 | 배포 저장소가 소유 |
-| EKS | `../argocd-env-demo` | GitOps 저장소가 소유 | GitOps 저장소가 소유 |
+| IDC (운영) | `../dockpad` | 배포 저장소가 소유 | `https://memory.opspresso.com/` |
+| EKS (중지) | 배포·검증 대상에서 제외 | — | — |
 
 이 저장소는 IDC Compose나 Kubernetes manifest를 보관하지 않는다. Release workflow는 image 게시 후 `argocd-env-demo`에 tag만 전달한다.
 
-IDC와 EKS에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
+IDC에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
 
-`v*` tag를 push하면 release workflow가 GitHub-hosted Ubuntu 24.04 runner에서 `pnpm verify`, PostgreSQL integration test, 인증 E2E test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 immutable tag를 배포한다.
+`v*` tag를 push하면 release workflow가 GitHub-hosted Ubuntu 24.04 runner에서 `pnpm verify`, PostgreSQL integration test, 인증 E2E test를 실행한다. 검증 후 GitHub Release 생성과 image build를 독립 job으로 실행하고, ECR과 GHCR에 `<tag>`와 `latest` image를 함께 push한다. Image 게시가 성공하면 GitHub App installation token으로 `argocd-env-demo`에 `agent-memory`, `app`, `alpha` GitOps dispatch를 보내 Dockpad가 사용하는 alpha image version 목록을 갱신한다.
 
-Release 완료 조건은 tag와 GitHub Release만 만드는 것이 아니다. Workflow 성공, ECR·GHCR image 게시, GitOps dispatch와 Argo CD sync를 확인한 뒤 container image, health endpoint, 공개 화면의 version을 검증하라. IDC rollout과 관측성은 `../dockpad`, EKS rollout은 `../argocd-env-demo`에서 확인한다.
+Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, Dockpad가 읽는 `argocd-env-demo`의 alpha version 목록 갱신, IDC rollout 완료다. EKS는 중지 상태이므로 Argo CD sync나 EKS 접속은 요구하지 않는다. `../dockpad/scripts/remote.sh deploy-selected alpha agent-memory`로 백업 후 Agent Memory를 배포하고, 실제 container image, `https://memory.opspresso.com/api/health`, 공개 화면의 version을 검증하라.
 
 ### 로컬 개발
 
@@ -75,7 +75,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Auth | `AUTH_PASSWORD` | Email/password 로그인 활성화 |
 | Auth | `AUTH_PASSWORD_SIGNUP` | Self-signup 활성화. `AUTH_PASSWORD=true`가 함께 필요하며 loopback 이외의 production에서는 허용하지 않음 |
 | Auth | `ALLOWED_EMAIL_DOMAINS` | 로그인 허용 email domain의 comma-separated 목록. 미설정 또는 빈 값이면 모든 domain 허용 |
-| Auth | `ADMIN_EMAILS` | 첫 조직을 만들 수 있는 email의 comma-separated 목록. 기본값 `me@nalbam.com` |
+| Auth | `ADMIN_EMAILS` | 최초 owner와 전역 설정 관리자를 지정하는 email의 comma-separated 목록. 기본값 `me@nalbam.com` |
 | Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google provider. 두 값을 함께 설정 |
 | OIDC | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Generic OIDC provider. 세 값을 함께 설정 |
 | OIDC | `OIDC_SCOPES` | 공백으로 구분한 scope. 기본값 `openid email profile` |
@@ -107,7 +107,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Telemetry | `LANGFUSE_EXPORT_MODE` | `batched` 또는 `immediate`. Vercel runtime(`VERCEL` 자동 설정)에서는 기본값 `immediate` |
 | Telemetry | `LANGFUSE_TRACING_ENVIRONMENT` | Trace 환경 이름 |
 
-`ALLOWED_EMAIL_DOMAINS`는 미설정하거나 빈 값이면 모든 domain을 허용한다. 목록을 설정하면 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. `ADMIN_EMAILS`는 조직 bootstrap 권한과 전역 설정 관리 권한만 제어하고 기존 조직의 tenant role을 우회하지 않는다. 빈 값으로 설정하면 누구도 새 조직을 만들거나 전역 설정을 관리할 수 없다.
+`ALLOWED_EMAIL_DOMAINS`는 미설정하거나 빈 값이면 모든 domain을 허용한다. 목록을 설정하면 정확한 domain만 허용하며 subdomain을 자동 허용하지 않는다. `ADMIN_EMAILS`는 최초 owner bootstrap과 전역 설정 관리 권한만 제어하고 조직의 membership·role을 우회하지 않는다. 초기 설치 전에 실제 운영자 email을 지정하라. 전역 admin도 active owner가 이미 있으면 다른 신규 사용자처럼 승인을 기다린다.
 
 `NODE_ENV=production`에서는 `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`이 필수다. `ALLOWED_EMAIL_DOMAINS`는 production에서도 선택 항목이다. `BETTER_AUTH_SECRET`은 32자 이상이어야 하고 public `BETTER_AUTH_URL`은 HTTPS를 사용해야 한다. 하나라도 유효하지 않으면 서버가 시작 시점에 실패한다 — 개발용 기본값으로의 무경고 fallback은 개발 환경에서만 동작한다.
 
@@ -230,9 +230,9 @@ worker instance: MIGRATE_ON_START=false, DOCUMENT_WORKER_ENABLED=true
 
 Database만 복원하고 object storage를 복원하지 않으면 document metadata는 남지만 원본 재처리가 실패할 수 있다. Object storage만 복원하면 권한·상태·chunk·provenance를 복구할 수 없다. 두 저장소의 보존 시점과 복원 절차를 함께 관리하라.
 
-조직 또는 팀 삭제는 PostgreSQL resource만 cascade 삭제하고 S3 호환 storage의 문서 원본 object는 제거하지 않는다. PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 object storage lifecycle로 제거하라.
+팀 삭제는 PostgreSQL resource만 cascade 삭제하고 S3 호환 storage의 문서 원본 object는 제거하지 않는다. PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 별도로 구성한 object storage lifecycle로 제거하라. 조직 삭제 UI·API는 제공하지 않는다. 운영자가 DB를 직접 초기화할 때도 object storage와 queue의 정리는 별도로 관리해야 한다.
 
-회원 제거는 membership을 `removed` tombstone으로 전환해 user scope의 document metadata와 원본 object key를 보존하므로 storage orphan을 만들지 않는다. 제거된 사용자는 active membership으로 다시 가입하기 전까지 해당 resource에 접근할 수 없다.
+회원 제거는 membership을 `removed` tombstone으로 전환해 user scope의 document metadata와 원본 object key를 보존하므로 storage orphan을 만들지 않는다. 제거된 사용자는 운영자가 다시 추가해 active membership을 복원하기 전까지 해당 resource에 접근할 수 없다.
 
 ## 장애 대응
 
@@ -304,6 +304,12 @@ Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지
 | `429` | AI instance·organization·user quota와 `Retry-After` header, 또는 document storage·backlog·upload quota |
 | `503` | PostgreSQL 연결·migration 상태 또는 온톨로지 AI 제안 model 설정 |
 
+## 단일 조직 설치
+
+서버 시작 시 조직이 없으면 `default` slug와 `Agent Memory` 이름으로 생성한다. 기존 조직이 하나면 ID·이름·멤버십·데이터를 그대로 사용한다. 두 개 이상이면 서버 시작을 중단한다. `MIGRATE_ON_START=true`일 때는 schema 변경 전에 기존 조직 수를 검사해 다중 조직 설치를 거부한다. 기존 다중 조직 설치는 운영자가 조직별 독립 DB·bucket으로 분리하거나 보존할 데이터를 정리한 후 시작하라. 자동 병합·삭제는 수행하지 않는다.
+
+가입 후 첫 콘솔 접속은 설치 조직에 대한 가입 요청으로 처리한다. active owner가 없는 경우 `ADMIN_EMAILS`의 사용자가 최초 owner가 된다. 다른 사용자의 가입은 pending 요청으로 처리되며 운영자 승인 후에만 활성 멤버가 된다. blocked·removed membership은 자동으로 복구하지 않는다. 모든 공개 HTTP endpoint는 조직 slug를 받지 않으며 MCP 주소는 `/api/mcp`다.
+
 ## 배포 전 확인
 
 ```bash
@@ -312,7 +318,7 @@ pnpm verify
 
 `pnpm verify`는 lint, typecheck, architecture, unit test, production build를 실행한다. Database 변경은 `pnpm test:integration`, 화면과 인증 흐름 변경은 `pnpm test:e2e`를 추가한다. 세부 기준은 [AGENTS.md](../AGENTS.md#검증)를 따른다.
 
-인증 E2E는 `E2E_AUTHENTICATED=true`가 있어야 실행된다. 이 값이 없으면 가입·조직 관리·Memory lifecycle 시나리오가 skip되므로 공개 화면 검사만으로 인증 검증을 완료했다고 판단하지 마라. 테스트는 계정과 조직을 생성하므로 별도 PostgreSQL DB를 사용한다. 예를 들어 다음과 같이 E2E 전용 container를 시작한다.
+인증 E2E는 `E2E_AUTHENTICATED=true`가 있어야 실행된다. 이 값이 없으면 가입 요청·승인·멤버 관리·Memory lifecycle 시나리오가 skip되므로 공개 화면 검사만으로 인증 검증을 완료했다고 판단하지 마라. 인증 fixture는 시나리오 시작 시 `TRUNCATE organizations, users CASCADE`로 계정과 조직 소속 데이터를 초기화한다. 이름이 `_e2e` 또는 `_test`로 끝나는 폐기 가능한 별도 DB를 `DATABASE_URL`에 명시해야 하며 개발·운영 DB를 연결하지 마라. 인증 E2E는 worker 하나로 실행해 초기화 간 충돌을 방지한다. 예를 들어 다음과 같이 E2E 전용 container를 시작한다.
 
 ```bash
 docker run --detach --name agent-memory-e2e \

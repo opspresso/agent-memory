@@ -2,11 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildAddOrganizationMember,
-  buildCreateOrganization,
   buildCreateTeam,
-  buildDeleteOrganization,
   buildDeleteTeam,
-  buildJoinOrganization,
   buildListOrganizationMembers,
   buildListTeamMembers,
   buildRemoveOrganizationMember,
@@ -17,10 +14,6 @@ import {
 } from "@/application/identity/manage-organization";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import type { OrganizationAdministrationRepository } from "@/domain/identity/organization-administration-repository";
-import {
-  defaultKnowledgeOntology,
-  defaultKnowledgeOntologyMode
-} from "@/domain/knowledge/knowledge-ontology";
 
 const now = new Date("2026-08-26T00:00:00.000Z");
 const ownerAccess: OrganizationAccess = {
@@ -34,10 +27,8 @@ function repository(
   overrides: Partial<OrganizationAdministrationRepository> = {}
 ): OrganizationAdministrationRepository {
   return {
-    createOrganization: vi.fn(),
     findOrganization: vi.fn(),
     updateOrganizationSettings: vi.fn(),
-    deleteOrganization: vi.fn(),
     listOrganizationMembers: vi.fn(),
     findOrganizationMember: vi.fn(),
     addOrganizationMember: vi.fn(),
@@ -50,55 +41,11 @@ function repository(
     listTeamMembers: vi.fn(),
     upsertTeamMember: vi.fn(),
     removeTeamMember: vi.fn(),
-    listJoinableOrganizations: vi.fn(),
-    joinOrganizationBySlug: vi.fn(),
     ...overrides
   };
 }
 
 describe("organization administration", () => {
-  it("creates a normalized organization with its authenticated owner", async () => {
-    const createOrganization = vi.fn().mockImplementation(
-      async (organization) => ({ status: "created", organization })
-    );
-    const create = buildCreateOrganization({
-      clock: () => now,
-      generateId: () => "organization-1",
-      repository: repository({ createOrganization })
-    });
-
-    await expect(create({ userId: "user-1", isAdmin: true }, " Platform-Team ", " Platform Team ")).resolves
-      .toMatchObject({
-        id: "organization-1",
-        slug: "platform-team",
-        name: "Platform Team",
-        newMemberStatus: "pending",
-        defaultTeamId: null,
-        ontologyMode: defaultKnowledgeOntologyMode,
-        ontology: defaultKnowledgeOntology
-      });
-    expect(createOrganization).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "organization-1" }),
-      "user-1"
-    );
-  });
-
-  it("requires global admin authority before creating an organization", async () => {
-    const createOrganization = vi.fn();
-    const generateId = vi.fn();
-    const create = buildCreateOrganization({
-      clock: () => now,
-      generateId,
-      repository: repository({ createOrganization })
-    });
-
-    await expect(
-      create({ userId: "user-1", isAdmin: false }, "platform", "Platform")
-    ).rejects.toThrow("organization administration access denied");
-    expect(createOrganization).not.toHaveBeenCalled();
-    expect(generateId).not.toHaveBeenCalled();
-  });
-
   it("restricts member administration to organization administrators", async () => {
     const list = buildListOrganizationMembers(repository());
     await expect(
@@ -190,7 +137,6 @@ describe("organization administration", () => {
           id: "organization-1",
           slug: "platform",
           name: update.name ?? "Platform",
-          newMemberStatus: update.newMemberStatus ?? "active",
           defaultTeamId: update.defaultTeamId ?? null,
           createdAt: now,
           updatedAt: now
@@ -203,13 +149,12 @@ describe("organization administration", () => {
     });
 
     await expect(
-      update({ ...ownerAccess, role: "member" }, { newMemberStatus: "pending" })
+      update({ ...ownerAccess, role: "member" }, { name: "Changed" })
     ).rejects.toThrow("organization administration access denied");
     await expect(
-      update(ownerAccess, { name: " Platform Guild ", newMemberStatus: "pending" })
+      update(ownerAccess, { name: " Platform Guild " })
     ).resolves.toMatchObject({
-      name: "Platform Guild",
-      newMemberStatus: "pending"
+      name: "Platform Guild"
     });
     expect(updateOrganizationSettings).toHaveBeenCalledWith(
       "organization-1",
@@ -265,19 +210,6 @@ describe("organization administration", () => {
         }
       })
     ).rejects.toThrow("ontology node kinds must contain at most 200 terms");
-  });
-
-  it("reserves organization deletion for owners", async () => {
-    const deleteOrganization = vi.fn().mockResolvedValue(true);
-    const remove = buildDeleteOrganization(
-      repository({ deleteOrganization })
-    );
-
-    await expect(
-      remove({ ...ownerAccess, role: "admin" })
-    ).rejects.toThrow("organization administration access denied");
-    await expect(remove(ownerAccess)).resolves.toBeUndefined();
-    expect(deleteOrganization).toHaveBeenCalledWith("organization-1");
   });
 
   it("protects members from self and owner-target changes", async () => {
@@ -382,31 +314,6 @@ describe("organization administration", () => {
       "team-1",
       "Platform Guild",
       now
-    );
-  });
-
-  it("joins an organization with the configured membership status", async () => {
-    const joinOrganizationBySlug = vi.fn().mockResolvedValue({
-      status: "joined",
-      membershipStatus: "pending"
-    });
-    const join = buildJoinOrganization(repository({ joinOrganizationBySlug }));
-
-    await expect(join("user-1", "organization-p")).resolves.toBe("pending");
-    expect(joinOrganizationBySlug).toHaveBeenCalledWith(
-      "organization-p",
-      "user-1"
-    );
-
-    const alreadyMember = buildJoinOrganization(
-      repository({
-        joinOrganizationBySlug: vi
-          .fn()
-          .mockResolvedValue({ status: "already_member" })
-      })
-    );
-    await expect(alreadyMember("user-1", "organization-p")).rejects.toThrow(
-      "user already belongs to this organization"
     );
   });
 });

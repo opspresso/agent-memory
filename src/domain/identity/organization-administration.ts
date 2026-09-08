@@ -5,7 +5,6 @@ import {
   type KnowledgeOntologyMode
 } from "../knowledge/knowledge-ontology";
 import type {
-  NewMemberStatus,
   OrganizationMemberStatus,
   OrganizationRole,
   TeamRole
@@ -15,7 +14,6 @@ export interface Organization {
   readonly id: string;
   readonly slug: string;
   readonly name: string;
-  readonly newMemberStatus: NewMemberStatus;
   readonly defaultTeamId: string | null;
   readonly ontologyMode: KnowledgeOntologyMode;
   readonly ontology: KnowledgeOntology;
@@ -97,7 +95,6 @@ export function createOrganization(input: NewOrganization): Organization {
     id: input.id,
     slug: normalizedSlug(input.slug),
     name: normalizedName(input.name),
-    newMemberStatus: "pending" as const,
     defaultTeamId: null,
     ontologyMode: defaultKnowledgeOntologyMode,
     ontology: defaultKnowledgeOntology,

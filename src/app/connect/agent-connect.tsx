@@ -39,7 +39,7 @@ export function AgentConnect({ origin }: { readonly origin: string }) {
   const canManageToken = access?.role === "admin" || access?.role === "owner";
   const mcpEndpoint =
     organizationSlug && origin
-      ? `${origin}/api/organizations/${organizationSlug}/mcp`
+      ? `${origin}/api/mcp`
       : t("workspace.selectOrganization");
 
   return (
@@ -189,7 +189,7 @@ function AgentTokenPanel({
       return;
     }
     const controller = new AbortController();
-    fetch(`/api/organizations/${organizationSlug}/agent-token`, {
+    fetch(`/api/agent-token`, {
       signal: controller.signal
     })
       .then((response) =>
@@ -221,7 +221,7 @@ function AgentTokenPanel({
     setGeneratedToken(undefined);
     try {
       const generated = await fetch(
-        `/api/organizations/${organizationSlug}/agent-token`,
+        `/api/agent-token`,
         { method: "POST" }
       ).then((response) =>
         responseJson(
@@ -257,7 +257,7 @@ function AgentTokenPanel({
     setGeneratedToken(undefined);
     try {
       const revealed = await fetch(
-        `/api/organizations/${organizationSlug}/agent-token/reveal`,
+        `/api/agent-token/reveal`,
         { method: "POST" }
       ).then((response) =>
         responseJson(
@@ -290,7 +290,7 @@ function AgentTokenPanel({
     setGeneratedToken(undefined);
     try {
       const response = await fetch(
-        `/api/organizations/${organizationSlug}/agent-token`,
+        `/api/agent-token`,
         { method: "DELETE" }
       );
       if (!response.ok) {

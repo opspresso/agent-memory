@@ -37,7 +37,7 @@ src/app  ──▶ src/lib ──▶ src/application ──▶ src/domain
 
 ## 개발 시 책임과 port 계약
 
-Memory 생성은 `src/app/api/organizations/[organizationSlug]/memories/route.ts` → `src/lib/memory-service.ts` → `src/application/memory/create-memory.ts` → domain의 `MemoryRepository` port로 이어진다. `src/lib/container.ts`가 PostgreSQL adapter와 선택형 AI adapter를 만들고 service가 clock·ID 함수와 함께 주입한다. HTTP와 MCP는 이 조립된 operation을 공유한다.
+Memory 생성은 `src/app/api/memories/route.ts` → `src/lib/memory-service.ts` → `src/application/memory/create-memory.ts` → domain의 `MemoryRepository` port로 이어진다. `src/lib/container.ts`가 PostgreSQL adapter와 선택형 AI adapter를 만들고 service가 clock·ID 함수와 함께 주입한다. HTTP와 MCP는 이 조립된 operation을 공유한다.
 
 - Domain은 프레임워크 타입을 받지 않고 entity와 순수 정책을 정의한다.
 - Application은 인증된 actor와 port를 받아 권한과 workflow를 결정한다. 시간·ID·외부 호출은 주입한다.
@@ -47,13 +47,19 @@ Memory 생성은 `src/app/api/organizations/[organizationSlug]/memories/route.ts
 
 Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 의미, 충돌 결과를 함께 확인하라. 예를 들어 candidate 승인은 최초 승격과 재실행을 구분한다. 최초 승격은 ready source를 요구하지만, 이미 승인한 candidate의 재실행은 source가 이후 archive되었더라도 기존 승인 결과를 반환하며 새 graph resource를 생성하지 않는다.
 
+## 설치 경계
+
+한 설치는 하나의 조직을 사용한다. 서버 시작 시 조직이 없으면 기본 조직을 만들고, 하나면 기존 데이터를 사용하며, 둘 이상이면 시작을 거부한다. 조직 생성 시 PostgreSQL table lock으로 직렬화하고 기존 조직 조회에는 이 잠금을 사용하지 않는다. 요청 권한 검사는 조직을 읽기만 하며 조직을 생성하지 않는다. 일반 HTTP와 session MCP는 사용자 인증을 먼저 확인한다. 내부 organization ID와 tenant FK는 scope·provenance 검증을 위해 유지한다. 공개 API에는 조직 선택 경로가 없고 `/api/organization`은 조회·설정 변경만 제공한다. MCP 주소는 `/api/mcp`다.
+
+인증 사용자의 첫 콘솔 진입 시 가입 요청을 등록한다. 같은 조직 advisory lock 아래에서 최초 owner를 결정하고 기본 팀 배정을 수행한다. active owner가 없는 경우에만 전역 admin을 owner로 준비한다. 그 외 신규 사용자는 pending 요청으로 등록하며 운영자가 승인해야 active 멤버가 된다. 기존 blocked·removed membership은 로그인으로 재활성화하지 않는다.
+
 ## 요청 경계
 
 조직 API 요청은 다음 경계를 통과한다.
 
 1. Route가 path와 query 또는 body를 검증한다.
 2. Better Auth session 또는 session Bearer token으로 사용자를 인증한다. MCP route는 조직 Agent token을 service credential로 별도 인정하고, 검증 후 `X-User-Email`이 있으면 해당 조직의 활성 사용자로 위임한다.
-3. URL의 `organizationSlug`를 UUID로 해석하고 session 사용자 또는 Agent token 발급자의 현재 조직 멤버십과 역할을 조회한다.
+3. 설치 조직을 결정하고 session 사용자 또는 Agent token 발급자의 현재 조직 멤버십과 역할을 조회한다.
 4. Application use case가 scope와 action에 대한 domain 정책을 적용한다.
 5. Repository가 모든 조회와 변경을 `organizationId`로 제한한다.
 6. 공개 응답 변환기가 권한에 따라 ACL과 내부 필드를 제거한다.
@@ -64,21 +70,21 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 Next.js 전역 응답 header는 CSP `frame-ancestors 'none'`과 `X-Frame-Options: DENY`로 clickjacking을 차단하고 MIME sniffing, cross-origin referrer, 사용하지 않는 browser capability를 제한한다.
 
-조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 같은 slug의 MCP route에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자가 현재 active `admin` 또는 `owner`인지 다시 확인해 제거·차단·강등을 즉시 반영한다. 유효한 token 요청에 `X-User-Email`이 없으면 발급자에게 귀속되는 organization service principal로 실행하며 organization scope만 허용한다. 이 경우 user scope, team scope, 개별 access grant는 domain 정책과 SQL predicate 모두에서 제외한다. Header가 있으면 정규화·형식 검증 후 token 조직의 활성 멤버를 `findByEmail`로 조회해 사용자의 role과 team을 포함한 기존 사용자 권한을 적용한다. 빈 값·잘못된 형식은 거부하고 활성 멤버가 없으면 접근을 거부하며 service principal로 fallback하지 않는다. Token 발급자의 role을 위임 사용자에게 물려주지 않는다. 조직 token은 조직 내 사용자 신원을 위임할 수 있으므로 인증된 사용자 email을 전달하는 신뢰된 server-side client만 보유해야 한다. Session 인증과 일반 HTTP route는 이 header로 사용자를 변경하지 않는다.
+조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 설치의 `/api/mcp`에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자가 현재 active `admin` 또는 `owner`인지 다시 확인해 제거·차단·강등을 즉시 반영한다. 유효한 token 요청에 `X-User-Email`이 없으면 발급자에게 귀속되는 organization service principal로 실행하며 organization scope만 허용한다. 이 경우 user scope, team scope, 개별 access grant는 domain 정책과 SQL predicate 모두에서 제외한다. Header가 있으면 정규화·형식 검증 후 token 조직의 활성 멤버를 `findByEmail`로 조회해 사용자의 role과 team을 포함한 기존 사용자 권한을 적용한다. 빈 값·잘못된 형식은 거부하고 활성 멤버가 없으면 접근을 거부하며 service principal로 fallback하지 않는다. Token 발급자의 role을 위임 사용자에게 물려주지 않는다. 조직 token은 조직 내 사용자 신원을 위임할 수 있으므로 인증된 사용자 email을 전달하는 신뢰된 server-side client만 보유해야 한다. Session 인증과 일반 HTTP route는 이 header로 사용자를 변경하지 않는다.
 
-Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 허용 domain 목록이 없으면 모든 email domain을 허용한다. 인증 경계는 설정된 전역 admin email 여부를 actor에 담고, 조직 생성 application use case와 전역 설정 API가 이 권한을 확인한다. 이 권한은 조직 bootstrap과 애플리케이션 설정 관리만 허용하며, 생성된 조직 안에서는 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
+Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 허용 domain 목록이 없으면 모든 email domain을 허용한다. 인증 경계는 설정된 전역 admin email 여부를 actor에 담고, 설치 멤버십의 최초 owner bootstrap과 전역 설정 API가 이 권한을 확인한다. 이 권한은 조직 resource 접근을 우회하지 않으며 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
 
 전역 애플리케이션 설정은 singleton `app_settings` row에 env 이름별 override로 저장한다. Application use case가 env보다 override를 우선해 유효 설정을 만들고, infrastructure adapter가 Secret 값을 `BETTER_AUTH_SECRET`에서 분리해 파생한 AES-256-GCM key와 env 이름 AAD로 암호화한다. 인증 domain과 admin 목록은 짧은 cache를 거쳐 요청 시 다시 읽으며, process 초기화형 설정은 instrumentation이 migration 이후 다른 adapter를 import하기 전에 `process.env`에 적용한다. Database 연결, 암호화 root, migration 실행 여부, Node runtime은 이 row를 읽기 전에 필요하므로 bootstrap env로 남긴다.
 
 ## Scope와 권한
 
-검색·조회 SQL의 scope 필터는 `scope-predicates`(infrastructure repository 공용 builder)가 단일 소유하며, domain의 `canAccessScopedResource`와의 동치성을 integration test로 고정한다. user scope 자원은 검색 결과에서도 본인에게만 보인다 — `admin`·`owner`도 다른 사용자의 user scope 자원을 검색으로 열람할 수 없다.
+검색·조회 SQL의 scope 필터는 `scope-predicates`(infrastructure repository 공용 builder)가 단일 소유하며, domain의 `canAccessScopedResource`와의 동치성을 integration test로 고정한다. user scope의 기본 접근 권한은 본인에게만 있고 `admin`·`owner` 역할만으로 다른 사용자의 개인 자료를 열람할 수 없다. Memory는 명시적 access grant가 있으면 해당 사용자·팀에도 접근을 허용한다.
 
-조직 membership은 사용자에게 노출하는 `active`, `pending`, `blocked`와 접근 회수 tombstone인 내부 `removed` status를 가진다. 조직 접근 조회는 `active` membership만 반환하므로 나머지 사용자는 모든 조직 API에서 `403`을 받는다. 조직은 신규 가입자의 기본 status(`newMemberStatus`, 기본값 `pending`)와 기본 팀(`defaultTeamId`)을 설정할 수 있으며, 멤버가 `active`가 되는 시점에 기본 팀에 `member`로 배정된다. `newMemberStatus`는 DB에서도 `active`·`pending`으로 제한하고 기본 팀은 같은 organization의 team만 composite FK로 참조한다. 조직 설정 변경, 기본 팀 삭제, 가입·활성화는 같은 organization advisory lock을 사용하며 기본 팀 삭제 transaction은 참조를 먼저 해제한다. 조직 온톨로지(`ontology` 사전, `ontologyMode`)를 포함한 조직 설정 변경은 `admin`·`owner`만 수행한다. 마지막 active `owner`는 강등·차단·제거할 수 없고, 자기 자신의 membership 변경은 허용하지 않는다.
+조직 membership은 사용자에게 노출하는 `active`, `pending`, `blocked`와 접근 회수 tombstone인 내부 `removed` status를 가진다. 조직 접근 조회는 `active` membership만 반환하므로 나머지 사용자는 모든 조직 API에서 `403`을 받는다. 조직은 기본 팀(`defaultTeamId`)을 설정할 수 있으며, 멤버가 `active`가 되는 시점에 기본 팀에 `member`로 배정된다. 가입 요청은 항상 pending으로 저장한다. 기본 팀은 같은 organization의 team만 composite FK로 참조한다. 조직 설정 변경, 기본 팀 삭제, 가입·활성화는 같은 organization advisory lock을 사용하며 기본 팀 삭제 transaction은 참조를 먼저 해제한다. 조직 온톨로지(`ontology` 사전, `ontologyMode`)를 포함한 조직 설정 변경은 `admin`·`owner`만 수행한다. 마지막 active `owner`는 강등·차단·제거할 수 없고, 자기 자신의 membership 변경은 허용하지 않는다.
 
-Membership 제거는 row를 삭제하지 않고 `removed`로 전환해 user scope의 Memory, Document, Knowledge resource 소유권을 보존한다. Team membership과 해당 사용자가 발급한 조직 Agent token은 즉시 삭제하고 모든 접근 조회에서 tombstone을 제외한다. 같은 사용자가 다시 가입하거나 관리자가 다시 추가하면 기존 row를 활성화하므로 보존된 user scope에 다시 접근할 수 있다. `createdBy`, `changedBy`, `grantedBy`, `reviewedBy`, `mergedBy` 같은 audit actor도 stable global user를 참조하므로 감사 기록과 organization·team scope resource를 보존한다.
+Membership 제거는 row를 삭제하지 않고 `removed`로 전환해 user scope의 Memory, Document, Knowledge resource 소유권을 보존한다. Team membership과 해당 사용자가 발급한 조직 Agent token은 즉시 삭제하고 모든 접근 조회에서 tombstone을 제외한다. 관리자가 다시 추가하면 기존 row를 활성화하므로 보존된 user scope에 다시 접근할 수 있다. `createdBy`, `changedBy`, `grantedBy`, `reviewedBy`, `mergedBy` 같은 audit actor도 stable global user를 참조하므로 감사 기록과 organization·team scope resource를 보존한다.
 
-모든 memory, document, knowledge node와 edge는 하나의 organization에 속하며 다음 scope 중 하나를 갖는다.
+모든 memory, document, knowledge node와 edge는 하나의 organization에 속하며 다음 scope 중 하나를 갖는다. 표는 별도 Memory access grant가 없는 기본 권한이다.
 
 | Scope | 읽기 | 쓰기 | 관리 |
 | --- | --- | --- | --- |
@@ -116,6 +122,8 @@ Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `documen
 
 ## Knowledge Graph와 통합 검색
 
+Graph 검색·이름 기반 중복 조회·관계 탐색은 각 작업 시작 시의 애플리케이션 시각으로 출처 Memory의 유효기간을 검사한다. 한 작업의 node·edge·source 조회에는 같은 시각을 사용하며, DB 서버의 시각을 별도 기준으로 사용하지 않는다.
+
 Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenance 행은 DB constraint로 정확히 하나의 memory 또는 document chunk를 참조한다. Canonical resource가 여러 근거에서 발견되면 resource를 중복 생성하지 않고 provenance를 누적한다. 생성 시 호출자가 source를 읽을 수 있어야 하고 graph scope는 source scope보다 넓을 수 없다. 검색·Neighborhood·node 및 edge 생성은 source의 현재 권한과 active·유효·ready 상태를 다시 확인한다. Memory의 유효성은 domain의 `isMemoryActiveAt` 정책으로 정의하며 `validFrom <= now`이고 `expiresAt`이 없거나 `now < expiresAt`인 active Memory만 검색과 Graph 근거로 허용한다.
 
 Graph의 검색·중복 후보 조회·Neighborhood repository port는 읽을 수 있고 현재 유효한 provenance만 반환한다. Resource 선택과 개별 source 필터는 같은 SQL predicate를 사용하며, source를 다시 조회하는 사이 유효한 근거가 사라진 resource는 결과에서 제외한다. 내부 mutation을 위한 `findNodeById`와 `findEdgeById`는 전체 provenance를 보존하므로 공개 검색 결과로 직접 사용하지 않는다.
@@ -146,7 +154,7 @@ Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같
 - AI candidate 승인만 node·edge와 reviewer audit을 하나의 transaction으로 저장한다.
 - Memory mutation은 `If-Match` version 충돌을 감지하고 덮어쓰기를 거부한다.
 - Source를 읽을 수 없게 되면 graph 검색과 neighborhood에서 해당 provenance를 다시 제외한다.
-- 조직·팀 삭제는 PostgreSQL의 tenant resource를 cascade 삭제하지만 S3 호환 storage의 문서 원본 object는 제거하지 않는다. 삭제 전 식별과 object lifecycle은 운영 경계에서 담당한다.
+- 팀 삭제는 PostgreSQL의 team resource를 cascade 삭제하지만 S3 호환 storage의 문서 원본 object는 제거하지 않는다. 삭제 전 식별과 object lifecycle은 운영 경계에서 담당한다.
 
 ## 관측성과 민감정보
 
