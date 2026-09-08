@@ -30,7 +30,7 @@ export const ko: Messages = {
     "한 기업의 장기 Memory, 문서 근거, Knowledge Graph를 연결하는 설치형 Context 플랫폼입니다. 독립적으로 사용하거나 Agent Studio에 연결하고, 승인된 멤버와 Agent가 권한에 맞는 지식을 공유합니다.",
   "home.capability.memory": "Long-term Memory",
   "home.capability.memoryBody":
-    "규칙, 결정, 경험을 revision과 유효기간까지 보존합니다.",
+    "MCP로 기억을 저장·회상·잊고, 변경 이력과 출처·유효기간을 보존합니다.",
   "home.capability.rag": "Hybrid RAG",
   "home.capability.ragBody":
     "문서를 수집해 본문을 검색합니다. Embedding 모델을 설정하면 의미 검색을 함께 사용할 수 있습니다.",
@@ -96,9 +96,9 @@ export const ko: Messages = {
   "guide.start.body":
     "가입은 이 설치의 멤버가 되기 위한 요청입니다. 운영자가 승인하기 전에는 조직의 지식을 읽거나 저장할 수 없습니다. 별도로 조직을 만들거나 선택할 필요는 없습니다.",
   "guide.scope.organizationAudience": "조직 멤버",
-  "guide.scope.teamAudience": "해당 팀 멤버",
+  "guide.scope.teamAudience": "팀 멤버와 조직 관리자",
   "guide.scope.userAudience": "본인",
-  "guide.scope.teamManager": "manager 이상",
+  "guide.scope.teamManager": "팀 manager 또는 조직 admin·owner",
   "guide.scope.userManager": "본인",
   "guide.scope.read": "읽기 · {audience}",
   "guide.scope.manage": "관리 · {manager}",
@@ -115,13 +115,15 @@ export const ko: Messages = {
   "guide.search.evidenceNote": "Memory 또는 문서 조각의 원문 열기",
   "guide.search.note":
     "검색 진단은 필요할 때 펼쳐 봅니다. 상대 관련도는 같은 검색의 결과 간 비교이며 신뢰 확률이 아닙니다. 보관됨·만료·미래 유효 Memory와 미처리 문서는 검색에서 제외됩니다.",
+  "guide.search.reranker":
+    "reranker를 설정하면 모든 지식 검색과 MCP recall에 적용합니다. Memory·Documents·Graph 개별 검색은 키워드와 선택형 의미 검색 점수를 사용합니다. 재정렬이 실패하면 hybrid 순위로 결과를 제공합니다.",
   "guide.memory.title": "결정의 현재 상태와 변경 이유를 함께 남깁니다.",
   "guide.memory.body":
     "왼쪽 Memory 메뉴에서 새 Memory를 선택해 결정, 규칙이나 유용한 사실을 공유 범위와 함께 기록합니다. 목록에서 항목을 선택하면 내용과 출처를 읽을 수 있습니다. 권한이 있는 사용자는 수정과 Version 이력을 확인할 수 있습니다.",
   "guide.memory.initial": "최초 기록",
   "guide.memory.current": "현재 상태",
   "guide.memory.note":
-    "수정할 때 변경 사유를 기록하며 이전 version은 보존됩니다. 다른 사용자가 먼저 저장했다면 최신 version을 다시 불러온 뒤 저장합니다. 보관은 새 version으로 기록되고 일반 검색에서 제외됩니다.",
+    "변경 사유는 선택 사항이며 수정 전 version은 보존됩니다. 다른 사용자가 먼저 저장했다면 최신 version을 다시 불러온 뒤 저장합니다. 보관은 새 version으로 기록되고 일반 검색에서 제외됩니다.",
   "guide.documents.title": "원본은 보존하고, 검색은 chunk로 수행합니다.",
   "guide.documents.body":
     "문서 라이브러리에서 UTF-8 text, Markdown, CSV, JSON 또는 XML을 업로드합니다. 공유 범위를 선택하고 업로드한 문서를 열어 처리 상태, 메타데이터와 출처를 확인합니다. 사용 가능한 문서는 검색에서 찾을 수 있습니다.",
@@ -134,7 +136,7 @@ export const ko: Messages = {
     "Node 목록은 키보드로도 탐색할 수 있습니다. Node와 관계는 읽을 수 있는 Memory나 문서 조각을 근거로 하며, 중심을 변경할 때 source 접근 권한을 다시 검사합니다.",
   "guide.review.title": "AI의 제안을 검토해 지식을 완성합니다.",
   "guide.review.body":
-    "대기 목록에서 후보를 선택합니다. 문서 원문과 제안된 entity·이름으로 표시된 관계를 비교하고 유사한 기존 지식을 확인한 뒤, 검토 사유와 함께 승인하거나 거절합니다.",
+    "대기 목록에서 후보를 선택합니다. 문서 원문과 제안된 entity·이름으로 표시된 관계를 비교하고 유사한 기존 지식을 확인한 뒤 승인하거나 거절합니다. 검토 사유는 선택 사항입니다.",
   "guide.review.accept": "Graph에 승인",
   "guide.review.acceptNote":
     "Canonical node·edge와 provenance를 transaction으로 저장",
@@ -142,9 +144,9 @@ export const ko: Messages = {
   "guide.review.rejectNote": "Graph를 변경하지 않고 거절을 기록합니다. 거절한 후보는 나중에 승인할 수 없습니다.",
   "guide.connect.title": "MCP로 Agent와 Context를 연결합니다.",
   "guide.connect.body":
-    "Agent 연결 화면에서 /api/mcp 주소와 인증 설정을 확인하세요. Agent Studio 등록 템플릿을 복사한 뒤 연결을 테스트하고 사용할 version에 서버를 연결합니다.",
+    "서비스는 /api/mcp로 장기 기억을 저장·회상·잊습니다. Agent Memory는 RAG 문서와 Knowledge Graph도 관리하며, context_search로 세 종류를 함께 검색합니다. Agent 연결에서 endpoint와 인증 정보를 확인하고, 필요하면 Agent Studio 등록 템플릿을 사용합니다.",
   "guide.connect.note":
-    "조직 admin·owner는 Agent token을 관리할 수 있습니다. 템플릿의 자리표시자를 실제 인증 정보로 바꾸고 Studio에서 연결을 테스트한 뒤 version에 서버를 직접 연결합니다. 자동 회상에는 memoryRecall 설정과 recall 도구 허용도 필요합니다.",
+    "조직 admin·owner는 Agent token을 관리합니다. 사용자 위임이 없으면 조직 범위만 허용하며, 신뢰된 서비스가 X-User-Email을 보내면 활성 멤버의 권한을 적용합니다. Studio의 자동 Memory 회상은 version에 서버를 연결하고 memoryRecall 설정과 recall 도구를 허용해야 동작합니다.",
   "guide.next.title": "이제 실제 Context를 탐색하세요.",
   "guide.next.body":
     "Memory를 만들거나 문서를 업로드해 시작하세요. 검색 결과에서 원문 근거를 확인하고 준비된 지식을 Agent에 연결합니다.",
@@ -334,7 +336,7 @@ export const ko: Messages = {
   "workspace.studioTemplateDescription":
     "{organizationSlug} 조직에 저장된 결정·규칙·경험, 문서 근거, 지식 간 관계를 확인할 때 사용합니다. Memory·RAG·Knowledge Graph를 검색하고 공유할 정보를 조직 범위 Memory로 저장합니다.",
   "workspace.studioTemplateContent":
-    "# {organizationSlug} 조직 Agent Memory 운영 메모\n\n- 접근 범위: 조직 Agent token은 organization scope만 허용한다. Studio의 project·사용자·대화 header로 개인·팀 범위가 부여되지 않는다.\n- 제공 기능: Memory 저장·회상·잊기(remember·recall·forget), RAG 문서 검색, Knowledge Graph 검색·관계 탐색이다. 문서 수집과 Graph 관리는 Agent Memory 콘솔에서 수행한다.\n- 연결 확인: Test connection은 도구 목록 조회를 검사한다. 저장 후 사용할 project의 version에 서버를 직접 연결하고 실제 실행도 확인한다.\n- 자동 회상: version의 memoryRecall을 켜고 recall 도구를 허용한다. 자동 검색으로 추가된 서버는 실행 전 회상 대상이 아니다.\n- Token 변경: 재생성하면 Studio의 Authorization header를 갱신한다. Version에 같은 header를 덮어쓴 경우 해당 값도 갱신한다.\n\n이 Content는 모델에 전달되지 않는 운영자 메모다. 정보 저장 조건과 응답 규칙은 version의 system prompt 또는 연결한 Skill에 작성한다.",
+    "# {organizationSlug} 조직 Agent Memory 운영 메모\n\n- 접근 범위: X-User-Email 없는 Agent token은 조직 범위만 허용한다. X-User-Email을 보내면 해당 활성 멤버의 권한을 적용한다. 이 header는 사용자 신원을 검증하는 신뢰된 서버만 설정하라. Studio는 로그인 사용자 email을 전달하며 project·대화 header는 접근 범위를 부여하지 않는다.\n- 제공 기능: Memory는 remember·recall·forget으로 저장·회상·잊는다. forget은 manage 권한과 현재 version을 검증해 archive한다. Memory·RAG·Graph 통합 검색은 context_search를 사용한다. 문서 수집과 Graph 관리는 Agent Memory 콘솔에서 수행한다.\n- 연결 확인: Test connection은 도구 목록 조회를 검사한다. 저장 후 사용할 project의 version에 서버를 직접 연결하고 실제 실행도 확인한다.\n- 자동 회상: version의 memoryRecall을 켜고 recall 도구를 허용한다. Memory만 검색하며 설정된 reranker를 적용한다. 자동 검색으로 추가된 서버는 실행 전 회상 대상이 아니다.\n- Token 변경: 재생성하면 Studio의 Authorization header를 갱신한다. Version에 같은 header를 덮어쓴 경우 해당 값도 갱신한다.\n\n이 Content는 모델에 전달되지 않는 운영자 메모다. 정보 저장 조건과 응답 규칙은 version의 system prompt 또는 연결한 Skill에 작성한다.",
   "workspace.studioTemplateCopyField": "등록 템플릿 {field} 복사",
   "workspace.studioTemplateTokenHint":
     "Headers의 Key는 Authorization, Value는 Bearer 뒤에 공백과 실제 Agent token을 입력합니다. <amt_token>을 위에서 생성하거나 확인한 token으로 교체하세요.",
@@ -342,7 +344,7 @@ export const ko: Messages = {
     "등록 후 Test connection으로 도구 목록을 확인하고 사용할 project의 version에 서버를 직접 연결하세요. 실행 전 Memory 회상이 필요하면 memoryRecall을 켜고 recall 도구를 허용하세요. 모델이 따라야 할 저장·응답 규칙은 version의 system prompt 또는 Skill에 작성하세요.",
   "workspace.agentTokenTitle": "Agent token",
   "workspace.agentTokenBody":
-    "Agent Studio에서 사용할 Bearer token을 생성합니다. MCP는 발급자의 현재 조직 관리자 권한으로 조직 범위에만 접근합니다.",
+    "신뢰된 서비스에서 사용할 Bearer token을 생성합니다. X-User-Email이 없으면 조직 범위만 허용하고, 있으면 해당 활성 멤버의 권한을 적용합니다. 발급자는 활성 admin·owner 권한을 유지해야 합니다.",
   "workspace.agentTokenGenerate": "Token 생성",
   "workspace.agentTokenRegenerate": "Token 재생성",
   "workspace.agentTokenReveal": "Token 보기",

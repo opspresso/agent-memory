@@ -1,60 +1,75 @@
 # 지식 워크스페이스 UI
 
-Agent Memory의 화면은 지식을 수집하고, 전체 내용과 근거를 읽고, 검토한 뒤 Agent에 연결하는 흐름을 제공한다. 실행·채팅·도구 조립은 Agent Studio가 담당한다.
+이 문서는 현재 화면의 책임, 공통 상호작용과 검증 근거를 설명한다. 실제 조작 절차는 [사용자 가이드](user-guide.md), HTTP·MCP 입력과 응답은 [API 문서](api.md)를 기준으로 한다. 실행·채팅·도구 조립은 Agent Studio가 담당한다.
 
 ## 정보 구조
 
-| 화면 | 주요 작업 |
-| --- | --- |
-| 통합 검색 | Memory·문서·Graph 검색, 목록과 상세 비교, 원문과 관계로 이동 |
-| Memory | 최근 목록·검색, 개인·팀·조직 Memory 생성, 읽기·수정·이력 |
-| 문서 라이브러리 | 업로드, 처리 상태, 실패 재처리, 처리된 원문 순차 읽기 |
-| Knowledge Graph | 지식 검색, 노드 목록과 지도, 관계와 모든 provenance 확인 |
-| AI 후보 검토 | 대기 목록에서 원문과 제안·중복 후보를 비교하고 승인·거절 |
-| 조직 관리 | 회원 검색·상태 필터, 팀 관리, 조직·온톨로지 설정 |
-| Agent 연결 | endpoint → token → Studio 등록 예시와 연결 절차 |
+| 경로 | 화면 | 주요 작업 |
+| --- | --- | --- |
+| `/` | 비로그인 제품 안내 / 로그인 후 통합 검색 | 로그인, Memory·문서·Graph 검색과 근거 확인 |
+| `/guide` | 공개 가이드 | 가입부터 서비스 연결까지 제품 흐름 안내 |
+| `/onboarding` | 가입 요청·접근 상태 | 승인 대기와 접근 제한 안내 |
+| `/memories` | Memory | 최신 목록·검색, 생성, 내용·출처, 수정·이력·archive |
+| `/documents` | 문서 라이브러리 | 파일 업로드, 처리 상태, 실패 재처리, 처리된 원문 읽기 |
+| `/knowledge` | Knowledge Graph | 지식 검색, 지도·노드 목록, 관계와 provenance 확인 |
+| `/review` | AI 후보 검토 | source 원문·제안·중복 후보 비교와 승인·거절 |
+| `/members`, `/teams` | 회원·팀 관리 | 역할과 소속, 가입 승인, 접근 회수 |
+| `/settings` | 조직·애플리케이션 설정 | 조직·온톨로지 및 전역 admin의 runtime override 관리 |
+| `/connect` | Agent 연결 | endpoint·token·Studio 등록 템플릿 |
 
-목록을 읽는 작업과 내용을 수정하는 작업을 구분한다. 읽기 권한만 있어도 전체 Memory와 원문을 확인할 수 있으며 수정·이력·archive 버튼은 해당 capability에 맞게 제공한다. 설치의 단일 조직을 사용하며 조직 선택기는 제공하지 않는다.
+지식 화면은 활성 설치 멤버십을 요구한다. 조직 선택기는 없으며 사용자는 개인·팀·조직 scope로 지식을 구분한다. 조직 관리 메뉴는 admin·owner에게, 팀 메뉴는 관리 가능한 팀이 있는 사용자에게 표시한다. 전역 admin은 멤버십 상태와 관계없이 계정 메뉴에서 애플리케이션 설정에 접근할 수 있다.
 
 ## 표현과 상호작용
 
-- 중립 배경과 불투명한 surface, indigo 강조색, 작은 radius를 사용한다. 위험 작업의 의미별 색상을 전역 스타일로 덮지 않는다.
-- 검색은 목록과 상세 패널로 구성한다. 검색 진단 점수는 펼쳐서 확인하며 상대 관련도를 신뢰 확률처럼 표시하지 않는다.
-- Memory의 내용·출처, 수정, 이력을 탭으로 구분한다. 저장 후 검색 목록을 새로 읽더라도 선택한 상세와 성공 안내를 유지한다.
-- 문서는 처리된 원문을 본문 순서대로 25개씩 읽는다. 원본 파일 다운로드나 새로운 포맷 변환 기능은 아니다.
-- 좁은 화면에서는 상세로 이동하고 목록으로 돌아갈 수 있다. 선택·닫기 때 focus를 옮기며 키보드로 Graph의 노드 목록을 탐색할 수 있다.
-- 한국어·영어와 라이트·다크 테마를 제공한다. 가입·로딩·빈 결과·권한 변경·실패·충돌 상태마다 해당 설명과 복구 동작을 제공한다.
+### 목록과 상세
+
+검색과 라이브러리는 목록에서 대상을 고르고 상세에서 내용·출처를 읽는 구조다. 읽기 권한만 있어도 Memory의 본문과 허용된 근거를 읽을 수 있다. 수정·이력·archive는 서버가 반환한 capability에 따라 제공한다.
+
+Memory는 내용·출처, 수정, 이력을 탭으로 구분한다. 저장 후 목록을 다시 조회해도 선택한 대상과 성공 안내를 유지한다. API 요청이 늦게 끝나더라도 이전 대상의 결과가 새 선택을 덮어쓰지 않도록 처리한다.
+
+문서 원문은 처리된 chunk를 ordinal 순서로 25개씩 조회하고 `본문 더 보기`로 이어 읽는다. 원본 bytes 다운로드와 포맷 변환은 이 화면의 기능이 아니다. 선택한 문서가 바뀌면 이전 본문을 비우고 새 권한을 확인한다.
+
+### 검색과 관계 지도
+
+검색 종류와 query는 URL에 보존한다. 상대 관련도는 현재 결과 사이의 비교이며 신뢰 확률이 아니다. reranker 적용 여부는 [검색 계약](api.md#통합-context-검색)을 따른다.
+
+Graph의 위치 계산과 선택 상태는 client가, 접근 가능한 node·edge·source 결정은 server가 소유한다. 지도와 키보드로 선택 가능한 노드 목록은 같은 선택을 공유한다. 중심 node가 바뀌면 제한된 depth·limit의 neighborhood를 새로 조회한다.
+
+### 반응형·접근성·상태
+
+- 좁은 화면에서는 목록과 선택한 상세를 전환한다. 선택·닫기 때 focus를 옮겨 키보드 탐색을 이어간다.
+- 한국어·영어, 라이트·다크·시스템 테마를 제공한다. locale과 theme은 UI 표시를 바꾸며 resource 이름·본문을 번역하지 않는다.
+- 가입 대기, 로딩, 초기 상태, 빈 결과, 접근 상실, 실패, version 충돌에 각각 안내와 복구 동작을 제공한다.
+- 중립 배경, indigo 강조색, 작은 radius를 사용한다. 위험 작업의 색상을 전역 스타일로 덮지 않는다.
+
+## 구현 위치
+
+| 책임 | 구현 |
+| --- | --- |
+| 메뉴·역할별 표시·계정 메뉴 | [app-shell.tsx](../src/app/app-shell.tsx) |
+| 통합 검색·선택·관계 탐색 | [search-console.tsx](../src/app/search-console.tsx) |
+| Memory 상세·수정·이력 | [memory-lifecycle.tsx](../src/app/memory-lifecycle.tsx) |
+| 공개 제품 안내 | [guide/page.tsx](../src/app/guide/page.tsx) |
+| 번역 key와 기본 언어 | [en.ts](../src/app/_i18n/messages/en.ts), [ko.ts](../src/app/_i18n/messages/ko.ts) |
 
 ## 비교 화면
 
-Before는 `e559699` (`v0.14.0`)에서, After는 개편된 코드의 인증 E2E에서 캡처했다. 모두 로컬 합성 자료이며 실제 사용자가 업로드한 문서와 credential은 포함하지 않는다. 전후 fixture·자료 수·viewport는 서로 다르므로 검색 품질이나 성능 측정이 아닌 **레이아웃과 업무 흐름 비교**다.
+다음 이미지는 로컬 합성 fixture로 만든 레이아웃 참고 자료다. 현재 계약·문구·데이터는 위 구현과 사용자 가이드를 우선하며, 이미지로 검색 품질이나 성능을 판단하지 않는다.
 
-### 검색과 근거 확인
-
-| Before | After |
-| --- | --- |
-| ![개편 전 검색](ui/before-search.png) | ![개편 후 목록과 근거](ui/after-search.png) |
-
-### Memory 읽기와 수정
-
-| Before | After |
-| --- | --- |
-| ![개편 전 전체 화면 편집](ui/before-memory.png) | ![개편 후 Memory 목록과 상세](ui/after-memory.png) |
-
-### 검토와 작은 화면
-
-![원문과 AI 후보 비교](ui/after-review.png)
-
-[모바일 다크 테마의 문서 읽기](ui/after-document-mobile.png)
+- [검색 목록과 근거](ui/after-search.png)
+- [Memory 목록과 상세](ui/after-memory.png)
+- [원문과 AI 후보 비교](ui/after-review.png)
+- [모바일 다크 테마의 문서 읽기](ui/after-document-mobile.png)
 
 ## 검증 범위
 
-`pnpm verify`, PostgreSQL integration, 인증 E2E로 다음 흐름을 검증한다.
+| 검증 | 근거 |
+| --- | --- |
+| 공개 화면·로그인·언어·테마 | [home.spec.ts](../e2e/home.spec.ts) |
+| 가입 요청·승인·멤버 관리·Memory·MCP 연결 | [workspace.spec.ts](../e2e/workspace.spec.ts) |
+| 근거·문서 상태·지연 응답·선택 유지·모바일 | [knowledge-workspace.spec.ts](../e2e/knowledge-workspace.spec.ts) |
+| 권한·상태·동시성 및 계층 | unit test, PostgreSQL integration test, `pnpm architecture` |
 
-- 실제 API로 Memory를 생성·수정하고 이력·공유 범위를 확인한다.
-- 지연된 archive 응답이나 권한 변경 응답이 새 선택을 닫거나 오래된 내용을 재표시하지 않는다.
-- 문서 pending·processing·failed·ready 상태와 retry, 원문 페이지 조회·더 보기·선택 초기화를 확인한다.
-- 원문을 읽고 후보를 승인·거절하며 Graph의 여러 Memory·문서 근거를 모두 확인한다.
-- 최초 owner 준비, 일반 사용자의 가입 요청·운영자 승인·차단, 일반 멤버의 읽기와 거부되는 쓰기, 조직 선택기 부재, 한국어·영어, 모바일과 다크 모드를 확인한다. 제거된 멤버십이 로그인으로 복구되지 않는 동작은 integration test에서 검증한다.
+인증 E2E에는 폐기 가능한 `_e2e` 또는 `_test` DB와 `E2E_AUTHENTICATED=true`가 필요하다. 미설정 시 인증 시나리오는 skip된다. 실행 방법은 [운영 가이드](operations.md#배포-전-확인)를 따른다.
 
-E2E의 문서 worker 결과는 격리된 `_e2e` DB의 합성 fixture로 재현한다. Memory의 접근 상실은 실제 PATCH 후 GET만 403으로 응답하는 fixture를 사용한다. Worker 처리와 DB tenant·상태 불변 조건은 application·integration 테스트에서 별도로 검증한다. 자동 검사 범위 밖의 모든 기기·브라우저·화면 조합을 검증한 것으로 간주하지 않는다.
+E2E는 문서 worker 결과를 합성 DB fixture로 준비하고 일부 지연·오류 응답을 재현한다. Worker·외부 AI의 실제 운영 상태를 검증하는 검사는 아니다. 처리와 저장소 불변 조건은 application·integration 테스트로 따로 검증한다.

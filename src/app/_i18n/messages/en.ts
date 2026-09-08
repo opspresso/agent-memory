@@ -28,7 +28,7 @@ export const en = {
     "A self-hosted context platform for one organization’s long-term Memory, document evidence, and Knowledge Graph. Use it independently or connect Agent Studio, with access scoped to approved members and agents.",
   "home.capability.memory": "Long-term Memory",
   "home.capability.memoryBody":
-    "Preserve rules, decisions, and experience with revisions and validity periods.",
+    "Remember, recall, and forget through MCP while preserving revisions, sources, and validity periods.",
   "home.capability.rag": "Hybrid RAG",
   "home.capability.ragBody":
     "Ingest documents and search their text. Configure an embedding model to add semantic search.",
@@ -94,9 +94,9 @@ export const en = {
   "guide.start.body":
     "Signing up requests membership in this installation. An operator must approve it before you can read or save organization knowledge. There is no separate organization to create or choose.",
   "guide.scope.organizationAudience": "organization members",
-  "guide.scope.teamAudience": "team members",
+  "guide.scope.teamAudience": "team members and organization administrators",
   "guide.scope.userAudience": "you",
-  "guide.scope.teamManager": "manager or above",
+  "guide.scope.teamManager": "team manager or organization admin/owner",
   "guide.scope.userManager": "you",
   "guide.scope.read": "Read · {audience}",
   "guide.scope.manage": "Manage · {manager}",
@@ -113,13 +113,15 @@ export const en = {
   "guide.search.evidenceNote": "Open the original Memory or document chunk",
   "guide.search.note":
     "Search diagnostics are optional details. Relative relevance compares results within this search; it is not a confidence score. Archived, expired and future Memory and unprocessed documents are excluded.",
+  "guide.search.reranker":
+    "When configured, reranking applies to All knowledge and MCP recall. Memory, Documents and Graph searches use lexical and optional semantic scores. If reranking fails, results use hybrid ranking.",
   "guide.memory.title": "Keep the current decision and why it changed together.",
   "guide.memory.body":
     "Open Memory in the sidebar and choose New Memory to record a decision, rule or useful fact with a sharing scope. Select an item to open Content and source. Users with the required permission can edit it and inspect Version history.",
   "guide.memory.initial": "Initial record",
   "guide.memory.current": "Current state",
   "guide.memory.note":
-    "Editing requires a change reason and preserves the previous version. If another person saves first, reload the current version before retrying. Archive creates a new version and removes the Memory from ordinary search.",
+    "A change reason is optional. Editing preserves the previous version. If another person saves first, reload the current version before retrying. Archive creates a new version and removes the Memory from ordinary search.",
   "guide.documents.title": "Preserve originals and search their chunks.",
   "guide.documents.body":
     "Open the document library and upload UTF-8 text, Markdown, CSV, JSON or XML. Choose a sharing scope and select the uploaded item to inspect its processing status, metadata and source. Ready documents can be found in search.",
@@ -132,7 +134,7 @@ export const en = {
     "The node list also supports keyboard navigation. Every node and relationship is grounded in a readable Memory or document chunk; sources are checked again when the exploration center changes.",
   "guide.review.title": "Review AI proposals to complete the knowledge.",
   "guide.review.body":
-    "Choose a candidate from the review queue. Compare its original document chunk with proposed entities and named relationships, inspect similar existing knowledge, and record a review reason before accepting or rejecting it.",
+    "Choose a candidate from the review queue. Compare its original document chunk with proposed entities and named relationships, inspect similar existing knowledge, and optionally record a reason when accepting or rejecting it.",
   "guide.review.accept": "Accept into Graph",
   "guide.review.acceptNote":
     "Store canonical nodes, edges, and provenance in one transaction",
@@ -140,9 +142,9 @@ export const en = {
   "guide.review.rejectNote": "Record the rejection without changing the Graph; a rejected candidate cannot be accepted later.",
   "guide.connect.title": "Connect Agents to Context through MCP.",
   "guide.connect.body":
-    "Open Agent connection to get the /api/mcp address and authentication settings. Copy the Agent Studio registration template, test the connection, and bind the server to the version that will use it.",
+    "Services connect to /api/mcp to remember, recall, and forget long-term memories. Agent Memory also manages RAG documents and Knowledge Graph. Use context_search to search all three together. Agent connection provides the endpoint, credentials, and an optional Agent Studio registration template.",
   "guide.connect.note":
-    "An organization admin or owner can manage an Agent token. Replace the template placeholder with the actual credential, test the connection in Studio, then bind the server to a version. Automatic recall also requires memoryRecall and the recall tool to be enabled.",
+    "An organization admin or owner can manage an Agent token. Without user delegation, it permits organization scope only. A trusted service can send X-User-Email to act with an active member’s permissions. In Studio, bind the server to a version and enable memoryRecall with recall allowed for automatic Memory recall.",
   "guide.next.title": "Explore real context now.",
   "guide.next.body":
     "Start by creating a Memory or uploading a document. Search it, check the original evidence, and connect an Agent when the knowledge is ready.",
@@ -335,7 +337,7 @@ export const en = {
   "workspace.studioTemplateDescription":
     "Use for decisions, rules, experience, document evidence, and knowledge relationships stored in the {organizationSlug} organization. Search Memory, RAG, and Knowledge Graph, and save shared information as organization-scope memories.",
   "workspace.studioTemplateContent":
-    "# Agent Memory operator notes for {organizationSlug}\n\n- Access: Organization Agent tokens only allow organization scope. Studio project, user, and conversation headers do not grant personal or team access.\n- Capabilities: Remember, recall, and forget memories; search RAG documents and Knowledge Graph relationships. Ingest documents and manage the Graph in the Agent Memory console.\n- Verification: Test connection checks tool discovery. Bind the server directly to the project version and verify an actual run too.\n- Automatic recall: Enable memoryRecall on the version and allow the recall tool. Dynamically discovered servers are not queried before a run.\n- Token changes: After regeneration, update the Studio Authorization header and any version override of that header.\n\nThis Content is an operator note and is not sent to the model. Put memory-writing conditions and response rules in the version system prompt or a bound Skill.",
+    "# Agent Memory operator notes for {organizationSlug}\n\n- Access: An Agent token without X-User-Email permits organization scope only. With X-User-Email, MCP applies the active member’s permissions. Only a trusted server that verifies the user’s identity should send this header. Studio supplies the signed-in user’s email; project and conversation headers do not grant scope access.\n- Capabilities: Use remember, recall, and forget for Memory. Forget requires manage permission and the current version and archives the record. Use context_search for combined Memory, RAG and Graph search. Ingest documents and manage the Graph in the Agent Memory console.\n- Verification: Test connection checks tool discovery. Bind the server directly to the project version and verify an actual run too.\n- Automatic recall: Enable memoryRecall on the version and allow recall. It searches Memory only and uses the configured reranker. Dynamically discovered servers are not queried before a run.\n- Token changes: After regeneration, update the Studio Authorization header and any version override of that header.\n\nThis Content is an operator note and is not sent to the model. Put memory-writing conditions and response rules in the version system prompt or a bound Skill.",
   "workspace.studioTemplateCopyField": "Copy template {field}",
   "workspace.studioTemplateTokenHint":
     "Set the Headers key to Authorization and its value to Bearer followed by a space and the actual Agent token. Replace <amt_token> with the token generated or viewed above.",
@@ -343,7 +345,7 @@ export const en = {
     "After registering, use Test connection to inspect the tool list and bind the server directly to the project version. For memory recall before a run, enable memoryRecall and allow the recall tool. Put memory-writing and response rules in the version system prompt or a Skill.",
   "workspace.agentTokenTitle": "Agent token",
   "workspace.agentTokenBody":
-    "Generate a Bearer token for Agent Studio. MCP uses the issuer's current administrator access and is limited to organization scope.",
+    "Generate a Bearer token for trusted services. Without X-User-Email it permits organization scope only. With that header, MCP applies the active member’s own permissions; the issuer must remain an active admin or owner.",
   "workspace.agentTokenGenerate": "Generate token",
   "workspace.agentTokenRegenerate": "Regenerate token",
   "workspace.agentTokenReveal": "View token",

@@ -1,6 +1,6 @@
 # Architecture
 
-Agent Memory는 여러 Agent가 공유하는 장기 memory와 검색 Context를 조직 경계 안에서 제공하는 독립 플랫폼이다. 필요하면 Agent Studio를 비롯한 Agent 실행 환경과 연동할 수 있다.
+Agent Memory는 여러 Agent가 공유하는 장기 Memory와 검색 Context를 설치의 단일 조직 안에서 제공한다. 이 문서는 구현 계층과 데이터 불변 조건을 설명한다. 요청·응답 규격은 [API 문서](api.md), 환경 변수·배포·복원은 [운영 가이드](operations.md)를 따른다.
 
 ## System context
 
@@ -45,9 +45,25 @@ Memory 생성은 `src/app/api/memories/route.ts` → `src/lib/memory-service.ts`
 - `lib`의 `*-schemas`와 `*-http`는 입력 검증·공개 응답·오류 변환을, `*-service`와 `container`는 조립을 담당한다. Better Auth 연결과 readiness 같은 운영 기능도 이 외부 경계에 둔다. Route는 준비된 operation을 호출한다.
 - Unit test는 clock·ID·port 대역으로 정책을 검증한다. Transaction, tenant FK, SQL 권한 predicate는 실제 PostgreSQL integration test로 검증한다.
 
+| 확인할 계약 | 구현 기준 |
+| --- | --- |
+| 시작 순서와 종료 hook | [instrumentation.ts](../src/instrumentation.ts) |
+| 설치 초기화·가입 | [installation-repository.ts](../src/infrastructure/database/repositories/installation-repository.ts) |
+| 조직·team·user scope 정책 | [organization-access.ts](../src/domain/identity/organization-access.ts), [memory-access.ts](../src/domain/memory/memory-access.ts) |
+| SQL 읽기 권한 | [scope-predicates.ts](../src/infrastructure/database/repositories/scope-predicates.ts) |
+| 문서 처리·후속 AI job | [process-document.ts](../src/application/document/process-document.ts), [ingest-document.ts](../src/application/document/ingest-document.ts) |
+| 통합 검색·회상 재정렬 | [search-context.ts](../src/application/context/search-context.ts), [context-service.ts](../src/lib/context-service.ts) |
+| MCP 도구 등록·공개 응답 | [mcp-server.ts](../src/lib/mcp-server.ts) |
+
 Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 의미, 충돌 결과를 함께 확인하라. 예를 들어 candidate 승인은 최초 승격과 재실행을 구분한다. 최초 승격은 ready source를 요구하지만, 이미 승인한 candidate의 재실행은 source가 이후 archive되었더라도 기존 승인 결과를 반환하며 새 graph resource를 생성하지 않는다.
 
 ## 설치 경계
+
+### 시작 순서
+
+Node.js runtime은 bootstrap 설정을 검증한 뒤 선택형 migration, DB 설정 override 적용·검증, 설치 조직 초기화, 운영 설정 확인, 종료 hook·telemetry 등록, 선택형 worker 시작 순서로 준비된다. `MIGRATE_ON_START=true`이면 migration 전에 기존 다중 조직 여부를 검사한다. DB와 암호화 root 설정은 override를 읽기 전에 필요하다.
+
+### 단일 조직과 가입
 
 한 설치는 하나의 조직을 사용한다. 서버 시작 시 조직이 없으면 기본 조직을 만들고, 하나면 기존 데이터를 사용하며, 둘 이상이면 시작을 거부한다. 조직 생성 시 PostgreSQL table lock으로 직렬화하고 기존 조직 조회에는 이 잠금을 사용하지 않는다. 요청 권한 검사는 조직을 읽기만 하며 조직을 생성하지 않는다. 일반 HTTP와 session MCP는 사용자 인증을 먼저 확인한다. 내부 organization ID와 tenant FK는 scope·provenance 검증을 위해 유지한다. 공개 API에는 조직 선택 경로가 없고 `/api/organization`은 조회·설정 변경만 제공한다. MCP 주소는 `/api/mcp`다.
 
@@ -55,14 +71,15 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 ## 요청 경계
 
-조직 API 요청은 다음 경계를 통과한다.
+조직 resource 요청은 다음 책임을 분리한다. Path ID 검증을 인증보다 먼저 수행하는 route도 있고 body 검증을 인증 뒤에 수행하는 route도 있으므로 모든 endpoint의 검사 순서가 같지는 않다. Resource 접근은 인증·조직 권한 확인을 통과해야 한다.
 
-1. Route가 path와 query 또는 body를 검증한다.
-2. Better Auth session 또는 session Bearer token으로 사용자를 인증한다. MCP route는 조직 Agent token을 service credential로 별도 인정하고, 검증 후 `X-User-Email`이 있으면 해당 조직의 활성 사용자로 위임한다.
-3. 설치 조직을 결정하고 session 사용자 또는 Agent token 발급자의 현재 조직 멤버십과 역할을 조회한다.
-4. Application use case가 scope와 action에 대한 domain 정책을 적용한다.
-5. Repository가 모든 조회와 변경을 `organizationId`로 제한한다.
-6. 공개 응답 변환기가 권한에 따라 ACL과 내부 필드를 제거한다.
+| 경계 | 책임 |
+| --- | --- |
+| Route와 schema | path·query·body 형식과 크기를 검증 |
+| 인증·설치 권한 | session/Bearer를 검증하고 설치 조직의 활성 멤버 또는 조직 서비스 principal을 결정 |
+| Application | scope·action·현재 resource 상태와 version을 검증 |
+| Repository | 조직 ID, SQL 권한 predicate, transaction·constraint로 저장소 경계를 유지 |
+| 공개 변환 | 호출자에게 허용한 필드만 반환하고 embedding vector·storage 내부 정보 등을 제외 |
 
 운영 콘솔은 `api-response-schemas`의 endpoint별 Zod schema로 성공 응답을 decode한 뒤 상태와 mutation target에 사용한다. JSON이더라도 계약과 다른 응답은 화면의 operation fallback 오류로 처리하며 caller가 지정한 generic type으로 단언하지 않는다.
 
@@ -70,7 +87,15 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 Next.js 전역 응답 header는 CSP `frame-ancestors 'none'`과 `X-Frame-Options: DENY`로 clickjacking을 차단하고 MIME sniffing, cross-origin referrer, 사용하지 않는 browser capability를 제한한다.
 
-조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 설치의 `/api/mcp`에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자가 현재 active `admin` 또는 `owner`인지 다시 확인해 제거·차단·강등을 즉시 반영한다. 유효한 token 요청에 `X-User-Email`이 없으면 발급자에게 귀속되는 organization service principal로 실행하며 organization scope만 허용한다. 이 경우 user scope, team scope, 개별 access grant는 domain 정책과 SQL predicate 모두에서 제외한다. Header가 있으면 정규화·형식 검증 후 token 조직의 활성 멤버를 `findByEmail`로 조회해 사용자의 role과 team을 포함한 기존 사용자 권한을 적용한다. 빈 값·잘못된 형식은 거부하고 활성 멤버가 없으면 접근을 거부하며 service principal로 fallback하지 않는다. Token 발급자의 role을 위임 사용자에게 물려주지 않는다. 조직 token은 조직 내 사용자 신원을 위임할 수 있으므로 인증된 사용자 email을 전달하는 신뢰된 server-side client만 보유해야 한다. Session 인증과 일반 HTTP route는 이 header로 사용자를 변경하지 않는다.
+### MCP 서비스 인증과 사용자 위임
+
+조직 Agent token은 organization별 하나만 존재하며 `admin` 또는 `owner`가 생성·재생성·reveal·폐기한다. 저장 시 SHA-256 hash와 AES-256-GCM 암호문을 함께 기록한다. 암호화 key는 `BETTER_AUTH_SECRET`에서 HKDF(`agent-memory/organization-agent-token/v1`)로 파생하고 organization UUID를 AAD로 결합한다. 검증은 복호화가 아니라 hash 비교를 사용하므로 key가 바뀌어 reveal할 수 없는 token도 인증 자체는 유지된다. 원문은 생성 또는 명시적 reveal POST에서만 반환한다. Token은 설치의 `/api/mcp`에서만 인증되며 일반 HTTP API에는 사용자 principal을 만들지 않는다. 검증할 때 발급자가 현재 active `admin` 또는 `owner`인지 다시 확인해 제거·차단·강등을 즉시 반영한다.
+
+유효한 token 요청에 `X-User-Email`이 없으면 발급자에게 귀속되는 organization service principal로 실행하며 organization scope만 허용한다. 이 경우 user scope, team scope, 개별 access grant는 domain 정책과 SQL predicate 모두에서 제외한다.
+
+Header가 있으면 정규화·형식 검증 후 token 조직의 활성 멤버를 `findByEmail`로 조회해 사용자의 role과 team을 포함한 기존 사용자 권한을 적용한다. 빈 값·잘못된 형식은 거부하고 활성 멤버가 없으면 접근을 거부하며 service principal로 fallback하지 않는다. Token 발급자의 role을 위임 사용자에게 물려주지 않는다. 조직 token은 조직 내 사용자 신원을 위임할 수 있으므로 인증된 사용자 email을 전달하는 신뢰된 server-side client만 보유해야 한다. Session 인증과 일반 HTTP route는 이 header로 사용자를 변경하지 않는다.
+
+### 로그인 정책과 전역 설정
 
 Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 허용 domain 목록이 없으면 모든 email domain을 허용한다. 인증 경계는 설정된 전역 admin email 여부를 actor에 담고, 설치 멤버십의 최초 owner bootstrap과 전역 설정 API가 이 권한을 확인한다. 이 권한은 조직 resource 접근을 우회하지 않으며 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
 
@@ -80,9 +105,13 @@ Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경
 
 검색·조회 SQL의 scope 필터는 `scope-predicates`(infrastructure repository 공용 builder)가 단일 소유하며, domain의 `canAccessScopedResource`와의 동치성을 integration test로 고정한다. user scope의 기본 접근 권한은 본인에게만 있고 `admin`·`owner` 역할만으로 다른 사용자의 개인 자료를 열람할 수 없다. Memory는 명시적 access grant가 있으면 해당 사용자·팀에도 접근을 허용한다.
 
+### 멤버십과 관리 권한
+
 조직 membership은 사용자에게 노출하는 `active`, `pending`, `blocked`와 접근 회수 tombstone인 내부 `removed` status를 가진다. 조직 접근 조회는 `active` membership만 반환하므로 나머지 사용자는 모든 조직 API에서 `403`을 받는다. 조직은 기본 팀(`defaultTeamId`)을 설정할 수 있으며, 멤버가 `active`가 되는 시점에 기본 팀에 `member`로 배정된다. 가입 요청은 항상 pending으로 저장한다. 기본 팀은 같은 organization의 team만 composite FK로 참조한다. 조직 설정 변경, 기본 팀 삭제, 가입·활성화는 같은 organization advisory lock을 사용하며 기본 팀 삭제 transaction은 참조를 먼저 해제한다. 조직 온톨로지(`ontology` 사전, `ontologyMode`)를 포함한 조직 설정 변경은 `admin`·`owner`만 수행한다. 마지막 active `owner`는 강등·차단·제거할 수 없고, 자기 자신의 membership 변경은 허용하지 않는다.
 
 Membership 제거는 row를 삭제하지 않고 `removed`로 전환해 user scope의 Memory, Document, Knowledge resource 소유권을 보존한다. Team membership과 해당 사용자가 발급한 조직 Agent token은 즉시 삭제하고 모든 접근 조회에서 tombstone을 제외한다. 관리자가 다시 추가하면 기존 row를 활성화하므로 보존된 user scope에 다시 접근할 수 있다. `createdBy`, `changedBy`, `grantedBy`, `reviewedBy`, `mergedBy` 같은 audit actor도 stable global user를 참조하므로 감사 기록과 organization·team scope resource를 보존한다.
+
+### Resource scope
 
 모든 memory, document, knowledge node와 edge는 하나의 organization에 속하며 다음 scope 중 하나를 갖는다. 표는 별도 Memory access grant가 없는 기본 권한이다.
 
@@ -98,11 +127,12 @@ Memory는 별도 access grant로 organization 안의 team 또는 user에게 `rea
 
 Memory 종류는 `rule`, `experience`, `decision`, `preference`, `fact`다. 생성할 때 scope, content, source, 유효기간과 선택형 access grant를 저장한다.
 
-- 수정과 archive는 현재 version을 `If-Match`로 받아 충돌을 감지한다.
+- HTTP 수정·archive는 `If-Match`, MCP `forget`은 `expectedVersion`으로 현재 version을 받아 충돌을 감지한다.
 - 각 변경 전 상태는 revision으로 보존한다. Revision 조회는 `manage` 권한이 필요하다.
-- 검색은 접근 가능하고 `active`이며 현재 유효한 memory만 반환한다.
+- 검색·라이브러리·회상은 접근 가능하고 `active`이며 현재 유효한 Memory만 반환한다. ID 조회는 읽을 수 있는 active Memory를 반환하므로 만료·미래 유효 Memory도 조회할 수 있다. Archive된 Memory는 일반 ID 조회에서도 제외한다.
 - `EMBEDDING_MODEL`이 설정되면 같은 model의 vector score와 PostgreSQL Full-Text Search를 결합한다. 설정하지 않으면 lexical search만 사용한다.
-- Embedding은 model 이름과 함께 저장한다. 차원과 ANN index를 특정 model에 미리 고정하지 않는다.
+- Embedding은 model 이름과 함께 저장한다. 검색 시 같은 model의 vector만 비교한다. 차원과 ANN index를 특정 model에 미리 고정하지 않는다.
+- 제목·본문을 포함한 revision은 현재 embedding 설정으로 vector를 다시 만들며, embedding이 비활성화된 경우 기존 vector를 제거한다. 다른 필드만 바꾸면 기존 vector를 유지한다. 전체 Memory를 자동 재색인하는 작업은 제공하지 않는다.
 
 ## 문서 수집 흐름
 
@@ -114,7 +144,15 @@ multipart upload → S3-compatible storage → document row(pending)
                                                                          └──▶ candidate → scope review → graph
 ```
 
-원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v2` queue는 document ID별 exclusive job을 보장해 queued·active·retry job이 있을 때만 중복 enqueue를 병합한다. 지원 MIME type의 text를 정규화하고 문서당 최대 512개 chunk를 생성하며 embedding은 최대 64개 chunk씩 provider에 전달한다. 따라서 60초 provider timeout 기준 embedding 대기는 최대 8분으로 제한되어 추출·저장을 포함한 전체 작업이 lease 안에 끝날 여유를 둔다. 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다. Document 삭제는 provenance를 보존하는 archive이며 원본과 chunk를 유지하되 검색, retry, AI 후보 조회·승인에서 제외한다.
+### 원본 저장과 처리 claim
+
+원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v2` queue는 document ID별 exclusive job을 보장해 queued·active·retry job이 있을 때만 중복 enqueue를 병합한다.
+
+### 추출·embedding과 실패
+
+지원 MIME type의 text를 정규화하고 문서당 최대 512개 chunk를 생성하며 embedding은 최대 64개 chunk씩 provider에 전달한다. 최대 8개 batch를 순서대로 요청하며 각 embedding HTTP 요청의 timeout은 60초다. 이 값은 S3 조회·추출·DB 저장을 포함한 전체 처리 시간의 보장이 아니다. Lease가 재발급되면 이전 worker의 저장은 거부된다. 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다. Document 삭제는 provenance를 보존하는 archive이며 원본과 chunk를 유지하되 검색, retry, AI 후보 조회·승인에서 제외한다.
+
+### 후속 Knowledge enrichment
 
 `buildIngestDocument` application operation은 문서 처리를 완료한 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. Worker는 job decode, operation 호출, queue retry와 로그를 담당한다. 후속 queue 등록 실패는 문서 처리 상태를 되돌리지 않으며 ingestion 재실행에서 chunk 등록을 다시 시도한다.
 
@@ -122,11 +160,15 @@ Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `documen
 
 ## Knowledge Graph와 통합 검색
 
+### Provenance와 현재 유효성
+
 Graph 검색·이름 기반 중복 조회·관계 탐색은 각 작업 시작 시의 애플리케이션 시각으로 출처 Memory의 유효기간을 검사한다. 한 작업의 node·edge·source 조회에는 같은 시각을 사용하며, DB 서버의 시각을 별도 기준으로 사용하지 않는다.
 
 Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenance 행은 DB constraint로 정확히 하나의 memory 또는 document chunk를 참조한다. Canonical resource가 여러 근거에서 발견되면 resource를 중복 생성하지 않고 provenance를 누적한다. 생성 시 호출자가 source를 읽을 수 있어야 하고 graph scope는 source scope보다 넓을 수 없다. 검색·Neighborhood·node 및 edge 생성은 source의 현재 권한과 active·유효·ready 상태를 다시 확인한다. Memory의 유효성은 domain의 `isMemoryActiveAt` 정책으로 정의하며 `validFrom <= now`이고 `expiresAt`이 없거나 `now < expiresAt`인 active Memory만 검색과 Graph 근거로 허용한다.
 
 Graph의 검색·중복 후보 조회·Neighborhood repository port는 읽을 수 있고 현재 유효한 provenance만 반환한다. Resource 선택과 개별 source 필터는 같은 SQL predicate를 사용하며, source를 다시 조회하는 사이 유효한 근거가 사라진 resource는 결과에서 제외한다. 내부 mutation을 위한 `findNodeById`와 `findEdgeById`는 전체 provenance를 보존하므로 공개 검색 결과로 직접 사용하지 않는다.
+
+### Identity·온톨로지·변경
 
 Node identity는 NFKC·공백·대소문자를 정규화한 canonical name key와 ontology로 정규화한 kind를 사용한다. 동일 scope의 동일 identity 생성은 transaction advisory lock으로 직렬화해 하나의 node와 provenance로 수렴한다. 이름은 같지만 kind가 다른 node는 자동 병합하지 않고 검토 대상으로 남긴다.
 
@@ -138,11 +180,17 @@ Node merge는 같은 scope에서만 허용한다. 하나의 transaction에서 so
 
 AI candidate는 graph와 분리된 검토 queue다. 거절은 graph를 변경하지 않으며, 승인된 candidate는 다시 거절할 수 없다. 승인·거절에는 reviewer와 선택형 사유를 남긴다.
 
+### 후보 수집과 재정렬
+
 통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node 후보를 각각 검색한다. Semantic search가 활성화되어도 query embedding은 한 번만 생성해 세 저장소 검색에 공유한다. Reranker가 설정되면 종류별로 `min(100, max(12, limit × 4))`개까지 후보를 조회한 뒤 같은 총량 상한 안에서 source별로 균형 있게 구성하고, 권한 필터가 완료된 후보만 외부 reranker에 보낸다. Reranker 입력은 query 4,000자, 후보당 8,000자로 제한한다. 성공하면 relevance score로 최종 순위를 정하고, timeout·provider 오류·잘못된 응답이면 기존 hybrid score 순위로 복귀한다. 모든 AI call은 인증 access 또는 document creator에서 organization·user quota key를 만들고, instance-local limiter와 PostgreSQL minute bucket을 모두 통과해야 한다. 따라서 여러 replica와 worker가 같은 tenant·principal budget을 공유한다. API와 MCP는 동일한 application operation을 사용한다.
+
+### Memory 전용 회상
 
 서비스의 기억 lifecycle은 MCP `remember`·`recall`·`forget`으로 제공한다. `remember`는 Memory 생성 use case를, `forget`은 manage 권한과 현재 version을 검증하는 archive use case를 사용한다. Archive 후에는 회상·검색에서 제외하고 revision과 provenance는 보존한다. `recall`은 같은 검색·재정렬 흐름을 Memory만 대상으로 실행하며 문서·Graph를 조회하지 않는다. Reranker 설정·최소 점수·실패 시 hybrid 복귀를 통합 검색과 공유한다. 회상 응답은 결과 하나 최대 1,200자·전체 최대 4,000자의 `remembered` text와 구조화 Memory 검색 결과를 반환한다. 두 형식 모두 Memory ID·version을 포함해 text만 소비하는 서비스도 `forget`을 호출할 수 있다. RAG·Knowledge Graph를 함께 검색하려면 `context_search`를 사용한다.
 
 Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같은 instance-local request limiter를 공유한다. 동시 실행 수와 분당 합산 호출 수를 넘으면 provider를 호출하지 않는다. Embedding 기반 HTTP 요청은 `429`와 `Retry-After`를 반환하고, reranker는 hybrid 순위로 복귀하며, worker의 제한 초과는 pg-boss retry로 복구한다.
+
+### 관계 지도
 
 운영 콘솔의 관계 지도는 search hit의 node ID로 제한된 neighborhood를 요청한다. Client는 반환된 node와 방향성 edge를 SVG에 배치하고 node 선택 상태와 inspector를 관리한다. Inspector의 `이 node 중심으로 탐색`을 실행하면 해당 node를 새 중심으로 neighborhood를 재조회한다. Layout은 표현 계층의 책임이며 접근 가능한 node·edge 결정은 server의 application·repository 계층에 남긴다.
 
@@ -151,8 +199,8 @@ Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같
 - 문서 원본 저장 후 queue 등록이 실패해도 document row와 ID를 유지하고 `failed` 상태에서 retry할 수 있다.
 - Document processing lease가 재발급되면 이전 worker의 complete·fail 갱신을 거부한다.
 - Knowledge enrichment 실패는 ready 문서와 문서 검색 가능 상태를 되돌리지 않는다.
-- AI candidate 승인만 node·edge와 reviewer audit을 하나의 transaction으로 저장한다.
-- Memory mutation은 `If-Match` version 충돌을 감지하고 덮어쓰기를 거부한다.
+- AI candidate 승인은 node·edge와 reviewer audit을 하나의 transaction으로 저장한다.
+- Memory mutation은 HTTP `If-Match` 또는 MCP `expectedVersion` 충돌을 감지하고 덮어쓰기를 거부한다.
 - Source를 읽을 수 없게 되면 graph 검색과 neighborhood에서 해당 provenance를 다시 제외한다.
 - 팀 삭제는 PostgreSQL의 team resource를 cascade 삭제하지만 S3 호환 storage의 문서 원본 object는 제거하지 않는다. 삭제 전 식별과 object lifecycle은 운영 경계에서 담당한다.
 

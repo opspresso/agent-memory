@@ -41,9 +41,10 @@ export async function GET(request: Request, context: RouteContext) {
       parsedQuery.data.limit,
       parsedQuery.data.before
     );
+    const oldestVersion = versions.at(-1)?.version;
     const nextBefore =
-      versions.length === parsedQuery.data.limit
-        ? versions.at(-1)?.version
+      versions.length === parsedQuery.data.limit && oldestVersion !== undefined && oldestVersion > 1
+        ? oldestVersion
         : undefined;
     return Response.json({
       versions: versions.map(publicMemoryVersion),

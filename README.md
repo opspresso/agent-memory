@@ -1,28 +1,23 @@
 # Agent Memory
 
-Agent Memory는 설치당 하나의 조직에서 여러 AI Agent가 장기 Memory, RAG 문서, Knowledge Graph를 안전하게 공유하도록 지원하는 설치형 Context 플랫폼이다. 독립적으로 실행하거나 Agent Studio 같은 실행 환경에 HTTP API와 MCP로 연결할 수 있다. 별도의 조직 선택 없이 개인·팀·조직 범위로 지식을 관리하며, 일반 사용자는 가입 요청 후 운영자 승인을 받아 사용한다.
+Agent Memory는 설치당 하나의 조직에서 서비스와 AI Agent가 장기 기억을 공유하는 독립 실행형 Context 플랫폼이다. MCP로 기억을 저장·회상·잊고, RAG 문서와 provenance 기반 Knowledge Graph를 함께 관리한다. 운영 콘솔과 HTTP API도 같은 권한 정책과 application use case를 사용한다. Agent Studio는 선택적으로 연결하는 실행 플랫폼이며, Agent 실행·채팅·도구 조립은 이 저장소의 역할이 아니다.
 
 ## 핵심 흐름
 
-```text
-사용자·Agent
-   ├── Memory 저장 ───────────────────────────────┐
-   ├── 문서 업로드 → chunk → embedding(optional) ─┼──▶ 통합 Context 검색
-   └── 문서 chunk → AI 후보 → 사람 검토 → Graph ─┘
-```
+| 목적 | 제공 기능 |
+| --- | --- |
+| 장기 기억 | MCP `remember`로 저장, `recall`로 관련 Memory 회상, `forget`으로 archive |
+| 문서 지식 | 파일 업로드 → 원본 저장 → worker 추출·chunk 생성 → 검색 |
+| Knowledge Graph | Memory·문서 chunk를 근거로 관계를 구성하고, AI 문서 후보는 사람이 검토한 뒤 반영 |
+| 통합 검색 | `context_search`로 Memory·문서·Graph를 함께 검색 |
 
-- 모든 resource에 organization과 `organization`, `team`, `user` scope를 적용한다.
-- Memory의 출처, revision, 변경 사유, 유효기간, archive 상태, ACL을 보존한다.
-- 원본 문서를 S3 호환 storage에 저장하고 pg-boss worker가 chunk와 선택형 embedding을 생성한다.
-- PostgreSQL Full-Text Search와 선택형 pgvector를 결합해 후보를 찾고, 선택형 reranker로 Memory, 문서 chunk, Knowledge node의 통합 순위를 정한다.
-- Knowledge node와 edge마다 읽을 수 있는 Memory 또는 document chunk provenance를 요구한다.
-- AI가 추출한 graph 후보는 scope 관리자가 승인하기 전까지 공유 Graph에 반영하지 않는다.
-- 서비스는 MCP `remember`, `recall`, `forget`으로 장기 기억을 저장·회상·잊는다. RAG 문서와 Knowledge Graph는 Agent Memory에서 관리하며 `context_search`로 통합 검색한다.
-- 운영 콘솔, HTTP API, Streamable HTTP MCP가 같은 application operation과 권한 정책을 사용한다.
+Memory, 문서, Graph에는 개인·팀·조직 scope를 적용한다. 일반 사용자는 첫 콘솔 접속 시 가입 요청을 등록하고 운영자 승인 후 지식에 접근한다. 조직 Agent token만 사용하는 서비스는 조직 범위로 제한되며, 사용자 위임은 [MCP 인증 계약](docs/api.md#mcp)을 따른다.
+
+Embedding을 설정하지 않아도 키워드 검색을 사용할 수 있다. 선택형 embedding은 의미 검색을, reranker는 통합 검색과 Memory 회상의 재정렬을 제공한다. 문서 원본과 변경 이력을 보존하는 archive는 영구 삭제와 다르다.
 
 ## 빠른 시작
 
-Node.js 24, pnpm 11, Docker가 필요하다.
+Node.js 24, pnpm 11, Docker가 필요하다. 아래는 새 로컬 설치의 기본 Compose 구성을 사용하는 절차다.
 
 ```bash
 corepack enable
@@ -30,9 +25,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-이 저장소는 application image와 localdev 설정을 소유한다. 운영 서비스는 `https://memory.opspresso.com/`이며 `../dockpad`로 IDC에 배포한다. EKS는 중지 상태다. Release workflow는 Dockpad의 버전 원본인 `../argocd-env-demo`에 image tag를 전달한다.
-
-로컬에서 로그인하려면 `.env.local`에서 password provider와 signup을 활성화하라.
+`.env.local`의 `BETTER_AUTH_SECRET`을 32자 이상의 임의 값으로 바꾸고, 로컬 로그인과 최초 운영자 계정을 설정하라.
 
 ```dotenv
 AUTH_PASSWORD=true
@@ -40,56 +33,43 @@ AUTH_PASSWORD_SIGNUP=true
 ADMIN_EMAILS=your-admin@example.com
 ```
 
-그다음 Database migration과 application을 실행하라.
-
 ```bash
-docker compose up -d postgres minio minio-init
+docker compose up --wait postgres minio
+docker compose run --rm minio-init
 pnpm db:migrate
 pnpm dev
 ```
 
-`ADMIN_EMAILS`를 실제 운영자 email로 바꾸고 `http://localhost:3100`에서 해당 계정으로 가입하라. 서버가 기본 조직을 준비하고 active owner가 없을 때 이 사용자를 최초 owner로 설정한다. 다른 사용자는 첫 콘솔 접속 시 가입 요청이 접수되며, 운영자가 `회원`에서 승인한 뒤에만 지식에 접근한다. `ALLOWED_EMAIL_DOMAINS`는 설정한 경우에만 가입 email domain을 제한한다. 전역 admin은 설정 화면에서 env 값을 Database override로 관리할 수 있다.
+`http://localhost:3100`에서 지정한 운영자 email로 가입하라. 설치에 active owner가 없으면 이 사용자가 최초 owner가 된다. 다른 사용자의 요청은 `회원` 화면에서 승인한다.
 
-로그인 전후에 `http://localhost:3100/guide`에서 제품 사용 흐름과 기능별 설명을 확인할 수 있다.
-
-이 명령은 독립된 `agent-memory-local` PostgreSQL 18과 MinIO를 시작하고 `agent-memory` bucket을 멱등하게 만든다.
-
-설치부터 첫 Memory 검색까지의 전체 절차는 [시작 가이드](docs/getting-started.md)를 따른다.
+`.env.local`의 DB 주소를 변경했다면 migration 전에 같은 값을 shell의 `DATABASE_URL`에도 지정해야 한다. Drizzle CLI는 `.env.local`을 자동으로 읽지 않는다. Google·OIDC 사용, 환경 설정 우선순위, 첫 Memory·문서·MCP 연결은 [시작 가이드](docs/getting-started.md)를 따른다.
 
 ## 운영 콘솔
 
-운영 콘솔은 다음 작업을 제공한다.
+콘솔은 통합 검색, Memory 읽기·수정·이력, 문서 업로드·재처리, Graph 탐색, AI 후보 검토, 회원·팀·조직 설정, Agent 연결을 제공한다. 읽기·쓰기·관리 권한에 따라 사용할 수 있는 작업이 달라진다.
 
-- 좌측 메뉴와 상단 메뉴로 구성된 셸에서 설치의 지식을 관리
-- Memory·문서·Knowledge Graph 통합 검색과 검색 근거 확인
-- Memory 목록·생성·읽기 상세, revision 생성, version 이력 확인, archive
-- 개인·팀·조직 범위 문서 업로드, 처리 상태 확인과 실패 재처리
-- 검색·종류 필터·관계 집중을 제공하는 Knowledge Graph 관계 지도 탐색
-- AI graph 후보의 실제 원문·entity·relationship 비교와 승인·거절
-- 가입 요청 접수와 운영자 승인 후 멤버 활성화
-- 조직 회원 목록에서 role·status(승인·차단)·팀 배정 관리, 팀 생성·이름 변경·삭제
-- 조직 설정에서 이름·기본 팀 관리
-- MCP 연결 정보 확인
+화면별 절차는 [사용자 가이드](docs/user-guide.md), 로그인 없이 읽을 수 있는 제품 안내는 `/guide`에서 확인한다.
 
 ## 기술 구성
 
-- Node.js 24, pnpm 11, Next.js 16 App Router, React 19, TypeScript strict, Mantine 9
-- Better Auth, Drizzle ORM, PostgreSQL 18, pgvector, PostgreSQL Full-Text Search, pg-boss
-- OpenAI-compatible embedding·rerank·structured extraction API, S3·MinIO
-- MCP TypeScript SDK, OpenTelemetry, Pino, Langfuse
-- Vitest, Testcontainers, Playwright, dependency-cruiser, ESLint, Docker Compose
+- Next.js App Router, TypeScript strict, React, Mantine
+- Better Auth, Drizzle, PostgreSQL·pgvector, pg-boss
+- S3 호환 object storage, OpenAI-compatible embedding·reranker·extraction adapter
+- HTTP API, Streamable HTTP MCP, Pino, OpenTelemetry·Langfuse
+
+정확한 runtime·의존성 버전은 [package.json](package.json)과 [pnpm-lock.yaml](pnpm-lock.yaml), 계층과 불변 조건은 [아키텍처](docs/architecture.md)를 기준으로 한다.
 
 ## 문서
 
-| 문서 | 대상 | 내용 |
-| --- | --- | --- |
-| [시작 가이드](docs/getting-started.md) | 처음 설치하는 사용자 | 인증 가능한 로컬 환경, 자동 조직 준비, 첫 검색, 선택 기능 활성화 |
-| [사용자 가이드](docs/user-guide.md) | 운영자·Agent 통합 개발자 | 콘솔, Memory lifecycle, 문서, Graph, AI 검토, MCP 연결 |
-| [Workspace UI](docs/ui-workspace.md) | 제품·UI 개발자 | 정보 구조, 디자인 기준, 전후 화면과 검증 범위 |
-| [Architecture](docs/architecture.md) | 개발자·보안 검토자 | 계층, 요청 경계, 권한, 데이터 흐름, 불변 조건 |
-| [HTTP API와 MCP](docs/api.md) | API·Agent 통합 개발자 | 인증, endpoint, 요청·응답, 오류, 실행 예시 |
-| [운영 가이드](docs/operations.md) | 배포·운영 담당자 | 환경 변수, topology, migration, worker, 관측성, 장애 대응 |
-| [AGENTS.md](AGENTS.md) | Coding agent | 변경 원칙과 검증 기준 |
+| 하려는 작업 | 문서 |
+| --- | --- |
+| 로컬 설치부터 첫 검색·서비스 연결까지 | [시작 가이드](docs/getting-started.md) |
+| 콘솔에서 지식을 관리하고 권한을 이해하기 | [사용자 가이드](docs/user-guide.md) |
+| HTTP 또는 MCP client 구현 | [HTTP API와 MCP](docs/api.md) |
+| 배포·환경 설정·backup·장애 대응 | [운영 가이드](docs/operations.md) |
+| 내부 책임·데이터 흐름·불변 조건 확인 | [Architecture](docs/architecture.md) |
+| 화면 구조·상호작용·UI 검증 확인 | [Workspace UI](docs/ui-workspace.md) |
+| 저장소 변경 규칙 확인 | [AGENTS.md](AGENTS.md) |
 
 ## 개발 검증
 
@@ -97,10 +77,12 @@ pnpm dev
 pnpm verify
 ```
 
-`pnpm verify`는 lint, typecheck, architecture, unit test, production build를 실행한다. Database 변경에는 `pnpm test:integration`, 화면·인증 변경에는 `pnpm test:e2e`를 추가한다. 자세한 기준은 [AGENTS.md](AGENTS.md#검증)를 따른다. 인증 E2E에는 `E2E_AUTHENTICATED=true`와 별도 migration 완료 DB가 필요하다. [운영 가이드의 검증 절차](docs/operations.md#배포-전-확인)를 따른다.
+이 명령은 lint, typecheck, architecture, unit test, production build를 실행한다. DB·repository 변경에는 `pnpm test:integration`, 화면·브라우저 흐름 변경에는 `pnpm test:e2e`를 추가한다. 인증 E2E는 폐기 가능한 별도 DB와 `E2E_AUTHENTICATED=true`가 필요하다. [검증 절차](docs/operations.md#배포-전-확인)를 따른다.
 
-Pull request와 `main` push CI는 PostgreSQL 18·pgvector service에서 migration, `pnpm verify`, integration test, 인증 E2E를 모두 실행한다.
+Pull request와 `main` push CI는 DB migration, 위 전체 검사, PostgreSQL integration test, 인증 E2E를 실행한다.
 
 ## 데이터 보호
 
-PostgreSQL 18과 MinIO volume은 Agent Memory 전용이다. `docker compose down -v`는 두 volume을 삭제하므로 데이터와 대상을 확인하지 않고 실행하지 마라.
+로컬 Compose의 PostgreSQL·MinIO volume은 Agent Memory 전용이다. `docker compose down -v`는 데이터를 삭제한다.
+
+운영 배포는 `../dockpad`가 담당하며 서비스 주소는 `https://memory.opspresso.com/`이다. 이 저장소의 Release workflow는 image를 게시하고 `../argocd-env-demo`의 alpha version 목록에 tag를 전달한다. IDC rollout과 backup·복원 절차는 [운영 가이드](docs/operations.md#배포-형태)를 따른다. EKS는 현재 배포·검증 대상이 아니다.
