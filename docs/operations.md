@@ -62,12 +62,13 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 ## 환경 변수
 
-`.env.example`을 기준으로 환경별 값을 설정하라.
+`.env.example`을 기준으로 환경별 값을 설정하라. 샘플은 bootstrap, 인증·접근 정책, 문서 worker·quota, object storage, AI 기능·호출 제한, 관측성, 개발·빌드 순으로 구분한다. 주석 처리된 선택 항목은 해당 기능을 사용할 때 활성화한다. 최초 실행 전에 secret과 관리자 email을 바꾸고 Google·OIDC·password 중 최소 한 개의 로그인 수단을 설정하라.
 
 | 그룹 | 변수 | 역할 |
 | --- | --- | --- |
 | Database | `DATABASE_URL` | PostgreSQL 연결 문자열 |
 | Startup | `NODE_ENV` | `production`이면 운영 필수 변수 검증을 활성화 |
+| Build | `NEXT_DIST_DIR` | Next.js 출력 디렉터리. 기본값 `.next`, Playwright 서버는 `.next-e2e` 사용 |
 | Startup | `MIGRATE_ON_START` | Node.js runtime 시작 시 migration 실행 |
 | Worker | `DOCUMENT_WORKER_ENABLED` | 같은 process에서 pg-boss document worker 시작 |
 | Auth | `BETTER_AUTH_SECRET` | Better Auth secret, 32자 이상. 조직 Agent token 암호화 key도 HKDF로 파생하므로 값을 변경하면 기존 token을 reveal할 수 없음 |
@@ -121,7 +122,7 @@ Embedding·reranker·knowledge extraction endpoint를 바꿀 때 기존 credenti
 
 Secret 항목은 `BETTER_AUTH_SECRET`에서 파생한 key로 암호화해 저장하고 화면과 API 응답에서는 마스킹한다. `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN`은 현재 instance에 즉시 반영된다. 인증 provider, AI service, worker, object storage, logging, telemetry처럼 process 초기화 시 구성되는 항목은 모든 instance를 재시작한 뒤 반영된다. 여러 replica에서 접근 정책 override는 최대 5초 안에 다시 읽는다.
 
-`DATABASE_URL`, `BETTER_AUTH_SECRET`, `MIGRATE_ON_START`, `NODE_ENV`는 Database 접근·설정 암호화·migration·runtime 선택에 먼저 필요하므로 override 대상이 아닌 bootstrap env다. `NEXT_RUNTIME`, `NEXT_PHASE`, `VERCEL`, `CI`, `E2E_*` 같은 framework·배포·검사 변수도 전역 설정에서 관리하지 않는다.
+`DATABASE_URL`, `BETTER_AUTH_SECRET`, `MIGRATE_ON_START`, `NODE_ENV`는 Database 접근·설정 암호화·migration·runtime 선택에 먼저 필요하므로 override 대상이 아닌 bootstrap env다. `NEXT_DIST_DIR`, `NEXT_RUNTIME`, `NEXT_PHASE`, `VERCEL`, `CI`, `E2E_*` 같은 framework·배포·검사 변수도 전역 설정에서 관리하지 않는다.
 
 Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 동시 실행·분당 호출 제한을 공유하고, PostgreSQL의 organization·user 분당 quota도 함께 적용받는다. Replica를 늘려도 같은 조직·사용자의 durable quota는 늘어나지 않는다. Provider account 전체 예산은 조직별 quota와 별도로 설정하라.
 
