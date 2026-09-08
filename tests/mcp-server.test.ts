@@ -179,7 +179,11 @@ describe("agent memory MCP server", () => {
     }
   );
 
-  it("remembers, recalls, and forgets through the application lifecycle", async () => {
+  it.each(["user", "organization"] as const)(
+    "remembers, recalls, and forgets for %s scope through the application lifecycle", async (scopeKind) => {
+    const principal: OrganizationAccess = scopeKind === "organization"
+      ? { ...access, role: "admin", principalKind: "organization-agent" }
+      : access;
     const now = new Date("2026-09-08T00:00:00Z");
     const memoryId = "30000000-0000-4000-8000-000000000001";
     let stored: Memory | undefined;
@@ -200,22 +204,31 @@ describe("agent memory MCP server", () => {
       createMemory: buildCreateMemory({ ...dependencies, generateId: () => memoryId }),
       searchMemories: buildSearchMemories(dependencies),
       archiveMemory: buildArchiveMemory(dependencies)
-    }));
+    }), principal);
     const remembered = await client.callTool({
       name: "remember",
       arguments: {
-        kind: "decision", scope: { kind: "user" }, title: "Rollback",
+        kind: "decision", scope: { kind: scopeKind }, title: "Rollback",
         content: "Use the previous release.", source: { type: "agent", agentId: "service" }
       }
     });
     expect(remembered.isError).not.toBe(true);
     expect(remembered.structuredContent).toMatchObject({ memory: {
       id: memoryId, version: 1,
-      scope: { organizationId: access.organizationId, userId: access.userId }
+      scope: { kind: scopeKind, organizationId: access.organizationId }
     } });
     const recalled = await client.callTool({ name: "recall", arguments: { query: "rollback" } });
-    expect(recalled.content).toEqual([{ type: "text", text: "[memory] Rollback\nUse the previous release." }]);
+    expect(recalled.content).toEqual([{ type: "text", text: `[memory id=${memoryId} version=1] Rollback\nUse the previous release.` }]);
     expect(recalled.structuredContent).toMatchObject({ count: 1, hits: [{ memory: { id: memoryId, version: 1 } }] });
+
+    const otherOrganization = await connectedClient(operations({
+      archiveMemory: buildArchiveMemory(dependencies)
+    }), { ...principal, organizationId: "90000000-0000-4000-8000-000000000001" });
+    const missing = await otherOrganization.callTool({
+      name: "forget", arguments: { memoryId, expectedVersion: 1 }
+    });
+    expect(missing).toMatchObject({ isError: true, content: [{ type: "text", text: "memory not found" }] });
+    expect(repository.saveRevision).not.toHaveBeenCalled();
 
     const otherUser = await connectedClient(operations({
       archiveMemory: buildArchiveMemory(dependencies)
@@ -227,8 +240,16 @@ describe("agent memory MCP server", () => {
     const stale = await client.callTool({ name: "forget", arguments: { memoryId, expectedVersion: 2 } });
     expect(stale.isError).toBe(true);
     expect(repository.saveRevision).not.toHaveBeenCalled();
+    const content = recalled.content as { type: string; text: string }[];
+    const reference = content[0]?.text.match(/\[memory id=([0-9a-f-]+) version=(\d+)\]/);
+    expect(reference).not.toBeNull();
     const forgotten = await client.callTool({
-      name: "forget", arguments: { memoryId, expectedVersion: 1, changeReason: "Superseded" }
+      name: "forget",
+      arguments: {
+        memoryId: reference?.[1],
+        expectedVersion: Number(reference?.[2]),
+        changeReason: "Superseded"
+      }
     });
     expect(forgotten.structuredContent).toEqual({ memoryId, forgotten: true });
     expect(repository.saveRevision).toHaveBeenCalledWith(

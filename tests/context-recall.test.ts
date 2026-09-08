@@ -40,7 +40,7 @@ function memoryResult(content: string): ContextSearchResult {
 describe("context recall projection", () => {
   it("formats ranked context as compact prompt text", () => {
     expect(contextRecallText(memoryResult("Use the previous release."))).toBe(
-      "[memory] Rollback decision\nUse the previous release."
+      "[memory id=30000000-0000-0000-0000-000000000001 version=1] Rollback decision\nUse the previous release."
     );
   });
 

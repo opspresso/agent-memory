@@ -15,7 +15,7 @@ function boundedText(value: string, maximumCharacters: number): string {
 
 function recallHitText(hit: ContextSearchHit): string {
   if (hit.sourceType === "memory") {
-    return `[memory] ${hit.memory.title}\n${hit.memory.content}`;
+    return `[memory id=${hit.memory.id} version=${hit.memory.version}] ${hit.memory.title}\n${hit.memory.content}`;
   }
   if (hit.sourceType === "document") {
     return `[document] ${hit.document.title} · chunk ${hit.chunk.ordinal + 1}\n${hit.chunk.content}`;
