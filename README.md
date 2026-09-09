@@ -13,7 +13,7 @@ Agent Memory는 설치당 하나의 조직에서 서비스와 AI Agent가 장기
 
 Memory, 문서, Graph에는 개인·팀·조직 scope를 적용한다. 일반 사용자는 첫 콘솔 접속 시 가입 요청을 등록하고 운영자 승인 후 지식에 접근한다. 조직 Agent token만 사용하는 서비스는 조직 범위로 제한되며, 사용자 위임은 [MCP 인증 계약](docs/api.md#mcp)을 따른다.
 
-Embedding을 설정하지 않아도 키워드 검색을 사용할 수 있다. 선택형 embedding은 의미 검색을, reranker는 통합 검색과 Memory 회상의 재정렬을 제공한다. 문서 원본과 변경 이력을 보존하는 archive는 영구 삭제와 다르다.
+Embedding을 설정하지 않아도 키워드 검색을 사용할 수 있다. 선택형 embedding은 의미 검색을, reranker는 통합 검색과 Memory 회상의 재정렬을 제공한다. 문서의 `ready` 상태는 검색 준비 완료를 뜻하며 Graph 추출·검증 완료와는 다르다. 문서 원본과 변경 이력을 보존하는 archive는 영구 삭제와 다르다.
 
 ## 빠른 시작
 
@@ -77,11 +77,13 @@ pnpm dev
 pnpm verify
 ```
 
-이 명령은 lint, typecheck, architecture, unit test, production build를 실행한다. DB·repository 변경에는 `pnpm test:integration`, 화면·브라우저 흐름 변경에는 `pnpm test:e2e`를 추가한다. 인증 E2E는 폐기 가능한 별도 DB와 `E2E_AUTHENTICATED=true`가 필요하다. [검증 절차](docs/operations.md#배포-전-확인)를 따른다.
+이 명령은 현재 schema SQL과 TypeScript schema의 일치 검사, lint, typecheck, architecture, unit test, production build를 실행한다. DB·repository 변경에는 `pnpm test:integration`, 화면·브라우저 흐름 변경에는 `pnpm test:e2e`를 추가한다. 인증 E2E는 폐기 가능한 별도 DB와 `E2E_AUTHENTICATED=true`가 필요하다. [검증 절차](docs/operations.md#배포-전-확인)를 따른다.
 
 Pull request와 `main` push CI는 빈 DB 초기화, 위 전체 검사, PostgreSQL integration test, 인증 E2E를 실행한다.
 
 ## 데이터 보호
+
+누적 migration과 구버전 데이터 변환은 제공하지 않는다. 현재 스키마는 `database/schema.sql`로 관리하며, 스키마가 달라지면 배포 전에 백업·쓰기 중단·명시적 초기화가 필요하다. 계정·설정 보존은 운영자가 별도로 수행하며 서버가 기존 데이터를 자동 삭제하거나 변환하지 않는다. [DB 초기화 절차](docs/operations.md#database-초기화)를 따른다.
 
 로컬 Compose의 PostgreSQL·MinIO volume은 Agent Memory 전용이다. `docker compose down -v`는 데이터를 삭제한다.
 

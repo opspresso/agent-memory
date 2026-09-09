@@ -7,7 +7,7 @@
 | 경로 | 화면 | 주요 작업 |
 | --- | --- | --- |
 | `/` | 비로그인 제품 안내 / 로그인 후 통합 검색 | 로그인, Memory·문서·Graph 검색과 근거 확인 |
-| `/guide` | 공개 가이드 | 가입부터 서비스 연결까지 제품 흐름 안내 |
+| `/guide` | 공개 가이드 | 가입·문서 처리·지식 자동 승인/수동 검토/자동 제외·Agent 연결 안내 |
 | `/onboarding` | 가입 요청·접근 상태 | 승인 대기와 접근 제한 안내 |
 | `/memories` | Memory | 최신 목록·검색, 생성, 내용·출처, 수정·이력·archive |
 | `/documents` | 문서 라이브러리 | 파일 업로드, 처리 상태, 실패 재처리, 처리된 원문 읽기 |
@@ -35,6 +35,12 @@ Memory는 내용·출처, 수정, 이력을 탭으로 구분한다. 저장 후 �
 
 Graph의 위치 계산과 선택 상태는 client가, 접근 가능한 node·edge·source 결정은 server가 소유한다. 지도와 키보드로 선택 가능한 노드 목록은 같은 선택을 공유한다. 중심 node가 바뀌면 제한된 depth·limit의 neighborhood를 새로 조회한다.
 
+### 지식 자동 처리와 검토
+
+`/review`는 확인 필요한 지식·청크별 검토·처리 내역으로 나뉜다. 확인 필요한 지식은 동일 scope의 개체·관계를 출처별로 묶으며, 원문과 이유를 비교해 출처를 선택하고 부분 승인·거절한다. 자동 승인이 현재 strict 사전에 막힌 경우도 이 목록에서 확인한다. 빈 추출·검증 대기·자동 처리 완료 항목은 기본 수동 검토 목록에 넣지 않는다.
+
+Graph의 진척 배너는 추출·검증·자동 처리 상태를 표시하며 수동 검토 완료를 뜻하지 않는다. 검색어 우선 처리는 이미 추출된 이름·별칭이 맞는 미완료 후보만 대상으로 하고 재추출하지 않는다. 공개 가이드와 홈페이지의 한국어·영어 설명도 이 흐름을 따른다.
+
 ### 반응형·접근성·상태
 
 - 좁은 화면에서는 목록과 선택한 상세를 전환한다. 선택·닫기 때 focus를 옮겨 키보드 탐색을 이어간다.
@@ -49,7 +55,8 @@ Graph의 위치 계산과 선택 상태는 client가, 접근 가능한 node·edg
 | 메뉴·역할별 표시·계정 메뉴 | [app-shell.tsx](../src/app/app-shell.tsx) |
 | 통합 검색·선택·관계 탐색 | [search-console.tsx](../src/app/search-console.tsx) |
 | Memory 상세·수정·이력 | [memory-lifecycle.tsx](../src/app/memory-lifecycle.tsx) |
-| 공개 제품 안내 | [guide/page.tsx](../src/app/guide/page.tsx) |
+| 비로그인 홈페이지 | [page.tsx](../src/app/page.tsx) |
+| 공개 제품 가이드 | [guide/page.tsx](../src/app/guide/page.tsx) |
 | 번역 key와 기본 언어 | [en.ts](../src/app/_i18n/messages/en.ts), [ko.ts](../src/app/_i18n/messages/ko.ts) |
 
 ## 비교 화면

@@ -33,8 +33,7 @@ export const en = {
   "home.capability.ragBody":
     "Ingest documents and search their text. Configure an embedding model to add semantic search.",
   "home.capability.graph": "Knowledge Graph",
-  "home.capability.graphBody":
-    "Explore entity relationships and trace them back to source memories and chunks.",
+  "home.capability.graphBody": "Automatically apply knowledge that passes AI verification and review uncertain items. Follow relationships back to their source evidence.",
   "home.capability.sharing": "Flexible Sharing",
   "home.capability.sharingBody":
     "Operators approve members, with access controlled across organization, team, and personal scopes.",
@@ -56,8 +55,7 @@ export const en = {
   "login.failed": "Sign-in failed.",
   "login.notConfigured":
     "No sign-in method is configured. Ask your operator to configure access.",
-  "guide.metaDescription":
-    "A guide to Agent Memory search, memories, documents, knowledge graphs, and MCP",
+  "guide.metaDescription": "A guide to Agent Memory search, document ingestion, automatic knowledge review, Knowledge Graph, and MCP",
   "guide.metaTitle": "Guide · Agent Memory",
   "guide.console": "Console",
   "guide.eyebrow": "Product guide · 7 chapters",
@@ -123,8 +121,7 @@ export const en = {
   "guide.memory.note":
     "A change reason is optional. Editing preserves the previous version. If another person saves first, reload the current version before retrying. Archive creates a new version and removes the Memory from ordinary search.",
   "guide.documents.title": "Preserve originals and search their chunks.",
-  "guide.documents.body":
-    "Open the document library and upload UTF-8 text, Markdown, CSV, JSON or XML. Choose a sharing scope and select the uploaded item to inspect its processing status, metadata and source. Ready documents can be found in search.",
+  "guide.documents.body": "Upload UTF-8 text, Markdown, CSV, JSON, or XML from Documents. Choose a sharing scope and inspect processing status and source text. Ready means document search is available; AI knowledge extraction and verification continue separately.",
   "guide.documents.note":
     "Pending and processing documents refresh automatically while the page is visible, for up to two minutes. Use Refresh after polling pauses. For a failed document, inspect the error and choose Retry processing when you have write permission. Archiving requires manage permission.",
   "guide.graph.title": "Follow relationships without losing the evidence.",
@@ -132,14 +129,17 @@ export const en = {
     "Open Knowledge Graph from the sidebar or explore relationships from a search result. Search for a node, select it in the map or node list, then inspect connected relationships and original sources. Use the selected node as a new exploration center.",
   "guide.graph.note":
     "The node list also supports keyboard navigation. Every node and relationship is grounded in a readable Memory or document chunk; sources are checked again when the exploration center changes.",
-  "guide.review.title": "Review AI proposals to complete the knowledge.",
-  "guide.review.body":
-    "Choose a candidate from the review queue. Compare its original document chunk with proposed entities and named relationships, inspect similar existing knowledge, and optionally record a reason when accepting or rejecting it.",
-  "guide.review.accept": "Accept into Graph",
-  "guide.review.acceptNote":
-    "Store canonical nodes, edges, and provenance in one transaction",
-  "guide.review.reject": "Do not apply this candidate",
-  "guide.review.rejectNote": "Record the rejection without changing the Graph; a rejected candidate cannot be accepted later.",
+  "guide.review.title": "Automatically apply qualified knowledge and review uncertain items.",
+  "guide.review.body": "With a knowledge extraction model and document worker configured, a separate AI verification checks source quotations, usefulness, conflicts, and ontology rules. Repeated entities and relationships in the same scope are grouped with their sources. AI judgments and quotation checks do not guarantee factual accuracy.",
+  "guide.review.accept": "Automatic acceptance",
+  "guide.review.acceptNote": "Apply explicit, useful items that pass source evidence and policy checks to the Graph, retaining their sources.",
+  "guide.review.reject": "Automatic exclusion",
+  "guide.review.rejectNote": "Leave unsupported or incidental items and relationships that do not identify a specific fact out of the Graph.",
+  "guide.graph.progress": "Graph progress tracks extraction, verification, and automatic processing, not completion of human review. Search prioritization targets unfinished candidates whose extracted names or aliases match. Refresh relationships to load new connections.",
+  "guide.review.manual": "Needs review",
+  "guide.review.manualNote": "Compare reasons and source text for uncertain, conflicting, or ontology-constrained items, then select which sources to apply.",
+  "guide.review.partial": "Accept or reject knowledge from selected sources. Accepting a relationship includes its required endpoints; rejecting an entity also rejects its unreviewed relationships. Other items remain pending, and rejection does not delete previously accepted Graph data.",
+  "guide.review.history": "Run AI curation queues existing unverified candidates and unfinished automatic decisions. Use chunk review for remaining extraction batches and curation history for the latest 50 assessments and automatic or human decisions. Empty extractions stay out of the default review list.",
   "guide.connect.title": "Connect Agents to Context through MCP.",
   "guide.connect.body":
     "Services connect to /api/mcp to remember, recall, and forget long-term memories. Agent Memory also manages RAG documents and Knowledge Graph. Use context_search to search all three together. Agent connection provides the endpoint, credentials, and an optional Agent Studio registration template.",

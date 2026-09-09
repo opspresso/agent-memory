@@ -98,4 +98,4 @@ pnpm test
 | 화면, 인증·가입 흐름, browser interaction | `pnpm test:e2e` |
 | schema SQL 생성 | `pnpm db:generate` 후 SQL diff·`pnpm db:check`와 `pnpm test:integration` |
 
-`pnpm verify`는 lint, typecheck, architecture, unit test, production build를 순서대로 실행한다. Integration test는 Testcontainers와 Docker가 필요하며 E2E test는 Playwright Chromium이 필요하다.
+`pnpm verify`는 현재 schema SQL의 일치를 확인하는 db:check, lint, typecheck, architecture, unit test, production build를 순서대로 실행한다. Integration test는 Testcontainers와 Docker가 필요하며 E2E test는 Playwright Chromium이 필요하다.
