@@ -24,6 +24,7 @@ export interface DocumentKnowledgeEnrichmentQueue {
   enqueueKnowledgeEnrichment(
     organizationId: string,
     chunkId: string,
-    requestedBy?: string
+    requestedBy?: string,
+    priority?: number
   ): Promise<DocumentQueueEnqueueResult>;
 }

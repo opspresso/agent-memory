@@ -2157,7 +2157,7 @@ describe("PostgreSQL schema", () => {
     );
     expect(upserted).toMatchObject({
       id: sourceNodeId,
-      summary: "Processes purchases and checkout requests",
+      summary: "Processes checkout requests\n\nProcesses purchases and checkout requests",
       sources: expect.arrayContaining([
         { memoryId: sourceMemoryId },
         { memoryId: corroboratingMemoryId }
@@ -2609,6 +2609,73 @@ describe("PostgreSQL schema", () => {
     const afterAutomatic = await pool.query("SELECT (SELECT count(*) FROM knowledge_nodes WHERE organization_id=$1)::int nodes, (SELECT count(*) FROM knowledge_edges WHERE organization_id=$1)::int edges", [organization]);
     expect(afterAutomatic.rows[0]).toEqual({ nodes: 2, edges: 1 });
     expect(await repository.reviewSummary({ ...access, organizationId: organizationB })).toEqual({ automaticAccepted: 0, automaticIgnored: 0 });
+  });
+
+  it("accumulates descriptions from visible sources and never searches archived descriptions", async () => {
+    const organization = randomUUID(), user = randomUUID();
+    await pool.query("INSERT INTO organizations(id,slug,name) VALUES($1,$2,'Description test')", [organization, organization]);
+    await pool.query("INSERT INTO users(id,email,name) VALUES($1,$2,'Reviewer')", [user, `${user}@example.test`]);
+    await pool.query("INSERT INTO organization_members(organization_id,user_id,role,status) VALUES($1,$2,'owner','active')", [organization,user]);
+    const documentIds = [randomUUID(),randomUUID()];
+    const chunkIds = [randomUUID(),randomUUID()];
+    const descriptions = ["Guan Yu commanded the Azure battalion.", "Guan Yu studied the Crimson strategy."];
+    for (let index=0;index<2;index++) {
+      await pool.query("INSERT INTO documents(id,organization_id,scope_kind,title,object_key,checksum,mime_type,status,created_by) VALUES($1,$2,'organization','Chapter','fixture','checksum','text/plain','ready',$3)", [documentIds[index],organization,user]);
+      await pool.query("INSERT INTO document_chunks(id,organization_id,document_id,ordinal,content) VALUES($1,$2,$3,0,$4)", [chunkIds[index],organization,documentIds[index],descriptions[index]]);
+    }
+    const repository = createKnowledgeGraphRepository(db);
+    const scope = { kind: "organization" as const, organizationId: organization };
+    const nodes = await Promise.all(chunkIds.map((chunkId,index) => repository.saveNode(createKnowledgeNode({
+      id: randomUUID(), scope, kind: "person", canonicalName: "Guan Yu", summary: descriptions[index], source: { chunkId }, now: new Date()
+    }))));
+    expect(nodes[0]?.id).toBe(nodes[1]?.id);
+    const access: OrganizationAccess = { organizationId: organization, userId: user, role: "owner", teams: [] };
+    const before = await repository.searchNodes({ access, query: "Azure", limit: 10 });
+    expect(before[0]?.node.summary).toContain("Azure");
+    expect(before[0]?.node.summary).toContain("Crimson");
+    expect(before[0]?.node.sources).toHaveLength(2);
+    await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Related officer",
+      summary: "Guan Yu ".repeat(30), source: { chunkId: chunkIds[1]! }, now: new Date() }));
+    expect((await repository.searchNodes({ access, query: "Guan Yu", limit: 10 }))[0]?.node.id).toBe(nodes[0]?.id);
+
+    await pool.query("UPDATE documents SET status='archived' WHERE id=$1",[documentIds[0]]);
+    expect(await repository.searchNodes({ access, query: "Azure", limit: 10 })).toEqual([]);
+    const visible = await repository.searchNodes({ access, query: "Crimson", limit: 10 });
+    expect(visible[0]?.node.summary).toBe(descriptions[1]);
+    expect(visible[0]?.node.sources).toEqual([{ chunkId: chunkIds[1] }]);
+    const alias = await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "character", canonicalName: "General Guan",
+      summary: "Commands the Emerald guard.", source: { chunkId: chunkIds[1]! }, now: new Date() }));
+    const merged = await repository.mergeNodes({ organizationId: organization, sourceNodeId: alias.id, targetNodeId: nodes[0]!.id, mergedBy: user, reason: "Same person", now: new Date() });
+    expect(merged?.summary).toContain("Crimson");
+    expect(merged?.summary).toContain("Emerald");
+    expect(merged?.sources).toHaveLength(2);
+
+    const candidates = createKnowledgeCandidateRepository(db);
+    expect(await candidates.processingProgress(access)).toEqual({ totalChunks: 1, extractedChunks: 0, curatedChunks: 0 });
+    expect(await candidates.processingProgress({ ...access, organizationId: organizationB })).toEqual({ totalChunks: 0, extractedChunks: 0, curatedChunks: 0 });
+    const legacy = createKnowledgeCandidate({ id: randomUUID(), documentId: documentIds[1]!, chunkId: chunkIds[1]!, scope, model: "legacy", extractionVersion: 1,
+      graph: { entities: [{ key: "old", kind: "person", canonicalName: "Guan Yu" }], relationships: [] }, now: new Date() });
+    await candidates.save(legacy);
+    const next = createKnowledgeCandidate({ ...legacy, id: randomUUID(), extractionVersion: 2, model: "current",
+      graph: { entities: [{ key: "new", kind: "person", canonicalName: "Guan Yu", summary: "A detailed account." }, { key: "other", kind: "person", canonicalName: "Another person" }], relationships: [] }, now: new Date() });
+    const replacements = await Promise.all([candidates.replaceExtraction(legacy.id, next), candidates.replaceExtraction(legacy.id, { ...next, id: randomUUID() })]);
+    expect(replacements[0]?.id).toBe(replacements[1]?.id);
+    expect((await candidates.findById(organization, legacy.id))?.graph).toEqual(legacy.graph);
+    expect((await candidates.findById(organization, legacy.id))?.supersededAt).toBeInstanceOf(Date);
+    expect((await candidates.findByChunkId(organization, chunkIds[1]!))?.extractionVersion).toBe(2);
+    expect(await candidates.listPending(access, 100)).toHaveLength(1);
+    expect(await candidates.processingProgress(access)).toEqual({ totalChunks: 1, extractedChunks: 1, curatedChunks: 0 });
+    await expect(candidates.accept({ candidateId: legacy.id, organizationId: organization, entityPromotions: [], relationshipIds: [], reviewedAt: new Date(), reviewedBy: user })).resolves.toEqual({ status: "superseded" });
+    await expect(candidates.reject({ candidateId: legacy.id, organizationId: organization, reviewedAt: new Date(), reviewedBy: user })).resolves.toBeNull();
+    const current = replacements[0]!;
+    await candidates.accept({ candidateId: current.id, organizationId: organization, selection: { entityKeys: ["new"], relationshipIndexes: [] },
+      entityPromotions: [{ key: "new", id: randomUUID() }], relationshipIds: [], reviewedAt: new Date(), reviewedBy: user });
+    const attempted = { ...next, id: randomUUID(), extractionVersion: 3 };
+    expect((await candidates.replaceExtraction(current.id, attempted)).id).toBe(current.id);
+    expect(await candidates.findById(organization, attempted.id)).toBeNull();
+    expect((await candidates.findById(organization, current.id))?.supersededAt).toBeUndefined();
+
+
   });
 
 });

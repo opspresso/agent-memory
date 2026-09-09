@@ -54,6 +54,8 @@ function repository(
     listReviewSources: vi.fn(),
     saveAssessment: vi.fn(),
     reviewSummary: vi.fn(),
+    processingProgress: vi.fn(),
+    replaceExtraction: vi.fn(),
     listPending: vi.fn(),
     save: vi.fn(),
     accept: vi.fn(),

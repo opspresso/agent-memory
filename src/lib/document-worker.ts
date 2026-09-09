@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { curateKnowledgeCandidate } from "./knowledge-curation-service";
+import { readKnowledgeEnrichmentConcurrency } from "./document-worker-configuration";
 
 import { z } from "zod";
 
@@ -104,7 +105,7 @@ export async function startDocumentWorker(): Promise<void> {
           documentKnowledgeEnrichmentQueueName,
           {
             batchSize: 1,
-            localConcurrency: 1,
+            localConcurrency: readKnowledgeEnrichmentConcurrency(),
             pollingIntervalSeconds: 2
           },
           async (jobs) => {

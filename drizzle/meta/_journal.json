@@ -204,6 +204,20 @@
       "when": 1788934703546,
       "tag": "0028_late_stone_men",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1788938850930,
+      "tag": "0029_mushy_maelstrom",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788939582027,
+      "tag": "0030_huge_wrecking_crew",
+      "breakpoints": true
     }
   ]
 }

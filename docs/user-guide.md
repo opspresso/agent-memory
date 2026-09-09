@@ -131,6 +131,8 @@ Graph node와 edge 삭제에는 해당 scope의 `manage` 권한이 필요하다.
 
 검색 결과에서 같은 scope와 이름을 가진 node가 여러 개 발견되면 kind를 비교한다. 정규화 identity가 같은 신규 node는 자동으로 기존 node에 합쳐진다. Kind가 달라 자동 병합되지 않은 기존 node는 `중복 병합`에서 target을 확인하고 병합 사유를 입력한다. 병합은 provenance와 관계를 보존하며 되돌릴 수 없으므로 같은 실제 entity인지 확인하라.
 
+Graph 화면의 처리 진척은 추출·검증·자동 반영한 청크 수를 표시한다. 진행 중인 Graph는 전체 자료의 최종 결과가 아니다. 검색어 관련 미처리 후보를 우선 처리하고 `관계 새로고침`으로 새 연결을 불러올 수 있다.
+
 ## AI 후보 검토
 
 Knowledge extraction이 활성화되면 ready document chunk에서 entity와 relationship 후보가 생성된다. 추출과 별도의 AI 검증을 통과한 지식은 자동으로 Graph에 반영한다. 애매하거나 충돌하는 지식만 사람이 검토한다.

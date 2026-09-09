@@ -6,6 +6,7 @@ import type { OrganizationKnowledgeOntology } from "./knowledge-ontology-reader"
 import { evaluateKnowledgeOntology } from "./knowledge-ontology";
 
 const vague = new Set(["associated_with", "related_to", "related_with", "co_occurs_with"]);
+const incidentalMovement = new Set(["comes_from", "went_to", "visits", "visited", "responds_to"]);
 const normalize = (text: string) => text.normalize("NFKC").replace(/\s+/g, " ").trim();
 
 export function assessKnowledgeCandidate(input: {
@@ -46,6 +47,7 @@ export function assessKnowledgeCandidate(input: {
     const key = relationshipReviewKey(index);
     if (relationship.predicate === "alias_of") { change(key, "review", "Alias identity needs resolution before merging entities."); }
     if (vague.has(relationship.predicate)) { change(key, "ignore", "The relation does not identify a specific fact."); }
+    if (incidentalMovement.has(relationship.predicate)) { change(key, "ignore", "An unqualified movement or response in one scene is not a durable relationship. Model a consequential event with its context instead."); }
     if (items.get(key)?.verdict !== "accept") { return; }
     const endpoints = [relationship.sourceKey, relationship.targetKey].map((key) => graph.entities.find((entity) => entity.key === key)!);
     if (!allowed(undefined, relationship.predicate) || endpoints.some((entity) => {

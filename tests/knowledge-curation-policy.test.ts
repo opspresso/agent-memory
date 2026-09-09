@@ -16,6 +16,11 @@ function assess(changes: Partial<KnowledgeItemVerification> = {}) {
     items: items.map((item) => item.item === "relationship:0" ? { ...item, ...changes } : item) });
 }
 describe("automatic knowledge curation policy", () => {
+  it("does not promote a scene's departure location as a durable origin relationship", () => {
+    const movement = { ...candidate, graph: { ...candidate.graph, relationships: [{ sourceKey: "liu", targetKey: "lu", predicate: "comes_from" }] } };
+    const result = assessKnowledgeCandidate({ candidate: movement, content, model: "verifier", now: new Date(), ontology: null, items });
+    expect(result.items.find((item) => item.item === "relationship:0")?.verdict).toBe("ignore");
+  });
   it("canonicalizes symmetric edge endpoints but preserves directed relations", () => {
     const input = { id: "edge", organizationId: "org", scope: { organizationId: "org", kind: "organization" as const },
       sourceNodeId: "b", targetNodeId: "a", predicate: "sworn_sibling_of", source: { chunkId: "chunk" }, now: new Date() };

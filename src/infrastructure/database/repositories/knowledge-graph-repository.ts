@@ -160,9 +160,18 @@ function sourcesByResourceId<T extends NodeSourceRow | EdgeSourceRow>(
   return result;
 }
 
-function scoreExpressions(input: KnowledgeNodeSearchInput) {
+function scoreExpressions(input: KnowledgeNodeSearchInput, now: Date) {
+  const visibleDescriptions = sql`(SELECT string_agg(${knowledgeNodeSources.description}, ' ')
+    FROM ${knowledgeNodeSources}
+    WHERE ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
+      AND ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
+      AND ${visibleSourcePredicate(input.access, knowledgeNodeSources, now)})`;
+  const legacySummary = sql`CASE WHEN NOT EXISTS (
+    SELECT 1 FROM ${knowledgeNodeSources} WHERE ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
+      AND ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId} AND ${knowledgeNodeSources.description} IS NOT NULL
+    ) THEN coalesce(${knowledgeNodes.summary}, '') ELSE '' END`;
   return hybridSearchExpressions({
-    search: knowledgeNodes.search,
+    search: sql`to_tsvector('simple', ${knowledgeNodes.canonicalName} || ' ' || coalesce(${visibleDescriptions}, ${legacySummary}))`,
     embedding: knowledgeNodes.embedding,
     embeddingModel: knowledgeNodes.embeddingModel,
     query: input.query,
@@ -323,10 +332,8 @@ export function createKnowledgeGraphRepository(
               eq(knowledgeNodeSources.nodeId, source.id)
             )
           );
-        const sourcesToMove = knowledgeNodeFromRow(
-          source,
-          sourceNodeSourceRows.map(knowledgeSourceFromRow)
-        ).sources;
+        const sourcesToMove = sourceNodeSourceRows.map(knowledgeSourceFromRow);
+        if (sourcesToMove.length === 0) { throw new Error("knowledge node has no provenance"); }
         for (const sourceReference of sourcesToMove) {
           await transaction
             .insert(knowledgeNodeSources)
@@ -335,9 +342,16 @@ export function createKnowledgeGraphRepository(
               nodeId: target.id,
               memoryId: sourceReference.memoryId ?? null,
               chunkId: sourceReference.chunkId ?? null,
+              description: sourceReference.description ?? null,
               createdAt: input.now
             })
-            .onConflictDoNothing();
+            .onConflictDoUpdate({
+              target: [knowledgeNodeSources.organizationId, knowledgeNodeSources.nodeId, knowledgeNodeSources.memoryId, knowledgeNodeSources.chunkId],
+              set: { description: sql`CASE
+                WHEN ${knowledgeNodeSources.description} IS NULL THEN excluded.description
+                WHEN excluded.description IS NULL OR excluded.description = ${knowledgeNodeSources.description} THEN ${knowledgeNodeSources.description}
+                ELSE ${knowledgeNodeSources.description} || E'\n\n' || excluded.description END` }
+            });
         }
 
         const connectedEdges = await transaction
@@ -624,7 +638,7 @@ export function createKnowledgeGraphRepository(
 
     async searchNodes(input) {
       const now = clock();
-      const scores = scoreExpressions(input);
+      const scores = scoreExpressions(input, now);
       const rows = await db
         .select({
           node: knowledgeNodes,
@@ -641,7 +655,10 @@ export function createKnowledgeGraphRepository(
             scores.matches
           )
         )
-        .orderBy(desc(scores.score), knowledgeNodes.canonicalName)
+        .orderBy(
+          desc(sql<number>`CASE WHEN ${knowledgeNodes.canonicalNameKey} = ${knowledgeCanonicalNameKey(input.query)} THEN 1 ELSE 0 END`),
+          desc(scores.score), knowledgeNodes.canonicalName
+        )
         .limit(input.limit);
       const sourceRows = rows.length > 0
         ? await db

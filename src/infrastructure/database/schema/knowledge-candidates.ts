@@ -3,6 +3,7 @@ import {
   check,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -40,6 +41,8 @@ export const knowledgeCandidates = pgTable(
     documentId: uuid().notNull(),
     chunkId: uuid().notNull(),
     model: text().notNull(),
+    extractionVersion: integer().notNull().default(1),
+    supersededAt: timestamp({ withTimezone: true }),
     graph: jsonb().$type<ProposedKnowledgeGraph>().notNull(),
     itemReviews: jsonb().$type<readonly KnowledgeCandidateItemReview[]>().notNull().default([]),
     assessment: jsonb().$type<KnowledgeCandidateAssessment>(),
@@ -73,7 +76,7 @@ export const knowledgeCandidates = pgTable(
     uniqueIndex("knowledge_candidates_organization_chunk_unique").on(
       table.organizationId,
       table.chunkId
-    ),
+    ).where(sql`${table.supersededAt} IS NULL`),
     unique("knowledge_candidates_organization_id_id_unique").on(
       table.organizationId,
       table.id

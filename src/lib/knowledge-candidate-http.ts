@@ -51,6 +51,8 @@ export function publicKnowledgeCandidate(candidate: KnowledgeCandidate) {
     documentId: candidate.documentId,
     chunkId: candidate.chunkId,
     model: candidate.model,
+    extractionVersion: candidate.extractionVersion,
+    ...(candidate.supersededAt ? { supersededAt: candidate.supersededAt } : {}),
     graph: candidate.graph,
     itemReviews: candidate.itemReviews ?? [],
     ...(candidate.assessment ? { assessment: candidate.assessment } : {}),

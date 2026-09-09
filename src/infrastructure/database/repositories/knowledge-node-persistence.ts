@@ -6,6 +6,7 @@ import type {
   KnowledgeSource
 } from "@/domain/knowledge/knowledge-graph";
 import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
+import { mergeKnowledgeDescriptions } from "@/domain/knowledge/knowledge-description";
 
 import type { AgentMemoryDatabase } from "../client";
 import { knowledgeNodes, knowledgeNodeSources } from "../schema";
@@ -18,8 +19,10 @@ type NodeRow = typeof knowledgeNodes.$inferSelect;
 export function knowledgeSourceFromRow(row: {
   memoryId: string | null;
   chunkId: string | null;
-}): KnowledgeSource {
-  return row.memoryId ? { memoryId: row.memoryId } : { chunkId: row.chunkId! };
+  description?: string | null;
+}): KnowledgeSource & { readonly description?: string } {
+  return { ...(row.memoryId ? { memoryId: row.memoryId } : { chunkId: row.chunkId! }),
+    ...(row.description ? { description: row.description } : {}) };
 }
 
 export function knowledgeScopeFromRow(row: {
@@ -47,22 +50,24 @@ export function knowledgeScopeFromRow(row: {
 
 export function knowledgeNodeFromRow(
   row: NodeRow,
-  sources: readonly KnowledgeSource[]
+  sources: readonly (KnowledgeSource & { readonly description?: string })[]
 ): KnowledgeNode {
   if (sources.length === 0) {
     throw new Error("knowledge node has no provenance");
   }
+  const descriptions = sources.flatMap((source) => source.description ? [source.description] : []);
+  const summary = descriptions.length ? mergeKnowledgeDescriptions(descriptions) : row.summary;
   return {
     id: row.id,
     scope: knowledgeScopeFromRow(row),
     kind: row.kind,
     canonicalName: row.canonicalName,
-    ...(row.summary ? { summary: row.summary } : {}),
+    ...(summary ? { summary } : {}),
     ...(row.embedding && row.embeddingModel
       ? { embedding: { model: row.embeddingModel, values: row.embedding } }
       : {}),
     properties: row.properties,
-    sources,
+    sources: sources.map((source) => source.memoryId ? { memoryId: source.memoryId } : { chunkId: source.chunkId! }),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   };
@@ -168,9 +173,13 @@ export async function upsertKnowledgeNode(
         nodeId: row.id,
         memoryId: source.memoryId ?? null,
         chunkId: source.chunkId ?? null,
+        description: node.summary ?? null,
         createdAt: node.updatedAt
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: [knowledgeNodeSources.organizationId, knowledgeNodeSources.nodeId, knowledgeNodeSources.memoryId, knowledgeNodeSources.chunkId],
+        set: { description: sql`coalesce(excluded.description, ${knowledgeNodeSources.description})` }
+      });
   }
   const sourceRows = await transaction
     .select()

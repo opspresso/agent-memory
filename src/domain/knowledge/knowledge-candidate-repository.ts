@@ -21,9 +21,12 @@ export type KnowledgeCandidateAcceptResult =
   | Readonly<{ status: "promoted" } & KnowledgeCandidatePromotionResult>
   | Readonly<{ status: "not_found" }>
   | Readonly<{ status: "source_not_ready" }>
-  | Readonly<{ status: "already_rejected" }>;
+  | Readonly<{ status: "already_rejected" }>
+  | Readonly<{ status: "superseded" }>;
 
 export interface KnowledgeCandidateRepository {
+  replaceExtraction(previousId: string, candidate: KnowledgeCandidate): Promise<KnowledgeCandidate>;
+  processingProgress(access: OrganizationAccess): Promise<{ readonly totalChunks: number; readonly extractedChunks: number; readonly curatedChunks: number }>;
   reviewSummary(access: OrganizationAccess): Promise<{ readonly automaticAccepted: number; readonly automaticIgnored: number }>;
   saveAssessment(organizationId: string, candidateId: string, assessment: KnowledgeCandidateAssessment): Promise<KnowledgeCandidate | null>;
   listReviewSources(access: OrganizationAccess, assessmentHistory?: boolean): Promise<readonly KnowledgeReviewSource[]>;

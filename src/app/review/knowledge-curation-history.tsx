@@ -27,6 +27,7 @@ export function KnowledgeCurationHistory() {
     <Text c="dimmed" size="sm">{t("reviewQueue.historyDescription")}</Text>
     {data.sources.length === 0 ? <Text>{t("reviewQueue.noHistory")}</Text> : null}
     {data.sources.map(({ candidate, documentTitle, ordinal }) => <Paper key={candidate.id} p="md" withBorder>
+      {candidate.supersededAt ? <Badge color="gray">{t("reviewQueue.superseded")}</Badge> : null}
       <Button variant="subtle" onClick={() => setSelected(selected === candidate.id ? undefined : candidate.id)} style={{ maxWidth: "100%" }}>
         <Text truncate>{documentTitle.normalize("NFKC")} · {t("source.chunk", { number: ordinal + 1 })}</Text>
       </Button>

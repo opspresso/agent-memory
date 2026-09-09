@@ -44,6 +44,7 @@ import { MemoryLifecycle } from "./memory-lifecycle";
 import { useOrganization } from "./organization-context";
 import { SearchResultCard, SearchHitDetails, searchResultKey } from "./search-result-card";
 import { WorkspaceHeader, EmptyState } from "./workspace-components";
+import { KnowledgeProcessingStatus } from "./knowledge/knowledge-processing-status";
 import classes from "./search-workspace.module.css";
 
 type PendingResourceAction =
@@ -386,6 +387,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
         description={t("searchUi.description")}
         actions={<><Button component={Link} href="/memories?create=true" variant="default">{t("memoryUi.create")}</Button><Button component={Link} href="/documents">{t("searchUi.ingest")}</Button></>}
       />
+      {searchKind === "knowledge/nodes" ? <KnowledgeProcessingStatus query={initialQuery} /> : null}
       <Paper p="md" withBorder>
         <Stack gap="md">
           {pathname !== "/knowledge" ? <div className={classes.filters}><SegmentedControl
@@ -422,7 +424,10 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
         <Stack gap="md">
           <Group justify="space-between">
             <Button variant="default" onClick={() => { graphRequest.current?.abort(); setLoadingGraph(false); setGraphCenterNodeId(undefined); setGraphNodes([]); setGraphEdges([]); }}>{t("searchUi.backResults")}</Button>
-            <Badge>{t("workspace.mapCount", { nodes: graphNodes.length, edges: graphEdges.length })}</Badge>
+            <Group gap="xs">
+              <Button size="xs" variant="light" loading={loadingGraph} disabled={deletingResource} onClick={() => void exploreKnowledgeNode(graphCenterNodeId)}>{t("knowledgeProgress.refresh")}</Button>
+              <Badge>{t("workspace.mapCount", { nodes: graphNodes.length, edges: graphEdges.length })}</Badge>
+            </Group>
           </Group>
               <KnowledgeGraph
                 centerNodeId={graphCenterNodeId}

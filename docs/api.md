@@ -498,6 +498,8 @@ curl -X POST \
   "$AGENT_MEMORY_URL/api/knowledge/edges"
 ```
 
+Node 설명은 현재 읽을 수 있는 출처별 설명을 중복 제거해 합친다(개요 최대 10,000자). Node 검색은 이름이 정확히 일치하는 결과를 먼저 보여주고 나머지는 hybrid 점수순으로 정렬한다.
+
 Node 응답은 `id`, `scope`, `kind`, `canonicalName`, `properties`, `sources`, `createdAt`, `updatedAt`과 값이 있는 `summary`, `embeddingModel`을 포함한다. Edge 응답은 `id`, `sourceNodeId`, `targetNodeId`, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
 
 Node·edge 생성 성공은 `200`과 공개 resource를 반환한다. Node 응답의 `Location`은 해당 node의 neighborhood URL이다. 온톨로지 경고는 아래 검증 모드에 따라 추가된다.
@@ -547,19 +549,21 @@ curl \
 
 ### AI 후보 조회와 검토
 
+`GET /api/knowledge/progress`는 읽기 가능한 ready 문서 청크를 대상으로 `{ totalChunks, extractedChunks, curatedChunks, enabled }`를 반환한다. Curated는 현재 추출 버전의 검증과 자동 처리가 끝났거나 사람이 완료한 청크이며, superseded 후보는 중복 집계하지 않는다. 이 숫자는 수동 검토까지 모두 끝났다는 의미가 아니다.
+
 `GET /api/knowledge/curation`은 검토 권한이 있는 ready 문서의 최근 assessment 기록 50개를 `{ sources: [{ candidate, documentTitle, ordinal }] }`로 반환한다. Candidate는 assessment와 항목별 자동·수동 처리 기록을 포함한다.
 
-`POST /api/knowledge/curation`은 현재 검토할 권한이 있는 미검증 추출과 미완료 자동 처리 항목을 enrichment queue에 등록한다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐 요청자(기본 ingestion은 문서 생성자)의 현재 권한을 검증한 후 실행한다.
+`POST /api/knowledge/curation?query=관우`는 검토 권한이 있는 후보 중 이름·추출된 별칭에 해당 검색어가 포함된 후보를 우선 처리한다. Query는 선택 사항이며 최대 500자다. 기존 queued job도 우선순위를 올린다. Query를 생략하면 미검증 추출·구버전 추출·미완료 자동 처리 항목을 등록한다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐 요청자(기본 ingestion은 문서 생성자)의 현재 권한을 검증한 후 실행한다.
 
 자동 검증은 추출과 별도의 structured-output 요청이며 같은 설정의 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다. Provider 응답 스키마는 모든 항목 ID를 필수 object key로 지정하고 추가 key를 금지한다. 서버에서도 전체 항목 집합을 다시 검증한다. 모든 항목이 정확히 한 번 평가되어야 하고 명시적·유용한 사실만 자동 승인 대상이다. 불확실성, 충돌, strict 사전 위반, 불명확한 양 끝 개체와 별칭 identity 병합은 사람에게 남긴다. 인용은 원문과 대조하며 실패·불완전 응답은 자동 승인의 근거가 될 수 없다. `itemReviews[].method`는 human 또는 automatic으로 처리 주체를 구분한다. 인증된 공개 승인 body로 method를 지정할 수 없다.
 
 `GET /api/knowledge/review-groups?offset=0&limit=25&query=유비`는 AI가 수동 검토로 분류한 전체 pending 항목에서 동일 scope·kind·정규화 이름의 개체와 동일 양 끝 개체·predicate의 관계를 통합한 후 페이지를 반환한다. 응답은 `{ groups, total, sourceCount, offset, limit, automaticAccepted, automaticIgnored, unassessedCount }`이다. 자동 처리 수는 개체·관계 항목 단위이며 검토 권한이 있는 ready source만 집계한다. Limit은 1–100, offset은 0 이상의 정수이며 query는 최대 500자다. 그룹의 `occurrences`는 후보 ID, 문서 제목·ID, chunk ID·ordinal, 근거, 별칭·설명과 해당 항목을 검토할 `selection`을 제공한다. 빈 결과와 이미 검토한 항목은 제외한다. 각 그룹의 `ontology`는 검증 모드와 해당 항목의 위반 목록을 제공한다. 구체적인 관계와 인용 근거가 있는 항목을 우선하며 정렬은 진실성 점수가 아니다. 대칭 관계만 역방향을 통합한다. 원본 인용이 다른 사건·시점을 나타내는지는 검토자가 확인한다.
 
-승인·거절 body의 선택적 `selection: { entityKeys: string[], relationshipIndexes: number[] }`은 원본 graph의 키와 0 기반 관계 index를 참조한다. 생략하면 남은 항목 전체를 처리한다. 관계 승인은 양 끝 개체도 승격하고, 개체 거절은 아직 검토하지 않은 연결 관계도 거절한다. 다른 항목은 pending으로 남는다. `itemReviews`는 항목별 decision·reviewedBy·reviewedAt·reason을 보존하며 원본 graph는 변경하지 않는다. 모든 항목을 검토하면 승인된 항목이 하나라도 있는 후보는 accepted, 전부 거절한 후보는 rejected가 된다. 동일 항목의 같은 결정은 멱등하며 반대 결정은 거부한다. 빈 추출은 조회 이력으로 보존하되 승인할 수 없다.
+승인·거절 body의 선택적 `selection: { entityKeys: string[], relationshipIndexes: number[] }`은 원본 graph의 키와 0 기반 관계 index를 참조한다. 생략하면 남은 항목 전체를 처리한다. 관계 승인은 양 끝 개체도 승격하고, 개체 거절은 아직 검토하지 않은 연결 관계도 거절한다. 다른 항목은 pending으로 남는다. `itemReviews`는 항목별 decision·reviewedBy·reviewedAt·reason을 보존하며 원본 graph는 변경하지 않는다. 구버전 자동 후보 재추출은 새 ID를 만들며 이전 ID는 superseded로 남긴다. 이전 ID를 승인·거절하는 요청은 충돌로 거부한다. 모든 항목을 검토하면 승인된 항목이 하나라도 있는 후보는 accepted, 전부 거절한 후보는 rejected가 된다. 동일 항목의 같은 결정은 멱등하며 반대 결정은 거부한다. 빈 추출은 조회 이력으로 보존하되 승인할 수 없다.
 
 Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity와 relationship candidate를 만든다. Candidate는 source document·chunk, 원래 scope, extraction model을 포함하며 chunk 원문 전체를 응답하지 않는다. 새 추출의 entity는 `aliases`와 `evidence` 배열을, relationship은 `evidence` 배열을 포함한다. Evidence는 청크에서 인용한 최대 2,000자의 문구이며 각 배열은 최대 20개다. 근거 필드가 없는 기존 추출 기록도 조회할 수 있다. 서버는 NFKC·공백 정규화 후 원문에 존재하는 인용만 보존하고, 근거가 없는 개체·관계와 막연한 동시 등장 관계를 제외한다. 인용 일치는 의미적 사실 검증을 대체하지 않는다.
 
-- `GET .../knowledge/candidates?limit=<1-100>`은 빈 추출 결과를 제외한 pending candidate를 오래된 순으로 반환하며 기본 limit은 50이다. 응답은 `{ candidates, count }`다. 각 candidate는 `id`, `scope`, `documentId`, `chunkId`, `model`, 추출된 `graph`, `status`, `createdAt`, `updatedAt`과 값이 있는 `reviewedBy`, `reviewReason`, `reviewedAt`을 포함한다.
+- `GET .../knowledge/candidates?limit=<1-100>`은 빈 추출 결과를 제외한 pending candidate를 오래된 순으로 반환하며 기본 limit은 50이다. 응답은 `{ candidates, count }`다. 각 candidate는 `id`, `extractionVersion`, 선택형 `supersededAt`, `scope`, `documentId`, `chunkId`, `model`, 추출된 `graph`, `status`, `createdAt`, `updatedAt`과 값이 있는 `reviewedBy`, `reviewReason`, `reviewedAt`을 포함한다.
 - `GET .../knowledge/candidates/<candidateId>/duplicates`는 후보의 모든 entity를 한 번에 조회하고 entity key별로 같은 canonical name·scope의 읽기 가능한 기존 node를 반환한다. Semantic embedding을 생성하지 않는다.
 - 후보 조회와 승인은 source scope의 `manage` 권한을 따른다. Organization scope는 `admin`·`owner`, team scope는 해당 팀 `manager` 또는 조직 `admin`·`owner`, user scope는 본인만 검토한다.
 - `POST .../accept`와 `POST .../reject` JSON object body는 필수이며 `reason`만 선택 항목이다. 사유가 없으면 `{}`를 보내고, 있으면 `{ "reason": string }`을 보낸다. reason은 앞뒤 공백 제거 후 1–2,000자다.

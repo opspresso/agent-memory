@@ -1,9 +1,11 @@
-import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { reviewedCandidateState, selectKnowledgeCandidateItems } from "@/domain/knowledge/knowledge-candidate-selection";
+import { currentKnowledgeExtractionVersion } from "@/domain/knowledge/knowledge-candidate";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
+import { knowledgeCanonicalNameKey, normalizeKnowledgeKind } from "@/domain/knowledge/knowledge-identity";
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
 import {
   createKnowledgeEdge,
@@ -32,7 +34,7 @@ import {
   knowledgeSourceFromRow,
   upsertKnowledgeNode
 } from "./knowledge-node-persistence";
-import { scopedManagePredicate } from "./scope-predicates";
+import { scopedManagePredicate, scopedReadPredicate } from "./scope-predicates";
 
 type CandidateRow = typeof knowledgeCandidates.$inferSelect;
 type AgentMemoryTransaction = Parameters<
@@ -145,6 +147,8 @@ function candidateFromRow(
     documentId: row.documentId,
     chunkId: row.chunkId,
     model: row.model,
+    extractionVersion: row.extractionVersion,
+    ...(row.supersededAt ? { supersededAt: row.supersededAt } : {}),
     graph: row.graph,
     itemReviews: row.itemReviews,
     ...(row.assessment ? { assessment: row.assessment } : {}),
@@ -159,6 +163,14 @@ function candidateFromRow(
 
 function candidateReviewPredicate(access: OrganizationAccess): SQL {
   return scopedManagePredicate(access, documents);
+}
+
+function candidateValues(candidate: KnowledgeCandidate) {
+  return {
+    id: candidate.id, organizationId: candidate.scope.organizationId, documentId: candidate.documentId,
+    chunkId: candidate.chunkId, model: candidate.model, extractionVersion: candidate.extractionVersion,
+    graph: candidate.graph, status: candidate.status, createdAt: candidate.createdAt, updatedAt: candidate.updatedAt
+  };
 }
 
 export function createKnowledgeCandidateRepository(
@@ -201,7 +213,8 @@ export function createKnowledgeCandidateRepository(
       .where(
         and(
           eq(knowledgeCandidates.organizationId, organizationId),
-          eq(knowledgeCandidates.chunkId, chunkId)
+          eq(knowledgeCandidates.chunkId, chunkId),
+          isNull(knowledgeCandidates.supersededAt)
         )
       )
       .limit(1);
@@ -213,6 +226,24 @@ export function createKnowledgeCandidateRepository(
   return {
     findById,
     findByChunkId,
+
+    async processingProgress(access) {
+      const result = await db.execute<{ totalChunks: number; extractedChunks: number; curatedChunks: number }>(sql`
+        SELECT count(*)::int AS "totalChunks", count(${knowledgeCandidates.id})::int AS "extractedChunks",
+          count(*) FILTER (WHERE ${knowledgeCandidates.status} <> 'pending'
+            OR (${knowledgeCandidates.extractionVersion} >= ${currentKnowledgeExtractionVersion} AND (jsonb_array_length(${knowledgeCandidates.graph}->'entities') = 0
+            OR (${knowledgeCandidates.assessment} IS NOT NULL AND NOT EXISTS (
+              SELECT 1 FROM jsonb_array_elements(${knowledgeCandidates.assessment}->'items') item
+              WHERE item->>'verdict' <> 'review' AND NOT EXISTS (
+                SELECT 1 FROM jsonb_array_elements(${knowledgeCandidates.itemReviews}) reviewed WHERE reviewed->>'item' = item->>'item'
+              )
+            )))))::int AS "curatedChunks"
+        FROM ${documents} JOIN ${documentChunks} ON ${documentChunks.organizationId} = ${documents.organizationId} AND ${documentChunks.documentId} = ${documents.id}
+        LEFT JOIN ${knowledgeCandidates} ON ${knowledgeCandidates.organizationId} = ${documents.organizationId} AND ${knowledgeCandidates.chunkId} = ${documentChunks.id} AND ${knowledgeCandidates.supersededAt} IS NULL
+        WHERE ${documents.organizationId} = ${access.organizationId} AND ${documents.status} = 'ready' AND ${scopedReadPredicate(access, documents)}
+      `);
+      return result.rows[0] ?? { totalChunks: 0, extractedChunks: 0, curatedChunks: 0 };
+    },
 
     async reviewSummary(access) {
       const result = await db.execute<{ automaticAccepted: number; automaticIgnored: number }>(sql`
@@ -230,7 +261,7 @@ export function createKnowledgeCandidateRepository(
     async saveAssessment(organizationId, candidateId, assessment) {
       await db.update(knowledgeCandidates).set({ assessment })
         .where(and(eq(knowledgeCandidates.organizationId, organizationId), eq(knowledgeCandidates.id, candidateId),
-          eq(knowledgeCandidates.status, "pending"), sql`${knowledgeCandidates.assessment} IS NULL`));
+          eq(knowledgeCandidates.status, "pending"), isNull(knowledgeCandidates.supersededAt), sql`${knowledgeCandidates.assessment} IS NULL`));
       return findById(organizationId, candidateId);
     },
 
@@ -244,7 +275,7 @@ export function createKnowledgeCandidateRepository(
           eq(documentChunks.id, knowledgeCandidates.chunkId)
         )).where(and(
           eq(knowledgeCandidates.organizationId, access.organizationId),
-          assessmentHistory ? sql`${knowledgeCandidates.assessment} IS NOT NULL` : eq(knowledgeCandidates.status, "pending"), eq(documents.status, "ready"),
+          assessmentHistory ? sql`${knowledgeCandidates.assessment} IS NOT NULL` : and(eq(knowledgeCandidates.status, "pending"), isNull(knowledgeCandidates.supersededAt)), eq(documents.status, "ready"),
           sql`jsonb_array_length(${knowledgeCandidates.graph}->'entities') > 0`,
           candidateReviewPredicate(access)
         )).orderBy(assessmentHistory ? desc(knowledgeCandidates.updatedAt) : asc(knowledgeCandidates.createdAt), asc(knowledgeCandidates.id));
@@ -255,25 +286,43 @@ export function createKnowledgeCandidateRepository(
       }));
     },
 
+    async replaceExtraction(previousId, candidate) {
+      return db.transaction(async (transaction) => {
+        const [previous] = await transaction.select({ candidate: knowledgeCandidates, document: documents })
+          .from(knowledgeCandidates).innerJoin(documents, and(eq(documents.id, knowledgeCandidates.documentId), eq(documents.organizationId, knowledgeCandidates.organizationId)))
+          .where(and(eq(knowledgeCandidates.id, previousId), eq(knowledgeCandidates.organizationId, candidate.scope.organizationId), isNull(knowledgeCandidates.supersededAt)))
+          .for("update").limit(1);
+        if (!previous) {
+          const [current] = await transaction.select({ candidate: knowledgeCandidates, document: documents })
+            .from(knowledgeCandidates).innerJoin(documents, and(eq(documents.id, knowledgeCandidates.documentId), eq(documents.organizationId, knowledgeCandidates.organizationId)))
+            .where(and(eq(knowledgeCandidates.organizationId, candidate.scope.organizationId), eq(knowledgeCandidates.chunkId, candidate.chunkId), isNull(knowledgeCandidates.supersededAt)))
+            .limit(1);
+          if (!current) { throw new Error("current extraction not found"); }
+          return candidateFromRow(current.candidate, knowledgeScopeFromRow(current.document));
+        }
+        const old = previous.candidate;
+        if (old.chunkId !== candidate.chunkId || old.documentId !== candidate.documentId) { throw new Error("replacement extraction source does not match"); }
+        if (old.status !== "pending" || old.extractionVersion >= candidate.extractionVersion || old.itemReviews.some((review) => review.method !== "automatic") || previous.document.status !== "ready") {
+          return candidateFromRow(old, knowledgeScopeFromRow(previous.document));
+        }
+        await transaction.update(knowledgeCandidates).set({ supersededAt: candidate.createdAt, updatedAt: candidate.createdAt })
+          .where(eq(knowledgeCandidates.id, previousId));
+        const [row] = await transaction.insert(knowledgeCandidates).values(candidateValues(candidate)).returning();
+        if (!row) { throw new Error("replacement extraction was not saved"); }
+        return candidateFromRow(row, candidate.scope);
+      });
+    },
+
     async save(candidate) {
       const [row] = await db
         .insert(knowledgeCandidates)
-        .values({
-          id: candidate.id,
-          organizationId: candidate.scope.organizationId,
-          documentId: candidate.documentId,
-          chunkId: candidate.chunkId,
-          model: candidate.model,
-          graph: candidate.graph,
-          status: candidate.status,
-          createdAt: candidate.createdAt,
-          updatedAt: candidate.updatedAt
-        })
+        .values(candidateValues(candidate))
         .onConflictDoNothing({
           target: [
             knowledgeCandidates.organizationId,
             knowledgeCandidates.chunkId
-          ]
+          ],
+          where: isNull(knowledgeCandidates.supersededAt)
         })
         .returning();
       if (row) {
@@ -307,6 +356,7 @@ export function createKnowledgeCandidateRepository(
               access.organizationId
             ),
             eq(knowledgeCandidates.status, "pending"),
+            isNull(knowledgeCandidates.supersededAt),
             sql`jsonb_array_length(${knowledgeCandidates.graph}->'entities') > 0`,
             eq(documents.status, "ready"),
             candidateReviewPredicate(access)
@@ -349,6 +399,7 @@ export function createKnowledgeCandidateRepository(
         // The idempotent already-accepted return must stay ahead of both the
         // source-readiness and promotion-completeness checks: callers replay
         // accepted candidates with empty promotion inputs.
+        if (candidate.supersededAt) { return { status: "superseded" } as const; }
         if (input.selection) { selectKnowledgeCandidateItems(candidate, input.selection); }
         if (candidate.status === "accepted") {
           const promoted = await promotedResourcesForCandidate(
@@ -376,7 +427,14 @@ export function createKnowledgeCandidateRepository(
         }
         const nodes = [];
         const nodeIds = new Map<string, string>();
-        for (const entity of selected.graph.entities) {
+        // Concurrent chunks often contain the same people in different orders.
+        // Acquire identity locks in one order to avoid A→B / B→A deadlocks.
+        const orderedEntities = selected.graph.entities.toSorted((left, right) => {
+          const a = `${normalizeKnowledgeKind(left.kind)}:${knowledgeCanonicalNameKey(left.canonicalName)}`;
+          const b = `${normalizeKnowledgeKind(right.kind)}:${knowledgeCanonicalNameKey(right.canonicalName)}`;
+          return a < b ? -1 : a > b ? 1 : 0;
+        });
+        for (const entity of orderedEntities) {
           const promotion = promotions.get(entity.key);
           if (!promotion) {
             throw new Error("knowledge candidate entity promotion is missing");
@@ -386,7 +444,7 @@ export function createKnowledgeCandidateRepository(
             scope: candidate.scope,
             kind: entity.kind,
             canonicalName: entity.canonicalName,
-            ...(entity.summary ? { summary: entity.summary } : {}),
+            ...((entity.summary ?? entity.evidence?.join(" ")) ? { summary: entity.summary ?? entity.evidence?.join(" ") } : {}),
             ...(promotion.embedding ? { embedding: promotion.embedding } : {}),
             source: { chunkId: candidate.chunkId },
             now: input.reviewedAt
@@ -509,10 +567,11 @@ export function createKnowledgeCandidateRepository(
         if (!reviewed) {
           throw new Error("knowledge candidate review claim was lost");
         }
+        const nodesById = new Map(nodes.map((node) => [node.id, node]));
         return {
           status: "promoted",
           candidate: candidateFromRow(reviewed, candidate.scope),
-          nodes,
+          nodes: selected.graph.entities.map((entity) => nodesById.get(nodeIds.get(entity.key)!)!),
           edges
         } as const;
       });
@@ -528,6 +587,7 @@ export function createKnowledgeCandidateRepository(
           .for("update").limit(1);
         if (!locked) { return null; }
         const candidate = candidateFromRow(locked.candidate, knowledgeScopeFromRow(locked.document));
+        if (candidate.supersededAt) { return null; }
         const selected = selectKnowledgeCandidateItems(candidate, input.selection, "rejected");
         if (candidate.status === "rejected") { return candidate; }
         if (candidate.status !== "pending") { return input.selection && selected.items.length === 0 ? candidate : null; }

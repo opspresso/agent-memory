@@ -1,5 +1,5 @@
 import type { DocumentRepository } from "@/domain/document/document-repository";
-import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
+import { createKnowledgeCandidate, canUpgradeKnowledgeExtraction } from "@/domain/knowledge/knowledge-candidate";
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
 import type { KnowledgeExtractionService } from "@/domain/knowledge/knowledge-extraction-service";
 import type { KnowledgeOntologyReader } from "@/domain/knowledge/knowledge-ontology-reader";
@@ -28,7 +28,8 @@ export function buildGenerateKnowledgeCandidate(
       organizationId,
       chunkId
     );
-    if (existing) {
+    const canUpgrade = existing && canUpgradeKnowledgeExtraction(existing);
+    if (existing && !canUpgrade) {
       return existing;
     }
     const source = await dependencies.documentRepository.findChunkById(
@@ -70,6 +71,8 @@ export function buildGenerateKnowledgeCandidate(
       graph: extraction.graph,
       now: dependencies.clock()
     });
-    return dependencies.candidateRepository.save(candidate);
+    return existing
+      ? dependencies.candidateRepository.replaceExtraction(existing.id, candidate)
+      : dependencies.candidateRepository.save(candidate);
   };
 }

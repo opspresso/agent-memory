@@ -48,6 +48,8 @@ function candidateRepository(): KnowledgeCandidateRepository {
     listReviewSources: vi.fn(),
     saveAssessment: vi.fn(),
     reviewSummary: vi.fn(),
+    processingProgress: vi.fn(),
+    replaceExtraction: vi.fn(),
     listPending: vi.fn(),
     save: vi.fn((value) => value),
     accept: vi.fn(),
