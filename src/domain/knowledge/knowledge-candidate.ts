@@ -36,6 +36,19 @@ export interface ProposedKnowledgeGraph {
   readonly relationships: readonly ProposedKnowledgeRelationship[];
 }
 
+export interface KnowledgeCandidateSelection {
+  readonly entityKeys: readonly string[];
+  readonly relationshipIndexes: readonly number[];
+}
+
+export interface KnowledgeCandidateItemReview {
+  readonly item: string;
+  readonly decision: "accepted" | "rejected";
+  readonly reviewedBy: string;
+  readonly reviewedAt: string;
+  readonly reason?: string;
+}
+
 export interface KnowledgeCandidate {
   readonly id: string;
   readonly scope: ScopedResource;
@@ -44,6 +57,7 @@ export interface KnowledgeCandidate {
   readonly model: string;
   readonly graph: ProposedKnowledgeGraph;
   readonly status: KnowledgeCandidateStatus;
+  readonly itemReviews?: readonly KnowledgeCandidateItemReview[];
   readonly reviewedBy?: string;
   readonly reviewReason?: string;
   readonly reviewedAt?: Date;

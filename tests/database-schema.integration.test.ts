@@ -2513,4 +2513,56 @@ describe("PostgreSQL schema", () => {
     expect(await receipts.find({ organizationId, userId, operation: "memory.create", key: "rollback" })).toBeNull();
   });
 
+  it("partially reviews facts atomically while preserving pending items and excluding empty extractions", async () => {
+    const organization = randomUUID();
+    const user = randomUUID();
+    const documentId = randomUUID();
+    const chunkId = randomUUID();
+    const emptyChunkId = randomUUID();
+    await pool.query("INSERT INTO organizations (id, slug, name) VALUES ($1, $2, 'Review test')", [organization, organization]);
+    await pool.query("INSERT INTO users (id, email, name) VALUES ($1, $2, 'Reviewer')", [user, `${user}@example.test`]);
+    await pool.query("INSERT INTO organization_members (organization_id, user_id, role, status) VALUES ($1, $2, 'owner', 'active')", [organization, user]);
+    await pool.query(`INSERT INTO documents (id, organization_id, scope_kind, title, object_key, checksum, mime_type, created_by, status)
+      VALUES ($1, $2, 'organization', 'Review source', 'review-source', 'checksum', 'text/plain', $3, 'ready')`, [documentId, organization, user]);
+    await pool.query(`INSERT INTO document_chunks (id, organization_id, document_id, ordinal, content)
+      VALUES ($1, $2, $3, 0, 'A learns from B. B knows C.'), ($4, $2, $3, 1, 'Contents')`, [chunkId, organization, documentId, emptyChunkId]);
+    const repository = createKnowledgeCandidateRepository(db);
+    const now = new Date();
+    const candidate = createKnowledgeCandidate({
+      id: randomUUID(), scope: { kind: "organization", organizationId: organization }, documentId, chunkId,
+      model: "test", now, graph: {
+        entities: ["a", "b", "c"].map((key) => ({ key, kind: "person", canonicalName: key })),
+        relationships: [{ sourceKey: "a", targetKey: "b", predicate: "student_of" }, { sourceKey: "b", targetKey: "c", predicate: "associated_with" }]
+      }
+    });
+    await repository.save(candidate);
+    await repository.save(createKnowledgeCandidate({ ...candidate, id: randomUUID(), chunkId: emptyChunkId, graph: { entities: [], relationships: [] }, now }));
+    const access: OrganizationAccess = { organizationId: organization, userId: user, role: "owner", teams: [] };
+    expect(await repository.listPending(access, 100)).toHaveLength(1);
+    expect(await repository.listReviewSources(access)).toHaveLength(1);
+    expect(await repository.listReviewSources({ ...access, organizationId: organizationB })).toEqual([]);
+    expect(await repository.listReviewSources({ ...access, role: "member" })).toEqual([]);
+    const input = {
+      candidateId: candidate.id, organizationId: organization, reviewedBy: user, reviewedAt: now,
+      selection: { entityKeys: [], relationshipIndexes: [0] },
+      entityPromotions: ["a", "b"].map((key) => ({ key, id: randomUUID() })),
+      relationshipIds: [randomUUID(), randomUUID()]
+    };
+    const results = await Promise.all([repository.accept(input), repository.accept(input)]);
+    expect(results.every((result) => result.status === "promoted" && result.candidate.status === "pending")).toBe(true);
+    const saved = await repository.findById(organization, candidate.id);
+    expect(saved?.itemReviews).toHaveLength(3);
+    expect(saved?.graph).toEqual(candidate.graph);
+    const counts = await pool.query("SELECT (SELECT count(*) FROM knowledge_nodes WHERE organization_id=$1)::int nodes, (SELECT count(*) FROM knowledge_edges WHERE organization_id=$1)::int edges", [organization]);
+    expect(counts.rows[0]).toEqual({ nodes: 2, edges: 1 });
+    await expect(repository.reject({ candidateId: candidate.id, organizationId: organization, reviewedBy: user, reviewedAt: now,
+      selection: { entityKeys: [], relationshipIndexes: [0] } })).rejects.toThrow("opposite");
+    await repository.reject({ candidateId: candidate.id, organizationId: organization, reviewedBy: user, reviewedAt: now,
+      selection: { entityKeys: ["c"], relationshipIndexes: [] } });
+    const finished = await repository.findById(organization, candidate.id);
+    expect(finished?.status).toBe("accepted");
+    expect(finished?.itemReviews).toHaveLength(5);
+    expect(await repository.listReviewSources(access)).toEqual([]);
+  });
+
 });

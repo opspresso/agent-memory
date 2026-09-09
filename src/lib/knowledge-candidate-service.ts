@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { buildListKnowledgeReviewGroups } from "@/application/knowledge/list-knowledge-review-groups";
 
 import {
   buildAcceptKnowledgeCandidate,
@@ -15,6 +16,8 @@ import {
 } from "./container";
 
 const clock = () => new Date();
+
+export const listKnowledgeReviewGroups = buildListKnowledgeReviewGroups(knowledgeCandidateRepository);
 
 export const listKnowledgeCandidateRecords = buildListKnowledgeCandidates(
   knowledgeCandidateRepository

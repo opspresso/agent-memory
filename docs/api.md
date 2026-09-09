@@ -547,9 +547,13 @@ curl \
 
 ### AI 후보 조회와 검토
 
+`GET /api/knowledge/review-groups?offset=0&limit=25&query=유비`는 검토 가능한 전체 pending 후보에서 동일 scope·kind·정규화 이름의 개체와 동일 양 끝 개체·predicate의 관계를 통합한 후 페이지를 반환한다. 응답은 `{ groups, total, sourceCount, offset, limit }`이다. Limit은 1–100, offset은 0 이상의 정수이며 query는 최대 500자다. 그룹의 `occurrences`는 후보 ID, 문서 제목·ID, chunk ID·ordinal, 근거, 별칭·설명과 해당 항목을 검토할 `selection`을 제공한다. 빈 결과와 이미 검토한 항목은 제외한다. 구체적인 관계와 인용 근거가 있는 항목을 우선하며 정렬은 진실성 점수가 아니다. 대칭 관계만 역방향을 통합한다. 원본 인용이 다른 사건·시점을 나타내는지는 검토자가 확인한다.
+
+승인·거절 body의 선택적 `selection: { entityKeys: string[], relationshipIndexes: number[] }`은 원본 graph의 키와 0 기반 관계 index를 참조한다. 생략하면 남은 항목 전체를 처리한다. 관계 승인은 양 끝 개체도 승격하고, 개체 거절은 아직 검토하지 않은 연결 관계도 거절한다. 다른 항목은 pending으로 남는다. `itemReviews`는 항목별 decision·reviewedBy·reviewedAt·reason을 보존하며 원본 graph는 변경하지 않는다. 모든 항목을 검토하면 승인된 항목이 하나라도 있는 후보는 accepted, 전부 거절한 후보는 rejected가 된다. 동일 항목의 같은 결정은 멱등하며 반대 결정은 거부한다. 빈 추출은 조회 이력으로 보존하되 승인할 수 없다.
+
 Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity와 relationship candidate를 만든다. Candidate는 source document·chunk, 원래 scope, extraction model을 포함하며 chunk 원문 전체를 응답하지 않는다. 새 추출의 entity는 `aliases`와 `evidence` 배열을, relationship은 `evidence` 배열을 포함한다. Evidence는 청크에서 인용한 최대 2,000자의 문구이며 각 배열은 최대 20개다. 근거 필드가 없는 기존 추출 기록도 조회할 수 있다. 서버는 NFKC·공백 정규화 후 원문에 존재하는 인용만 보존하고, 근거가 없는 개체·관계와 막연한 동시 등장 관계를 제외한다. 인용 일치는 의미적 사실 검증을 대체하지 않는다.
 
-- `GET .../knowledge/candidates?limit=<1-100>`은 pending candidate를 오래된 순으로 반환하며 기본 limit은 50이다. 응답은 `{ candidates, count }`다. 각 candidate는 `id`, `scope`, `documentId`, `chunkId`, `model`, 추출된 `graph`, `status`, `createdAt`, `updatedAt`과 값이 있는 `reviewedBy`, `reviewReason`, `reviewedAt`을 포함한다.
+- `GET .../knowledge/candidates?limit=<1-100>`은 빈 추출 결과를 제외한 pending candidate를 오래된 순으로 반환하며 기본 limit은 50이다. 응답은 `{ candidates, count }`다. 각 candidate는 `id`, `scope`, `documentId`, `chunkId`, `model`, 추출된 `graph`, `status`, `createdAt`, `updatedAt`과 값이 있는 `reviewedBy`, `reviewReason`, `reviewedAt`을 포함한다.
 - `GET .../knowledge/candidates/<candidateId>/duplicates`는 후보의 모든 entity를 한 번에 조회하고 entity key별로 같은 canonical name·scope의 읽기 가능한 기존 node를 반환한다. Semantic embedding을 생성하지 않는다.
 - 후보 조회와 승인은 source scope의 `manage` 권한을 따른다. Organization scope는 `admin`·`owner`, team scope는 해당 팀 `manager` 또는 조직 `admin`·`owner`, user scope는 본인만 검토한다.
 - `POST .../accept`와 `POST .../reject` JSON object body는 필수이며 `reason`만 선택 항목이다. 사유가 없으면 `{}`를 보내고, 있으면 `{ "reason": string }`을 보낸다. reason은 앞뒤 공백 제거 후 1–2,000자다.

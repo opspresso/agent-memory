@@ -39,7 +39,8 @@ export async function POST(request: Request, context: RouteContext) {
     const result = await acceptKnowledgeCandidateRecord(
       authorization.access,
       parsedCandidateId.data,
-      parsed.data.reason
+      parsed.data.reason,
+      parsed.data.selection
     );
     return Response.json(publicKnowledgeCandidatePromotion(result));
   } catch (error) {

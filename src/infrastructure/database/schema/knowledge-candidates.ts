@@ -16,6 +16,7 @@ import {
 
 import {
   knowledgeCandidateStatuses,
+  type KnowledgeCandidateItemReview,
   type ProposedKnowledgeGraph
 } from "@/domain/knowledge/knowledge-candidate";
 
@@ -39,6 +40,7 @@ export const knowledgeCandidates = pgTable(
     chunkId: uuid().notNull(),
     model: text().notNull(),
     graph: jsonb().$type<ProposedKnowledgeGraph>().notNull(),
+    itemReviews: jsonb().$type<readonly KnowledgeCandidateItemReview[]>().notNull().default([]),
     status: knowledgeCandidateStatus().notNull().default("pending"),
     reviewedBy: uuid().references(() => users.id, { onDelete: "restrict" }),
     reviewReason: text(),

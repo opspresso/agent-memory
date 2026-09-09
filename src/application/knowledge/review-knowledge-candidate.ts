@@ -2,6 +2,8 @@ import {
   canAccessScopedResource,
   type OrganizationAccess
 } from "@/domain/identity/organization-access";
+import { selectKnowledgeCandidateItems } from "@/domain/knowledge/knowledge-candidate-selection";
+import type { KnowledgeCandidateSelection } from "@/domain/knowledge/knowledge-candidate";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import type {
   KnowledgeCandidateAcceptResult,
@@ -176,7 +178,8 @@ export function buildAcceptKnowledgeCandidate(
   return async function execute(
     access: OrganizationAccess,
     candidateId: string,
-    reason?: string
+    reason?: string,
+    selection?: KnowledgeCandidateSelection
   ): Promise<AcceptKnowledgeCandidateResult> {
     const candidate = await dependencies.repository.findById(
       access.organizationId,
@@ -189,6 +192,7 @@ export function buildAcceptKnowledgeCandidate(
     if (candidate.status === "rejected") {
       throw new KnowledgeCandidateReviewConflictError();
     }
+    if (selection) { selectKnowledgeCandidateItems(candidate, selection); }
     if (candidate.status === "accepted") {
       const existing = await dependencies.repository.accept({
         candidateId,
@@ -200,6 +204,10 @@ export function buildAcceptKnowledgeCandidate(
       });
       return { ...promotionFromAcceptResult(existing), ontologyWarnings: [] };
     }
+    const selected = selectKnowledgeCandidateItems(candidate, selection);
+    if (candidate.graph.entities.length === 0) {
+      throw new InvalidKnowledgeCandidateReviewError("empty extraction cannot be accepted");
+    }
     const settings = await dependencies.ontologyReader.findByOrganization(
       access.organizationId
     );
@@ -208,13 +216,13 @@ export function buildAcceptKnowledgeCandidate(
           settings.mode,
           evaluateKnowledgeOntology(
             settings.ontology,
-            candidateOntologyTerms(candidate)
+            candidateOntologyTerms({ ...candidate, graph: selected.graph })
           )
         )
       : [];
     const embeddings = dependencies.embeddingService
       ? await dependencies.embeddingService.embedMany(
-          candidate.graph.entities.map(
+          selected.graph.entities.map(
             (entity) => `${entity.canonicalName}\n${entity.summary ?? ""}`
           ),
           {
@@ -225,13 +233,13 @@ export function buildAcceptKnowledgeCandidate(
       : [];
     if (
       dependencies.embeddingService &&
-      embeddings.length !== candidate.graph.entities.length
+      embeddings.length !== selected.graph.entities.length
     ) {
       throw new Error(
         "embedding result count does not match knowledge candidate entities"
       );
     }
-    const entityPromotions = candidate.graph.entities.map((entity, index) => ({
+    const entityPromotions = selected.graph.entities.map((entity, index) => ({
       key: entity.key,
       id: dependencies.generateId(),
       ...(embeddings[index] ? { embedding: embeddings[index] } : {})
@@ -239,6 +247,7 @@ export function buildAcceptKnowledgeCandidate(
     const promoted = await dependencies.repository.accept({
       candidateId,
       entityPromotions,
+      ...(selection ? { selection } : {}),
       organizationId: access.organizationId,
       ...(normalizedReason(reason) ? { reason: normalizedReason(reason) } : {}),
       relationshipIds: candidate.graph.relationships.map(() =>
@@ -275,7 +284,8 @@ export function buildRejectKnowledgeCandidate(
   return async function execute(
     access: OrganizationAccess,
     candidateId: string,
-    reason?: string
+    reason?: string,
+    selection?: KnowledgeCandidateSelection
   ): Promise<KnowledgeCandidate> {
     const candidate = await dependencies.repository.findById(
       access.organizationId,
@@ -285,12 +295,15 @@ export function buildRejectKnowledgeCandidate(
       throw new KnowledgeCandidateNotFoundError();
     }
     authorizeReviewer(access, candidate);
+    const selected = selectKnowledgeCandidateItems(candidate, selection, "rejected");
     if (candidate.status === "accepted") {
+      if (selection && selected.items.length === 0) { return candidate; }
       throw new KnowledgeCandidateReviewConflictError();
     }
     const normalized = normalizedReason(reason);
     const rejected = await dependencies.repository.reject({
       candidateId,
+      ...(selection ? { selection } : {}),
       organizationId: access.organizationId,
       ...(normalized ? { reason: normalized } : {}),
       reviewedAt: dependencies.clock(),

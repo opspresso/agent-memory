@@ -1,7 +1,8 @@
 import type { MemoryEmbedding } from "../memory/memory";
 import type { OrganizationAccess } from "../identity/organization-access";
-import type { KnowledgeCandidate } from "./knowledge-candidate";
+import type { KnowledgeCandidate, KnowledgeCandidateSelection } from "./knowledge-candidate";
 import type { KnowledgeEdge, KnowledgeNode } from "./knowledge-graph";
+import type { KnowledgeReviewSource } from "./knowledge-review-group";
 
 export interface KnowledgeCandidateEntityPromotion {
   readonly key: string;
@@ -22,6 +23,7 @@ export type KnowledgeCandidateAcceptResult =
   | Readonly<{ status: "already_rejected" }>;
 
 export interface KnowledgeCandidateRepository {
+  listReviewSources(access: OrganizationAccess): Promise<readonly KnowledgeReviewSource[]>;
   findById(
     organizationId: string,
     candidateId: string
@@ -37,6 +39,7 @@ export interface KnowledgeCandidateRepository {
   save(candidate: KnowledgeCandidate): Promise<KnowledgeCandidate>;
   accept(input: {
     readonly candidateId: string;
+    readonly selection?: KnowledgeCandidateSelection;
     readonly entityPromotions: readonly KnowledgeCandidateEntityPromotion[];
     readonly organizationId: string;
     readonly reason?: string;
@@ -46,6 +49,7 @@ export interface KnowledgeCandidateRepository {
   }): Promise<KnowledgeCandidateAcceptResult>;
   reject(input: {
     readonly candidateId: string;
+    readonly selection?: KnowledgeCandidateSelection;
     readonly organizationId: string;
     readonly reason?: string;
     readonly reviewedAt: Date;
