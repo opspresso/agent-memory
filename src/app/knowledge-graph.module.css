@@ -24,29 +24,26 @@
 .toolbar :global(.mantine-Input-section) { color: var(--mantine-color-dimmed); }
 .search { width: min(190px, 46%); }
 .zoomValue { min-width: 36px; color: var(--mantine-color-dimmed); text-align: center; }
-.graph { position: relative; z-index: 1; display: block; width: 100%; height: 100%; transition: viewBox 180ms ease; }
-.centerGlow { pointer-events: none; }
-.orbit { fill: none; stroke: light-dark(#d6dbe7, #30364b); stroke-dasharray: .7 2.2; stroke-width: .18; }
-.edge { fill: none; stroke: #68729c; stroke-linecap: round; stroke-width: 0.34; }
+.graph { position: relative; z-index: 1; display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.edge { fill: none; stroke: #68729c; stroke-linecap: round; stroke-width: 1.2; }
 .arrow { fill: #8b95c4; }
-.edgeLabel { fill: light-dark(#434b63, #d4d8ea); font-family: var(--font-mono); font-size: 1.55px; font-weight: 650; paint-order: stroke; stroke: light-dark(#f5f7fb, #111520); stroke-width: 1.35px; text-anchor: middle; }
+.edgeLabel { fill: light-dark(#434b63, #d4d8ea); font-family: var(--font-mono); font-size: 10px; font-weight: 650; paint-order: stroke; stroke: light-dark(#f5f7fb, #111520); stroke-width: 4px; text-anchor: middle; }
 .edge, .edgeLabel, .node { transition: opacity 160ms ease; }
 .graph g[data-muted] { opacity: 0.1; }
-.node { cursor: pointer; outline: none; }
+.node { cursor: grab; outline: none; }
 .node circle { transition: opacity 160ms ease, transform 160ms ease, stroke-width 160ms ease; }
 .nodeAura { fill: var(--node-accent); opacity: .08; }
-.nodeRing { fill: none; stroke: var(--node-accent); stroke-width: .22; opacity: .55; }
-.nodeCore { fill: color-mix(in srgb, var(--node-accent) 12%, var(--memory-surface)); stroke: color-mix(in srgb, var(--node-accent) 82%, white); stroke-width: .48; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
+.nodeRing { fill: none; stroke: var(--node-accent); stroke-width: 1; opacity: .55; }
+.nodeCore { fill: color-mix(in srgb, var(--node-accent) 12%, var(--memory-surface)); stroke: color-mix(in srgb, var(--node-accent) 82%, white); stroke-width: 1.5; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
 .node:hover .nodeAura, .node:focus-visible .nodeAura, .node[data-selected] .nodeAura { opacity: .26; transform: scale(1.12); }
-.node:hover .nodeRing, .node:focus-visible .nodeRing, .node[data-selected] .nodeRing { stroke-width: .52; transform: scale(1.08); }
-.node:hover .nodeCore, .node:focus-visible .nodeCore, .node[data-selected] .nodeCore { fill: color-mix(in srgb, var(--node-accent) 22%, var(--memory-surface)); stroke-width: .72; transform: scale(1.03); }
-.node[data-center] .nodeCore { fill: color-mix(in srgb, var(--node-accent) 22%, var(--memory-surface)); stroke: #f3f0ff; stroke-width: .65; }
-.node[data-center] .nodeRing { stroke: #d9d5ff; stroke-dasharray: .7 .6; opacity: .9; }
+.node:hover .nodeRing, .node:focus-visible .nodeRing, .node[data-selected] .nodeRing { stroke-width: 2; transform: scale(1.08); }
+.node:hover .nodeCore, .node:focus-visible .nodeCore, .node[data-selected] .nodeCore { fill: color-mix(in srgb, var(--node-accent) 22%, var(--memory-surface)); stroke-width: 2.5; transform: scale(1.03); }
+.node[data-center] .nodeCore { fill: color-mix(in srgb, var(--node-accent) 22%, var(--memory-surface)); stroke: #f3f0ff; stroke-width: 2; }
+.node[data-center] .nodeRing { stroke: #d9d5ff; stroke-dasharray: 3 3; opacity: .9; }
 .node[data-search-match] .nodeAura { opacity: .34; }
-.node[data-search-match] .nodeRing { stroke-width: .7; filter: drop-shadow(0 0 2px var(--node-accent)); }
-.nodeKind, .nodeLabel { pointer-events: none; fill: var(--mantine-color-text); paint-order: stroke; stroke: light-dark(rgba(255,255,255,.8), rgba(13,14,24,.72)); stroke-width: .32px; }
-.nodeKind { font-family: var(--font-mono); font-size: 1.25px; font-weight: 650; letter-spacing: 0.04em; }
-.nodeLabel { font-size: 2px; font-weight: 650; }
+.node[data-search-match] .nodeRing { stroke-width: 2; filter: drop-shadow(0 0 2px var(--node-accent)); }
+.nodeLabel { pointer-events: none; fill: var(--mantine-color-text); paint-order: stroke; stroke: light-dark(rgba(255,255,255,.8), rgba(13,14,24,.72)); stroke-width: 3px; }
+.nodeLabel { font-size: 12px; font-weight: 650; }
 .legend { position: absolute; right: var(--mantine-spacing-md); bottom: var(--mantine-spacing-md); left: var(--mantine-spacing-md); display: flex; gap: 6px; flex-wrap: wrap; }
 .kindChip { display: inline-flex; gap: 5px; align-items: center; padding: 4px 8px; border: 1px solid rgba(189, 195, 232, .18); border-radius: 999px; color: var(--mantine-color-text); background: var(--memory-surface); box-shadow: 0 8px 24px rgba(0, 0, 0, .15); font: inherit; font-size: 10px; cursor: pointer; backdrop-filter: blur(14px); }
 .kindChip span { width: 6px; height: 6px; border-radius: 50%; background: var(--node-accent); }
@@ -75,3 +72,19 @@
 @media (max-width: 48em) { .inspector { max-height: none; } }
 
 .nodeList > div { max-height: 180px; overflow-y: auto; }
+
+.controls { position: absolute; z-index: 3; top: var(--mantine-spacing-md); right: var(--mantine-spacing-md); padding: 4px; border: 1px solid var(--memory-border); border-radius: 8px; background: var(--memory-surface); }
+.gestureHint { position: absolute; z-index: 2; bottom: 58px; left: 16px; right: 16px; color: var(--mantine-color-dimmed); pointer-events: none; }
+.legend { z-index: 2; }
+.graph:active, .node:active { cursor: grabbing; }
+.graph g[data-active] .edge { stroke: var(--mantine-color-brand-5); stroke-width: 1.8; }
+.node[data-pinned] .nodeRing { stroke-dasharray: 3 3; }
+.explorer[data-fullscreen] { height: calc(100dvh - 76px); }
+.explorer[data-fullscreen] .canvas { height: 100%; min-height: 0; }
+.explorer[data-fullscreen] .inspector { max-height: 100%; }
+@media (max-width: 48em) {
+  .explorer[data-fullscreen] { grid-template-rows: minmax(350px, 65dvh) auto; height: auto; }
+  .explorer[data-fullscreen] .canvas { height: 65dvh; }
+  .explorer[data-fullscreen] .inspector { max-height: none; }
+}
+@media (max-width: 36em) { .controls { top: 58px; } }

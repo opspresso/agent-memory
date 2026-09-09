@@ -127,8 +127,7 @@ export const en = {
   "guide.graph.title": "Follow relationships without losing the evidence.",
   "guide.graph.body":
     "Open Knowledge Graph from the sidebar or explore relationships from a search result. Search for a node, select it in the map or node list, then inspect connected relationships and original sources. Use the selected node as a new exploration center.",
-  "guide.graph.note":
-    "The node list also supports keyboard navigation. Every node and relationship is grounded in a readable Memory or document chunk; sources are checked again when the exploration center changes.",
+  "guide.graph.note": "Drag nodes to pin their positions, drag the background to pan, and scroll or pinch to zoom. Use fit, reset layout, or full screen; press Escape to leave full screen. Keyboard node navigation and readable source evidence remain available.",
   "guide.review.title": "Automatically apply qualified knowledge and review uncertain items.",
   "guide.review.body": "With a knowledge extraction model and document worker configured, a separate AI verification checks source quotations, usefulness, conflicts, and ontology rules. Repeated entities and relationships in the same scope are grouped with their sources. AI judgments and quotation checks do not guarantee factual accuracy.",
   "guide.review.accept": "Automatic acceptance",
@@ -391,6 +390,10 @@ export const en = {
   "result.evidence.memoryKnowledge": "Knowledge connected from a memory",
   "result.evidence.documentKnowledge": "Knowledge connected from document evidence",
   "result.evidence.graph": "Knowledge Graph evidence",
+  "graph.resetLayout": "Reset layout",
+  "graph.gestureHint": "Drag nodes to pin · Drag background to pan · Scroll or pinch to zoom",
+  "graph.fullscreen": "Full screen",
+  "graph.exitFullscreen": "Exit full screen",
   "graph.mapLabel": "Knowledge Graph relationship map",
   "graph.searchLabel": "Search Graph nodes",
   "graph.searchPlaceholder": "Find a node",

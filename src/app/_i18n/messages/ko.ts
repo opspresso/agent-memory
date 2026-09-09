@@ -129,8 +129,7 @@ export const ko: Messages = {
   "guide.graph.title": "관계를 따라가되, 근거에서 멀어지지 않습니다.",
   "guide.graph.body":
     "왼쪽 Knowledge Graph 메뉴나 검색 결과의 관계 보기에서 탐색을 시작합니다. Node를 검색한 뒤 지도 또는 node 목록에서 선택하고, 연결 관계와 원문 근거를 확인합니다. 선택한 node를 새로운 탐색 중심으로 바꿀 수 있습니다.",
-  "guide.graph.note":
-    "Node 목록은 키보드로도 탐색할 수 있습니다. Node와 관계는 읽을 수 있는 Memory나 문서 조각을 근거로 하며, 중심을 변경할 때 source 접근 권한을 다시 검사합니다.",
+  "guide.graph.note": "노드를 드래그해 위치를 고정하고 배경을 드래그해 이동합니다. 휠·핀치로 확대하며 화면 맞춤·배치 초기화·전체 화면을 사용할 수 있습니다. 전체 화면은 Esc로 종료합니다. 키보드 노드 목록과 읽을 수 있는 원문 근거도 함께 제공합니다.",
   "guide.review.title": "기준을 통과한 지식은 자동 반영하고, 애매한 항목만 확인합니다.",
   "guide.review.body": "지식 추출 모델과 문서 worker가 설정되면 추출과 별도의 AI 검증으로 원문 인용, 유용성, 충돌과 사전 기준을 확인합니다. 같은 공유 범위의 반복된 개체·관계는 출처를 모아 보여줍니다. AI 판단과 인용 확인이 사실 정확성을 보장하지는 않습니다.",
   "guide.review.accept": "자동 승인",
@@ -390,6 +389,10 @@ export const ko: Messages = {
   "result.evidence.memoryKnowledge": "Memory에서 연결된 지식",
   "result.evidence.documentKnowledge": "문서 근거에서 연결된 지식",
   "result.evidence.graph": "Knowledge Graph 근거",
+  "graph.resetLayout": "배치 초기화",
+  "graph.gestureHint": "노드 드래그로 위치 고정 · 배경 드래그로 이동 · 휠·핀치로 확대",
+  "graph.fullscreen": "전체 화면",
+  "graph.exitFullscreen": "전체 화면 종료",
   "graph.mapLabel": "Knowledge Graph 관계 지도",
   "graph.searchLabel": "Graph node 검색",
   "graph.searchPlaceholder": "Node 찾기",
