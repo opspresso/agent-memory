@@ -1,6 +1,6 @@
 {
   "name": "agent-memory",
-  "version": "0.19.1",
+  "version": "0.20.0",
   "private": true,
   "scripts": {
     "dev": "WATCHPACK_POLLING=true next dev --port 3100",
@@ -30,6 +30,10 @@
     "@opentelemetry/sdk-node": "^0.221.0",
     "@tabler/icons-react": "^3.46.0",
     "better-auth": "^1.7.1",
+    "d3-drag": "^3.0.0",
+    "d3-force": "^3.0.0",
+    "d3-selection": "^3.0.0",
+    "d3-zoom": "^3.0.0",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.23.0",
     "pg-boss": "^12.28.0",
@@ -41,6 +45,10 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@testcontainers/postgresql": "^12.1.0",
+    "@types/d3-drag": "^3.0.7",
+    "@types/d3-force": "^3.0.10",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-zoom": "^3.0.8",
     "@types/node": "^24.13.3",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.2.18",
