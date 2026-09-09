@@ -2611,6 +2611,33 @@ describe("PostgreSQL schema", () => {
     expect(await repository.reviewSummary({ ...access, organizationId: organizationB })).toEqual({ automaticAccepted: 0, automaticIgnored: 0 });
   });
 
+  it("consolidates symmetric edges and provenance when a merge reverses endpoint order", async () => {
+    const organization = randomUUID(), user = randomUUID(), memoryId = randomUUID(), otherMemoryId = randomUUID();
+    await pool.query("INSERT INTO organizations(id,slug,name) VALUES($1,$2,'Symmetric merge')", [organization, organization]);
+    await pool.query("INSERT INTO users(id,email,name) VALUES($1,$2,'Reviewer')", [user, `${user}@example.test`]);
+    await pool.query("INSERT INTO organization_members(organization_id,user_id,role,status) VALUES($1,$2,'owner','active')", [organization, user]);
+    const scope = { kind: "organization" as const, organizationId: organization };
+    const now = new Date();
+    for (const id of [memoryId, otherMemoryId]) {
+      await createMemoryRepository(db).save(createMemory({ id, kind: "fact", scope, title: "Family", content: "A and B are siblings.", source: { type: "user" }, createdBy: user, validFrom: now, now }));
+    }
+    const repository = createKnowledgeGraphRepository(db);
+    const ids = [randomUUID(), randomUUID(), randomUUID()].sort();
+    const [low, middle, high] = await Promise.all(ids.map((id, index) => repository.saveNode(createKnowledgeNode({
+      id, scope, kind: "person", canonicalName: `Person ${index}`, source: { memoryId }, now
+    }))));
+    const retained = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
+      sourceNodeId: low!.id, targetNodeId: middle!.id, predicate: "sibling_of", source: { memoryId }, now }));
+    const moved = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
+      sourceNodeId: middle!.id, targetNodeId: high!.id, predicate: "sibling_of", source: { memoryId: otherMemoryId }, now }));
+    await repository.mergeNodes({ organizationId: organization, sourceNodeId: high!.id, targetNodeId: low!.id, mergedBy: user, reason: "Same person", now });
+    expect(await repository.findEdgeById(organization, moved.id)).toBeNull();
+    expect((await repository.findEdgeById(organization, retained.id))?.sources).toEqual(expect.arrayContaining([{ memoryId }, { memoryId: otherMemoryId }]));
+    const repeated = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
+      sourceNodeId: middle!.id, targetNodeId: low!.id, predicate: "sibling_of", source: { memoryId: otherMemoryId }, now }));
+    expect(repeated.id).toBe(retained.id);
+  });
+
   it("accumulates descriptions from visible sources and never searches archived descriptions", async () => {
     const organization = randomUUID(), user = randomUUID();
     await pool.query("INSERT INTO organizations(id,slug,name) VALUES($1,$2,'Description test')", [organization, organization]);
@@ -2649,6 +2676,17 @@ describe("PostgreSQL schema", () => {
     expect(merged?.summary).toContain("Crimson");
     expect(merged?.summary).toContain("Emerald");
     expect(merged?.sources).toHaveLength(2);
+
+    // A visible source without a description must not revive the shared summary
+    // left by an archived source. Exercise every public node read path.
+    const withoutDescription = await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
+      source: { chunkId: chunkIds[1]! }, now: new Date() }));
+    await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
+      summary: "Archived secret biography.", source: { chunkId: chunkIds[0]! }, now: new Date() }));
+    expect((await repository.searchNodes({ access, query: "Zhang Fei", limit: 10 }))[0]?.node.summary).toBeUndefined();
+    expect((await repository.findNodesByCanonicalNames(access, scope, ["Zhang Fei"]))[0]?.summary).toBeUndefined();
+    expect((await repository.findNeighborhood(access, withoutDescription.id, 1, 10)).nodes[0]?.summary).toBeUndefined();
+    expect(await repository.searchNodes({ access, query: "biography", limit: 10 })).toEqual([]);
 
     const candidates = createKnowledgeCandidateRepository(db);
     expect(await candidates.processingProgress(access)).toEqual({ totalChunks: 1, extractedChunks: 0, curatedChunks: 0 });
