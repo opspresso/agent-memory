@@ -84,6 +84,11 @@ test("onboards, approves, and manages members through the console", async ({
     page.getByRole("heading", { name: "통합 검색", exact: true })
   ).toBeVisible();
 
+  const authCookieNames = (await page.context().cookies()).map((cookie) => cookie.name);
+  expect(authCookieNames).toContain("agent-memory.session_token");
+  expect(authCookieNames).not.toContain("better-auth.session_token");
+  expect(authCookieNames).not.toContain("agent-studio.session_token");
+
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "애플리케이션 설정" })).toBeVisible();
   await page.getByRole("button", { name: "인증 및 접근" }).click();

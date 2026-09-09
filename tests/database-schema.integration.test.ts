@@ -290,6 +290,12 @@ describe("PostgreSQL schema", () => {
       .getSetCookie()
       .map((value) => value.split(";", 1)[0])
       .join("; ");
+    expect(cookie).toContain("agent-memory.session_token=");
+    expect(cookie).not.toContain("better-auth.session_token=");
+    const otherAppSession = await testAuth.handler(new Request("http://localhost:3100/api/auth/get-session", {
+      headers: { cookie: cookie.replaceAll("agent-memory.", "agent-studio.") }
+    }));
+    expect(await otherAppSession.json()).toBeNull();
     const bearerToken = signUpResponse.headers.get("set-auth-token");
     expect(bearerToken).toBeTruthy();
     const sessionResponse = await testAuth.handler(

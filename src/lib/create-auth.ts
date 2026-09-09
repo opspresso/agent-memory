@@ -71,6 +71,7 @@ export function createAuth(options: CreateAuthOptions) {
       transaction: true
     }),
     advanced: {
+      cookiePrefix: "agent-memory",
       database: {
         generateId: "uuid"
       }

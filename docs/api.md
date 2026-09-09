@@ -20,6 +20,11 @@ export AGENT_MEMORY_TOKEN='<better-auth-session-token>'
 
 ## 인증과 요청 경계
 
+Better Auth의 `advanced.cookiePrefix`는 `agent-memory`다. 세션 쿠키는
+`agent-memory.session_token`이며 HTTPS 설정에서는 `__Secure-`가 붙는다. Studio의
+`agent-studio` 쿠키와 분리하며 이전 `better-auth` 쿠키를 인증에 사용하지 않는다.
+접두어 변경 배포 후 브라우저 사용자는 다시 로그인해야 한다.
+
 인증 방식과 사용할 수 있는 endpoint는 다음과 같다.
 
 | 인증 | 사용 범위 | 권한 주체 |
