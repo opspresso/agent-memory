@@ -90,31 +90,93 @@ test("onboards, approves, and manages members through the console", async ({
   expect(authCookieNames).not.toContain("agent-studio.session_token");
 
   await page.goto("/settings");
-  await expect(page.getByRole("heading", { name: "애플리케이션 설정" })).toBeVisible();
-  await page.getByRole("button", { name: "인증 및 접근" }).click();
+  await expect(page.getByRole("heading", { name: "설정", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "문서 처리", exact: true }).click();
+  const enrichment = page.getByRole("textbox", { name: /KNOWLEDGE_ENRICHMENT_CONCURRENCY/ });
+  await expect(enrichment).toHaveValue("4");
+  await enrichment.fill("6");
+  await expect(page.getByRole("button", { name: "설치 설정 저장", exact: true })).toBeEnabled();
+  await enrichment.fill("4");
+  await expect(page.getByRole("button", { name: "설치 설정 저장", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "AI 모델", exact: true }).click();
+  await page.getByRole("textbox", { name: "설치 설정 검색 · 이름 또는 환경 변수" }).fill("KNOWLEDGE_ENRICHMENT_CONCURRENCY");
+  await expect(enrichment).toBeVisible();
+  await page.getByRole("button", { name: "검색 지우기", exact: true }).click();
+  await expect(page.getByLabel(/EMBEDDING_API_KEY/)).toHaveValue("");
+  await page.getByLabel(/EMBEDDING_API_KEY/).fill("draft-secret-only");
+  await page.getByRole("button", { name: "변경 취소", exact: true }).click();
+  await expect(page.getByLabel(/EMBEDDING_API_KEY/)).toHaveValue("");
+  await expect(page.getByRole("button", { name: "설치 설정 저장", exact: true })).toBeDisabled();
+
+  await page.screenshot({ path: testInfo.outputPath("settings-ai-desktop-ko.png"), fullPage: true });
+  await page.getByRole("button", { name: "인증 및 접근", exact: true }).click();
   await expect(page.getByLabel(/ALLOWED_EMAIL_DOMAINS/)).toHaveValue("nalbam.com");
-  await page.getByRole("button", { name: "로그 및 telemetry" }).click();
-  await page.getByRole("textbox", { name: /LOG_LEVEL/ }).fill("trace");
-  await page.getByRole("textbox", { name: /LOG_LEVEL/ }).fill("debug");
+  await page.getByRole("button", { name: "로그 및 모니터링", exact: true }).click();
+  const logLevel = page.getByRole("combobox", { name: /LOG_LEVEL/ });
+  const exportMode = page.getByRole("combobox", { name: /LANGFUSE_EXPORT_MODE/ });
+  await exportMode.click(); await page.getByRole("option", { name: "batched", exact: true }).click();
+  await page.getByRole("button", { name: "자동 · 실행 환경 기본값", exact: true }).click({ timeout: 15_000 });
+  await expect(exportMode).toHaveValue("");
+  await expect(page.getByRole("button", { name: "설치 설정 저장", exact: true })).toBeDisabled();
+
+  await logLevel.click(); await page.getByRole("option", { name: "trace", exact: true }).click();
+  await logLevel.click(); await page.getByRole("option", { name: "debug", exact: true }).click();
+  await page.getByRole("button", { name: "AI 모델", exact: true }).click();
+  await page.getByRole("button", { name: "로그 및 모니터링", exact: true }).click();
+  await expect(logLevel).toHaveValue("debug");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.getByRole("link", { name: "가이드", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\?section=observability$/);
+  await page.getByRole("link", { name: "설정", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.getByRole("button", { name: "로그 및 모니터링", exact: true }).click();
+  await expect(logLevel).toHaveValue("debug");
+
+
+  await page.route("**/api/settings/runtime", async (route) => {
+    if (route.request().method() === "PUT") { await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Settings temporarily unavailable" }) }); }
+    else { await route.continue(); }
+  });
+  await page.getByRole("button", { name: "설치 설정 저장", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Settings temporarily unavailable" })).toBeVisible();
+  await expect(logLevel).toHaveValue("debug");
+  await page.unroute("**/api/settings/runtime");
   let releaseSave!: () => void;
   const saveGate = new Promise<void>((resolve) => { releaseSave = resolve; });
   await page.route("**/api/settings/runtime", async (route) => {
-    if (route.request().method() === "PUT") await saveGate;
+    if (route.request().method() === "PUT") {
+      expect(route.request().postDataJSON()).toEqual({ reset: [], values: { LOG_LEVEL: "debug" } });
+      await saveGate;
+    }
     await route.continue();
   });
-  await page.getByRole("button", { name: "Override 저장" }).click();
-  await expect(page.getByRole("textbox", { name: /LOG_LEVEL/ })).toBeDisabled();
+  await page.getByRole("button", { name: "설치 설정 저장", exact: true }).click();
+  await expect(logLevel).toBeDisabled();
   releaseSave();
   await expect(page.getByText("애플리케이션 설정을 저장했습니다.", { exact: true })).toBeVisible();
+  await expect(page.getByText("재시작 후 적용되는 변경이 있습니다.", { exact: true })).toBeVisible();
   await page.unroute("**/api/settings/runtime");
   await page.reload();
-  await page.getByRole("button", { name: "로그 및 telemetry" }).click();
-  await expect(page.getByRole("textbox", { name: /LOG_LEVEL/ })).toHaveValue("debug");
-  await page.getByRole("button", { name: "LOG_LEVEL에 환경 변수 값 사용", exact: true }).click();
-  await page.getByRole("button", { name: "Override 저장" }).click();
+  await expect(logLevel).toHaveValue("debug");
+  const restoreLogLevel = page.getByRole("button", { name: "LOG_LEVEL에 환경 변수 값 사용", exact: true });
+  await restoreLogLevel.click();
+  await expect(logLevel).toBeDisabled();
+  await restoreLogLevel.click();
+  await expect(logLevel).toBeEnabled();
+  await restoreLogLevel.click();
+  await page.getByRole("button", { name: "설치 설정 저장", exact: true }).click();
   await expect(page.getByText("애플리케이션 설정을 저장했습니다.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "LOG_LEVEL에 환경 변수 값 사용", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("textbox", { name: /LOG_LEVEL/ })).toHaveValue("info");
+  await expect(restoreLogLevel).toHaveCount(0);
+  await expect(logLevel).toHaveValue("info");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(logLevel).toHaveValue("info");
+  const settingsNavigation = page.getByRole("navigation", { name: "설정 분류", exact: true });
+  await expect.poll(async () => (await settingsNavigation.boundingBox())?.x ?? 1000).toBeLessThan(25);
+  await expect.poll(async () => (await settingsNavigation.boundingBox())?.width ?? 0).toBeGreaterThan(340);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("settings-mobile-ko.png"), fullPage: true, animations: "disabled" });
+  await page.setViewportSize({ width: 1280, height: 900 });
 
   const defaultTeam = await postJson<{ id: string }>(
     page,
@@ -122,18 +184,26 @@ test("onboards, approves, and manages members through the console", async ({
     { name: "E2E Default Team", slug: `e2e-default-${runId}-${testInfo.retry}` }
   );
 
-  await page.goto("/settings");
-  await expect(
-    page.getByRole("heading", { name: "조직 설정" })
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "애플리케이션 설정" })
-  ).toBeVisible();
-  await page.getByRole("button", { name: "인증 및 접근" }).click();
-  await expect(page.getByLabel(/ALLOWED_EMAIL_DOMAINS/)).toHaveValue("nalbam.com");
+  let releaseRecommendations!: () => void;
+  const recommendationsGate = new Promise<void>((resolve) => { releaseRecommendations = resolve; });
+  await page.route("**/api/knowledge/ontology/recommendations", async (route) => {
+    await recommendationsGate;
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "recommendations unavailable" }) });
+  });
+  await page.goto("/settings?section=general");
+  await expect(page.getByRole("heading", { name: "조직 프로필", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "검증 모드", exact: true })).toBeHidden();
   await expect(page.getByRole("combobox", { name: "신규 회원 정책" })).toHaveCount(0);
   await page.getByRole("combobox", { name: "기본 팀" }).click();
   await page.getByRole("option", { name: "E2E Default Team" }).click();
+  releaseRecommendations();
+  await page.getByRole("button", { name: "지식 사전", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "기본 팀", exact: true })).toBeHidden();
+  await expect(page.getByText("추천 용어를 불러오지 못했습니다. 직접 편집과 저장은 계속할 수 있습니다.", { exact: true })).toBeVisible();
+  await page.unroute("**/api/knowledge/ontology/recommendations");
+  await page.getByRole("button", { name: "다시 시도", exact: true }).click();
+  await expect(page.getByText("추천 용어를 불러오지 못했습니다. 직접 편집과 저장은 계속할 수 있습니다.", { exact: true })).toHaveCount(0);
+
   await page.getByRole("combobox", { name: "검증 모드" }).click();
   await page.getByRole("option", { name: "경고 · 미등록 용어 표시" }).click();
   await page.getByRole("combobox", { name: "Node kind 사전" }).fill("Service");
@@ -144,6 +214,7 @@ test("onboards, approves, and manages members through the console", async ({
     .getByRole("combobox", { name: "Edge predicate 사전" })
     .fill("depends_on");
   await page.keyboard.press("Enter");
+  await page.screenshot({ path: testInfo.outputPath("settings-dictionary-desktop-ko.png"), fullPage: true });
   await page.getByRole("button", { name: "설정 저장" }).click();
   await expect(page.getByText("설정을 저장했습니다.")).toBeVisible();
   await expect(page.getByText("recognition", { exact: true })).toBeVisible();
