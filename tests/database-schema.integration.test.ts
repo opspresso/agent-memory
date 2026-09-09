@@ -1,3 +1,5 @@
+import { buildCurateKnowledgeCandidate } from "@/application/knowledge/curate-knowledge-candidate";
+import { buildAcceptKnowledgeCandidate, buildRejectKnowledgeCandidate } from "@/application/knowledge/review-knowledge-candidate";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { randomUUID, createHash } from "node:crypto";
 import { buildCreateMemory } from "@/application/memory/create-memory";
@@ -8,7 +10,7 @@ import { ingestionFingerprint } from "@/lib/ingestion-fingerprint";
 import { and, eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   createDatabase,
@@ -2563,6 +2565,33 @@ describe("PostgreSQL schema", () => {
     expect(finished?.status).toBe("accepted");
     expect(finished?.itemReviews).toHaveLength(5);
     expect(await repository.listReviewSources(access)).toEqual([]);
+
+    const automaticChunkId = randomUUID();
+    await pool.query("INSERT INTO document_chunks (id, organization_id, document_id, ordinal, content) VALUES ($1,$2,$3,2,'A learns from B. B knows C.')", [automaticChunkId, organization, documentId]);
+    const automaticCandidate = createKnowledgeCandidate({ ...candidate, id: randomUUID(), chunkId: automaticChunkId, now });
+    await repository.save(automaticCandidate);
+    const verify = vi.fn().mockResolvedValue({ model: "independent-verifier", items: ["entity:a", "entity:b", "entity:c", "relationship:0", "relationship:1"].map((item) => ({
+      item, support: "explicit", usefulness: item === "entity:c" ? "incidental" : "useful", conflict: false, evidence: "A learns from B.", reason: "Synthetic source judgement"
+    })) });
+    const ontology = createKnowledgeOntologyReader(db);
+    const curate = buildCurateKnowledgeCandidate({
+      candidates: repository, documents: createDocumentRepository(db), access: createOrganizationAccessRepository(db),
+      graph: createKnowledgeGraphRepository(db), ontology, verification: { verify }, clock: () => now,
+      accept: buildAcceptKnowledgeCandidate({ clock: () => now, generateId: randomUUID, method: "automatic", repository, ontologyReader: ontology }),
+      reject: buildRejectKnowledgeCandidate({ clock: () => now, method: "automatic", repository })
+    });
+    await curate(organization, automaticChunkId);
+    await curate(organization, automaticChunkId);
+    expect(verify).toHaveBeenCalledTimes(1);
+    const automatic = await repository.findById(organization, automaticCandidate.id);
+    expect(automatic?.status).toBe("accepted");
+    expect(automatic?.assessment?.policyVersion).toBe("evidence-v1");
+    expect(automatic?.itemReviews).toHaveLength(5);
+    expect(automatic?.itemReviews?.every((review) => review.method === "automatic")).toBe(true);
+    expect(await repository.reviewSummary(access)).toEqual({ automaticAccepted: 3, automaticIgnored: 2 });
+    const afterAutomatic = await pool.query("SELECT (SELECT count(*) FROM knowledge_nodes WHERE organization_id=$1)::int nodes, (SELECT count(*) FROM knowledge_edges WHERE organization_id=$1)::int edges", [organization]);
+    expect(afterAutomatic.rows[0]).toEqual({ nodes: 2, edges: 1 });
+    expect(await repository.reviewSummary({ ...access, organizationId: organizationB })).toEqual({ automaticAccepted: 0, automaticIgnored: 0 });
   });
 
 });

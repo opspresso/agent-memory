@@ -18,6 +18,7 @@ export interface KnowledgeReviewOccurrence {
   readonly evidence: readonly string[];
   readonly summary?: string;
   readonly aliases: readonly string[];
+  readonly assessmentReason?: string;
 }
 
 export interface KnowledgeReviewGroup {
@@ -36,12 +37,13 @@ export interface KnowledgeReviewGroup {
 const symmetric = new Set(["spouse_of", "sibling_of", "sworn_sibling_of"]);
 const vague = new Set(["associated_with", "related_to", "related_with", "co_occurs_with"]);
 
-export function groupKnowledgeReviewSources(sources: readonly KnowledgeReviewSource[]): readonly KnowledgeReviewGroup[] {
+export function groupKnowledgeReviewSources(sources: readonly KnowledgeReviewSource[], onlyNeedsReview = false): readonly KnowledgeReviewGroup[] {
   const groups = new Map<string, KnowledgeReviewGroup>();
   for (const { candidate, documentTitle, ordinal } of sources) {
     const scope = candidate.scope;
     const scopeKey = [scope.organizationId, scope.kind, scope.kind === "team" ? scope.teamId : scope.kind === "user" ? scope.userId : ""];
     const reviewed = new Set(candidate.itemReviews?.map((review) => review.item));
+    const assessments = new Map(candidate.assessment?.items.map((item) => [item.item, item]));
     const entities = new Map(candidate.graph.entities.map((entity) => [entity.key, entity]));
     const identity = (key: string) => {
       const entity = entities.get(key)!;
@@ -49,9 +51,13 @@ export function groupKnowledgeReviewSources(sources: readonly KnowledgeReviewSou
     };
     const add = (group: Omit<KnowledgeReviewGroup, "occurrences" | "evidenceCount" | "documentCount" | "scope">,
       selection: KnowledgeCandidateSelection, evidence: readonly string[] = [], summary?: string, aliases: readonly string[] = []) => {
+      const itemKey = selection.entityKeys[0] !== undefined ? entityReviewKey(selection.entityKeys[0]) : relationshipReviewKey(selection.relationshipIndexes[0]!);
+      const assessment = assessments.get(itemKey);
+      if (onlyNeedsReview && assessment?.verdict !== "review") { return; }
       const occurrence: KnowledgeReviewOccurrence = {
         candidateId: candidate.id, documentId: candidate.documentId, documentTitle,
-        chunkId: candidate.chunkId, ordinal, selection, evidence, aliases,
+        chunkId: candidate.chunkId, ordinal, selection, evidence: evidence.length ? evidence : assessment?.evidence ? [assessment.evidence] : [], aliases,
+        ...(assessment ? { assessmentReason: assessment.reason } : {}),
         ...(summary ? { summary } : {})
       };
       const existing = groups.get(group.key);

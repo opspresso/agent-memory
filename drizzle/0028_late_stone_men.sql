@@ -1,0 +1,1 @@
+ALTER TABLE "knowledge_candidates" ADD COLUMN "assessment" jsonb;

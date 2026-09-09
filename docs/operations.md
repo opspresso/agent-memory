@@ -320,7 +320,8 @@ Schema source는 `src/infrastructure/database/schema/`, 생성된 migration은 `
 - 추출 결과가 512 chunks를 넘으면 provider 호출 전에 실패한다. 이 한도는 작업량을 제한하며 S3·DB 지연을 포함한 전체 처리 시간이 15분 lease 안에 끝남을 보장하지는 않는다. 원본을 더 작은 문서로 나눈 뒤 다시 업로드하라.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
-- AI 분석은 candidate만 생성한다. Source scope의 `manage` 권한을 가진 사용자가 운영 콘솔이나 API에서 승인해야 Knowledge Graph에 반영된다.
+- AI 추출 후 같은 모델·endpoint를 사용하는 별도 검증 요청으로 원문 근거·유용성·충돌을 평가한다. 명시적이고 유용하며 인용 검증과 정책을 통과한 항목은 자동 승인한다. 불확실한 항목은 수동 검토로 남기고 근거 없는·사소한 항목은 자동 제외한다. 검증 요청도 AI quota를 소비하며 실패하면 자동 반영하지 않고 enrichment job을 재시도한다.
+- 기본 자동 검토는 문서 생성자의 현재 active membership과 source scope `manage` 권한을 요구한다. 검토 화면의 일괄 실행은 인증된 요청자를 job에 기록하며 worker가 그 권한을 다시 확인한다. 기존 추출도 재추출 없이 검증할 수 있고, 저장된 assessment는 재시도 시 재사용한다. Worker 실행과 최신 migration 적용이 필요하다.
 
 ### Queue와 종료
 

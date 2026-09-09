@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
@@ -147,6 +147,7 @@ function candidateFromRow(
     model: row.model,
     graph: row.graph,
     itemReviews: row.itemReviews,
+    ...(row.assessment ? { assessment: row.assessment } : {}),
     status: row.status,
     ...(row.reviewedBy ? { reviewedBy: row.reviewedBy } : {}),
     ...(row.reviewReason ? { reviewReason: row.reviewReason } : {}),
@@ -213,8 +214,28 @@ export function createKnowledgeCandidateRepository(
     findById,
     findByChunkId,
 
-    async listReviewSources(access) {
-      const rows = await db.select({ candidate: knowledgeCandidates, document: documents, ordinal: documentChunks.ordinal })
+    async reviewSummary(access) {
+      const result = await db.execute<{ automaticAccepted: number; automaticIgnored: number }>(sql`
+        SELECT count(*) FILTER (WHERE review->>'decision' = 'accepted')::int AS "automaticAccepted",
+               count(*) FILTER (WHERE review->>'decision' = 'rejected')::int AS "automaticIgnored"
+        FROM ${knowledgeCandidates} JOIN ${documents}
+          ON ${documents.organizationId} = ${knowledgeCandidates.organizationId} AND ${documents.id} = ${knowledgeCandidates.documentId}
+        CROSS JOIN LATERAL jsonb_array_elements(${knowledgeCandidates.itemReviews}) AS review
+        WHERE ${knowledgeCandidates.organizationId} = ${access.organizationId}
+          AND ${documents.status} = 'ready' AND ${candidateReviewPredicate(access)} AND review->>'method' = 'automatic'
+      `);
+      return result.rows[0] ?? { automaticAccepted: 0, automaticIgnored: 0 };
+    },
+
+    async saveAssessment(organizationId, candidateId, assessment) {
+      await db.update(knowledgeCandidates).set({ assessment })
+        .where(and(eq(knowledgeCandidates.organizationId, organizationId), eq(knowledgeCandidates.id, candidateId),
+          eq(knowledgeCandidates.status, "pending"), sql`${knowledgeCandidates.assessment} IS NULL`));
+      return findById(organizationId, candidateId);
+    },
+
+    async listReviewSources(access, assessmentHistory = false) {
+      const query = db.select({ candidate: knowledgeCandidates, document: documents, ordinal: documentChunks.ordinal })
         .from(knowledgeCandidates).innerJoin(documents, and(
           eq(documents.organizationId, knowledgeCandidates.organizationId),
           eq(documents.id, knowledgeCandidates.documentId)
@@ -223,10 +244,11 @@ export function createKnowledgeCandidateRepository(
           eq(documentChunks.id, knowledgeCandidates.chunkId)
         )).where(and(
           eq(knowledgeCandidates.organizationId, access.organizationId),
-          eq(knowledgeCandidates.status, "pending"), eq(documents.status, "ready"),
+          assessmentHistory ? sql`${knowledgeCandidates.assessment} IS NOT NULL` : eq(knowledgeCandidates.status, "pending"), eq(documents.status, "ready"),
           sql`jsonb_array_length(${knowledgeCandidates.graph}->'entities') > 0`,
           candidateReviewPredicate(access)
-        )).orderBy(asc(knowledgeCandidates.createdAt), asc(knowledgeCandidates.id));
+        )).orderBy(assessmentHistory ? desc(knowledgeCandidates.updatedAt) : asc(knowledgeCandidates.createdAt), asc(knowledgeCandidates.id));
+      const rows = assessmentHistory ? await query.limit(50) : await query;
       return rows.map((row) => ({
         candidate: candidateFromRow(row.candidate, knowledgeScopeFromRow(row.document)),
         documentTitle: row.document.title, ordinal: row.ordinal
@@ -463,7 +485,7 @@ export function createKnowledgeCandidateRepository(
           );
         }
         const state = reviewedCandidateState(candidate, selected.items.map((item) => ({
-          item, decision: "accepted", reviewedBy: input.reviewedBy, reviewedAt: input.reviewedAt.toISOString(),
+          item, decision: "accepted", method: input.method ?? "human", reviewedBy: input.reviewedBy, reviewedAt: input.reviewedAt.toISOString(),
           ...(input.reason ? { reason: input.reason } : {})
         })));
         const [reviewed] = await transaction
@@ -510,7 +532,7 @@ export function createKnowledgeCandidateRepository(
         if (candidate.status === "rejected") { return candidate; }
         if (candidate.status !== "pending") { return input.selection && selected.items.length === 0 ? candidate : null; }
         const state = reviewedCandidateState(candidate, selected.items.map((item) => ({
-          item, decision: "rejected", reviewedBy: input.reviewedBy, reviewedAt: input.reviewedAt.toISOString(),
+          item, decision: "rejected", method: input.method ?? "human", reviewedBy: input.reviewedBy, reviewedAt: input.reviewedAt.toISOString(),
           ...(input.reason ? { reason: input.reason } : {})
         })));
         const [row] = await transaction.update(knowledgeCandidates).set({

@@ -77,6 +77,7 @@ function normalizedReason(reason: string | undefined) {
 }
 
 interface ReviewKnowledgeCandidateDependencies {
+  readonly method?: "human" | "automatic";
   readonly clock: () => Date;
   readonly embeddingService?: TextEmbeddingService;
   readonly generateId: () => string;
@@ -248,6 +249,7 @@ export function buildAcceptKnowledgeCandidate(
       candidateId,
       entityPromotions,
       ...(selection ? { selection } : {}),
+      ...(dependencies.method ? { method: dependencies.method } : {}),
       organizationId: access.organizationId,
       ...(normalizedReason(reason) ? { reason: normalizedReason(reason) } : {}),
       relationshipIds: candidate.graph.relationships.map(() =>
@@ -278,7 +280,7 @@ function promotionFromAcceptResult(
 export function buildRejectKnowledgeCandidate(
   dependencies: Pick<
     ReviewKnowledgeCandidateDependencies,
-    "clock" | "repository"
+    "clock" | "repository" | "method"
   >
 ) {
   return async function execute(
@@ -304,6 +306,7 @@ export function buildRejectKnowledgeCandidate(
     const rejected = await dependencies.repository.reject({
       candidateId,
       ...(selection ? { selection } : {}),
+      ...(dependencies.method ? { method: dependencies.method } : {}),
       organizationId: access.organizationId,
       ...(normalized ? { reason: normalized } : {}),
       reviewedAt: dependencies.clock(),

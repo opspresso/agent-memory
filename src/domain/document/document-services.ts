@@ -23,6 +23,7 @@ export interface DocumentTextExtractor {
 export interface DocumentKnowledgeEnrichmentQueue {
   enqueueKnowledgeEnrichment(
     organizationId: string,
-    chunkId: string
+    chunkId: string,
+    requestedBy?: string
   ): Promise<DocumentQueueEnqueueResult>;
 }

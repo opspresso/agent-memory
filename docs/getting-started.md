@@ -159,7 +159,7 @@ KNOWLEDGE_EXTRACTION_API_KEY=replace-with-provider-key
 KNOWLEDGE_EXTRACTION_MODEL=provider/structured-output-model
 ```
 
-설정 후 수집되는 문서의 chunk에서 후보를 만든다. 기존 ready 문서를 자동으로 탐색해 후보를 채우지는 않는다. 후보는 운영 콘솔의 `AI 후보 검토`에서 승인하기 전까지 공유 Knowledge Graph에 나타나지 않는다.
+설정 후 수집되는 문서의 chunk에서 후보를 만든다. 기존 ready 문서를 자동으로 탐색해 후보를 채우지는 않는다. 추출 후 별도 AI 검증과 원문 인용·권한 검사를 통과한 항목은 자동 반영하고, 불확실한 항목만 운영 콘솔의 `AI 후보 검토`에 남긴다. 기존 추출은 `AI 자동 검토 실행`으로 검증 대기열에 등록할 수 있다.
 
 ## 7. 서비스에서 기억 저장·회상·잊기
 

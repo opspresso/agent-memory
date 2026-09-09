@@ -12,7 +12,7 @@
 | `/memories` | Memory | 최신 목록·검색, 생성, 내용·출처, 수정·이력·archive |
 | `/documents` | 문서 라이브러리 | 파일 업로드, 처리 상태, 실패 재처리, 처리된 원문 읽기 |
 | `/knowledge` | Knowledge Graph | 지식 검색, 지도·노드 목록, 관계와 provenance 확인 |
-| `/review` | AI 후보 검토 | source 원문·제안·중복 후보 비교와 승인·거절 |
+| `/review` | AI 후보 검토 | 자동 검토 실행·처리 내역, 불확실한 지식의 통합 근거 비교와 부분 승인·거절 |
 | `/members`, `/teams` | 회원·팀 관리 | 역할과 소속, 가입 승인, 접근 회수 |
 | `/settings` | 조직·애플리케이션 설정 | 조직·온톨로지 및 전역 admin의 runtime override 관리 |
 | `/connect` | Agent 연결 | endpoint·token·Studio 등록 템플릿 |

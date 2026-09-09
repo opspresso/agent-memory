@@ -152,8 +152,10 @@ test("completes knowledge work with real evidence, scoped access and responsive 
       await database.query("INSERT INTO document_chunks (id, organization_id, document_id, ordinal, content) VALUES ($1,$2,$3,$4,$5)", [randomUUID(), organization.id, readyId, ordinal, `Synthetic release appendix ${ordinal + 1}.`]);
     }
     const graph = { entities: [{ key: "api", kind: "service", canonicalName: "Evidence API" }, { key: "db", kind: "database", canonicalName: "Evidence Database" }], relationships: [{ sourceKey: "api", predicate: "stores_in", targetKey: "db" }] };
+    const assessment = { model: "synthetic-verifier", policyVersion: "evidence-v1", assessedAt: new Date().toISOString(),
+      items: ["entity:api", "entity:db", "relationship:0"].map((item) => ({ item, verdict: "review", evidence: "", reason: "This synthetic example needs a human source check." })) };
     for (const [id, sourceChunk] of [[candidateId, chunkId], [rejectCandidateId, rejectChunkId]]) {
-      await database.query("INSERT INTO knowledge_candidates (id, organization_id, document_id, chunk_id, model, graph) VALUES ($1,$2,$3,$4,$5,$6)", [id, organization.id, readyId, sourceChunk, "synthetic-e2e-extractor", JSON.stringify(graph)]);
+      await database.query("INSERT INTO knowledge_candidates (id, organization_id, document_id, chunk_id, model, graph, assessment) VALUES ($1,$2,$3,$4,$5,$6,$7)", [id, organization.id, readyId, sourceChunk, "synthetic-e2e-extractor", JSON.stringify(graph), JSON.stringify(assessment)]);
     }
 
     await page.goto(`/documents?document=${pendingId}`);

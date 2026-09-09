@@ -156,7 +156,7 @@ multipart upload → S3-compatible storage → document row(pending)
 
 `buildIngestDocument` application operation은 문서 처리를 완료한 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. Worker는 job decode, operation 호출, queue retry와 로그를 담당한다. 후속 queue 등록 실패는 문서 처리 상태를 되돌리지 않으며 ingestion 재실행에서 chunk 등록을 다시 시도한다.
 
-Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `document-knowledge-enrichment-v2` queue의 별도 job으로 enqueue해 entity와 relationship 후보를 생성한다. Chunk ID별 exclusive job이 독립적으로 retry되며 한 chunk의 실패는 문서의 ready 상태나 다른 chunk의 검색·후보 생성을 되돌리지 않는다. 후보는 source chunk, scope, model을 보존하며 chunk별로 중복 생성하지 않는다. 새 추출은 별칭을 entity 속성으로 표현하고 entity·relationship마다 원문의 인용 근거를 요구한다. Adapter는 원문에 없는 인용과 근거 없는 항목, 범용 동시 등장 관계를 제거한다. 동일 kind·정규화 이름은 청크 안에서 통합하고 대칭 관계의 역방향 반복을 제거하며 근거를 합친다. 이는 인용 존재 검증이며 사실의 함의·진실성 판정은 검토자의 책임이다. AI 생성 결과는 graph에 직접 쓰지 않고 해당 scope의 `manage` 권한을 가진 사용자가 검토한 뒤 승격한다. 승인 transaction은 candidate를 잠그고 node·edge upsert, candidate→resource 관계, 항목별 reviewer audit을 함께 저장한다. 부분 검토는 원본 graph를 보존하고 itemReviews에 결정을 누적하며 미검토 항목을 pending으로 유지한다. 빈 추출은 처리 이력으로 남기고 기본 검토 큐에서 제외한다. 통합 검토 큐는 서버에서 권한 필터한 전체 pending 후보를 개체·관계 identity로 묶은 뒤 페이지를 구성한다. Node merge로 resource ID가 바뀌면 candidate 관계도 surviving resource로 옮겨 재승인 응답의 정합성을 유지한다.
+Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `document-knowledge-enrichment-v2` queue의 별도 job으로 enqueue해 entity와 relationship 후보를 생성한다. Chunk ID별 exclusive job이 독립적으로 retry되며 한 chunk의 실패는 문서의 ready 상태나 다른 chunk의 검색·후보 생성을 되돌리지 않는다. 후보는 source chunk, scope, model을 보존하며 chunk별로 중복 생성하지 않는다. 새 추출은 별칭을 entity 속성으로 표현하고 entity·relationship마다 원문의 인용 근거를 요구한다. Adapter는 원문에 없는 인용과 근거 없는 항목, 범용 동시 등장 관계를 제거한다. 동일 kind·정규화 이름은 청크 안에서 통합하고 대칭 관계의 역방향 반복을 제거하며 근거를 합친다. 이는 인용 존재 검증이며 사실의 함의·진실성 판정은 검토자의 책임이다. AI 추출 결과는 별도 검증 adapter에서 원문·기존 이름 기반 지식과 대조한다. `evidence-v1` 정책은 명시성·유용성·인용 일치·충돌 여부·온톨로지와 관계 endpoint를 평가해 자동 승인·수동 검토·자동 제외로 분리한다. 모델의 자기 보고 숫자 점수를 승인 임계값으로 사용하지 않는다. 자동 검토도 source scope의 `manage` 권한과 active membership을 요구하며 긴 AI 호출 뒤 principal을 다시 읽는다. Assessment를 먼저 보존하고 항목별 검토를 멱등 적용하므로 retry가 검증 요청·Graph를 반복 생성하지 않는다. 자동 처리에는 `method: automatic`을 기록한다. 승인 transaction은 candidate를 잠그고 node·edge upsert, candidate→resource 관계, 항목별 reviewer audit을 함께 저장한다. 부분 검토는 원본 graph를 보존하고 itemReviews에 결정을 누적하며 미검토 항목을 pending으로 유지한다. 빈 추출은 처리 이력으로 남기고 기본 검토 큐에서 제외한다. 통합 검토 큐는 서버에서 권한 필터한 수동 검토로 평가된 pending 항목을 개체·관계 identity로 묶은 뒤 페이지를 구성한다. Node merge로 resource ID가 바뀌면 candidate 관계도 surviving resource로 옮겨 재승인 응답의 정합성을 유지한다.
 
 ## Knowledge Graph와 통합 검색
 
@@ -178,7 +178,7 @@ Graph resource 삭제는 해당 scope의 `manage` 권한을 요구한다. Edge �
 
 Node merge는 같은 scope에서만 허용한다. 하나의 transaction에서 source provenance를 target에 누적하고 edge endpoint를 재작성하며 동일 edge를 병합하고 self-edge를 제거한다. Source node 삭제 전 reviewer, reason, 원래 kind와 canonical name을 merge audit에 저장한다.
 
-AI candidate는 graph와 분리된 검토 queue다. 거절은 graph를 변경하지 않으며, 승인된 candidate는 다시 거절할 수 없다. 승인·거절에는 reviewer와 선택형 사유를 남긴다.
+AI candidate는 원본 추출과 검증·처리 이력을 graph와 분리해 보존한다. 항목별 승인은 graph에 근거를 반영하고 거절은 이미 승인한 graph를 변경하지 않는다. 자동·수동 처리 구분, 실행 principal, 시각과 사유를 기록한다.
 
 ### 후보 수집과 재정렬
 

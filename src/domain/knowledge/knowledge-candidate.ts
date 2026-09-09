@@ -1,4 +1,5 @@
 import type { ScopedResource } from "@/domain/identity/organization-access";
+import type { KnowledgeCandidateAssessment } from "./knowledge-assessment";
 
 import {
   normalizeKnowledgeKind,
@@ -47,6 +48,7 @@ export interface KnowledgeCandidateItemReview {
   readonly reviewedBy: string;
   readonly reviewedAt: string;
   readonly reason?: string;
+  readonly method?: "human" | "automatic";
 }
 
 export interface KnowledgeCandidate {
@@ -58,6 +60,7 @@ export interface KnowledgeCandidate {
   readonly graph: ProposedKnowledgeGraph;
   readonly status: KnowledgeCandidateStatus;
   readonly itemReviews?: readonly KnowledgeCandidateItemReview[];
+  readonly assessment?: KnowledgeCandidateAssessment;
   readonly reviewedBy?: string;
   readonly reviewReason?: string;
   readonly reviewedAt?: Date;

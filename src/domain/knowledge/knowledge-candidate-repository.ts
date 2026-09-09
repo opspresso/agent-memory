@@ -3,6 +3,7 @@ import type { OrganizationAccess } from "../identity/organization-access";
 import type { KnowledgeCandidate, KnowledgeCandidateSelection } from "./knowledge-candidate";
 import type { KnowledgeEdge, KnowledgeNode } from "./knowledge-graph";
 import type { KnowledgeReviewSource } from "./knowledge-review-group";
+import type { KnowledgeCandidateAssessment } from "./knowledge-assessment";
 
 export interface KnowledgeCandidateEntityPromotion {
   readonly key: string;
@@ -23,7 +24,9 @@ export type KnowledgeCandidateAcceptResult =
   | Readonly<{ status: "already_rejected" }>;
 
 export interface KnowledgeCandidateRepository {
-  listReviewSources(access: OrganizationAccess): Promise<readonly KnowledgeReviewSource[]>;
+  reviewSummary(access: OrganizationAccess): Promise<{ readonly automaticAccepted: number; readonly automaticIgnored: number }>;
+  saveAssessment(organizationId: string, candidateId: string, assessment: KnowledgeCandidateAssessment): Promise<KnowledgeCandidate | null>;
+  listReviewSources(access: OrganizationAccess, assessmentHistory?: boolean): Promise<readonly KnowledgeReviewSource[]>;
   findById(
     organizationId: string,
     candidateId: string
@@ -40,6 +43,7 @@ export interface KnowledgeCandidateRepository {
   accept(input: {
     readonly candidateId: string;
     readonly selection?: KnowledgeCandidateSelection;
+    readonly method?: "human" | "automatic";
     readonly entityPromotions: readonly KnowledgeCandidateEntityPromotion[];
     readonly organizationId: string;
     readonly reason?: string;
@@ -50,6 +54,7 @@ export interface KnowledgeCandidateRepository {
   reject(input: {
     readonly candidateId: string;
     readonly selection?: KnowledgeCandidateSelection;
+    readonly method?: "human" | "automatic";
     readonly organizationId: string;
     readonly reason?: string;
     readonly reviewedAt: Date;

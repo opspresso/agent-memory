@@ -15,7 +15,7 @@ export function buildListKnowledgeReviewGroups(repository: KnowledgeCandidateRep
     }
     const sources = await repository.listReviewSources(access);
     const query = options.query?.normalize("NFKC").trim().toLowerCase();
-    const groups = groupKnowledgeReviewSources(sources).filter((group) => !query ||
+    const groups = groupKnowledgeReviewSources(sources, true).filter((group) => !query ||
       group.title.normalize("NFKC").toLowerCase().includes(query) ||
       group.occurrences.some((occurrence) => occurrence.documentTitle.normalize("NFKC").toLowerCase().includes(query)));
     const settings = await ontologyReader.findByOrganization(access.organizationId);
@@ -26,7 +26,9 @@ export function buildListKnowledgeReviewGroups(repository: KnowledgeCandidateRep
       return { ...group, ontology: { mode: settings?.mode ?? "off", violations: settings && settings.mode !== "off"
         ? evaluateKnowledgeOntology(settings.ontology, { kinds: graph.entities.map((entity) => entity.kind), predicates: graph.relationships.map((relationship) => relationship.predicate) }) : [] } };
     });
-    return { groups: page, total: groups.length,
+    const summary = await repository.reviewSummary(access);
+    return { groups: page, total: groups.length, ...summary,
+      unassessedCount: sources.filter((source) => !source.candidate.assessment).length,
       sourceCount: sources.length, offset: options.offset, limit: options.limit };
   };
 }

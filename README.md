@@ -8,7 +8,7 @@ Agent Memory는 설치당 하나의 조직에서 서비스와 AI Agent가 장기
 | --- | --- |
 | 장기 기억 | MCP `remember`로 저장, `recall`로 관련 Memory 회상, `forget`으로 archive |
 | 문서 지식 | 파일 업로드 → 원본 저장 → worker 추출·chunk 생성 → 검색 |
-| Knowledge Graph | Memory·문서 chunk를 근거로 관계를 구성하고, AI 문서 후보는 사람이 검토한 뒤 반영 |
+| Knowledge Graph | Memory·문서 chunk를 근거로 관계를 구성하고, AI 검증 기준을 통과한 지식은 자동 반영하고 불확실한 후보만 사람이 검토 |
 | 통합 검색 | `context_search`로 Memory·문서·Graph를 함께 검색 |
 
 Memory, 문서, Graph에는 개인·팀·조직 scope를 적용한다. 일반 사용자는 첫 콘솔 접속 시 가입 요청을 등록하고 운영자 승인 후 지식에 접근한다. 조직 Agent token만 사용하는 서비스는 조직 범위로 제한되며, 사용자 위임은 [MCP 인증 계약](docs/api.md#mcp)을 따른다.

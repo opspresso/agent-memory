@@ -2,6 +2,7 @@
 
 import { Alert, Badge, Button, Checkbox, Group, Pagination, Paper, ScrollArea, Skeleton, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { useT } from "../_i18n/provider";
 import { knowledgeReviewGroupsResponseSchema, type KnowledgeReviewGroupsResponse } from "../api-response-schemas";
 import { responseJson, responseOk } from "../http-response";
@@ -73,6 +74,7 @@ function GroupReview({ group, onReviewed, onBusy }: { group: ReviewGroup; onRevi
                 onChange={(event) => setSelected(event.currentTarget.checked ? [...selected, index] : selected.filter((value) => value !== index))} />
               {occurrence.aliases.length ? <Text size="sm">{t("reviewQueue.aliases", { names: occurrence.aliases.join(", ") })}</Text> : null}
               {occurrence.summary ? <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>{occurrence.summary}</Text> : null}
+              {occurrence.assessmentReason ? <Alert color="yellow">{occurrence.assessmentReason}</Alert> : null}
               {occurrence.evidence.map((quote, quoteIndex) => <Text component="blockquote" size="sm" c="dimmed" key={quoteIndex} style={{ margin: 0, overflowWrap: "anywhere" }}>“{quote}”</Text>)}
               <Button variant="subtle" size="xs" onClick={() => setExpanded(expanded === `${index}` ? undefined : `${index}`)}>{t("reviewQueue.source")}</Button>
               {expanded === `${index}` ? <SourceEvidence chunkId={occurrence.chunkId} /> : null}
@@ -101,6 +103,17 @@ export function KnowledgeReviewQueue({ onBusyChange }: { onBusyChange: (busy: bo
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [queueing, setQueueing] = useState(false);
+  async function queueCuration() {
+    setQueueing(true);
+    setError(undefined);
+    try {
+      const result = await responseJson(await fetch("/api/knowledge/curation", { method: "POST" }), t("candidate.requestFailed"), z.object({ queued: z.number() }));
+      setMessage(t("reviewQueue.queued", { count: result.queued }));
+      setAttempt((value) => value + 1);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : t("candidate.requestFailed")); }
+    finally { setQueueing(false); }
+  }
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
@@ -129,7 +142,11 @@ export function KnowledgeReviewQueue({ onBusyChange }: { onBusyChange: (busy: bo
     </Group></form>
     {message ? <Alert role="status">{message}</Alert> : null}
     {error ? <Alert color="red" role="alert">{error}</Alert> : null}
+    <Group><Button loading={queueing} disabled={busy} onClick={() => void queueCuration()}>{t("reviewQueue.automate")}</Button>
+      <Text size="sm" c="dimmed">{t("reviewQueue.autoPolicy")}</Text></Group>
     {loading ? <Skeleton height={300} /> : data ? <>
+      <Group><Badge color="teal">{t("reviewQueue.autoAccepted", { count: data.automaticAccepted })}</Badge><Badge color="gray">{t("reviewQueue.autoIgnored", { count: data.automaticIgnored })}</Badge></Group>
+      {data.unassessedCount > 0 ? <Alert>{t("reviewQueue.unassessed", { count: data.unassessedCount })}</Alert> : null}
       <Text size="sm" c="dimmed">{t("reviewQueue.total", { count: data.total, sources: data.sourceCount })}</Text>
       {selected ? <div className={classes.reviewGrid}>
         <ScrollArea className={classes.queue}><Stack gap="xs">

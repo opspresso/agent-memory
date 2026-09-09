@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { curateKnowledgeCandidate } from "./knowledge-curation-service";
 
 import { z } from "zod";
 
@@ -32,7 +33,8 @@ const ingestionJobSchema = z.object({
 
 const enrichmentJobSchema = z.object({
   organizationId: z.uuid(),
-  chunkId: z.uuid()
+  chunkId: z.uuid(),
+  requestedBy: z.uuid().optional()
 });
 
 const processDocument = buildProcessDocument({
@@ -120,6 +122,7 @@ export async function startDocumentWorker(): Promise<void> {
                   data.organizationId,
                   data.chunkId
                 );
+                await curateKnowledgeCandidate?.(data.organizationId, data.chunkId, data.requestedBy);
               } catch (error) {
                 logger.error(
                   {
