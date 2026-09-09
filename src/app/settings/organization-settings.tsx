@@ -8,6 +8,7 @@ import {
   Paper,
   Select,
   SimpleGrid,
+  Skeleton,
   Stack,
   TagsInput,
   Text,
@@ -23,7 +24,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { KnowledgeOntologyMode } from "@/domain/knowledge/knowledge-ontology";
 
-import { WorkspaceHeader } from "../workspace-components";
+import classes from "./settings.module.css";
 
 import { useT } from "../_i18n/provider";
 import {
@@ -77,15 +78,20 @@ interface OntologySuggestion {
   readonly edgePredicates: readonly string[];
 }
 
-export function OrganizationSettings() {
+interface OrganizationSettingsProps {
+  readonly section: "general" | "ontology";
+  readonly onDirtyChange: (count: number) => void;
+}
+
+export function OrganizationSettings(props: OrganizationSettingsProps) {
   const { organizationSlug } = useOrganization();
   if (!organizationSlug) {
     return null;
   }
-  return <OrganizationSettingsView key={organizationSlug} />;
+  return <OrganizationSettingsView key={organizationSlug} {...props} />;
 }
 
-function OrganizationSettingsView() {
+function OrganizationSettingsView({ section, onDirtyChange }: OrganizationSettingsProps) {
   const t = useT();
   const router = useRouter();
   const { organizationSlug, access } = useOrganization();
@@ -96,6 +102,7 @@ function OrganizationSettingsView() {
   const [ontologyMode, setOntologyMode] = useState<KnowledgeOntologyMode>("off");
   const [nodeKinds, setNodeKinds] = useState<string[]>([]);
   const [edgePredicates, setEdgePredicates] = useState<string[]>([]);
+  const [recommendationError, setRecommendationError] = useState(false);
   const [recommendation, setRecommendation] =
     useState<OntologyRecommendation>();
   const [suggestion, setSuggestion] = useState<OntologySuggestion>();
@@ -104,8 +111,28 @@ function OrganizationSettingsView() {
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
 
+  const feedback = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (error || message) { feedback.current?.focus(); } }, [error, message]);
+
   const canManage = access?.role === "admin" || access?.role === "owner";
   const formInitialized = useRef(false);
+  const changedCount = organization ? [
+    name.trim() !== organization.name,
+    defaultTeamId !== (organization.defaultTeamId ?? null),
+    ontologyMode !== (organization.ontologyMode ?? "off"),
+    JSON.stringify(nodeKinds) !== JSON.stringify(organization.ontology?.nodeKinds ?? []),
+    JSON.stringify(edgePredicates) !== JSON.stringify(organization.ontology?.edgePredicates ?? [])
+  ].filter(Boolean).length : 0;
+  useEffect(() => { onDirtyChange(changedCount); }, [changedCount, onDirtyChange]);
+  function discard() {
+    if (!organization) { return; }
+    setName(organization.name); setDefaultTeamId(organization.defaultTeamId ?? null);
+    setOntologyMode(organization.ontologyMode ?? "off");
+    setNodeKinds([...(organization.ontology?.nodeKinds ?? [])]);
+    setEdgePredicates([...(organization.ontology?.edgePredicates ?? [])]);
+    setMessage(undefined); setError(undefined);
+  }
+
   const recommendedKinds =
     recommendation?.nodeKinds.filter(
       (entry) => !nodeKinds.includes(entry.term)
@@ -121,39 +148,43 @@ function OrganizationSettingsView() {
       (term) => !edgePredicates.includes(term)
     ) ?? [];
 
-  const load = useCallback(async () => {
-    if (!organizationSlug) {
+  const loadRecommendations = useCallback(async (signal?: AbortSignal) => {
+    if (!organizationSlug || !canManage) { return; }
+    try {
+      const response = await fetch("/api/knowledge/ontology/recommendations", { signal });
+      const body = await responseJson(response, t("organization.loadFailed"), ontologyRecommendationResponseSchema);
+      if (!signal?.aborted) { setRecommendation(body); setRecommendationError(false); }
+    } catch {
+      if (!signal?.aborted) { setRecommendationError(true); }
+    }
+  }, [organizationSlug, canManage, t]);
+
+  const load = useCallback(async (signal?: AbortSignal) => {
+    if (!organizationSlug || !canManage) {
       return;
     }
     try {
-      const [detail, teamsBody, recommendationBody] = await Promise.all([
-        fetch(`/api/organization`).then((response) =>
+      const [detail, teamsBody] = await Promise.all([
+        fetch(`/api/organization`, { signal }).then((response) =>
           responseJson(
             response,
             t("organization.loadFailed"),
             organizationDetailResponseSchema
           )
         ),
-        fetch(`/api/teams`).then((response) =>
+        fetch(`/api/teams`, { signal }).then((response) =>
           responseJson(
             response,
             t("organization.loadFailed"),
             teamsResponseSchema
           )
         ),
-        fetch(
-          `/api/knowledge/ontology/recommendations`
-        ).then((response) =>
-          responseJson(
-            response,
-            t("organization.loadFailed"),
-            ontologyRecommendationResponseSchema
-          )
-        )
+
       ]);
+      if (signal?.aborted) { return; }
+      setError(undefined);
       setOrganization(detail);
       setTeams(teamsBody.teams);
-      setRecommendation(recommendationBody);
       if (!formInitialized.current) {
         formInitialized.current = true;
         setName(detail.name);
@@ -163,15 +194,19 @@ function OrganizationSettingsView() {
         setEdgePredicates([...(detail.ontology?.edgePredicates ?? [])]);
       }
     } catch (caught) {
+      if (signal?.aborted) { return; }
       setError(
         caught instanceof Error ? caught.message : t("organization.loadFailed")
       );
     }
-  }, [organizationSlug, t]);
+  }, [organizationSlug, canManage, t]);
 
   useEffect(() => {
-    void Promise.resolve().then(load);
-  }, [load]);
+    const controller = new AbortController();
+    void Promise.resolve().then(() => load(controller.signal));
+    void Promise.resolve().then(() => loadRecommendations(controller.signal));
+    return () => controller.abort();
+  }, [load, loadRecommendations]);
 
   async function save() {
     setPending(true);
@@ -244,12 +279,19 @@ function OrganizationSettingsView() {
 
   return (
     <Stack gap="lg">
-      <WorkspaceHeader title={t("settings.title")} description={t("settings.lede")} />
-      {error ? <Alert color="red">{error}</Alert> : null}
-      {message ? <Alert color="teal">{message}</Alert> : null}
+      <div className={classes.sectionHeader}>
+        <Text size="xs" c="dimmed" fw={600} mb={6}>{t("settings.title")}</Text>
+        <Title order={2}>{t(`settings.ux.nav.${section}`)}</Title>
+        <Text c="dimmed" size="sm" mt={6}>{t(`settings.ux.description.${section}`)}</Text>
+      </div>
+      {error ? <Alert ref={feedback} tabIndex={-1} color="red" role="alert">{error}{!organization ? <Button variant="light" ml="md" onClick={() => void load()}>{t("settings.ux.retry")}</Button> : null}</Alert> : null}
+      {message && !changedCount ? <Alert ref={feedback} tabIndex={-1} color="teal" role="status">{message}</Alert> : null}
+      {!organization && !error ? <Skeleton height={280} radius="lg" /> : null}
+      <fieldset className={classes.fields} disabled={pending}>
+      <Stack gap="lg">
 
       {organization ? (
-      <Paper p="lg" radius="lg" withBorder>
+      <Paper className={classes.card} hidden={section !== "general"}>
         <Stack gap="md">
           <Group gap="xs">
             <Title order={3}>{t("settings.general")}</Title>
@@ -272,22 +314,13 @@ function OrganizationSettingsView() {
             value={defaultTeamId}
           />
           </SimpleGrid>
-          <Group justify="flex-end">
-            <Button
-              disabled={name.trim().length === 0}
-              leftSection={<IconDeviceFloppy size={16} />}
-              loading={pending}
-              onClick={() => void save()}
-            >
-              {t("settings.save")}
-            </Button>
-          </Group>
+
         </Stack>
       </Paper>
       ) : null}
 
       {organization ? (
-        <Paper p="lg" radius="lg" withBorder>
+        <Paper className={classes.card} hidden={section !== "ontology"}>
           <Stack gap="md">
             <Stack gap={4}>
               <Title order={3}>{t("settings.ontology.title")}</Title>
@@ -340,6 +373,7 @@ function OrganizationSettingsView() {
               value={edgePredicates}
             />
             </SimpleGrid>
+            {recommendationError ? <Alert color="gray"><Text component="span" size="sm">{t("settings.ux.recommendationsUnavailable")}</Text> <Button variant="light" size="compact-xs" onClick={() => void loadRecommendations()}>{t("settings.ux.retry")}</Button></Alert> : null}
             {recommendedKinds.length > 0 || recommendedPredicates.length > 0 ? (
               <Stack gap={6}>
                 <Text fw={650} size="sm">
@@ -391,6 +425,7 @@ function OrganizationSettingsView() {
               <Button
                 leftSection={<IconSparkles size={16} />}
                 loading={suggestionPending}
+                disabled={pending}
                 onClick={() => void requestSuggestion()}
                 variant="default"
               >
@@ -448,6 +483,13 @@ function OrganizationSettingsView() {
         </Paper>
       ) : null}
 
+      {organization ? <div className={classes.saveBar} data-dirty={changedCount > 0 || undefined}>
+        <div><Text size="sm" fw={600}>{t(changedCount ? "settings.ux.unsaved" : "settings.ux.noChanges", { count: changedCount })}</Text><Text size="xs" c="dimmed">{t("settings.ux.organizationSaveHint")}</Text></div>
+        <Group gap="xs"><Button variant="default" disabled={!changedCount || pending} onClick={discard}>{t("settings.ux.discard")}</Button>
+          <Button leftSection={<IconDeviceFloppy size={16} />} loading={pending} disabled={!changedCount || !name.trim()} onClick={() => void save()}>{t("settings.save")}</Button></Group>
+      </div> : null}
+      </Stack>
+      </fieldset>
     </Stack>
   );
 }

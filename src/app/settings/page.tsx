@@ -1,11 +1,9 @@
 import { headers } from "next/headers";
-import { Stack } from "@mantine/core";
 import { redirect } from "next/navigation";
 
 import { getSessionUser } from "@/lib/session";
 
-import { OrganizationSettings } from "./organization-settings";
-import { ApplicationSettings } from "./application-settings";
+import { SettingsWorkspace } from "./settings-workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +12,5 @@ export default async function SettingsPage() {
   if (!user) {
     redirect("/");
   }
-  return (
-    <Stack gap="lg">
-      <ApplicationSettings isAdmin={user.isAdmin} />
-      <OrganizationSettings />
-    </Stack>
-  );
+  return <SettingsWorkspace isAdmin={user.isAdmin} />;
 }
