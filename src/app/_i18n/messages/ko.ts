@@ -35,8 +35,7 @@ export const ko: Messages = {
   "home.capability.ragBody":
     "문서를 수집해 본문을 검색합니다. Embedding 모델을 설정하면 의미 검색을 함께 사용할 수 있습니다.",
   "home.capability.graph": "Knowledge Graph",
-  "home.capability.graphBody":
-    "엔터티 관계를 탐색하고 원본 memory와 chunk를 역참조합니다.",
+  "home.capability.graphBody": "AI 검증 기준을 통과한 지식은 자동 반영하고 애매한 항목만 검토합니다. 관계를 따라 원문 근거를 확인합니다.",
   "home.capability.sharing": "Flexible Sharing",
   "home.capability.sharingBody":
     "운영자가 멤버를 승인하고 조직·팀·개인 범위별로 읽기와 관리 권한을 적용합니다.",
@@ -58,8 +57,7 @@ export const ko: Messages = {
   "login.failed": "로그인에 실패했습니다.",
   "login.notConfigured":
     "로그인 수단이 설정되지 않았습니다. 운영자에게 로그인 설정을 요청하세요.",
-  "guide.metaDescription":
-    "Agent Memory의 검색, Memory, 문서, Knowledge Graph와 MCP 사용 가이드",
+  "guide.metaDescription": "Agent Memory의 검색, 문서 수집, 지식 자동 검토, Knowledge Graph와 MCP 사용 가이드",
   "guide.metaTitle": "사용 가이드 · Agent Memory",
   "guide.console": "Console",
   "guide.eyebrow": "Product guide · 7 chapters",
@@ -125,8 +123,7 @@ export const ko: Messages = {
   "guide.memory.note":
     "변경 사유는 선택 사항이며 수정 전 version은 보존됩니다. 다른 사용자가 먼저 저장했다면 최신 version을 다시 불러온 뒤 저장합니다. 보관은 새 version으로 기록되고 일반 검색에서 제외됩니다.",
   "guide.documents.title": "원본은 보존하고, 검색은 chunk로 수행합니다.",
-  "guide.documents.body":
-    "문서 라이브러리에서 UTF-8 text, Markdown, CSV, JSON 또는 XML을 업로드합니다. 공유 범위를 선택하고 업로드한 문서를 열어 처리 상태, 메타데이터와 출처를 확인합니다. 사용 가능한 문서는 검색에서 찾을 수 있습니다.",
+  "guide.documents.body": "문서 수집에서 UTF-8 text, Markdown, CSV, JSON 또는 XML을 업로드합니다. 공유 범위를 선택하고 처리 상태와 원문을 확인합니다. 사용 가능(ready)은 문서 검색 준비가 끝났다는 뜻이며, AI 지식 추출·검증은 별도로 진행됩니다.",
   "guide.documents.note":
     "처리 대기·처리 중 문서는 화면이 보이는 동안 최대 2분간 자동 갱신합니다. 중지 후에는 새로고침합니다. 실패한 문서는 오류를 확인한 뒤 쓰기 권한으로 처리 재시도를 선택합니다. 문서 보관에는 관리 권한이 필요합니다.",
   "guide.graph.title": "관계를 따라가되, 근거에서 멀어지지 않습니다.",
@@ -134,14 +131,17 @@ export const ko: Messages = {
     "왼쪽 Knowledge Graph 메뉴나 검색 결과의 관계 보기에서 탐색을 시작합니다. Node를 검색한 뒤 지도 또는 node 목록에서 선택하고, 연결 관계와 원문 근거를 확인합니다. 선택한 node를 새로운 탐색 중심으로 바꿀 수 있습니다.",
   "guide.graph.note":
     "Node 목록은 키보드로도 탐색할 수 있습니다. Node와 관계는 읽을 수 있는 Memory나 문서 조각을 근거로 하며, 중심을 변경할 때 source 접근 권한을 다시 검사합니다.",
-  "guide.review.title": "AI의 제안을 검토해 지식을 완성합니다.",
-  "guide.review.body":
-    "대기 목록에서 후보를 선택합니다. 문서 원문과 제안된 entity·이름으로 표시된 관계를 비교하고 유사한 기존 지식을 확인한 뒤 승인하거나 거절합니다. 검토 사유는 선택 사항입니다.",
-  "guide.review.accept": "Graph에 승인",
-  "guide.review.acceptNote":
-    "Canonical node·edge와 provenance를 transaction으로 저장",
-  "guide.review.reject": "이번에는 반영하지 않기",
-  "guide.review.rejectNote": "Graph를 변경하지 않고 거절을 기록합니다. 거절한 후보는 나중에 승인할 수 없습니다.",
+  "guide.review.title": "기준을 통과한 지식은 자동 반영하고, 애매한 항목만 확인합니다.",
+  "guide.review.body": "지식 추출 모델과 문서 worker가 설정되면 추출과 별도의 AI 검증으로 원문 인용, 유용성, 충돌과 사전 기준을 확인합니다. 같은 공유 범위의 반복된 개체·관계는 출처를 모아 보여줍니다. AI 판단과 인용 확인이 사실 정확성을 보장하지는 않습니다.",
+  "guide.review.accept": "자동 승인",
+  "guide.review.acceptNote": "명시적이고 유용하며 원문 근거와 정책 기준을 통과한 항목을 Graph에 반영하고 출처를 누적합니다.",
+  "guide.review.reject": "자동 제외",
+  "guide.review.rejectNote": "근거가 없거나 사소한 항목, 구체적인 사실을 나타내지 않는 관계는 Graph에 반영하지 않습니다.",
+  "guide.graph.progress": "Graph의 처리 진척은 추출·검증·자동 처리 상태를 보여주며 수동 검토 완료를 뜻하지 않습니다. 검색어 우선 처리는 이미 추출된 이름·별칭에 맞는 미완료 후보를 대상으로 합니다. 관계 새로고침으로 새 연결을 확인하세요.",
+  "guide.review.manual": "확인 필요한 지식",
+  "guide.review.manualNote": "불확실성·충돌·사전 제약이 있는 항목은 이유와 원문을 비교해 반영할 출처를 선택합니다.",
+  "guide.review.partial": "선택한 출처의 지식만 승인·거절할 수 있습니다. 관계 승인은 필요한 양 끝 개체를 함께 반영하고, 개체 거절은 아직 검토하지 않은 연결 관계도 거절합니다. 다른 항목은 대기 상태로 남고 이미 승인한 Graph는 거절로 삭제되지 않습니다.",
+  "guide.review.history": "AI 자동 검토 실행은 기존 미검증·자동 처리 미완료 후보를 대기열에 등록합니다. 청크별 검토에서 남은 추출 묶음을, 처리 내역에서 최근 검증 50건과 자동·수동 판단 기록을 확인하세요. 빈 추출은 기본 검토 목록에 표시하지 않습니다.",
   "guide.connect.title": "MCP로 Agent와 Context를 연결합니다.",
   "guide.connect.body":
     "서비스는 /api/mcp로 장기 기억을 저장·회상·잊습니다. Agent Memory는 RAG 문서와 Knowledge Graph도 관리하며, context_search로 세 종류를 함께 검색합니다. Agent 연결에서 endpoint와 인증 정보를 확인하고, 필요하면 Agent Studio 등록 템플릿을 사용합니다.",

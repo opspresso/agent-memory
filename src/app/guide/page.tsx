@@ -222,17 +222,23 @@ export default async function GuidePage() {
                 <Text c="dimmed" size="sm">
                   {t("guide.graph.note")}
                 </Text>
+                <Text c="dimmed" size="sm">{t("guide.graph.progress")}</Text>
               </section>
 
               <section className={classes.chapter} id="review">
                 <ChapterLabel>{`06 · ${t("guide.chapter.review")}`}</ChapterLabel>
                 <Title order={2}>{t("guide.review.title")}</Title>
                 <Text c="dimmed">{t("guide.review.body")}</Text>
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
                   <Paper className={classes.decisionCard} p="lg" radius="lg">
                     <IconSparkles size={22} />
                     <Text fw={750}>{t("guide.review.accept")}</Text>
                     <Text c="dimmed" size="sm">{t("guide.review.acceptNote")}</Text>
+                  </Paper>
+                  <Paper className={classes.decisionCard} p="lg" radius="lg">
+                    <IconSearch size={22} />
+                    <Text fw={750}>{t("guide.review.manual")}</Text>
+                    <Text c="dimmed" size="sm">{t("guide.review.manualNote")}</Text>
                   </Paper>
                   <Paper className={classes.decisionCard} p="lg" radius="lg">
                     <IconShieldCheck size={22} />
@@ -240,6 +246,8 @@ export default async function GuidePage() {
                     <Text c="dimmed" size="sm">{t("guide.review.rejectNote")}</Text>
                   </Paper>
                 </SimpleGrid>
+                <Text c="dimmed" size="sm">{t("guide.review.partial")}</Text>
+                <Text c="dimmed" size="sm">{t("guide.review.history")}</Text>
               </section>
 
               <section className={classes.chapter} id="connect">

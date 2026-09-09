@@ -553,7 +553,7 @@ curl \
 
 `GET /api/knowledge/curation`은 검토 권한이 있는 ready 문서의 최근 assessment 기록 50개를 `{ sources: [{ candidate, documentTitle, ordinal }] }`로 반환한다. Candidate는 assessment와 항목별 자동·수동 처리 기록을 포함한다.
 
-`POST /api/knowledge/curation?query=관우`는 검토 권한이 있는 후보 중 이름·추출된 별칭에 해당 검색어가 포함된 후보를 우선 처리한다. Query는 선택 사항이며 최대 500자다. 기존 queued job도 우선순위를 올린다. Query를 생략하면 미검증 추출·미완료 자동 처리 항목을 등록한다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐 요청자(기본 ingestion은 문서 생성자)의 현재 권한을 검증한 후 실행한다.
+`POST /api/knowledge/curation?query=관우`는 검토 권한이 있는 후보 중 이름·추출된 별칭에 해당 검색어가 포함된 후보를 우선 처리한다. Query는 선택 사항이며 최대 500자다. 기존 queued job도 우선순위를 올린다. 이미 저장된 추출을 재사용하며 원문 전체 재검색이나 재추출은 수행하지 않는다. Query가 있으면 `queued`는 기존 대기·실행 중 작업을 포함한 우선 처리 요청 대상 수이며, 생략하면 새로 등록된 작업 수다. Query를 생략하면 미검증 추출·미완료 자동 처리 항목을 등록한다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐 요청자(기본 ingestion은 문서 생성자)의 현재 권한을 검증한 후 실행한다.
 
 자동 검증은 추출과 별도의 structured-output 요청이며 같은 설정의 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다. Provider 응답 스키마는 모든 항목 ID를 필수 object key로 지정하고 추가 key를 금지한다. 서버에서도 전체 항목 집합을 다시 검증한다. 모든 항목이 정확히 한 번 평가되어야 하고 명시적·유용한 사실만 자동 승인 대상이다. 불확실성, 충돌, strict 사전 위반, 불명확한 양 끝 개체와 별칭 identity 병합은 사람에게 남긴다. 인용은 원문과 대조하며 실패·불완전 응답은 자동 승인의 근거가 될 수 없다. `itemReviews[].method`는 human 또는 automatic으로 처리 주체를 구분한다. 인증된 공개 승인 body로 method를 지정할 수 없다.
 
@@ -566,8 +566,8 @@ Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity�
 - `GET .../knowledge/candidates?limit=<1-100>`은 빈 추출 결과를 제외한 pending candidate를 오래된 순으로 반환하며 기본 limit은 50이다. 응답은 `{ candidates, count }`다. 각 candidate는 `id`, `scope`, `documentId`, `chunkId`, `model`, 추출된 `graph`, `status`, `createdAt`, `updatedAt`과 값이 있는 `reviewedBy`, `reviewReason`, `reviewedAt`을 포함한다.
 - `GET .../knowledge/candidates/<candidateId>/duplicates`는 후보의 모든 entity를 한 번에 조회하고 entity key별로 같은 canonical name·scope의 읽기 가능한 기존 node를 반환한다. Semantic embedding을 생성하지 않는다.
 - 후보 조회와 승인은 source scope의 `manage` 권한을 따른다. Organization scope는 `admin`·`owner`, team scope는 해당 팀 `manager` 또는 조직 `admin`·`owner`, user scope는 본인만 검토한다.
-- `POST .../accept`와 `POST .../reject` JSON object body는 필수이며 `reason`만 선택 항목이다. 사유가 없으면 `{}`를 보내고, 있으면 `{ "reason": string }`을 보낸다. reason은 앞뒤 공백 제거 후 1–2,000자다.
-- 승인은 node·edge, candidate→resource 관계, reviewer audit을 하나의 transaction으로 저장한다. 이미 거절된 후보를 승인하거나 승인된 후보를 거절하면 `409`를 반환한다. 최초 승인 시 source 문서가 archive 등으로 `ready`가 아니면 `409` `{ "error": "knowledge candidate source document is not ready" }`를 반환한다. 이미 승인된 후보의 재승인은 멱등하며 현재 surviving resource로 해석한 기존 승인 결과를 반환한다.
+- `POST .../accept`와 `POST .../reject` JSON object body는 필수이며 `reason`과 `selection`은 선택 항목이다. 남은 전체 항목을 사유 없이 처리하려면 `{}`를 보내고, 부분 검토에는 위의 `selection`을 포함한다. 사유는 `{ "reason": string }`으로 추가한다. reason은 앞뒤 공백 제거 후 1–2,000자다.
+- 승인은 node·edge, candidate→resource 관계, reviewer audit을 하나의 transaction으로 저장한다. 전체 거절된 후보의 승인과 `selection`을 생략한 승인 완료 후보의 거절은 `409`를 반환한다. 존재하지 않는 항목·빈 selection·반대 항목 결정을 지정한 selection은 `400`으로 거부한다(전체 거절된 후보의 승인은 `409`가 우선한다). 부분 거절 후 accepted 상태가 된 후보에서도 이미 거절한 항목을 같은 selection으로 다시 거절하는 요청은 멱등하게 처리한다. 최초 승인 시 source 문서가 archive 등으로 `ready`가 아니면 `409` `{ "error": "knowledge candidate source document is not ready" }`를 반환한다. 이미 승인된 후보의 재승인은 멱등하며 현재 surviving resource로 해석한 기존 승인 결과를 반환한다.
 
 Pending 후보를 조회하고 승인하는 예시는 다음과 같다.
 

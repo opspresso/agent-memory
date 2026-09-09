@@ -35,7 +35,7 @@ Compose: postgres, MinIO ─────┘      └── pg-boss
 
 이 저장소는 IDC Compose나 Kubernetes manifest를 보관하지 않는다. Release workflow는 image 게시 후 `argocd-env-demo`에 tag만 전달한다.
 
-IDC에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, schema 초기화, backup, 복원 단위는 분리된다.
+IDC에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, backup, 복원 단위는 분리된다.
 
 ### 릴리즈와 IDC 배포
 
@@ -302,6 +302,8 @@ Schema source는 `src/infrastructure/database/schema/`, 현재 schema의 생성 
 
 `db:init`은 `.env.local`을 읽고 이미 설정된 `DATABASE_URL`을 우선한다. 주소가 없으면 실패하며 기본 DB를 선택하지 않는다. `db:generate`와 `db:check`는 DB에 연결하지 않는다. Drizzle Studio는 `.env`와 shell의 `DATABASE_URL`을 사용하므로 실제 대상을 먼저 확인하라.
 
+초기화는 `application_schema`에 생성 SQL의 SHA-256 fingerprint를 기록한다. 내용이 없는 DB에서만 테이블을 생성하고, fingerprint가 일치하는 DB는 유지한다. 표식 없이 기존 테이블이 있거나 fingerprint가 다르면 시작을 거부한다. 스키마 호환성이 없는 릴리즈를 기존 DB에 바로 배포하지 마라.
+
 배포 이미지에는 `node scripts/init-database.mjs` 명령도 포함한다. Web·worker 시작 전에 schema만 초기화하고 보존 데이터를 복원할 때 사용한다.
 
 Schema를 변경하면 배포 전에 application·worker를 중단하고 DB·전용 bucket·queue를 명시적으로 초기화한다. 계정·설정 보존이 필요하면 초기화 전에 별도 보존·복원 범위를 결정한다. 공유 Agent Studio DB·bucket은 초기화 대상에 포함하지 않는다. Application 시작에는 자동 DROP·ALTER·backfill이 없다. 임의 DDL에 의한 schema drift는 fingerprint 검사만으로 탐지하지 않는다.
@@ -373,7 +375,7 @@ worker instance: DOCUMENT_WORKER_ENABLED=true
 
 현재 Docker image의 기본 command는 Next.js server이므로 전용 worker도 HTTP server와 같은 process에서 시작된다. 완전히 분리된 worker-only entry point는 제공하지 않는다. 여러 worker가 같은 pg-boss queue를 처리할 수 있으며 document processing lease가 stale worker의 늦은 상태 변경을 차단한다.
 
-현재 worker는 `document-ingestion-v2`와 `document-knowledge-enrichment-v2`만 소비한다. 이전 이름의 queue는 서로 다른 policy·payload 계약이므로 자동으로 삭제하거나 실행하지 않는다. 이전 queue에 남은 job이 있으면 document 상태와 실행 이력을 먼저 확인하라. `failed` 문서만 retry API로 새 queue에 등록할 수 있다. `pending`·`processing` 문서는 이 API로 복구할 수 없으므로 상태·lease와 원본을 확인한 뒤 별도 복구 절차를 결정한다. 자동 queue 이관이나 운영 DB 상태 변경을 위한 전용 명령은 제공하지 않는다.
+Worker는 `document-ingestion-v2`와 `document-knowledge-enrichment-v2`를 소비한다. 자동 queue 이관은 제공하지 않는다. DB를 초기화할 때는 pg-boss schema의 작업도 함께 정리한다. `failed` 문서만 retry API로 등록할 수 있으며 `pending`·`processing` 문서는 상태·lease와 원본을 확인한 뒤 별도 복구 절차를 결정한다.
 
 ### 백업과 복원
 
@@ -474,7 +476,7 @@ Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지
 pnpm verify
 ```
 
-`pnpm verify`는 lint, typecheck, architecture, unit test, production build를 실행한다. Database 변경은 `pnpm test:integration`, 화면과 인증 흐름 변경은 `pnpm test:e2e`를 추가한다. 세부 기준은 [AGENTS.md](../AGENTS.md#검증)를 따른다.
+`pnpm verify`는 `db:check`로 현재 schema SQL의 일치를 확인한 뒤 lint, typecheck, architecture, unit test, production build를 실행한다. Database 변경은 `pnpm test:integration`, 화면과 인증 흐름 변경은 `pnpm test:e2e`를 추가한다. 세부 기준은 [AGENTS.md](../AGENTS.md#검증)를 따른다.
 
 ### 인증 E2E
 
