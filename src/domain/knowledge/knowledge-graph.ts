@@ -2,6 +2,7 @@ import type { ScopedResource } from "@/domain/identity/organization-access";
 import { serializedJsonByteLength } from "@/domain/shared/json-size";
 
 import {
+  isSymmetricKnowledgePredicate,
   normalizeKnowledgeKind,
   normalizeKnowledgeName,
   normalizeKnowledgePredicate
@@ -176,12 +177,12 @@ export function createKnowledgeEdge(input: NewKnowledgeEdge): KnowledgeEdge {
       "knowledge edge scope must belong to its organization"
     );
   }
-  const sourceNodeId = normalizedText(
+  let sourceNodeId = normalizedText(
     input.sourceNodeId,
     "knowledge edge source node ID",
     255
   );
-  const targetNodeId = normalizedText(
+  let targetNodeId = normalizedText(
     input.targetNodeId,
     "knowledge edge target node ID",
     255
@@ -190,6 +191,10 @@ export function createKnowledgeEdge(input: NewKnowledgeEdge): KnowledgeEdge {
     throw new InvalidKnowledgeGraphError(
       "knowledge edge must not be self-referential"
     );
+  }
+
+  if (isSymmetricKnowledgePredicate(input.predicate) && sourceNodeId > targetNodeId) {
+    [sourceNodeId, targetNodeId] = [targetNodeId, sourceNodeId];
   }
 
   return Object.freeze({

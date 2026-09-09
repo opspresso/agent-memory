@@ -6,7 +6,7 @@ import {
   KnowledgeCandidateSourceNotReadyError,
   type AcceptKnowledgeCandidateResult
 } from "@/application/knowledge/review-knowledge-candidate";
-import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
+import { InvalidKnowledgeCandidateError, type KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
 
 import { aiErrorResponse } from "./ai-http";
@@ -38,7 +38,7 @@ export function knowledgeCandidateErrorResponse(error: unknown): Response | null
       { status: 422 }
     );
   }
-  if (error instanceof InvalidKnowledgeCandidateReviewError) {
+  if (error instanceof InvalidKnowledgeCandidateReviewError || error instanceof InvalidKnowledgeCandidateError) {
     return Response.json({ error: error.message }, { status: 400 });
   }
   return null;
@@ -52,6 +52,8 @@ export function publicKnowledgeCandidate(candidate: KnowledgeCandidate) {
     chunkId: candidate.chunkId,
     model: candidate.model,
     graph: candidate.graph,
+    itemReviews: candidate.itemReviews ?? [],
+    ...(candidate.assessment ? { assessment: candidate.assessment } : {}),
     status: candidate.status,
     ...(candidate.reviewedBy ? { reviewedBy: candidate.reviewedBy } : {}),
     ...(candidate.reviewReason

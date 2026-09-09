@@ -1,4 +1,4 @@
-import { checkDatabaseReadiness } from "@/lib/health-service";
+import { checkDatabaseReadiness, DatabaseSchemaNotReadyError } from "@/lib/health-service";
 import { logger } from "@/lib/observability";
 
 const headers = { "Cache-Control": "no-store" };
@@ -8,7 +8,7 @@ export async function GET() {
   try {
     await checkDatabaseReadiness();
     return Response.json(
-      { status: "ok", checks: { database: "ok" } },
+      { status: "ok", checks: { database: "ok", schema: "ok" } },
       { headers }
     );
   } catch (error) {
@@ -20,7 +20,9 @@ export async function GET() {
       "readiness check failed"
     );
     return Response.json(
-      { status: "unavailable", checks: { database: "failed" } },
+      { status: "unavailable", checks: error instanceof DatabaseSchemaNotReadyError
+        ? { database: "ok", schema: "failed" }
+        : { database: "failed", schema: "unknown" } },
       { status: 503, headers }
     );
   }

@@ -22,6 +22,7 @@ export const appSettingDefinitions = [
   { name: "KNOWLEDGE_EXTRACTION_BASE_URL", restartRequired: true },
   { name: "KNOWLEDGE_EXTRACTION_API_KEY", secret: true, restartRequired: true },
   { name: "KNOWLEDGE_EXTRACTION_MODEL", restartRequired: true },
+  { name: "KNOWLEDGE_ENRICHMENT_CONCURRENCY", defaultValue: "4", restartRequired: true },
   { name: "AI_PROVIDER_MAX_CONCURRENCY", defaultValue: "8", restartRequired: true },
   { name: "AI_PROVIDER_REQUESTS_PER_MINUTE", defaultValue: "120", restartRequired: true },
   { name: "AI_ORGANIZATION_REQUESTS_PER_MINUTE", defaultValue: "120", restartRequired: true },

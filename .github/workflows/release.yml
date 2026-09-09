@@ -56,7 +56,7 @@ jobs:
           ln -s "$cache_dir" .next/cache
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm db:migrate
+      - run: pnpm db:init
       - run: pnpm verify
       - run: pnpm test:integration
       - run: pnpm test:e2e

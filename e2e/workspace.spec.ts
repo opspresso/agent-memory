@@ -59,7 +59,7 @@ test("onboards, approves, and manages members through the console", async ({
   browser,
   page
 }, testInfo) => {
-  test.skip(!authenticatedE2e, "requires a disposable migrated PostgreSQL database");
+  test.skip(!authenticatedE2e, "requires a disposable initialized PostgreSQL database");
   test.setTimeout(90_000);
   await resetInstallationFixture();
   const runId = process.env.E2E_RUN_ID;
@@ -295,7 +295,7 @@ test("onboards, approves, and manages members through the console", async ({
 test("manages memory lifecycle and explores grounded knowledge", async ({
   page
 }, testInfo) => {
-  test.skip(!authenticatedE2e, "requires a disposable migrated PostgreSQL database");
+  test.skip(!authenticatedE2e, "requires a disposable initialized PostgreSQL database");
   test.setTimeout(90_000);
   await resetInstallationFixture();
   const runId = process.env.E2E_RUN_ID;
@@ -549,6 +549,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     }
   );
   await page.getByRole("link", { name: "AI 후보 검토" }).click();
+  await page.getByRole("tab", { name: "청크별 검토", exact: true }).click();
   await expect(
     page.getByText(/같은 scope와 이름의 기존 node가 1개 있습니다/)
   ).toBeVisible();

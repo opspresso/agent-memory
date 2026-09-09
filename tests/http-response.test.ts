@@ -6,13 +6,13 @@ import { responseJson } from "@/app/http-response";
 describe("HTTP response JSON", () => {
   it("preserves a structured API error", async () => {
     const response = Response.json(
-      { error: "Database migration is required" },
+      { error: "Database initialization is required" },
       { status: 500 }
     );
 
     await expect(
       responseJson(response, "Request failed", z.unknown())
-    ).rejects.toThrow("Database migration is required");
+    ).rejects.toThrow("Database initialization is required");
   });
 
   it("uses the operation fallback for an empty error response", async () => {

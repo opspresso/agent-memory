@@ -61,7 +61,7 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 ### 시작 순서
 
-Node.js runtime은 bootstrap 설정을 검증한 뒤 선택형 migration, DB 설정 override 적용·검증, 설치 조직 초기화, 운영 설정 확인, 종료 hook·telemetry 등록, 선택형 worker 시작 순서로 준비된다. `MIGRATE_ON_START=true`이면 migration 전에 기존 다중 조직 여부를 검사한다. DB와 암호화 root 설정은 override를 읽기 전에 필요하다.
+Node.js runtime은 bootstrap 설정을 검증한 뒤 빈 DB 초기화·schema fingerprint 검사, DB 설정 override 적용·검증, 설치 조직 초기화, 운영 설정 확인, 종료 hook·telemetry 등록, 선택형 worker 시작 순서로 준비된다. DB와 암호화 root 설정은 override를 읽기 전에 필요하다.
 
 ### 단일 조직과 가입
 
@@ -99,7 +99,7 @@ Header가 있으면 정규화·형식 검증 후 token 조직의 활성 멤버�
 
 Better Auth의 user·session 생성 hook은 설정한 email domain을 인증 경계에서 검사한다. 허용 domain 목록이 없으면 모든 email domain을 허용한다. 인증 경계는 설정된 전역 admin email 여부를 actor에 담고, 설치 멤버십의 최초 owner bootstrap과 전역 설정 API가 이 권한을 확인한다. 이 권한은 조직 resource 접근을 우회하지 않으며 다른 사용자와 동일하게 organization membership과 role 정책을 따른다.
 
-전역 애플리케이션 설정은 singleton `app_settings` row에 env 이름별 override로 저장한다. Application use case가 env보다 override를 우선해 유효 설정을 만들고, infrastructure adapter가 Secret 값을 `BETTER_AUTH_SECRET`에서 분리해 파생한 AES-256-GCM key와 env 이름 AAD로 암호화한다. 인증 domain과 admin 목록은 짧은 cache를 거쳐 요청 시 다시 읽으며, process 초기화형 설정은 instrumentation이 migration 이후 다른 adapter를 import하기 전에 `process.env`에 적용한다. Database 연결, 암호화 root, migration 실행 여부, Node runtime은 이 row를 읽기 전에 필요하므로 bootstrap env로 남긴다.
+전역 애플리케이션 설정은 singleton `app_settings` row에 env 이름별 override로 저장한다. Application use case가 env보다 override를 우선해 유효 설정을 만들고, infrastructure adapter가 Secret 값을 `BETTER_AUTH_SECRET`에서 분리해 파생한 AES-256-GCM key와 env 이름 AAD로 암호화한다. 인증 domain과 admin 목록은 짧은 cache를 거쳐 요청 시 다시 읽으며, process 초기화형 설정은 instrumentation이 schema 준비 이후 다른 adapter를 import하기 전에 `process.env`에 적용한다. Database 연결, 암호화 root, Node runtime은 이 row를 읽기 전에 필요하므로 bootstrap env로 남긴다.
 
 ## Scope와 권한
 
@@ -156,7 +156,9 @@ multipart upload → S3-compatible storage → document row(pending)
 
 `buildIngestDocument` application operation은 문서 처리를 완료한 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. Worker는 job decode, operation 호출, queue retry와 로그를 담당한다. 후속 queue 등록 실패는 문서 처리 상태를 되돌리지 않으며 ingestion 재실행에서 chunk 등록을 다시 시도한다.
 
-Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `document-knowledge-enrichment-v2` queue의 별도 job으로 enqueue해 entity와 relationship 후보를 생성한다. Chunk ID별 exclusive job이 독립적으로 retry되며 한 chunk의 실패는 문서의 ready 상태나 다른 chunk의 검색·후보 생성을 되돌리지 않는다. 후보는 source chunk, scope, model을 보존하며 chunk별로 중복 생성하지 않는다. AI 생성 결과는 graph에 직접 쓰지 않고 해당 scope의 `manage` 권한을 가진 사용자가 검토한 뒤 승격한다. 승인 transaction은 candidate를 잠그고 node·edge upsert, candidate→resource 관계, reviewer audit을 함께 저장한다. Node merge로 resource ID가 바뀌면 candidate 관계도 surviving resource로 옮겨 재승인 응답의 정합성을 유지한다.
+Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `document-knowledge-enrichment-v2` queue의 별도 job으로 enqueue해 entity와 relationship 후보를 생성한다. Chunk ID별 exclusive job이 독립적으로 retry되며 한 chunk의 실패는 문서의 ready 상태나 다른 chunk의 검색·후보 생성을 되돌리지 않는다. 후보는 source chunk, scope, model을 보존하며 청크별 후보를 하나만 유지한다. 재시도는 저장된 추출을 재사용한다. 새 추출은 별칭을 entity 속성으로 표현하고 entity·relationship마다 원문의 인용 근거를 요구한다. Adapter는 원문에 없는 인용과 근거 없는 항목, 범용 동시 등장 관계를 제거한다. 동일 kind·정규화 이름은 청크 안에서 통합하고 대칭 관계의 역방향 반복을 제거하며 근거를 합친다. 이는 인용 존재 검증이며 사실의 함의·진실성 판정은 검토자의 책임이다. AI 추출 결과는 별도 검증 adapter에서 원문·기존 이름 기반 지식과 대조한다. `evidence-v1` 정책은 명시성·유용성·인용 일치·충돌 여부·온톨로지와 관계 endpoint를 평가해 자동 승인·수동 검토·자동 제외로 분리한다. 모델의 자기 보고 숫자 점수를 승인 임계값으로 사용하지 않는다. 자동 검토도 source scope의 `manage` 권한과 active membership을 요구하며 긴 AI 호출 뒤 principal을 다시 읽는다. Assessment를 먼저 보존하고 항목별 검토를 멱등 적용하므로 retry가 검증 요청·Graph를 반복 생성하지 않는다. 자동 처리에는 `method: automatic`을 기록한다. 승인 transaction은 candidate를 잠그고 node·edge upsert, candidate→resource 관계, 항목별 reviewer audit을 함께 저장한다. 부분 검토는 원본 graph를 보존하고 itemReviews에 결정을 누적하며 미검토 항목을 pending으로 유지한다. 빈 추출은 처리 이력으로 남기고 기본 검토 큐에서 제외한다. 통합 검토 큐는 서버에서 권한 필터한 수동 검토로 평가된 pending 항목을 개체·관계 identity로 묶은 뒤 페이지를 구성한다. Node merge로 resource ID가 바뀌면 candidate 관계도 surviving resource로 옮겨 재승인 응답의 정합성을 유지한다.
+
+현재 strict 사전이 저장된 assessment의 자동 승인 묶음을 거부하면 해당 묶음을 통합 수동 검토에 표시한다. 원본 assessment는 변경하지 않으며, 현재 사전이 허용하는 개별 항목은 선택 승인할 수 있다. 개체 병합에서도 대칭 관계의 endpoint 순서를 정규화하고 중복 관계의 출처를 합친다. 개체 설명은 현재 보이는 출처별 description으로만 구성하며 공유 summary로 대체하지 않는다.
 
 ## Knowledge Graph와 통합 검색
 
@@ -170,7 +172,7 @@ Graph의 검색·중복 후보 조회·Neighborhood repository port는 읽을 �
 
 ### Identity·온톨로지·변경
 
-Node identity는 NFKC·공백·대소문자를 정규화한 canonical name key와 ontology로 정규화한 kind를 사용한다. 동일 scope의 동일 identity 생성은 transaction advisory lock으로 직렬화해 하나의 node와 provenance로 수렴한다. 이름은 같지만 kind가 다른 node는 자동 병합하지 않고 검토 대상으로 남긴다.
+Node identity는 NFKC·공백·대소문자를 정규화한 canonical name key와 ontology로 정규화한 kind를 사용한다. 동일 scope의 동일 identity 생성은 transaction advisory lock으로 직렬화해 하나의 node와 provenance로 수렴한다. 병렬 후보 승인은 identity 순서로 lock을 획득한다. 설명은 node source별로 보존하며 조회 시 현재 읽을 수 있는 출처의 설명만 모아 최대 10,000자의 중복 제거된 개요를 만든다. Lexical 검색도 같은 visible source 설명을 사용하므로 보관한 문서의 설명을 검색하거나 노출하지 않는다. 이름은 같지만 kind가 다른 node는 자동 병합하지 않고 검토 대상으로 남긴다.
 
 조직은 통제 어휘 사전(`ontology`: node kind·edge predicate 목록)과 검증 모드(`ontologyMode`: `off`·`warn`·`strict`)를 가진다. 신규 조직은 추출 프롬프트의 기본 kind 목록과 범용 edge predicate 목록으로 구성된 domain의 `defaultKnowledgeOntology` + `warn` 모드로 생성된다. 사전 확장은 두 경로로 지원한다 — 조직의 graph·pending 후보에서 관찰된 용어의 결정적 빈도 집계(`KnowledgeTermUsageRepository`), 그리고 관찰 용어를 extraction 모델에 보내 정제·통합을 제안받는 AI 경로(`KnowledgeOntologySuggestionService`, 용어 문자열만 전송). 두 경로 모두 admin·owner 전용이며 저장은 항상 설정 PATCH를 거친다. 검증은 application 계층에서 node 생성, edge 생성, AI 후보 승인의 세 쓰기 경로에 일괄 적용된다 — `warn`은 응답에 경고를 싣고, `strict`는 embedding 호출과 영속화 전에 `422`로 거부한다. 검증 모드가 켜져 있고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전을 힌트로 주입하고, `strict`에서는 entity kind를 structured output schema의 enum으로 제약한다. 사전 조회는 `KnowledgeOntologyReader` port를 통해 organizations 행에서 읽는다.
 
@@ -178,7 +180,7 @@ Graph resource 삭제는 해당 scope의 `manage` 권한을 요구한다. Edge �
 
 Node merge는 같은 scope에서만 허용한다. 하나의 transaction에서 source provenance를 target에 누적하고 edge endpoint를 재작성하며 동일 edge를 병합하고 self-edge를 제거한다. Source node 삭제 전 reviewer, reason, 원래 kind와 canonical name을 merge audit에 저장한다.
 
-AI candidate는 graph와 분리된 검토 queue다. 거절은 graph를 변경하지 않으며, 승인된 candidate는 다시 거절할 수 없다. 승인·거절에는 reviewer와 선택형 사유를 남긴다.
+AI candidate는 원본 추출과 검증·처리 이력을 graph와 분리해 보존한다. 항목별 승인은 graph에 근거를 반영하고 거절은 이미 승인한 graph를 변경하지 않는다. 자동·수동 처리 구분, 실행 principal, 시각과 사유를 기록한다.
 
 ### 후보 수집과 재정렬
 

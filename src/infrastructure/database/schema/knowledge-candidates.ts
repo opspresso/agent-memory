@@ -16,12 +16,14 @@ import {
 
 import {
   knowledgeCandidateStatuses,
+  type KnowledgeCandidateItemReview,
   type ProposedKnowledgeGraph
 } from "@/domain/knowledge/knowledge-candidate";
 
 import { documentChunks, documents } from "./documents";
 import { organizations, users } from "./identity";
 import { knowledgeEdges, knowledgeNodes } from "./knowledge-graph";
+import type { KnowledgeCandidateAssessment } from "@/domain/knowledge/knowledge-assessment";
 
 export const knowledgeCandidateStatus = pgEnum(
   "knowledge_candidate_status",
@@ -39,6 +41,8 @@ export const knowledgeCandidates = pgTable(
     chunkId: uuid().notNull(),
     model: text().notNull(),
     graph: jsonb().$type<ProposedKnowledgeGraph>().notNull(),
+    itemReviews: jsonb().$type<readonly KnowledgeCandidateItemReview[]>().notNull().default([]),
+    assessment: jsonb().$type<KnowledgeCandidateAssessment>(),
     status: knowledgeCandidateStatus().notNull().default("pending"),
     reviewedBy: uuid().references(() => users.id, { onDelete: "restrict" }),
     reviewReason: text(),

@@ -1,3 +1,6 @@
+import { checkSchemaReadiness, DatabaseSchemaNotReadyError } from "@/infrastructure/database/schema-readiness";
+import { buildCurateKnowledgeCandidate } from "@/application/knowledge/curate-knowledge-candidate";
+import { buildAcceptKnowledgeCandidate, buildRejectKnowledgeCandidate } from "@/application/knowledge/review-knowledge-candidate";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { randomUUID, createHash } from "node:crypto";
 import { buildCreateMemory } from "@/application/memory/create-memory";
@@ -6,9 +9,9 @@ import { buildRetryDocument } from "@/application/document/retry-document";
 import { createIngestionReceiptRepository } from "@/infrastructure/database/repositories/ingestion-receipt-repository";
 import { ingestionFingerprint } from "@/lib/ingestion-fingerprint";
 import { and, eq, sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { initializeSchema } from "@/infrastructure/database/schema-bootstrap.mjs";
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   createDatabase,
@@ -89,7 +92,7 @@ describe("PostgreSQL schema", () => {
     const database = createDatabase(container.getConnectionUri());
     db = database.db;
     pool = database.pool;
-    await migrate(db, { migrationsFolder: "drizzle" });
+    await Promise.all([initializeSchema(pool), initializeSchema(pool)]);
   });
 
   afterAll(async () => {
@@ -126,6 +129,41 @@ describe("PostgreSQL schema", () => {
          AND column_name IN ('source_memory_id', 'source_chunk_id')`
     );
     expect(legacyProvenanceColumns.rows).toEqual([]);
+  });
+
+  it("rejects a missing schema fingerprint or marker even when the database is reachable", async () => {
+    await expect(checkSchemaReadiness(db)).resolves.toBeUndefined();
+    const rollback = new Error("rollback readiness fixture");
+    await expect(db.transaction(async (transaction) => {
+      await transaction.execute(sql`delete from public.application_schema`);
+      await expect(checkSchemaReadiness(transaction)).rejects.toBeInstanceOf(DatabaseSchemaNotReadyError);
+      throw rollback;
+    })).rejects.toBe(rollback);
+    await expect(db.transaction(async (transaction) => {
+      await transaction.execute(sql`alter table public.application_schema rename to readiness_test_schema`);
+      await expect(checkSchemaReadiness(transaction)).rejects.toBeInstanceOf(DatabaseSchemaNotReadyError);
+      throw rollback;
+    })).rejects.toBe(rollback);
+    await expect(checkSchemaReadiness(db)).resolves.toBeUndefined();
+  });
+
+  it("refuses incompatible or unmarked databases without modifying their tables", async () => {
+    const original = (await pool.query("SELECT fingerprint FROM application_schema WHERE id = 1")).rows[0].fingerprint;
+    try {
+      await pool.query("UPDATE application_schema SET fingerprint = 'incompatible'");
+      await expect(initializeSchema(pool)).rejects.toThrow("does not match");
+      expect((await pool.query("SELECT fingerprint FROM application_schema")).rows[0].fingerprint).toBe("incompatible");
+    } finally {
+      await pool.query("UPDATE application_schema SET fingerprint = $1", [original]);
+    }
+    try {
+      await pool.query("ALTER TABLE application_schema RENAME TO unmarked_schema_fixture");
+      await expect(initializeSchema(pool)).rejects.toThrow("not empty");
+      expect((await pool.query("SELECT to_regclass('public.documents') IS NOT NULL AS present")).rows[0].present).toBe(true);
+    } finally {
+      await pool.query("ALTER TABLE unmarked_schema_fixture RENAME TO application_schema");
+    }
+    await expect(initializeSchema(pool)).resolves.toBeUndefined();
   });
 
   it("stores one global application settings row", async () => {
@@ -2138,7 +2176,7 @@ describe("PostgreSQL schema", () => {
     );
     expect(upserted).toMatchObject({
       id: sourceNodeId,
-      summary: "Processes purchases and checkout requests",
+      summary: "Processes checkout requests\n\nProcesses purchases and checkout requests",
       sources: expect.arrayContaining([
         { memoryId: sourceMemoryId },
         { memoryId: corroboratingMemoryId }
@@ -2513,4 +2551,170 @@ describe("PostgreSQL schema", () => {
     expect(await receipts.find({ organizationId, userId, operation: "memory.create", key: "rollback" })).toBeNull();
   });
 
+  it("partially reviews facts atomically while preserving pending items and excluding empty extractions", async () => {
+    const organization = randomUUID();
+    const user = randomUUID();
+    const documentId = randomUUID();
+    const chunkId = randomUUID();
+    const emptyChunkId = randomUUID();
+    await pool.query("INSERT INTO organizations (id, slug, name) VALUES ($1, $2, 'Review test')", [organization, organization]);
+    await pool.query("INSERT INTO users (id, email, name) VALUES ($1, $2, 'Reviewer')", [user, `${user}@example.test`]);
+    await pool.query("INSERT INTO organization_members (organization_id, user_id, role, status) VALUES ($1, $2, 'owner', 'active')", [organization, user]);
+    await pool.query(`INSERT INTO documents (id, organization_id, scope_kind, title, object_key, checksum, mime_type, created_by, status)
+      VALUES ($1, $2, 'organization', 'Review source', 'review-source', 'checksum', 'text/plain', $3, 'ready')`, [documentId, organization, user]);
+    await pool.query(`INSERT INTO document_chunks (id, organization_id, document_id, ordinal, content)
+      VALUES ($1, $2, $3, 0, 'A learns from B. B knows C.'), ($4, $2, $3, 1, 'Contents')`, [chunkId, organization, documentId, emptyChunkId]);
+    const repository = createKnowledgeCandidateRepository(db);
+    const now = new Date();
+    const candidate = createKnowledgeCandidate({
+      id: randomUUID(), scope: { kind: "organization", organizationId: organization }, documentId, chunkId,
+      model: "test", now, graph: {
+        entities: ["a", "b", "c"].map((key) => ({ key, kind: "person", canonicalName: key })),
+        relationships: [{ sourceKey: "a", targetKey: "b", predicate: "student_of" }, { sourceKey: "b", targetKey: "c", predicate: "associated_with" }]
+      }
+    });
+    await repository.save(candidate);
+    await repository.save(createKnowledgeCandidate({ ...candidate, id: randomUUID(), chunkId: emptyChunkId, graph: { entities: [], relationships: [] }, now }));
+    const access: OrganizationAccess = { organizationId: organization, userId: user, role: "owner", teams: [] };
+    expect(await repository.listPending(access, 100)).toHaveLength(1);
+    expect(await repository.listReviewSources(access)).toHaveLength(1);
+    expect(await repository.listReviewSources({ ...access, organizationId: organizationB })).toEqual([]);
+    expect(await repository.listReviewSources({ ...access, role: "member" })).toEqual([]);
+    const input = {
+      candidateId: candidate.id, organizationId: organization, reviewedBy: user, reviewedAt: now,
+      selection: { entityKeys: [], relationshipIndexes: [0] },
+      entityPromotions: ["a", "b"].map((key) => ({ key, id: randomUUID() })),
+      relationshipIds: [randomUUID(), randomUUID()]
+    };
+    const results = await Promise.all([repository.accept(input), repository.accept(input)]);
+    expect(results.every((result) => result.status === "promoted" && result.candidate.status === "pending")).toBe(true);
+    const saved = await repository.findById(organization, candidate.id);
+    expect(saved?.itemReviews).toHaveLength(3);
+    expect(saved?.graph).toEqual(candidate.graph);
+    const counts = await pool.query("SELECT (SELECT count(*) FROM knowledge_nodes WHERE organization_id=$1)::int nodes, (SELECT count(*) FROM knowledge_edges WHERE organization_id=$1)::int edges", [organization]);
+    expect(counts.rows[0]).toEqual({ nodes: 2, edges: 1 });
+    await expect(repository.reject({ candidateId: candidate.id, organizationId: organization, reviewedBy: user, reviewedAt: now,
+      selection: { entityKeys: [], relationshipIndexes: [0] } })).rejects.toThrow("opposite");
+    await repository.reject({ candidateId: candidate.id, organizationId: organization, reviewedBy: user, reviewedAt: now,
+      selection: { entityKeys: ["c"], relationshipIndexes: [] } });
+    const finished = await repository.findById(organization, candidate.id);
+    expect(finished?.status).toBe("accepted");
+    expect(finished?.itemReviews).toHaveLength(5);
+    expect(await repository.listReviewSources(access)).toEqual([]);
+
+    const automaticChunkId = randomUUID();
+    await pool.query("INSERT INTO document_chunks (id, organization_id, document_id, ordinal, content) VALUES ($1,$2,$3,2,'A learns from B. B knows C.')", [automaticChunkId, organization, documentId]);
+    const automaticCandidate = createKnowledgeCandidate({ ...candidate, id: randomUUID(), chunkId: automaticChunkId, now });
+    await repository.save(automaticCandidate);
+    const verify = vi.fn().mockResolvedValue({ model: "independent-verifier", items: ["entity:a", "entity:b", "entity:c", "relationship:0", "relationship:1"].map((item) => ({
+      item, support: "explicit", usefulness: item === "entity:c" ? "incidental" : "useful", conflict: false, evidence: "A learns from B.", reason: "Synthetic source judgement"
+    })) });
+    const ontology = createKnowledgeOntologyReader(db);
+    const curate = buildCurateKnowledgeCandidate({
+      candidates: repository, documents: createDocumentRepository(db), access: createOrganizationAccessRepository(db),
+      graph: createKnowledgeGraphRepository(db), ontology, verification: { verify }, clock: () => now,
+      accept: buildAcceptKnowledgeCandidate({ clock: () => now, generateId: randomUUID, method: "automatic", repository, ontologyReader: ontology }),
+      reject: buildRejectKnowledgeCandidate({ clock: () => now, method: "automatic", repository })
+    });
+    await curate(organization, automaticChunkId);
+    await curate(organization, automaticChunkId);
+    expect(verify).toHaveBeenCalledTimes(1);
+    const automatic = await repository.findById(organization, automaticCandidate.id);
+    expect(automatic?.status).toBe("accepted");
+    expect(automatic?.assessment?.policyVersion).toBe("evidence-v1");
+    expect(automatic?.itemReviews).toHaveLength(5);
+    expect(automatic?.itemReviews?.every((review) => review.method === "automatic")).toBe(true);
+    expect(await repository.reviewSummary(access)).toEqual({ automaticAccepted: 3, automaticIgnored: 2 });
+    const afterAutomatic = await pool.query("SELECT (SELECT count(*) FROM knowledge_nodes WHERE organization_id=$1)::int nodes, (SELECT count(*) FROM knowledge_edges WHERE organization_id=$1)::int edges", [organization]);
+    expect(afterAutomatic.rows[0]).toEqual({ nodes: 2, edges: 1 });
+    expect(await repository.reviewSummary({ ...access, organizationId: organizationB })).toEqual({ automaticAccepted: 0, automaticIgnored: 0 });
+  });
+
+  it("consolidates symmetric edges and provenance when a merge reverses endpoint order", async () => {
+    const organization = randomUUID(), user = randomUUID(), memoryId = randomUUID(), otherMemoryId = randomUUID();
+    await pool.query("INSERT INTO organizations(id,slug,name) VALUES($1,$2,'Symmetric merge')", [organization, organization]);
+    await pool.query("INSERT INTO users(id,email,name) VALUES($1,$2,'Reviewer')", [user, `${user}@example.test`]);
+    await pool.query("INSERT INTO organization_members(organization_id,user_id,role,status) VALUES($1,$2,'owner','active')", [organization, user]);
+    const scope = { kind: "organization" as const, organizationId: organization };
+    const now = new Date();
+    for (const id of [memoryId, otherMemoryId]) {
+      await createMemoryRepository(db).save(createMemory({ id, kind: "fact", scope, title: "Family", content: "A and B are siblings.", source: { type: "user" }, createdBy: user, validFrom: now, now }));
+    }
+    const repository = createKnowledgeGraphRepository(db);
+    const ids = [randomUUID(), randomUUID(), randomUUID()].sort();
+    const [low, middle, high] = await Promise.all(ids.map((id, index) => repository.saveNode(createKnowledgeNode({
+      id, scope, kind: "person", canonicalName: `Person ${index}`, source: { memoryId }, now
+    }))));
+    const retained = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
+      sourceNodeId: low!.id, targetNodeId: middle!.id, predicate: "sibling_of", source: { memoryId }, now }));
+    const moved = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
+      sourceNodeId: middle!.id, targetNodeId: high!.id, predicate: "sibling_of", source: { memoryId: otherMemoryId }, now }));
+    await repository.mergeNodes({ organizationId: organization, sourceNodeId: high!.id, targetNodeId: low!.id, mergedBy: user, reason: "Same person", now });
+    expect(await repository.findEdgeById(organization, moved.id)).toBeNull();
+    expect((await repository.findEdgeById(organization, retained.id))?.sources).toEqual(expect.arrayContaining([{ memoryId }, { memoryId: otherMemoryId }]));
+    const repeated = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
+      sourceNodeId: middle!.id, targetNodeId: low!.id, predicate: "sibling_of", source: { memoryId: otherMemoryId }, now }));
+    expect(repeated.id).toBe(retained.id);
+  });
+
+  it("accumulates descriptions from visible sources and never searches archived descriptions", async () => {
+    const organization = randomUUID(), user = randomUUID();
+    await pool.query("INSERT INTO organizations(id,slug,name) VALUES($1,$2,'Description test')", [organization, organization]);
+    await pool.query("INSERT INTO users(id,email,name) VALUES($1,$2,'Reviewer')", [user, `${user}@example.test`]);
+    await pool.query("INSERT INTO organization_members(organization_id,user_id,role,status) VALUES($1,$2,'owner','active')", [organization,user]);
+    const documentIds = [randomUUID(),randomUUID()];
+    const chunkIds = [randomUUID(),randomUUID()];
+    const descriptions = ["Guan Yu commanded the Azure battalion.", "Guan Yu studied the Crimson strategy."];
+    for (let index=0;index<2;index++) {
+      await pool.query("INSERT INTO documents(id,organization_id,scope_kind,title,object_key,checksum,mime_type,status,created_by) VALUES($1,$2,'organization','Chapter','fixture','checksum','text/plain','ready',$3)", [documentIds[index],organization,user]);
+      await pool.query("INSERT INTO document_chunks(id,organization_id,document_id,ordinal,content) VALUES($1,$2,$3,0,$4)", [chunkIds[index],organization,documentIds[index],descriptions[index]]);
+    }
+    const repository = createKnowledgeGraphRepository(db);
+    const scope = { kind: "organization" as const, organizationId: organization };
+    const nodes = await Promise.all(chunkIds.map((chunkId,index) => repository.saveNode(createKnowledgeNode({
+      id: randomUUID(), scope, kind: "person", canonicalName: "Guan Yu", summary: descriptions[index], source: { chunkId }, now: new Date()
+    }))));
+    expect(nodes[0]?.id).toBe(nodes[1]?.id);
+    const access: OrganizationAccess = { organizationId: organization, userId: user, role: "owner", teams: [] };
+    const before = await repository.searchNodes({ access, query: "Azure", limit: 10 });
+    expect(before[0]?.node.summary).toContain("Azure");
+    expect(before[0]?.node.summary).toContain("Crimson");
+    expect(before[0]?.node.sources).toHaveLength(2);
+    await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Related officer",
+      summary: "Guan Yu ".repeat(30), source: { chunkId: chunkIds[1]! }, now: new Date() }));
+    expect((await repository.searchNodes({ access, query: "Guan Yu", limit: 10 }))[0]?.node.id).toBe(nodes[0]?.id);
+
+    await pool.query("UPDATE documents SET status='archived' WHERE id=$1",[documentIds[0]]);
+    expect(await repository.searchNodes({ access, query: "Azure", limit: 10 })).toEqual([]);
+    const visible = await repository.searchNodes({ access, query: "Crimson", limit: 10 });
+    expect(visible[0]?.node.summary).toBe(descriptions[1]);
+    expect(visible[0]?.node.sources).toEqual([{ chunkId: chunkIds[1] }]);
+    const alias = await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "character", canonicalName: "General Guan",
+      summary: "Commands the Emerald guard.", source: { chunkId: chunkIds[1]! }, now: new Date() }));
+    const merged = await repository.mergeNodes({ organizationId: organization, sourceNodeId: alias.id, targetNodeId: nodes[0]!.id, mergedBy: user, reason: "Same person", now: new Date() });
+    expect(merged?.summary).toContain("Crimson");
+    expect(merged?.summary).toContain("Emerald");
+    expect(merged?.sources).toHaveLength(2);
+
+    // A visible source without a description must not revive the shared summary
+    // left by an archived source. Exercise every public node read path.
+    const withoutDescription = await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
+      source: { chunkId: chunkIds[1]! }, now: new Date() }));
+    await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
+      summary: "Archived secret biography.", source: { chunkId: chunkIds[0]! }, now: new Date() }));
+    expect((await repository.searchNodes({ access, query: "Zhang Fei", limit: 10 }))[0]?.node.summary).toBeUndefined();
+    expect((await repository.findNodesByCanonicalNames(access, scope, ["Zhang Fei"]))[0]?.summary).toBeUndefined();
+    expect((await repository.findNeighborhood(access, withoutDescription.id, 1, 10)).nodes[0]?.summary).toBeUndefined();
+    expect(await repository.searchNodes({ access, query: "biography", limit: 10 })).toEqual([]);
+
+    const candidates = createKnowledgeCandidateRepository(db);
+    expect(await candidates.processingProgress(access)).toEqual({ totalChunks: 1, extractedChunks: 0, curatedChunks: 0 });
+    expect(await candidates.processingProgress({ ...access, organizationId: organizationB })).toEqual({ totalChunks: 0, extractedChunks: 0, curatedChunks: 0 });
+    const candidate = createKnowledgeCandidate({ id: randomUUID(), documentId: documentIds[1]!, chunkId: chunkIds[1]!, scope, model: "current",
+      graph: { entities: [{ key: "guan", kind: "person", canonicalName: "Guan Yu" }], relationships: [] }, now: new Date() });
+    const saved = await Promise.all([candidates.save(candidate), candidates.save({ ...candidate, id: randomUUID() })]);
+    expect(saved[0]?.id).toBe(saved[1]?.id);
+    expect(await candidates.listPending(access, 100)).toHaveLength(1);
+    expect(await candidates.processingProgress(access)).toEqual({ totalChunks: 1, extractedChunks: 1, curatedChunks: 0 });
+  });
 });

@@ -12,15 +12,6 @@ function assertSingleOrganizationCount(count: number): void {
   }
 }
 
-export async function assertSingleOrganizationBeforeMigration(db: AgentMemoryDatabase): Promise<void> {
-  const table = await db.execute<{ exists: boolean }>(sql`select to_regclass('public.organizations') is not null as exists`);
-  if (!table.rows[0]?.exists) {
-    return;
-  }
-  const organizations = await db.execute(sql`select id from public.organizations limit 2`);
-  assertSingleOrganizationCount(organizations.rows.length);
-}
-
 function singleOrganization(rows: readonly Organization[]): Organization | undefined {
   assertSingleOrganizationCount(rows.length);
   return rows[0];

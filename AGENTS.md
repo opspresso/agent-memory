@@ -73,7 +73,7 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 
 - 변경 전 관련 route, schema, use case, domain 정책, repository, 테스트를 함께 읽어라.
 - API 입력을 바꾸면 Zod schema, route, 공개 응답 변환, API 문서, 관련 테스트를 함께 갱신하라.
-- database schema를 바꾸면 `src/infrastructure/database/schema/`를 수정하고 `pnpm db:generate`로 migration을 생성하라. 생성된 `drizzle/` migration과 snapshot을 임의로 편집하지 마라.
+- database schema를 바꾸면 `src/infrastructure/database/schema/`를 수정하고 `pnpm db:generate`로 현재 스키마 `database/schema.sql`을 생성하라. 생성 파일은 임의로 편집하지 마라. 누적 migration·이전 데이터 변환은 유지하지 않으며 schema 변경 배포 전에는 명시적으로 데이터를 초기화하라.
 - 새 동작과 버그 수정에는 가장 낮은 계층의 결정적 테스트를 추가하라. database constraint나 tenant 격리는 integration test로 검증하라.
 - 환경 변수나 실행 흐름을 바꾸면 `.env.example`, `compose.yaml`, `docs/operations.md`의 정합성을 확인하라.
 - HTTP 또는 MCP 계약을 바꾸면 `docs/api.md`를 갱신하라. 계층이나 불변 조건을 바꾸면 `docs/architecture.md`를 갱신하라.
@@ -96,6 +96,6 @@ pnpm test
 | production code, build 설정, dependency | `pnpm build` |
 | database schema, repository, tenant constraint | `pnpm test:integration` |
 | 화면, 인증·가입 흐름, browser interaction | `pnpm test:e2e` |
-| migration 생성 | `pnpm db:generate` 후 migration diff 검토와 `pnpm test:integration` |
+| schema SQL 생성 | `pnpm db:generate` 후 SQL diff·`pnpm db:check`와 `pnpm test:integration` |
 
 `pnpm verify`는 lint, typecheck, architecture, unit test, production build를 순서대로 실행한다. Integration test는 Testcontainers와 Docker가 필요하며 E2E test는 Playwright Chromium이 필요하다.

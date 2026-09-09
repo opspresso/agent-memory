@@ -173,6 +173,7 @@ export const knowledgeNodeSources = pgTable(
     nodeId: uuid().notNull(),
     memoryId: uuid(),
     chunkId: uuid(),
+    description: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [

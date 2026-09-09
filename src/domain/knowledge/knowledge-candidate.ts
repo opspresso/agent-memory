@@ -1,4 +1,5 @@
 import type { ScopedResource } from "@/domain/identity/organization-access";
+import type { KnowledgeCandidateAssessment } from "./knowledge-assessment";
 
 import {
   normalizeKnowledgeKind,
@@ -20,17 +21,34 @@ export interface ProposedKnowledgeEntity {
   readonly kind: string;
   readonly canonicalName: string;
   readonly summary?: string;
+  readonly aliases?: readonly string[];
+  readonly evidence?: readonly string[];
 }
 
 export interface ProposedKnowledgeRelationship {
   readonly sourceKey: string;
   readonly targetKey: string;
   readonly predicate: string;
+  readonly evidence?: readonly string[];
 }
 
 export interface ProposedKnowledgeGraph {
   readonly entities: readonly ProposedKnowledgeEntity[];
   readonly relationships: readonly ProposedKnowledgeRelationship[];
+}
+
+export interface KnowledgeCandidateSelection {
+  readonly entityKeys: readonly string[];
+  readonly relationshipIndexes: readonly number[];
+}
+
+export interface KnowledgeCandidateItemReview {
+  readonly item: string;
+  readonly decision: "accepted" | "rejected";
+  readonly reviewedBy: string;
+  readonly reviewedAt: string;
+  readonly reason?: string;
+  readonly method?: "human" | "automatic";
 }
 
 export interface KnowledgeCandidate {
@@ -41,6 +59,8 @@ export interface KnowledgeCandidate {
   readonly model: string;
   readonly graph: ProposedKnowledgeGraph;
   readonly status: KnowledgeCandidateStatus;
+  readonly itemReviews?: readonly KnowledgeCandidateItemReview[];
+  readonly assessment?: KnowledgeCandidateAssessment;
   readonly reviewedBy?: string;
   readonly reviewReason?: string;
   readonly reviewedAt?: Date;
@@ -78,6 +98,13 @@ function normalizedText(value: string, label: string, maximum: number) {
   return normalized;
 }
 
+function normalizedList(values: readonly string[], label: string, maximum: number) {
+  if (values.length > 20) {
+    throw new InvalidKnowledgeCandidateError(`${label} must contain at most 20 items`);
+  }
+  return Object.freeze([...new Set(values.map((value) => normalizedText(value, label, maximum)))]);
+}
+
 function normalizedGraph(graph: ProposedKnowledgeGraph): ProposedKnowledgeGraph {
   if (graph.entities.length > 100 || graph.relationships.length > 200) {
     throw new InvalidKnowledgeCandidateError(
@@ -96,6 +123,8 @@ function normalizedGraph(graph: ProposedKnowledgeGraph): ProposedKnowledgeGraph 
       "entity canonical name",
       500
     ),
+    ...(entity.aliases ? { aliases: normalizedList(entity.aliases, "entity aliases", 500) } : {}),
+    ...(entity.evidence ? { evidence: normalizedList(entity.evidence, "entity evidence", 2_000) } : {}),
     ...(entity.summary?.trim()
       ? {
           summary: normalizedText(entity.summary, "entity summary", 10_000)
@@ -134,7 +163,8 @@ function normalizedGraph(graph: ProposedKnowledgeGraph): ProposedKnowledgeGraph 
         normalizeKnowledgePredicate(relationship.predicate),
         "relationship predicate",
         100
-      )
+      ),
+      ...(relationship.evidence ? { evidence: normalizedList(relationship.evidence, "relationship evidence", 2_000) } : {})
     };
   });
   return Object.freeze({

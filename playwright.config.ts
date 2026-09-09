@@ -37,7 +37,7 @@ export default defineConfig({
     // A production server keeps route responses fast and avoids the dev
     // compiler's memory pressure on shared CI runners.
     command:
-      "./node_modules/.bin/next build && mkdir -p .next-e2e/standalone/.next-e2e/static .next-e2e/standalone/public && cp -R .next-e2e/static/. .next-e2e/standalone/.next-e2e/static/ && cp -R public/. .next-e2e/standalone/public/ && HOSTNAME=127.0.0.1 PORT=3110 node .next-e2e/standalone/server.js",
+      "./node_modules/.bin/next build && mkdir -p .next-e2e/standalone/database .next-e2e/standalone/.next-e2e/static .next-e2e/standalone/public && cp -R .next-e2e/static/. .next-e2e/standalone/.next-e2e/static/ && cp -R public/. .next-e2e/standalone/public/ && cp database/schema.sql .next-e2e/standalone/database/schema.sql && HOSTNAME=127.0.0.1 PORT=3110 node .next-e2e/standalone/server.js",
     env: {
       NEXT_DIST_DIR: ".next-e2e",
       DATABASE_URL:
@@ -49,10 +49,10 @@ export default defineConfig({
       ALLOWED_EMAIL_DOMAINS: "nalbam.com",
       BETTER_AUTH_SECRET: "agent-memory-playwright-secret-000000000000",
       BETTER_AUTH_URL: "http://127.0.0.1:3110",
-      S3_ENDPOINT: "http://127.0.0.1:9010",
-      S3_ACCESS_KEY_ID: "agent_memory",
-      S3_SECRET_ACCESS_KEY: "agent_memory_dev",
-      S3_BUCKET: "agent-memory",
+      S3_ENDPOINT: process.env.S3_ENDPOINT ?? "http://127.0.0.1:9010",
+      S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID ?? "agent_memory",
+      S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY ?? "agent_memory_dev",
+      S3_BUCKET: process.env.S3_BUCKET ?? "agent-memory",
       GOOGLE_CLIENT_ID: "",
       GOOGLE_CLIENT_SECRET: "",
       OIDC_CLIENT_ID: "",

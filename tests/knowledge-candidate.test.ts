@@ -45,6 +45,10 @@ function candidateRepository(): KnowledgeCandidateRepository {
   return {
     findById: vi.fn(),
     findByChunkId: vi.fn(),
+    listReviewSources: vi.fn(),
+    saveAssessment: vi.fn(),
+    reviewSummary: vi.fn(),
+    processingProgress: vi.fn(),
     listPending: vi.fn(),
     save: vi.fn((value) => value),
     accept: vi.fn(),

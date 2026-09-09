@@ -1,1 +1,0 @@
-ALTER TABLE "knowledge_candidates" ADD CONSTRAINT "knowledge_candidates_organization_id_id_unique" UNIQUE("organization_id","id");

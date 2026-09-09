@@ -269,6 +269,8 @@ export const neighborhoodResponseSchema = z.object({
 });
 
 const proposedEntityResponseSchema = z.object({
+  aliases: z.array(z.string()).optional(),
+  evidence: z.array(z.string()).optional(),
   key: z.string().min(1),
   kind: z.string().min(1),
   canonicalName: z.string().min(1),
@@ -276,12 +278,17 @@ const proposedEntityResponseSchema = z.object({
 });
 
 const proposedRelationshipResponseSchema = z.object({
+  evidence: z.array(z.string()).optional(),
   sourceKey: z.string().min(1),
   targetKey: z.string().min(1),
   predicate: z.string().min(1)
 });
 
 export const knowledgeCandidateResponseSchema = z.object({
+  assessment: z.object({ model: z.string(), policyVersion: z.string(), assessedAt: z.string(),
+    items: z.array(z.object({ item: z.string(), verdict: z.enum(["accept", "review", "ignore"]), evidence: z.string(), reason: z.string() })) }).optional(),
+  itemReviews: z.array(z.object({ item: z.string(), decision: z.enum(["accepted", "rejected"]),
+    reviewedAt: z.string(), reviewedBy: z.string(), method: z.enum(["human", "automatic"]).optional(), reason: z.string().optional() })).optional(),
   id: z.string().min(1),
   documentId: z.string().min(1),
   chunkId: z.string().min(1),
@@ -315,5 +322,33 @@ export const candidateDuplicatesResponseSchema = z.object({
   ).optional(),
   ontology: ontologyFlagsResponseSchema.optional()
 });
+
+export const knowledgeReviewGroupsResponseSchema = z.object({
+  automaticAccepted: z.number().int().nonnegative(),
+  automaticIgnored: z.number().int().nonnegative(),
+  unassessedCount: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+  sourceCount: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  groups: z.array(z.object({
+    key: z.string(), title: z.string(), kind: z.enum(["entity", "relationship"]),
+    predicate: z.string().optional(), entityKind: z.string().optional(),
+    scope: scopeResponseSchema, weak: z.boolean(), evidenceCount: z.number(), documentCount: z.number(),
+    ontology: ontologyFlagsResponseSchema,
+    occurrences: z.array(z.object({
+      candidateId: z.string(), documentId: z.string(), documentTitle: z.string(), chunkId: z.string(), ordinal: z.number(),
+      selection: z.object({ entityKeys: z.array(z.string()), relationshipIndexes: z.array(z.number().int()) }),
+      evidence: z.array(z.string()), aliases: z.array(z.string()), summary: z.string().optional(),
+      assessmentReason: z.string().optional()
+    })).min(1)
+  }))
+});
+
+export type KnowledgeReviewGroupsResponse = z.infer<typeof knowledgeReviewGroupsResponseSchema>;
+
+export const knowledgeCurationHistoryResponseSchema = z.object({ sources: z.array(z.object({
+  candidate: knowledgeCandidateResponseSchema, documentTitle: z.string(), ordinal: z.number()
+})) });
 
 export type SearchHitResponse = z.infer<typeof searchHitResponseSchema>;

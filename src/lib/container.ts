@@ -11,6 +11,7 @@ import { createDocumentRepository } from "@/infrastructure/database/repositories
 import { createIngestionReceiptRepository } from "@/infrastructure/database/repositories/ingestion-receipt-repository";
 import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
 import { createTextRerankerService } from "@/infrastructure/ai/text-reranker-service";
+import { createKnowledgeVerificationService } from "@/infrastructure/ai/knowledge-verification-service";
 import { createKnowledgeExtractionService } from "@/infrastructure/ai/knowledge-extraction-service";
 import {
   createAiRequestLimiter,
@@ -157,6 +158,15 @@ function createConfiguredKnowledgeExtractionService() {
 }
 export const knowledgeExtractionService =
   createConfiguredKnowledgeExtractionService();
+
+export const knowledgeVerificationService = knowledgeExtractionModel && knowledgeExtractionBaseUrl
+  ? createKnowledgeVerificationService({
+      apiKey: process.env.KNOWLEDGE_EXTRACTION_API_KEY,
+      baseUrl: knowledgeExtractionBaseUrl,
+      model: knowledgeExtractionModel,
+      requestLimiter: aiRequestLimiter
+    })
+  : undefined;
 
 function createConfiguredKnowledgeOntologySuggestionService() {
   if (!knowledgeExtractionModel || !knowledgeExtractionBaseUrl) {

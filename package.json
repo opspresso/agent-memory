@@ -1,6 +1,6 @@
 {
   "name": "agent-memory",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "scripts": {
     "dev": "WATCHPACK_POLLING=true next dev --port 3100",
@@ -13,10 +13,11 @@
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "test:watch": "vitest",
     "architecture": "depcruise src --config dependency-cruiser.config.cjs",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:generate": "node scripts/generate-schema.mjs",
     "db:studio": "drizzle-kit studio",
-    "verify": "pnpm lint && pnpm typecheck && pnpm architecture && pnpm test && pnpm build"
+    "verify": "pnpm db:check && pnpm lint && pnpm typecheck && pnpm architecture && pnpm test && pnpm build",
+    "db:init": "node --env-file-if-exists=.env.local scripts/init-database.mjs",
+    "db:check": "node scripts/generate-schema.mjs --check"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1118.0",

@@ -29,7 +29,12 @@ export const knowledgeEdgeIdSchema = z.uuid();
 export const knowledgeCandidateIdSchema = z.uuid();
 
 export const reviewKnowledgeCandidateSchema = z.object({
-  reason: z.string().trim().min(1).max(2_000).optional()
+  reason: z.string().trim().min(1).max(2_000).optional(),
+  selection: z.object({
+    entityKeys: z.array(z.string().trim().min(1).max(100)).max(100),
+    relationshipIndexes: z.array(z.number().int().min(0).max(199)).max(200)
+  }).refine((selection) => selection.entityKeys.length + selection.relationshipIndexes.length > 0,
+    "select at least one item").optional()
 });
 
 export const mergeKnowledgeNodesSchema = z.object({

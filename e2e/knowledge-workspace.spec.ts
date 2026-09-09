@@ -30,7 +30,7 @@ async function noOverflow(page: Page) {
 }
 
 test("completes knowledge work with real evidence, scoped access and responsive views", async ({ page, browser }, testInfo) => {
-  test.skip(process.env.E2E_AUTHENTICATED !== "true", "requires a disposable migrated PostgreSQL database");
+  test.skip(process.env.E2E_AUTHENTICATED !== "true", "requires a disposable initialized PostgreSQL database");
   test.setTimeout(240_000);
   await resetInstallationFixture();
   page.setDefaultTimeout(15_000);
@@ -152,8 +152,10 @@ test("completes knowledge work with real evidence, scoped access and responsive 
       await database.query("INSERT INTO document_chunks (id, organization_id, document_id, ordinal, content) VALUES ($1,$2,$3,$4,$5)", [randomUUID(), organization.id, readyId, ordinal, `Synthetic release appendix ${ordinal + 1}.`]);
     }
     const graph = { entities: [{ key: "api", kind: "service", canonicalName: "Evidence API" }, { key: "db", kind: "database", canonicalName: "Evidence Database" }], relationships: [{ sourceKey: "api", predicate: "stores_in", targetKey: "db" }] };
+    const assessment = { model: "synthetic-verifier", policyVersion: "evidence-v1", assessedAt: new Date().toISOString(),
+      items: ["entity:api", "entity:db", "relationship:0"].map((item) => ({ item, verdict: "review", evidence: "", reason: "This synthetic example needs a human source check." })) };
     for (const [id, sourceChunk] of [[candidateId, chunkId], [rejectCandidateId, rejectChunkId]]) {
-      await database.query("INSERT INTO knowledge_candidates (id, organization_id, document_id, chunk_id, model, graph) VALUES ($1,$2,$3,$4,$5,$6)", [id, organization.id, readyId, sourceChunk, "synthetic-e2e-extractor", JSON.stringify(graph)]);
+      await database.query("INSERT INTO knowledge_candidates (id, organization_id, document_id, chunk_id, model, graph, assessment) VALUES ($1,$2,$3,$4,$5,$6,$7)", [id, organization.id, readyId, sourceChunk, "synthetic-e2e-extractor", JSON.stringify(graph), JSON.stringify(assessment)]);
     }
 
     await page.goto(`/documents?document=${pendingId}`);
@@ -194,18 +196,30 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await page.screenshot({ path: testInfo.outputPath("after-documents-desktop-ko.png"), fullPage: true });
 
     await page.goto("/review");
+    await expect(page.getByRole("heading", { name: "Evidence API → stores_in → Evidence Database", exact: true })).toBeVisible();
+    await expect(page.getByText("검토할 지식 3개 · 추출 기록 2개", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "원문 펼치기 / 접기", exact: true }).first().click();
     await expect(page.getByText("Evidence API stores release records in Evidence Database. The source requires an accountable release owner.", { exact: true })).toBeVisible();
-    await expect(page.getByText("stores_in", { exact: true })).toBeVisible();
+    await page.getByRole("checkbox", { name: "Release source guide · 본문 2", exact: true }).uncheck();
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({ path: testInfo.outputPath("after-review-desktop-ko.png"), fullPage: true });
-    const acceptResponse = page.waitForResponse((response) => response.url().includes("/knowledge/candidates/") && response.url().endsWith("/accept"));
-    await page.getByRole("button", { name: "Graph에 승인", exact: true }).click();
-    expect((await acceptResponse).status()).toBe(200);
-    await expect(page.getByText("검토 대기 · 1", { exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.getByRole("heading", { name: "Evidence API → stores_in → Evidence Database", exact: true }).evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(240);
+    await noOverflow(page);
+    await page.screenshot({ path: testInfo.outputPath("after-review-mobile-ko.png"), fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByRole("button", { name: "선택한 출처 1곳 승인", exact: true }).click();
+    await expect(page.getByText("검토할 지식 3개 · 추출 기록 1개", { exact: true })).toBeVisible();
+    const persisted = await database.query("SELECT status, item_reviews FROM knowledge_candidates WHERE id=$1", [candidateId]);
+    expect(persisted.rows[0].status).toBe("accepted");
+    expect(persisted.rows[0].item_reviews).toHaveLength(3);
     await page.getByLabel("검토 사유", { exact: true }).fill("Duplicate evidence is unnecessary for this example");
-    const rejectResponse = page.waitForResponse((response) => response.url().includes("/knowledge/candidates/") && response.url().endsWith("/reject"));
-    await page.getByRole("button", { name: "거절", exact: true }).click();
-    expect((await rejectResponse).status()).toBe(200);
+    await page.getByRole("button", { name: "선택한 지식 거절", exact: true }).click();
+    await expect(page.getByText("검토할 지식 2개 · 추출 기록 1개", { exact: true })).toBeVisible();
+    for (let remaining = 2; remaining > 0; remaining -= 1) {
+      await page.getByRole("button", { name: "선택한 지식 거절", exact: true }).click();
+      await expect(page.getByText(`검토할 지식 ${remaining - 1}개 · 추출 기록 ${remaining === 1 ? 0 : 1}개`, { exact: true })).toBeVisible();
+    }
 
     await jsonRequest(page, `/api/knowledge/nodes`, "POST", { scope: { kind: "organization" }, kind: "service", canonicalName: "Evidence API", source: { memoryId: shared.id } });
     await page.goto("/?q=Evidence%20API&kind=knowledge%2Fnodes");

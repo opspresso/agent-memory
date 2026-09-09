@@ -8,7 +8,7 @@ Agent Memory는 설치당 하나의 조직에서 서비스와 AI Agent가 장기
 | --- | --- |
 | 장기 기억 | MCP `remember`로 저장, `recall`로 관련 Memory 회상, `forget`으로 archive |
 | 문서 지식 | 파일 업로드 → 원본 저장 → worker 추출·chunk 생성 → 검색 |
-| Knowledge Graph | Memory·문서 chunk를 근거로 관계를 구성하고, AI 문서 후보는 사람이 검토한 뒤 반영 |
+| Knowledge Graph | Memory·문서 chunk를 근거로 관계를 구성하고, AI 검증 기준을 통과한 지식은 자동 반영하고 불확실한 후보만 사람이 검토 |
 | 통합 검색 | `context_search`로 Memory·문서·Graph를 함께 검색 |
 
 Memory, 문서, Graph에는 개인·팀·조직 scope를 적용한다. 일반 사용자는 첫 콘솔 접속 시 가입 요청을 등록하고 운영자 승인 후 지식에 접근한다. 조직 Agent token만 사용하는 서비스는 조직 범위로 제한되며, 사용자 위임은 [MCP 인증 계약](docs/api.md#mcp)을 따른다.
@@ -36,13 +36,13 @@ ADMIN_EMAILS=your-admin@example.com
 ```bash
 docker compose up --wait postgres minio
 docker compose run --rm minio-init
-pnpm db:migrate
+pnpm db:init
 pnpm dev
 ```
 
 `http://localhost:3100`에서 지정한 운영자 email로 가입하라. 설치에 active owner가 없으면 이 사용자가 최초 owner가 된다. 다른 사용자의 요청은 `회원` 화면에서 승인한다.
 
-`.env.local`의 DB 주소를 변경했다면 migration 전에 같은 값을 shell의 `DATABASE_URL`에도 지정해야 한다. Drizzle CLI는 `.env.local`을 자동으로 읽지 않는다. Google·OIDC 사용, 환경 설정 우선순위, 첫 Memory·문서·MCP 연결은 [시작 가이드](docs/getting-started.md)를 따른다.
+`pnpm db:init`은 `.env.local`을 읽으며 shell의 `DATABASE_URL`이 있으면 우선한다. 빈 DB만 초기화하고 현재 schema와 다른 기존 DB는 변경 없이 거부한다. Google·OIDC 사용, 환경 설정 우선순위, 첫 Memory·문서·MCP 연결은 [시작 가이드](docs/getting-started.md)를 따른다.
 
 ## 운영 콘솔
 
@@ -79,7 +79,7 @@ pnpm verify
 
 이 명령은 lint, typecheck, architecture, unit test, production build를 실행한다. DB·repository 변경에는 `pnpm test:integration`, 화면·브라우저 흐름 변경에는 `pnpm test:e2e`를 추가한다. 인증 E2E는 폐기 가능한 별도 DB와 `E2E_AUTHENTICATED=true`가 필요하다. [검증 절차](docs/operations.md#배포-전-확인)를 따른다.
 
-Pull request와 `main` push CI는 DB migration, 위 전체 검사, PostgreSQL integration test, 인증 E2E를 실행한다.
+Pull request와 `main` push CI는 빈 DB 초기화, 위 전체 검사, PostgreSQL integration test, 인증 E2E를 실행한다.
 
 ## 데이터 보호
 

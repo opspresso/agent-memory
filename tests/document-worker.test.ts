@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  curate: vi.fn(),
   candidateFindByChunkId: vi.fn(),
   documentClaim: vi.fn(),
   documentFindChunk: vi.fn(),
@@ -18,6 +19,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/infrastructure/observability/logger", () => ({
   logger: { info: mocks.loggerInfo }
 }));
+
+vi.mock("@/lib/knowledge-curation-service", () => ({ curateKnowledgeCandidate: mocks.curate }));
 
 vi.mock("@/lib/container", () => ({
   documentIngestionQueue: {
@@ -46,6 +49,7 @@ describe("document worker startup", () => {
   beforeEach(() => {
     vi.resetModules();
     mocks.loggerInfo.mockReset();
+    mocks.curate.mockReset();
     mocks.candidateFindByChunkId.mockReset();
     mocks.documentClaim.mockReset();
     mocks.documentFindChunk.mockReset();
@@ -144,5 +148,6 @@ describe("document worker startup", () => {
       "50000000-0000-4000-8000-000000000001"
     );
     expect(mocks.documentFindChunk).not.toHaveBeenCalled();
+    expect(mocks.curate).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001", "50000000-0000-4000-8000-000000000001", undefined);
   });
 });
