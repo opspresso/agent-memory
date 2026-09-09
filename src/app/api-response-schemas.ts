@@ -319,4 +319,24 @@ export const candidateDuplicatesResponseSchema = z.object({
   ontology: ontologyFlagsResponseSchema.optional()
 });
 
+export const knowledgeReviewGroupsResponseSchema = z.object({
+  total: z.number().int().nonnegative(),
+  sourceCount: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  groups: z.array(z.object({
+    key: z.string(), title: z.string(), kind: z.enum(["entity", "relationship"]),
+    predicate: z.string().optional(), entityKind: z.string().optional(),
+    scope: scopeResponseSchema, weak: z.boolean(), evidenceCount: z.number(), documentCount: z.number(),
+    ontology: ontologyFlagsResponseSchema,
+    occurrences: z.array(z.object({
+      candidateId: z.string(), documentId: z.string(), documentTitle: z.string(), chunkId: z.string(), ordinal: z.number(),
+      selection: z.object({ entityKeys: z.array(z.string()), relationshipIndexes: z.array(z.number().int()) }),
+      evidence: z.array(z.string()), aliases: z.array(z.string()), summary: z.string().optional()
+    })).min(1)
+  }))
+});
+
+export type KnowledgeReviewGroupsResponse = z.infer<typeof knowledgeReviewGroupsResponseSchema>;
+
 export type SearchHitResponse = z.infer<typeof searchHitResponseSchema>;

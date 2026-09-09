@@ -17,7 +17,7 @@ import {
 
 const clock = () => new Date();
 
-export const listKnowledgeReviewGroups = buildListKnowledgeReviewGroups(knowledgeCandidateRepository);
+export const listKnowledgeReviewGroups = buildListKnowledgeReviewGroups(knowledgeCandidateRepository, knowledgeOntologyReader);
 
 export const listKnowledgeCandidateRecords = buildListKnowledgeCandidates(
   knowledgeCandidateRepository

@@ -549,6 +549,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     }
   );
   await page.getByRole("link", { name: "AI 후보 검토" }).click();
+  await page.getByRole("tab", { name: "청크별 검토", exact: true }).click();
   await expect(
     page.getByText(/같은 scope와 이름의 기존 node가 1개 있습니다/)
   ).toBeVisible();

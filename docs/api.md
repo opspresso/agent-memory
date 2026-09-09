@@ -547,7 +547,7 @@ curl \
 
 ### AI 후보 조회와 검토
 
-`GET /api/knowledge/review-groups?offset=0&limit=25&query=유비`는 검토 가능한 전체 pending 후보에서 동일 scope·kind·정규화 이름의 개체와 동일 양 끝 개체·predicate의 관계를 통합한 후 페이지를 반환한다. 응답은 `{ groups, total, sourceCount, offset, limit }`이다. Limit은 1–100, offset은 0 이상의 정수이며 query는 최대 500자다. 그룹의 `occurrences`는 후보 ID, 문서 제목·ID, chunk ID·ordinal, 근거, 별칭·설명과 해당 항목을 검토할 `selection`을 제공한다. 빈 결과와 이미 검토한 항목은 제외한다. 구체적인 관계와 인용 근거가 있는 항목을 우선하며 정렬은 진실성 점수가 아니다. 대칭 관계만 역방향을 통합한다. 원본 인용이 다른 사건·시점을 나타내는지는 검토자가 확인한다.
+`GET /api/knowledge/review-groups?offset=0&limit=25&query=유비`는 검토 가능한 전체 pending 후보에서 동일 scope·kind·정규화 이름의 개체와 동일 양 끝 개체·predicate의 관계를 통합한 후 페이지를 반환한다. 응답은 `{ groups, total, sourceCount, offset, limit }`이다. Limit은 1–100, offset은 0 이상의 정수이며 query는 최대 500자다. 그룹의 `occurrences`는 후보 ID, 문서 제목·ID, chunk ID·ordinal, 근거, 별칭·설명과 해당 항목을 검토할 `selection`을 제공한다. 빈 결과와 이미 검토한 항목은 제외한다. 각 그룹의 `ontology`는 검증 모드와 해당 항목의 위반 목록을 제공한다. 구체적인 관계와 인용 근거가 있는 항목을 우선하며 정렬은 진실성 점수가 아니다. 대칭 관계만 역방향을 통합한다. 원본 인용이 다른 사건·시점을 나타내는지는 검토자가 확인한다.
 
 승인·거절 body의 선택적 `selection: { entityKeys: string[], relationshipIndexes: number[] }`은 원본 graph의 키와 0 기반 관계 index를 참조한다. 생략하면 남은 항목 전체를 처리한다. 관계 승인은 양 끝 개체도 승격하고, 개체 거절은 아직 검토하지 않은 연결 관계도 거절한다. 다른 항목은 pending으로 남는다. `itemReviews`는 항목별 decision·reviewedBy·reviewedAt·reason을 보존하며 원본 graph는 변경하지 않는다. 모든 항목을 검토하면 승인된 항목이 하나라도 있는 후보는 accepted, 전부 거절한 후보는 rejected가 된다. 동일 항목의 같은 결정은 멱등하며 반대 결정은 거부한다. 빈 추출은 조회 이력으로 보존하되 승인할 수 없다.
 
