@@ -730,6 +730,20 @@ Memory 생성 HTTP API와 MCP `remember`는 선택적 `idempotencyKey`(trim 후 
 다른 payload는 HTTP 409 또는 MCP tool error다. 현재 scope 권한을 다시 확인하며 archived resource를
 새로 만들지 않는다. 인증 방식은 기존 session 또는 조직 Agent Bearer + 검증된 email 위임을 유지한다.
 
-문서 업로드 유스케이스도 같은 receipt 계약을 제공한다. 문서 수집 MCP 노출과 멱등 retry 도구는
-후속 개발 대상이며 현재 공개 도구 목록에는 포함되지 않는다. 저장된 pending 문서의 업로드를
-재호출하면 같은 문서 ID로 queue 등록을 복구한다. 새 원본·문서를 만들지 않는다.
+문서 수집 MCP는 같은 receipt 계약을 제공한다. 저장된 pending 문서의 업로드를 재호출하면 같은
+문서 ID로 queue 등록을 복구한다. 새 원본·문서를 만들지 않는다.
+
+| Tool | 입력 | 응답 |
+| --- | --- | --- |
+| `document_ingest` | `idempotencyKey`, `scope`, `title`, `mimeType`, UTF-8 `content`, 선택적 `sourceUri`·`metadata` | `{ document }` |
+| `document_ingest_status` | `documentId` | `{ document }`, 처리 상태·processingAttempts 포함 |
+| `document_ingest_retry` | `documentId`, `idempotencyKey`, 관측한 `expectedAttempts` | `{ document }` |
+
+Content는 기존 문서 MIME과 10 MiB 제한을 적용한다. metadata는 32 KiB다. MCP HTTP JSON 본문은
+문자 escape와 envelope를 포함해 `6 × maxDocumentBytes + 512 KiB`로 제한한다. 일반 HTTP JSON
+본문의 1 MiB 제한은 유지한다.
+
+Retry는 현재 문서 write 권한을 요구한다. 같은 키·같은 expectedAttempts는 같은 요청이며, 처리
+횟수가 바뀌면 새 키와 관측한 횟수로 요청한다. 이미 처리한 요청을 replay해도 재처리를 시작하지
+않는다. Queue 메시지도 expectedAttempts를 보관해 늦게 도착한 메시지를 거절한다. 처리 중 worker가
+중단된 경우 같은 횟수에서 만료 lease만 회수한다.

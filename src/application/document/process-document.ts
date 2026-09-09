@@ -51,14 +51,13 @@ async function embedDocumentParts(
 export function buildProcessDocument(dependencies: ProcessDocumentDependencies) {
   return async function execute(
     organizationId: string,
-    documentId: string
+    documentId: string,
+    expectedAttempts?: number
   ): Promise<void> {
     const startedAt = dependencies.clock();
-    const claim = await dependencies.repository.claimForProcessing(
-      organizationId,
-      documentId,
-      startedAt
-    );
+    const claim = expectedAttempts === undefined
+      ? await dependencies.repository.claimForProcessing(organizationId, documentId, startedAt)
+      : await dependencies.repository.claimForProcessing(organizationId, documentId, startedAt, expectedAttempts);
     if (!claim) {
       return;
     }

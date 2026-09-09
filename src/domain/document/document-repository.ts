@@ -50,6 +50,7 @@ export interface DocumentRepository {
     receipt?: IngestionReceipt
   ): Promise<SaveDocumentResult>;
   findById(organizationId: string, documentId: string): Promise<Document | null>;
+  prepareRetry?(document: Document, expectedAttempts: number, receipt: IngestionReceipt): Promise<Document | null>;
   findChunkById(
     organizationId: string,
     chunkId: string
@@ -61,7 +62,8 @@ export interface DocumentRepository {
   claimForProcessing(
     organizationId: string,
     documentId: string,
-    now: Date
+    now: Date,
+    expectedAttempts?: number
   ): Promise<DocumentProcessingClaim | null>;
   completeProcessing(
     claim: DocumentProcessingClaim,

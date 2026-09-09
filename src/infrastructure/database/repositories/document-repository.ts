@@ -212,6 +212,25 @@ export function createDocumentRepository(
       return row ? documentFromRow(row) : null;
     },
 
+    async prepareRetry(document, expectedAttempts, receipt) {
+      if (receipt.operation !== "document.retry" || receipt.organizationId !== document.scope.organizationId || receipt.resourceId !== document.id) {
+        throw new Error("retry receipt does not match its document");
+      }
+      return db.transaction(async (transaction) => {
+        await refuseIngestionReplay(transaction, receipt);
+        const [current] = await transaction.select().from(documents).where(and(
+          eq(documents.organizationId, document.scope.organizationId), eq(documents.id, document.id)
+        )).for("update").limit(1);
+        if (!current || current.status !== "failed" || current.processingAttempts !== expectedAttempts) return null;
+        await insertIngestionReceipt(transaction, receipt);
+        const [updated] = await transaction.update(documents).set({ status: "pending", errorMessage: null,
+          processingStartedAt: null, processingLeaseId: null, updatedAt: receipt.createdAt }).where(and(
+          eq(documents.organizationId, document.scope.organizationId), eq(documents.id, document.id)
+        )).returning();
+        return updated ? documentFromRow(updated) : null;
+      });
+    },
+
     async findChunkById(organizationId, chunkId) {
       const [row] = await db
         .select({
@@ -280,7 +299,7 @@ export function createDocumentRepository(
       return rows.map((row) => chunkFromRow(row.chunk));
     },
 
-    async claimForProcessing(organizationId, documentId, now) {
+    async claimForProcessing(organizationId, documentId, now, expectedAttempts) {
       const staleBefore = new Date(
         now.getTime() - documentProcessingLeaseMilliseconds
       );
@@ -289,7 +308,8 @@ export function createDocumentRepository(
         .set({
           status: "processing",
           errorMessage: null,
-          processingAttempts: sql`${documents.processingAttempts} + 1`,
+          processingAttempts: expectedAttempts === undefined ? sql`${documents.processingAttempts} + 1`
+            : sql`case when ${documents.status} = 'processing' then ${documents.processingAttempts} else ${documents.processingAttempts} + 1 end`,
           processingLeaseId: sql`uuidv7()`,
           processingStartedAt: now,
           updatedAt: now
@@ -298,6 +318,10 @@ export function createDocumentRepository(
           and(
             eq(documents.organizationId, organizationId),
             eq(documents.id, documentId),
+            expectedAttempts === undefined ? undefined : or(
+              and(inArray(documents.status, ["pending", "failed"]), eq(documents.processingAttempts, expectedAttempts)),
+              and(eq(documents.status, "processing"), eq(documents.processingAttempts, expectedAttempts + 1))
+            ),
             or(
               inArray(documents.status, ["pending", "failed"]),
               and(

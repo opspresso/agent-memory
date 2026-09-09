@@ -218,3 +218,8 @@ receipt를 확인하므로 같은 요청의 replay가 최초 생성으로 소진
 Payload fingerprint는 JSON key 순서·생성 시각·인증 role에 의존하지 않는다. 선택한 scope와 실제
 요청 내용을 반영한다. Archive 뒤에도 receipt를 유지해 재생성을 막는다. 문서 queue 등록은 resource
 transaction 뒤에 수행하며, pending upload replay가 동일 ID로 queue publication을 복구한다.
+
+멱등 문서 retry는 receipt와 pending 상태를 함께 commit한 뒤 queue에 발행한다. Queue 메시지의
+expectedAttempts와 현재 처리 횟수가 일치할 때만 새 처리를 claim한다. 만료된 processing lease는
+같은 횟수로 회수하므로 worker 재시작과 새 retry 요청을 구분한다. 완료된 처리의 오래된 queue
+메시지는 새 처리를 시작하지 않는다.

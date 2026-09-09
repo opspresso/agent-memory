@@ -527,4 +527,5 @@ E2E_AUTHENTICATED=true DOCUMENT_WORKER_ENABLED=false pnpm test:e2e
 
 멱등 Memory 생성과 내부 문서 업로드를 사용하기 전에 `pnpm db:migrate`로 `ingestion_receipts` 테이블을
 적용한다. Receipt는 resource와 함께 backup한다. Archive 이후 재생성을 막는 기록이므로 임의 TTL로
-제거하지 않는다. 문서 수집 MCP와 retry tool은 후속 구현 후 클라이언트에서 활성화한다.
+제거하지 않는다. 클라이언트는 document_ingest_status의 processingAttempts를 retry 요청의
+expectedAttempts로 전달하고, 같은 요청의 응답 유실 시 동일한 key와 횟수를 재사용한다.

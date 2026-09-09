@@ -11,7 +11,8 @@ export interface DocumentObjectStorage {
 export interface DocumentIngestionQueue {
   enqueue(
     organizationId: string,
-    documentId: string
+    documentId: string,
+    expectedAttempts?: number
   ): Promise<DocumentQueueEnqueueResult>;
 }
 

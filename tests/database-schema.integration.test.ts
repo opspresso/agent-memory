@@ -2,6 +2,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { randomUUID, createHash } from "node:crypto";
 import { buildCreateMemory } from "@/application/memory/create-memory";
 import { buildUploadDocument } from "@/application/document/upload-document";
+import { buildRetryDocument } from "@/application/document/retry-document";
 import { createIngestionReceiptRepository } from "@/infrastructure/database/repositories/ingestion-receipt-repository";
 import { ingestionFingerprint } from "@/lib/ingestion-fingerprint";
 import { and, eq, sql } from "drizzle-orm";
@@ -2436,6 +2437,31 @@ describe("PostgreSQL schema", () => {
     expect(objects.size).toBe(1);
     await expect(upload({ ...documentInput, title: "Other title" })).rejects.toThrow("different payload");
     expect((await receipts.find({ organizationId, userId, operation: "document.upload", key: "document-event" }))?.resourceId).toBe(documents[0]?.id);
+    const documentRepository = createDocumentRepository(db);
+    const documentId = documents[0]!.id;
+    await documentRepository.markEnqueueFailure(organizationId, documentId, "test failure", now);
+    const queued: number[] = [];
+    const retry = buildRetryDocument({ repository: documentRepository, receipts, fingerprint: ingestionFingerprint,
+      clock: () => now, queue: { enqueue: async (_organization, _document, expectedAttempts) => {
+        queued.push(expectedAttempts!); return "queued";
+      } } });
+    await retry(access, documentId, { idempotencyKey: "retry-0", expectedAttempts: 0 });
+    await retry(access, documentId, { idempotencyKey: "retry-0", expectedAttempts: 0 });
+    expect(queued).toEqual([0, 0]);
+    const first = await documentRepository.claimForProcessing(organizationId, documentId, now, 0);
+    expect(first).not.toBeNull();
+    await documentRepository.failProcessing(first!, "test processing failure", now);
+    expect(await documentRepository.claimForProcessing(organizationId, documentId, now, 0)).toBeNull();
+    await retry(access, documentId, { idempotencyKey: "retry-0", expectedAttempts: 0 });
+    expect(queued).toEqual([0, 0]);
+    await retry(access, documentId, { idempotencyKey: "retry-1", expectedAttempts: 1 });
+    const second = await documentRepository.claimForProcessing(organizationId, documentId, now, 1);
+    const recovered = await documentRepository.claimForProcessing(organizationId, documentId,
+      new Date(now.getTime() + documentProcessingLeaseMilliseconds + 1), 1);
+    expect(second?.document.processingAttempts).toBe(2);
+    expect(recovered?.document.processingAttempts).toBe(2);
+    expect(recovered?.leaseId).not.toBe(second?.leaseId);
+    await expect(retry(access, documentId, { idempotencyKey: "retry-1", expectedAttempts: 2 })).rejects.toThrow("different payload");
     const failedId = randomUUID();
     await expect(memoryRepository.save({ ...memories[0]!, id: failedId, scope: { kind: "team", organizationId, teamId: randomUUID() } }, {
       organizationId, userId, operation: "memory.create", key: "rollback", payloadHash: "a".repeat(64), resourceId: failedId, createdAt: now

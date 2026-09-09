@@ -6,6 +6,10 @@ import { version as appVersion } from "../../package.json";
 import { contextRecallText } from "@/application/context/context-recall";
 import { InvalidContextSearchError } from "@/application/context/search-context";
 import { InvalidDocumentSearchError } from "@/application/document/search-documents";
+import { DocumentAccessDeniedError, DocumentQuotaExceededError, type UploadDocumentInput } from "@/application/document/upload-document";
+import { DocumentNotFoundError } from "@/application/document/get-document";
+import { DocumentNotRetryableError } from "@/application/document/retry-document";
+import { InvalidDocumentError, type Document } from "@/domain/document/document";
 import { KnowledgeNodeNotFoundError } from "@/application/knowledge/create-knowledge-edge";
 import { InvalidKnowledgeSearchError } from "@/application/knowledge/search-knowledge-nodes";
 import { MemoryNotFoundError } from "@/application/memory/get-memory";
@@ -25,7 +29,8 @@ import { InvalidMemoryError } from "@/domain/memory/memory";
 import { AiRequestLimitExceededError } from "@/domain/shared/ai-request-limiter";
 import { IngestionConflictError } from "@/domain/shared/ingestion-receipt";
 
-import { publicDocumentHit } from "./document-http";
+import { publicDocument, publicDocumentHit } from "./document-http";
+import { documentIngestSchema } from "./document-schemas";
 import { publicContextSearchResult } from "./context-http";
 import {
   publicKnowledgeEdge,
@@ -38,6 +43,9 @@ import { resolveScopedResource } from "./scoped-resource";
 import { logger } from "./observability";
 
 export interface AgentMemoryMcpOperations {
+  uploadDocument?(input: UploadDocumentInput): Promise<Document>;
+  getDocument?(access: OrganizationAccess, documentId: string): Promise<Document>;
+  retryDocument?(access: OrganizationAccess, documentId: string, request: { idempotencyKey: string; expectedAttempts: number }): Promise<Document>;
   searchContext(
     access: OrganizationAccess,
     query: string,
@@ -92,6 +100,8 @@ async function executeMcpTool<T>(execute: () => Promise<T>) {
     return await execute();
   } catch (error) {
     const publicError =
+      error instanceof DocumentAccessDeniedError || error instanceof DocumentQuotaExceededError ||
+      error instanceof DocumentNotFoundError || error instanceof DocumentNotRetryableError || error instanceof InvalidDocumentError ||
       error instanceof IngestionConflictError ||
       error instanceof InvalidContextSearchError ||
       error instanceof InvalidDocumentSearchError ||
@@ -126,6 +136,30 @@ export function createAgentMemoryMcpServer(
   operations: AgentMemoryMcpOperations
 ) {
   const server = new McpServer({ name: "agent-memory", version: appVersion });
+
+  if (operations.uploadDocument && operations.getDocument && operations.retryDocument) {
+    server.registerTool("document_ingest", {
+      title: "Ingest a document", description: "Store a scoped text document for retrieval. Replays with the same idempotencyKey return the existing document. Check document_ingest_status until ready.",
+      inputSchema: documentIngestSchema, annotations: { idempotentHint: true }
+    }, async (input) => executeMcpTool(async () => {
+      const document = await operations.uploadDocument!({ access, idempotencyKey: input.idempotencyKey,
+        scope: resolveScopedResource(input.scope, access.organizationId, access.userId), title: input.title,
+        mimeType: input.mimeType, content: new TextEncoder().encode(input.content),
+        ...(input.sourceUri ? { sourceUri: input.sourceUri } : {}), ...(input.metadata ? { metadata: input.metadata } : {}) });
+      return jsonResult({ document: publicDocument(document) });
+    }));
+    server.registerTool("document_ingest_status", {
+      title: "Read document ingestion status", description: "Read an accessible document's processing status and attempt count.",
+      inputSchema: { documentId: z.uuid() }, annotations: { readOnlyHint: true, idempotentHint: true }
+    }, async ({ documentId }) => executeMcpTool(async () => jsonResult({ document: publicDocument(await operations.getDocument!(access, documentId)) })));
+    server.registerTool("document_ingest_retry", {
+      title: "Retry document ingestion", description: "Retry a failed document at its observed processingAttempts. Reuse the same key and expectedAttempts when a response is lost.",
+      inputSchema: { documentId: z.uuid(), idempotencyKey: z.string().trim().min(1).max(256), expectedAttempts: z.number().int().min(0) },
+      annotations: { idempotentHint: true }
+    }, async ({ documentId, idempotencyKey, expectedAttempts }) => executeMcpTool(async () => jsonResult({
+      document: publicDocument(await operations.retryDocument!(access, documentId, { idempotencyKey, expectedAttempts }))
+    })));
+  }
 
   server.registerTool(
     "context_search",

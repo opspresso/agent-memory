@@ -58,6 +58,9 @@ export async function searchDocumentRecords(
 }
 
 export const retryDocumentRecord = buildRetryDocument({
+  receipts: ingestionReceiptRepository,
+  fingerprint: ingestionFingerprint,
+  clock: () => new Date(),
   queue: documentIngestionQueue,
   repository: documentRepository
 });
