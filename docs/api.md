@@ -566,7 +566,7 @@ Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity�
 - `GET .../knowledge/candidates?limit=<1-100>`은 빈 추출 결과를 제외한 pending candidate를 오래된 순으로 반환하며 기본 limit은 50이다. 응답은 `{ candidates, count }`다. 각 candidate는 `id`, `scope`, `documentId`, `chunkId`, `model`, 추출된 `graph`, `status`, `createdAt`, `updatedAt`과 값이 있는 `reviewedBy`, `reviewReason`, `reviewedAt`을 포함한다.
 - `GET .../knowledge/candidates/<candidateId>/duplicates`는 후보의 모든 entity를 한 번에 조회하고 entity key별로 같은 canonical name·scope의 읽기 가능한 기존 node를 반환한다. Semantic embedding을 생성하지 않는다.
 - 후보 조회와 승인은 source scope의 `manage` 권한을 따른다. Organization scope는 `admin`·`owner`, team scope는 해당 팀 `manager` 또는 조직 `admin`·`owner`, user scope는 본인만 검토한다.
-- `POST .../accept`와 `POST .../reject` JSON object body는 필수이며 `reason`만 선택 항목이다. 사유가 없으면 `{}`를 보내고, 있으면 `{ "reason": string }`을 보낸다. reason은 앞뒤 공백 제거 후 1–2,000자다.
+- `POST .../accept`와 `POST .../reject` JSON object body는 필수이며 `reason`과 `selection`은 선택 항목이다. 남은 전체 항목을 사유 없이 처리하려면 `{}`를 보내고, 부분 검토에는 위의 `selection`을 포함한다. 사유는 `{ "reason": string }`으로 추가한다. reason은 앞뒤 공백 제거 후 1–2,000자다.
 - 승인은 node·edge, candidate→resource 관계, reviewer audit을 하나의 transaction으로 저장한다. 전체 거절된 후보의 승인과 `selection`을 생략한 승인 완료 후보의 거절은 `409`를 반환한다. 존재하지 않는 항목·빈 selection·반대 항목 결정을 지정한 selection은 `400`으로 거부한다(전체 거절된 후보의 승인은 `409`가 우선한다). 부분 거절 후 accepted 상태가 된 후보에서도 이미 거절한 항목을 같은 selection으로 다시 거절하는 요청은 멱등하게 처리한다. 최초 승인 시 source 문서가 archive 등으로 `ready`가 아니면 `409` `{ "error": "knowledge candidate source document is not ready" }`를 반환한다. 이미 승인된 후보의 재승인은 멱등하며 현재 surviving resource로 해석한 기존 승인 결과를 반환한다.
 
 Pending 후보를 조회하고 승인하는 예시는 다음과 같다.
