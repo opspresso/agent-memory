@@ -13,15 +13,25 @@ function setup() {
   const reject = vi.fn();
   const saveAssessment = vi.fn().mockImplementation(async (_org, _id, assessment) => ({ ...candidate, assessment }));
   const findByChunkId = vi.fn().mockResolvedValue(candidate);
+  const existingKnowledge = vi.fn().mockResolvedValue([]);
   const run = buildCurateKnowledgeCandidate({
     candidates: { findByChunkId, saveAssessment },
     documents: { findChunkById: vi.fn().mockResolvedValue({ document: { status: "ready", createdBy: "owner", title: "People" }, chunk: { content: "A leads the team." } }) },
-    access: { findByUser }, graph: { findNodesByCanonicalNames: vi.fn().mockResolvedValue([]) },
+    access: { findByUser }, graph: { findNodesByCanonicalNames: existingKnowledge },
     ontology: { findByOrganization: vi.fn().mockResolvedValue(null) }, verification: { verify }, accept, reject, clock: () => now
   });
-  return { run, findByUser, verify, accept, reject, saveAssessment, findByChunkId };
+  return { run, findByUser, verify, accept, reject, saveAssessment, findByChunkId, existingKnowledge };
 }
 describe("automatic curation orchestration", () => {
+  it("bounds accumulated context without truncating the source under verification", async () => {
+    const test = setup();
+    test.existingKnowledge.mockResolvedValue([{ canonicalName: "A", kind: "person", summary: "x".repeat(10_000) }]);
+    await test.run("org", "ch");
+    expect(test.verify.mock.calls[0]?.[0]).toMatchObject({
+      content: "A leads the team.",
+      existingKnowledge: [{ name: "A", summary: "x".repeat(2_000) }]
+    });
+  });
   it("verifies then persists its assessment before automatically accepting qualified facts", async () => {
     const test = setup();
     await test.run("org", "ch");

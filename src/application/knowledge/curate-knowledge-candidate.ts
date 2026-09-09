@@ -35,7 +35,7 @@ export function buildCurateKnowledgeCandidate(dependencies: {
       const existing = await dependencies.graph.findNodesByCanonicalNames(access, candidate.scope, candidate.graph.entities.map((entity) => entity.canonicalName));
       const verification = await dependencies.verification.verify({
         content: source.chunk.content, documentTitle: source.document.title, graph: candidate.graph,
-        existingKnowledge: existing.map((node) => ({ name: node.canonicalName, kind: node.kind, summary: node.summary })),
+        existingKnowledge: existing.map((node) => ({ name: node.canonicalName, kind: node.kind, summary: node.summary?.slice(0, 2_000) })),
         quotaKey: { organizationId, userId: access.userId }
       });
       const ontology = await dependencies.ontology.findByOrganization(organizationId);
