@@ -1,3 +1,4 @@
+import { checkSchemaReadiness, DatabaseSchemaNotReadyError } from "@/infrastructure/database/schema-readiness";
 import { buildCurateKnowledgeCandidate } from "@/application/knowledge/curate-knowledge-candidate";
 import { buildAcceptKnowledgeCandidate, buildRejectKnowledgeCandidate } from "@/application/knowledge/review-knowledge-candidate";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
@@ -128,6 +129,22 @@ describe("PostgreSQL schema", () => {
          AND column_name IN ('source_memory_id', 'source_chunk_id')`
     );
     expect(legacyProvenanceColumns.rows).toEqual([]);
+  });
+
+  it("rejects a missing migration record or ledger even when the database is reachable", async () => {
+    await expect(checkSchemaReadiness(db)).resolves.toBeUndefined();
+    const rollback = new Error("rollback readiness fixture");
+    await expect(db.transaction(async (transaction) => {
+      await transaction.execute(sql`delete from drizzle.__drizzle_migrations where id = (select max(id) from drizzle.__drizzle_migrations)`);
+      await expect(checkSchemaReadiness(transaction)).rejects.toBeInstanceOf(DatabaseSchemaNotReadyError);
+      throw rollback;
+    })).rejects.toBe(rollback);
+    await expect(db.transaction(async (transaction) => {
+      await transaction.execute(sql`alter table drizzle.__drizzle_migrations rename to readiness_test_migrations`);
+      await expect(checkSchemaReadiness(transaction)).rejects.toBeInstanceOf(DatabaseSchemaNotReadyError);
+      throw rollback;
+    })).rejects.toBe(rollback);
+    await expect(checkSchemaReadiness(db)).resolves.toBeUndefined();
   });
 
   it("stores one global application settings row", async () => {

@@ -61,7 +61,7 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 ### 시작 순서
 
-Node.js runtime은 bootstrap 설정을 검증한 뒤 선택형 migration, DB 설정 override 적용·검증, 설치 조직 초기화, 운영 설정 확인, 종료 hook·telemetry 등록, 선택형 worker 시작 순서로 준비된다. `MIGRATE_ON_START=true`이면 migration 전에 기존 다중 조직 여부를 검사한다. DB와 암호화 root 설정은 override를 읽기 전에 필요하다.
+Node.js runtime은 bootstrap 설정을 검증한 뒤 선택형 migration, migration 이력 준비 상태 검사, DB 설정 override 적용·검증, 설치 조직 초기화, 운영 설정 확인, 종료 hook·telemetry 등록, 선택형 worker 시작 순서로 준비된다. `MIGRATE_ON_START=true`이면 migration 전에 기존 다중 조직 여부를 검사한다. DB와 암호화 root 설정은 override를 읽기 전에 필요하다.
 
 ### 단일 조직과 가입
 

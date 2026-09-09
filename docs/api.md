@@ -115,7 +115,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 
 ### Readiness와 지표
 
-- `GET /api/health`: 인증 없이 DB readiness를 확인한다. 성공은 `200` `{ "status": "ok", "checks": { "database": "ok" } }`, DB 실패는 `503` `{ "status": "unavailable", "checks": { "database": "failed" } }`다. 두 응답 모두 `Cache-Control: no-store`다. Object storage·AI provider 상태는 검사하지 않는다.
+- `GET /api/health`: 인증 없이 DB 연결과 저장소 migration journal의 적용 이력을 확인한다. 성공은 `200` `{ "status": "ok", "checks": { "database": "ok", "schema": "ok" } }`다. DB 연결 실패는 `503`과 `{ "database": "failed", "schema": "unknown" }`, migration 누락은 `503`과 `{ "database": "ok", "schema": "failed" }`를 checks에 반환한다. 모든 응답은 `Cache-Control: no-store`다. Object storage·AI provider 상태나 수동 schema 변경은 검사하지 않는다.
 - `GET /api/metrics`: `METRICS_BEARER_TOKEN`이 없거나 Bearer가 일치하지 않으면 `404`다. 성공하면 Prometheus text exposition format으로 build·process 지표를 반환한다.
 
 ### 전역 애플리케이션 설정
@@ -551,7 +551,7 @@ curl \
 
 `POST /api/knowledge/curation`은 현재 검토할 권한이 있는 미검증 추출과 미완료 자동 처리 항목을 enrichment queue에 등록한다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐 요청자(기본 ingestion은 문서 생성자)의 현재 권한을 검증한 후 실행한다.
 
-자동 검증은 추출과 별도의 structured-output 요청이며 같은 설정의 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다. 모든 항목이 정확히 한 번 평가되어야 하고 명시적·유용한 사실만 자동 승인 대상이다. 불확실성, 충돌, strict 사전 위반, 불명확한 양 끝 개체와 별칭 identity 병합은 사람에게 남긴다. 인용은 원문과 대조하며 실패·불완전 응답은 자동 승인의 근거가 될 수 없다. `itemReviews[].method`는 human 또는 automatic으로 처리 주체를 구분한다. 인증된 공개 승인 body로 method를 지정할 수 없다.
+자동 검증은 추출과 별도의 structured-output 요청이며 같은 설정의 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다. Provider 응답 스키마는 모든 항목 ID를 필수 object key로 지정하고 추가 key를 금지한다. 서버에서도 전체 항목 집합을 다시 검증한다. 모든 항목이 정확히 한 번 평가되어야 하고 명시적·유용한 사실만 자동 승인 대상이다. 불확실성, 충돌, strict 사전 위반, 불명확한 양 끝 개체와 별칭 identity 병합은 사람에게 남긴다. 인용은 원문과 대조하며 실패·불완전 응답은 자동 승인의 근거가 될 수 없다. `itemReviews[].method`는 human 또는 automatic으로 처리 주체를 구분한다. 인증된 공개 승인 body로 method를 지정할 수 없다.
 
 `GET /api/knowledge/review-groups?offset=0&limit=25&query=유비`는 AI가 수동 검토로 분류한 전체 pending 항목에서 동일 scope·kind·정규화 이름의 개체와 동일 양 끝 개체·predicate의 관계를 통합한 후 페이지를 반환한다. 응답은 `{ groups, total, sourceCount, offset, limit, automaticAccepted, automaticIgnored, unassessedCount }`이다. 자동 처리 수는 개체·관계 항목 단위이며 검토 권한이 있는 ready source만 집계한다. Limit은 1–100, offset은 0 이상의 정수이며 query는 최대 500자다. 그룹의 `occurrences`는 후보 ID, 문서 제목·ID, chunk ID·ordinal, 근거, 별칭·설명과 해당 항목을 검토할 `selection`을 제공한다. 빈 결과와 이미 검토한 항목은 제외한다. 각 그룹의 `ontology`는 검증 모드와 해당 항목의 위반 목록을 제공한다. 구체적인 관계와 인용 근거가 있는 항목을 우선하며 정렬은 진실성 점수가 아니다. 대칭 관계만 역방향을 통합한다. 원본 인용이 다른 사건·시점을 나타내는지는 검토자가 확인한다.
 

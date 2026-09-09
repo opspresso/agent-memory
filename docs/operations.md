@@ -282,7 +282,7 @@ Semantic search는 query와 같은 model 이름으로 저장된 vector를 사용
 `src/instrumentation.ts`의 Node.js runtime은 다음 순서로 초기화한다.
 
 1. Production bootstrap 설정을 검사한다.
-2. `MIGRATE_ON_START=true`이면 기존 조직 수를 확인하고 migration을 적용한다.
+2. `MIGRATE_ON_START=true`이면 기존 조직 수를 확인하고 migration을 적용한다. 설정값과 관계없이 DB 연결과 journal의 모든 migration 적용 이력을 검사하고, 누락되면 설정 override·worker 준비 전에 시작을 중단한다.
 3. DB의 secret override를 복호화하고 유효 설정을 검증한 뒤 process environment에 적용한다.
 4. 설치의 단일 조직을 초기화하고 production 설정을 확인한다.
 5. Telemetry와 종료 handler를 준비하고 `DOCUMENT_WORKER_ENABLED=true`이면 worker를 시작한다.
@@ -346,10 +346,10 @@ curl -i http://localhost:3100/api/health
 
 | Endpoint | 인증과 응답 | 확인하는 범위 |
 | --- | --- | --- |
-| `GET /api/health` | 인증 불필요. 정상 `200`, DB 실패 `503`, cache 안 함 | DB `select 1` 연결 검사 |
+| `GET /api/health` | 인증 불필요. 정상 `200`, DB·migration 실패 `503`, cache 안 함 | DB 연결과 저장소 migration journal의 적용 이력 검사 |
 | `GET /api/metrics` | `METRICS_BEARER_TOKEN`과 일치하는 Bearer 필요. 미설정·잘못된 인증은 `404` | Build version, worker 활성 설정, process CPU·memory·event loop delay |
 
-Health의 `200`은 모든 migration 적용, S3 접근, worker 소비 상태나 AI provider 정상 여부를 보장하지 않는다. Metrics의 worker 값도 실제 처리 진척이 아닌 활성 설정이다. 배포 후에는 document 상태·queue log·필요한 provider 연결을 별도로 확인하라. Metrics token은 조직 Agent token·사용자 session과 다른 전용 credential이다.
+Health의 `200`은 DB 연결과 journal의 migration 적용 이력이 정상임을 뜻한다. 수동 schema 변경, S3 접근, worker 소비 상태나 AI provider 정상 여부는 보장하지 않는다. Metrics의 worker 값도 실제 처리 진척이 아닌 활성 설정이다. 배포 후에는 document 상태·queue log·필요한 provider 연결을 별도로 확인하라. Metrics token은 조직 Agent token·사용자 session과 다른 전용 credential이다.
 
 ### 로그와 trace
 

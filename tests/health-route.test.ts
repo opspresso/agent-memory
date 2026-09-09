@@ -5,8 +5,9 @@ const { execute, logError } = vi.hoisted(() => ({
   logError: vi.fn()
 }));
 
-vi.mock("@/lib/health-service", () => ({
-  checkDatabaseReadiness: execute
+vi.mock("@/lib/health-service", async () => ({
+  checkDatabaseReadiness: execute,
+  DatabaseSchemaNotReadyError: (await import("@/infrastructure/database/schema-readiness")).DatabaseSchemaNotReadyError
 }));
 
 vi.mock("@/lib/observability", () => ({
@@ -14,6 +15,7 @@ vi.mock("@/lib/observability", () => ({
 }));
 
 import { GET } from "@/app/api/health/route";
+import { DatabaseSchemaNotReadyError } from "@/infrastructure/database/schema-readiness";
 
 describe("health route", () => {
   beforeEach(() => {
@@ -30,7 +32,7 @@ describe("health route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({
       status: "ok",
-      checks: { database: "ok" }
+      checks: { database: "ok", schema: "ok" }
     });
     expect(logError).not.toHaveBeenCalled();
   });
@@ -45,7 +47,7 @@ describe("health route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({
       status: "unavailable",
-      checks: { database: "failed" }
+      checks: { database: "failed", schema: "unknown" }
     });
     expect(logError).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -54,5 +56,13 @@ describe("health route", () => {
       }),
       "readiness check failed"
     );
+  });
+
+  it("reports pending schema migrations separately from database connectivity", async () => {
+    execute.mockRejectedValue(new DatabaseSchemaNotReadyError());
+    const response = await GET();
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ status: "unavailable", checks: { database: "ok", schema: "failed" } });
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 });
