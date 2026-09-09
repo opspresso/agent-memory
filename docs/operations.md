@@ -302,6 +302,8 @@ Schema source는 `src/infrastructure/database/schema/`, 현재 schema의 생성 
 
 `db:init`은 `.env.local`을 읽고 이미 설정된 `DATABASE_URL`을 우선한다. 주소가 없으면 실패하며 기본 DB를 선택하지 않는다. `db:generate`와 `db:check`는 DB에 연결하지 않는다. Drizzle Studio는 `.env`와 shell의 `DATABASE_URL`을 사용하므로 실제 대상을 먼저 확인하라.
 
+배포 이미지에는 `node scripts/init-database.mjs` 명령도 포함한다. Web·worker 시작 전에 schema만 초기화하고 보존 데이터를 복원할 때 사용한다.
+
 Schema를 변경하면 배포 전에 application·worker를 중단하고 DB·전용 bucket·queue를 명시적으로 초기화한다. 계정·설정 보존이 필요하면 초기화 전에 별도 보존·복원 범위를 결정한다. 공유 Agent Studio DB·bucket은 초기화 대상에 포함하지 않는다. Application 시작에는 자동 DROP·ALTER·backfill이 없다. 임의 DDL에 의한 schema drift는 fingerprint 검사만으로 탐지하지 않는다.
 
 ## 문서 worker와 object storage
