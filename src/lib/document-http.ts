@@ -6,6 +6,7 @@ import {
   DocumentQuotaExceededError
 } from "@/application/document/upload-document";
 import { InvalidDocumentError, type Document } from "@/domain/document/document";
+import { IngestionConflictError } from "@/domain/shared/ingestion-receipt";
 import type { DocumentSearchHit } from "@/domain/document/document-repository";
 
 import { aiErrorResponse } from "./ai-http";
@@ -65,6 +66,7 @@ export async function boundedFormData(
 }
 
 export function documentErrorResponse(error: unknown): Response | null {
+  if (error instanceof IngestionConflictError) return Response.json({ error: error.message }, { status: 409 });
   const aiResponse = aiErrorResponse(error);
   if (aiResponse) {
     return aiResponse;

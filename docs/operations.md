@@ -522,3 +522,10 @@ E2E_AUTHENTICATED=true DOCUMENT_WORKER_ENABLED=false pnpm test:e2e
 - PostgreSQL과 object storage의 백업·복원 절차를 검증한다.
 - `/api/health`와 stdout JSON log 수집을 배포 환경에 연결한다.
 - Token, password, 본문, 검색어, embedding·reranker 입력과 출력이 log에 포함되지 않는지 확인한다.
+
+### 수집 receipt migration
+
+멱등 Memory 생성과 내부 문서 업로드를 사용하기 전에 `pnpm db:migrate`로 `ingestion_receipts` 테이블을
+적용한다. Receipt는 resource와 함께 backup한다. Archive 이후 재생성을 막는 기록이므로 임의 TTL로
+제거하지 않는다. 클라이언트는 document_ingest_status의 processingAttempts를 retry 요청의
+expectedAttempts로 전달하고, 같은 요청의 응답 유실 시 동일한 key와 횟수를 재사용한다.

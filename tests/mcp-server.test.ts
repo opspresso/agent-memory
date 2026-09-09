@@ -14,6 +14,7 @@ import { MemoryVersionConflictError } from "@/application/memory/revise-memory";
 import type { Memory } from "@/domain/memory/memory";
 import type { MemoryRepository } from "@/domain/memory/memory-repository";
 import { MemoryAccessDeniedError } from "@/application/memory/create-memory";
+import { createDocument } from "@/domain/document/document";
 import {
   createAgentMemoryMcpServer,
   type AgentMemoryMcpOperations
@@ -74,6 +75,42 @@ async function connectedClient(
 }
 
 describe("agent memory MCP server", () => {
+  it("exposes scoped document ingestion, status and attempt-fenced retry", async () => {
+    const document = createDocument({ id: "40000000-0000-4000-8000-000000000001",
+      scope: { kind: "user", organizationId: access.organizationId, userId: access.userId }, title: "Transcript",
+      objectKey: "private/source", checksum: "a".repeat(64), mimeType: "text/markdown", sizeBytes: 10,
+      createdBy: access.userId, now: new Date("2026-09-09T00:00:00Z") });
+    const uploadDocument = vi.fn().mockResolvedValue(document);
+    const getDocument = vi.fn().mockResolvedValue(document);
+    const retryDocument = vi.fn().mockResolvedValue(document);
+    const client = await connectedClient(operations({ uploadDocument, getDocument, retryDocument }));
+    const tools = await client.listTools();
+    expect(tools.tools.find((tool) => tool.name === "document_ingest")?.inputSchema.properties).toHaveProperty("idempotencyKey");
+    const result = await client.callTool({ name: "document_ingest", arguments: {
+      idempotencyKey: "source-1", scope: { kind: "user" }, title: "Transcript", mimeType: "text/markdown", content: "원문"
+    } });
+    expect(result.isError).not.toBe(true);
+    expect(uploadDocument).toHaveBeenCalledWith(expect.objectContaining({ access, idempotencyKey: "source-1",
+      scope: document.scope, content: new TextEncoder().encode("원문") }));
+    expect(result.structuredContent).toHaveProperty("document.processingAttempts", 0);
+    expect(result.structuredContent).not.toHaveProperty("document.objectKey");
+    await client.callTool({ name: "document_ingest_status", arguments: { documentId: document.id } });
+    expect(getDocument).toHaveBeenCalledWith(access, document.id);
+    await client.callTool({ name: "document_ingest_retry", arguments: {
+      documentId: document.id, idempotencyKey: "retry-0", expectedAttempts: 0
+    } });
+    expect(retryDocument).toHaveBeenCalledWith(access, document.id, { idempotencyKey: "retry-0", expectedAttempts: 0 });
+  });
+
+  it("bounds document text by UTF-8 bytes before executing ingestion", async () => {
+    const uploadDocument = vi.fn();
+    const client = await connectedClient(operations({ uploadDocument, getDocument: vi.fn(), retryDocument: vi.fn() }));
+    const result = await client.callTool({ name: "document_ingest", arguments: {
+      idempotencyKey: "oversize", scope: { kind: "user" }, title: "Transcript", mimeType: "text/markdown",
+      content: "가".repeat(Math.ceil(10 * 1024 * 1024 / 3))
+    } });
+    expect(result.isError).toBe(true); expect(uploadDocument).not.toHaveBeenCalled();
+  });
   it.each([
     ["context_search", "searchContext", { query: "incident" }],
     ["recall", "recallMemories", { query: "incident" }],

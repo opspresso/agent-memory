@@ -20,6 +20,11 @@ export AGENT_MEMORY_TOKEN='<better-auth-session-token>'
 
 ## 인증과 요청 경계
 
+Better Auth의 `advanced.cookiePrefix`는 `agent-memory`다. 세션 쿠키는
+`agent-memory.session_token`이며 HTTPS 설정에서는 `__Secure-`가 붙는다. Studio의
+`agent-studio` 쿠키와 분리하며 이전 `better-auth` 쿠키를 인증에 사용하지 않는다.
+접두어 변경 배포 후 브라우저 사용자는 다시 로그인해야 한다.
+
 인증 방식과 사용할 수 있는 endpoint는 다음과 같다.
 
 | 인증 | 사용 범위 | 권한 주체 |
@@ -722,3 +727,28 @@ Token은 client의 secret 또는 environment variable 기능으로 주입하고 
 ### 문서 본문 페이지
 
 `GET /api/documents/{documentId}/chunks?limit=25&offset=0`는 ready 문서의 처리된 본문을 순서대로 읽는다. 응답은 `{ document, chunks: [{ id, ordinal, content, metadata }], count, nextOffset }`이며 Document는 기존 공개 응답 형식이다. `ordinal` 오름차순(ID로 동률 정렬)으로 조회하며 `limit`·`offset` 범위와 `count`·`nextOffset` 의미는 위 library endpoint와 같다. 마지막 page 이후에는 `chunks: []`, `nextOffset: null`을 반환한다. 문서 조회와 본문 page는 같은 읽기 transaction snapshot을 사용한다. 다른 조직, 읽기 권한 없음, archived·pending·processing·failed source는 모두 `404`로 처리한다. 원본 파일 bytes나 object key, embedding은 반환하지 않는다.
+
+## 멱등 수집
+
+Memory 생성 HTTP API와 MCP `remember`는 선택적 `idempotencyKey`(trim 후 1–256자)를 받는다.
+같은 설치 조직·인증 사용자·operation·key에 같은 payload를 다시 보내면 기존 Memory를 반환한다.
+다른 payload는 HTTP 409 또는 MCP tool error다. 현재 scope 권한을 다시 확인하며 archived resource를
+새로 만들지 않는다. 인증 방식은 기존 session 또는 조직 Agent Bearer + 검증된 email 위임을 유지한다.
+
+문서 수집 MCP는 같은 receipt 계약을 제공한다. 저장된 pending 문서의 업로드를 재호출하면 같은
+문서 ID로 queue 등록을 복구한다. 새 원본·문서를 만들지 않는다.
+
+| Tool | 입력 | 응답 |
+| --- | --- | --- |
+| `document_ingest` | `idempotencyKey`, `scope`, `title`, `mimeType`, UTF-8 `content`, 선택적 `sourceUri`·`metadata` | `{ document }` |
+| `document_ingest_status` | `documentId` | `{ document }`, 처리 상태·processingAttempts 포함 |
+| `document_ingest_retry` | `documentId`, `idempotencyKey`, 관측한 `expectedAttempts` | `{ document }` |
+
+Content는 기존 문서 MIME과 10 MiB 제한을 적용한다. metadata는 32 KiB다. MCP HTTP JSON 본문은
+문자 escape와 envelope를 포함해 `6 × maxDocumentBytes + 512 KiB`로 제한한다. 일반 HTTP JSON
+본문의 1 MiB 제한은 유지한다.
+
+Retry는 현재 문서 write 권한을 요구한다. 같은 키·같은 expectedAttempts는 같은 요청이며, 처리
+횟수가 바뀌면 새 키와 관측한 횟수로 요청한다. 이미 처리한 요청을 replay해도 재처리를 시작하지
+않는다. Queue 메시지도 expectedAttempts를 보관해 늦게 도착한 메시지를 거절한다. 처리 중 worker가
+중단된 경우 같은 횟수에서 만료 lease만 회수한다.

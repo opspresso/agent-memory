@@ -59,12 +59,12 @@ describe("request origin policy", () => {
       method: "POST",
       headers: {
         authorization: "Bearer session-token",
-        cookie: "better-auth.session_token=cookie-token"
+        cookie: "agent-memory.session_token=cookie-token"
       }
     });
     const cookieRequest = new Request(`${baseURL}/api/memories`, {
       method: "POST",
-      headers: { cookie: "better-auth.session_token=cookie-token" }
+      headers: { cookie: "agent-memory.session_token=cookie-token" }
     });
 
     expect(authenticationHeaders(bearerRequest).get("cookie")).toBeNull();

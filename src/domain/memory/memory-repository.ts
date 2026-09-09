@@ -1,5 +1,6 @@
 import type { Memory, MemoryVersionSnapshot } from "./memory";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import type { IngestionReceipt } from "@/domain/shared/ingestion-receipt";
 
 export interface MemorySearchInput {
   readonly access: OrganizationAccess;
@@ -22,7 +23,7 @@ export interface MemorySearchHit {
 export type SaveMemoryRevisionResult = "saved" | "conflict" | "not_found";
 
 export interface MemoryRepository {
-  save(memory: Memory): Promise<void>;
+  save(memory: Memory, receipt?: IngestionReceipt): Promise<void>;
   findById(organizationId: string, memoryId: string): Promise<Memory | null>;
   listVersions(
     organizationId: string,

@@ -183,6 +183,13 @@
       "when": 1788795945109,
       "tag": "0025_hard_lady_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788888350600,
+      "tag": "0026_bent_wraith",
+      "breakpoints": true
     }
   ]
 }

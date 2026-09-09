@@ -30,6 +30,8 @@ import type {
 import { documentProcessingLeaseMilliseconds } from "@/domain/document/document-services";
 
 import type { AgentMemoryDatabase } from "../client";
+import { assertIngestionResource, type IngestionReceipt } from "@/domain/shared/ingestion-receipt";
+import { insertIngestionReceipt, refuseIngestionReplay } from "./ingestion-receipt-repository";
 import { documentChunks, documents } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
 import { scopedReadPredicate } from "./scope-predicates";
@@ -134,12 +136,14 @@ export function createDocumentRepository(
 
   async function saveWithinLimits(
     document: Document,
-    limits: DocumentUploadLimits
+    limits: DocumentUploadLimits,
+    receipt?: IngestionReceipt
   ): Promise<SaveDocumentResult> {
     return db.transaction(async (transaction) => {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${document.scope.organizationId}, 0))`
       );
+      if (receipt) await refuseIngestionReplay(transaction, receipt);
       const oneHourBefore = new Date(document.createdAt.getTime() - 3_600_000);
       const [usage] = await transaction
         .select({
@@ -171,15 +175,24 @@ export function createDocumentRepository(
       ) {
         return "user_rate_exceeded";
       }
+      if (receipt) await insertIngestionReceipt(transaction, receipt);
       await transaction.insert(documents).values(documentValues(document));
       return "saved";
     });
   }
 
   return {
-    async save(document, limits) {
+    async save(document, limits, receipt) {
+      if (receipt) assertIngestionResource(receipt, "document.upload", document.scope.organizationId, document.createdBy, document.id);
       if (limits) {
-        return saveWithinLimits(document, limits);
+        return saveWithinLimits(document, limits, receipt);
+      }
+      if (receipt) {
+        return db.transaction(async (transaction) => {
+          await insertIngestionReceipt(transaction, receipt);
+          await transaction.insert(documents).values(documentValues(document));
+          return "saved" as const;
+        });
       }
       await db.insert(documents).values(documentValues(document));
       return "saved";
@@ -197,6 +210,25 @@ export function createDocumentRepository(
         )
         .limit(1);
       return row ? documentFromRow(row) : null;
+    },
+
+    async prepareRetry(document, expectedAttempts, receipt) {
+      if (receipt.operation !== "document.retry" || receipt.organizationId !== document.scope.organizationId || receipt.resourceId !== document.id) {
+        throw new Error("retry receipt does not match its document");
+      }
+      return db.transaction(async (transaction) => {
+        await refuseIngestionReplay(transaction, receipt);
+        const [current] = await transaction.select().from(documents).where(and(
+          eq(documents.organizationId, document.scope.organizationId), eq(documents.id, document.id)
+        )).for("update").limit(1);
+        if (!current || current.status !== "failed" || current.processingAttempts !== expectedAttempts) return null;
+        await insertIngestionReceipt(transaction, receipt);
+        const [updated] = await transaction.update(documents).set({ status: "pending", errorMessage: null,
+          processingStartedAt: null, processingLeaseId: null, updatedAt: receipt.createdAt }).where(and(
+          eq(documents.organizationId, document.scope.organizationId), eq(documents.id, document.id)
+        )).returning();
+        return updated ? documentFromRow(updated) : null;
+      });
     },
 
     async findChunkById(organizationId, chunkId) {
@@ -267,7 +299,7 @@ export function createDocumentRepository(
       return rows.map((row) => chunkFromRow(row.chunk));
     },
 
-    async claimForProcessing(organizationId, documentId, now) {
+    async claimForProcessing(organizationId, documentId, now, expectedAttempts) {
       const staleBefore = new Date(
         now.getTime() - documentProcessingLeaseMilliseconds
       );
@@ -276,7 +308,8 @@ export function createDocumentRepository(
         .set({
           status: "processing",
           errorMessage: null,
-          processingAttempts: sql`${documents.processingAttempts} + 1`,
+          processingAttempts: expectedAttempts === undefined ? sql`${documents.processingAttempts} + 1`
+            : sql`case when ${documents.status} = 'processing' then ${documents.processingAttempts} else ${documents.processingAttempts} + 1 end`,
           processingLeaseId: sql`uuidv7()`,
           processingStartedAt: now,
           updatedAt: now
@@ -285,6 +318,10 @@ export function createDocumentRepository(
           and(
             eq(documents.organizationId, organizationId),
             eq(documents.id, documentId),
+            expectedAttempts === undefined ? undefined : or(
+              and(inArray(documents.status, ["pending", "failed"]), eq(documents.processingAttempts, expectedAttempts)),
+              and(eq(documents.status, "processing"), eq(documents.processingAttempts, expectedAttempts + 1))
+            ),
             or(
               inArray(documents.status, ["pending", "failed"]),
               and(

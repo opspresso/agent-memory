@@ -146,7 +146,7 @@ multipart upload → S3-compatible storage → document row(pending)
 
 ### 원본 저장과 처리 claim
 
-원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v2` queue는 document ID별 exclusive job을 보장해 queued·active·retry job이 있을 때만 중복 enqueue를 병합한다.
+원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v2` queue는 document ID와 선택형 처리 세대(`expectedAttempts`)별 exclusive job을 보장해 같은 세대의 queued·active·retry job이 있을 때만 중복 enqueue를 병합한다.
 
 ### 추출·embedding과 실패
 
@@ -207,3 +207,20 @@ Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같
 ## 관측성과 민감정보
 
 Pino는 작업명, organization ID, 결과 수, 처리 시간을 구조화해 기록한다. 일반 Error는 allowlist된 type·code만 직렬화하고 message를 기록하지 않는다. Provider·storage adapter가 만든 `SafeOperationalError`만 입력을 포함하지 않는 고정 message와 code를 기록하며, cause는 message 없이 type·code chain만 최대 3단계 보존한다. Reranker가 실패하면 본문 없이 fallback을 기록한다. 검색어와 본문은 retrieval log에 포함하지 않는다. Langfuse key가 모두 설정되면 OpenTelemetry trace를 내보내며 token과 secret을 마스킹하고 media upload를 비활성화한다. Retrieval 실패는 observation 안에서 고정된 실패 상태로 기록하고 원래 오류는 observation 밖에서 다시 던져 SDK가 오류 message를 span에 기록하지 못하게 한다. Embedding과 reranker 입력·출력은 telemetry 대상이 아니다.
+
+## 수집 receipt
+
+`ingestion_receipts`는 조직·사용자·operation·key를 primary key로 사용하고 payload hash와 resource ID를
+보관한다. Memory·Document insert와 receipt insert는 같은 transaction이다. 동시 요청의 패자는
+자신의 작업을 rollback한 뒤 현재 권한으로 기존 resource를 읽는다. 문서 quota 검사 전에 기존
+receipt를 확인하므로 같은 요청의 replay가 최초 생성으로 소진한 quota 때문에 거절되지 않는다.
+
+Payload fingerprint는 JSON key 순서·생성 시각·인증 role에 의존하지 않는다. 선택한 scope와 실제
+요청 내용을 반영한다. Archive 뒤에도 receipt를 유지해 재생성을 막는다. 문서 queue 등록은 resource
+transaction 뒤에 수행하며, pending upload replay가 동일 ID로 queue publication을 복구한다.
+
+멱등 문서 retry는 receipt와 pending 상태를 함께 commit한 뒤 queue에 발행한다. Queue 메시지의
+expectedAttempts와 현재 처리 횟수가 일치할 때만 새 처리를 claim한다. 만료된 processing lease는
+같은 횟수로 회수하므로 worker 재시작과 새 retry 요청을 구분한다. 완료된 처리의 오래된 queue
+메시지는 새 처리를 시작하지 않는다. 멱등 수집 queue의 중복 제거 키는 document ID와
+expectedAttempts를 함께 사용하므로 이전 세대의 queued·active·retry job이 새 세대를 막지 않는다.

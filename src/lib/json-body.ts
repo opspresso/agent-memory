@@ -11,23 +11,24 @@ function invalidJsonResponse(): JsonBodyResult {
   };
 }
 
-function oversizedJsonResponse(): JsonBodyResult {
+function oversizedJsonResponse(maximumBytes: number): JsonBodyResult {
   return {
     valid: false,
     response: Response.json(
-      { error: "JSON body exceeds 1 MiB" },
+      { error: maximumBytes === maximumJsonBodyBytes ? "JSON body exceeds 1 MiB" : `JSON body exceeds ${maximumBytes} bytes` },
       { status: 413 }
     )
   };
 }
 
-export async function readJsonBody(request: Request): Promise<JsonBodyResult> {
+export async function readJsonBody(request: Request, maximumBytes = maximumJsonBodyBytes): Promise<JsonBodyResult> {
   const declaredLength = Number(request.headers.get("content-length"));
   if (
     Number.isFinite(declaredLength) &&
-    declaredLength > maximumJsonBodyBytes
+    declaredLength > maximumBytes
   ) {
-    return oversizedJsonResponse();
+    await request.body?.cancel().catch(() => {});
+    return oversizedJsonResponse(maximumBytes);
   }
   if (!request.body) {
     return invalidJsonResponse();
@@ -44,9 +45,9 @@ export async function readJsonBody(request: Request): Promise<JsonBodyResult> {
         break;
       }
       bytesRead += value.byteLength;
-      if (bytesRead > maximumJsonBodyBytes) {
+      if (bytesRead > maximumBytes) {
         await reader.cancel();
-        return oversizedJsonResponse();
+        return oversizedJsonResponse(maximumBytes);
       }
       text += decoder.decode(value, { stream: true });
     }
@@ -54,5 +55,8 @@ export async function readJsonBody(request: Request): Promise<JsonBodyResult> {
     return { valid: true, value: JSON.parse(text) as unknown };
   } catch {
     return invalidJsonResponse();
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
 }

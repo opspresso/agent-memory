@@ -25,6 +25,7 @@ import {
 } from "./container";
 
 const ingestionJobSchema = z.object({
+  expectedAttempts: z.number().int().min(0).optional(),
   organizationId: z.uuid(),
   documentId: z.uuid()
 });
@@ -80,7 +81,8 @@ export async function startDocumentWorker(): Promise<void> {
             "processing document ingestion job"
           );
           try {
-            await ingestDocument(data.organizationId, data.documentId);
+            if (data.expectedAttempts === undefined) await ingestDocument(data.organizationId, data.documentId);
+            else await ingestDocument(data.organizationId, data.documentId, data.expectedAttempts);
           } catch (error) {
             logger.error(
               {

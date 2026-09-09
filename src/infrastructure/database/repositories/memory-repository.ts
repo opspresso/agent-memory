@@ -26,6 +26,8 @@ import type {
 } from "@/domain/memory/memory-repository";
 
 import type { AgentMemoryDatabase } from "../client";
+import { insertIngestionReceipt } from "./ingestion-receipt-repository";
+import { assertIngestionResource } from "@/domain/shared/ingestion-receipt";
 import {
   memories,
   memoryAccessGrants,
@@ -226,8 +228,10 @@ export function createMemoryRepository(
   db: AgentMemoryDatabase
 ): MemoryRepository & MemoryLibraryReader {
   return {
-    async save(memory) {
+    async save(memory, receipt) {
+      if (receipt) assertIngestionResource(receipt, "memory.create", memory.scope.organizationId, memory.createdBy, memory.id);
       await db.transaction(async (transaction) => {
+        if (receipt) await insertIngestionReceipt(transaction, receipt);
         await transaction.insert(memories).values(memoryValues(memory));
         await transaction
           .insert(memoryVersions)

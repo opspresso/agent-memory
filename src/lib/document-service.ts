@@ -16,11 +16,15 @@ import {
   documentIngestionQueue,
   documentObjectStorage,
   documentRepository,
+  ingestionReceiptRepository,
   textEmbeddingService
 } from "./container";
 import { readDocumentUploadLimits } from "./document-upload-limits";
+import { ingestionFingerprint } from "./ingestion-fingerprint";
 
 export const uploadDocumentRecord = buildUploadDocument({
+  receipts: ingestionReceiptRepository,
+  fingerprint: ingestionFingerprint,
   checksum: (content) => createHash("sha256").update(content).digest("hex"),
   clock: () => new Date(),
   generateId: randomUUID,
@@ -54,6 +58,9 @@ export async function searchDocumentRecords(
 }
 
 export const retryDocumentRecord = buildRetryDocument({
+  receipts: ingestionReceiptRepository,
+  fingerprint: ingestionFingerprint,
+  clock: () => new Date(),
   queue: documentIngestionQueue,
   repository: documentRepository
 });

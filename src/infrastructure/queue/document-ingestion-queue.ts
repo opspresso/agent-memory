@@ -13,6 +13,7 @@ const documentJobExpirationSeconds =
   documentProcessingLeaseMilliseconds / 1_000;
 
 export interface DocumentIngestionJob {
+  readonly expectedAttempts?: number;
   readonly organizationId: string;
   readonly documentId: string;
 }
@@ -83,12 +84,13 @@ export function createPgBossDocumentIngestionQueue(
 
   return {
     start,
-    async enqueue(organizationId, documentId) {
+    async enqueue(organizationId, documentId, expectedAttempts) {
       const instance = await start();
       const jobId = await instance.send(
         documentIngestionQueueName,
-        { organizationId, documentId } satisfies DocumentIngestionJob,
-        { singletonKey: documentId }
+        { organizationId, documentId, ...(expectedAttempts !== undefined ? { expectedAttempts } : {}) } satisfies DocumentIngestionJob,
+        // A stale job cannot claim a newer generation, so it must not suppress it.
+        { singletonKey: expectedAttempts === undefined ? documentId : `${documentId}:${expectedAttempts}` }
       );
       return jobId ? "queued" : "already_queued";
     },
