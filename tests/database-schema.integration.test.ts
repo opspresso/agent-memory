@@ -223,6 +223,44 @@ describe("PostgreSQL schema", () => {
     }
   });
 
+  it("queues a new retry generation while the previous job is still outstanding", async () => {
+    const organizationId = randomUUID();
+    const userId = randomUUID();
+    const now = new Date();
+    await pool.query("INSERT INTO users (id, email, name) VALUES ($1, $2, 'Retry User')", [userId, `${userId}@example.test`]);
+    await seedOrganization(createOrganization({ id: organizationId, slug: `retry-${organizationId}`, name: "Retry", now }), userId);
+    const repository = createDocumentRepository(db);
+    const document = createDocument({ id: randomUUID(), scope: { kind: "user", organizationId, userId },
+      title: "Transcript", objectKey: "retry/source", checksum: "a".repeat(64), mimeType: "text/markdown",
+      sizeBytes: 10, createdBy: userId, now });
+    await repository.save(document);
+    const queue = createPgBossDocumentIngestionQueue(container.getConnectionUri(), () => {});
+    try {
+      const boss = await queue.start();
+      await queue.enqueue(organizationId, document.id, 0);
+      const claim = await repository.claimForProcessing(organizationId, document.id, now, 0);
+      expect(claim).not.toBeNull();
+      await repository.failProcessing(claim!, "temporary extraction failure", now);
+
+      const retry = buildRetryDocument({ repository, queue, clock: () => now,
+        receipts: createIngestionReceiptRepository(db), fingerprint: ingestionFingerprint });
+      const access: OrganizationAccess = { organizationId, userId, role: "owner", teams: [] };
+      const request = { idempotencyKey: "retry-1", expectedAttempts: 1 };
+      await retry(access, document.id, request);
+      await retry(access, document.id, request);
+      const jobs = await boss.findJobs<DocumentIngestionJob>(documentIngestionQueueName,
+        { data: { organizationId, documentId: document.id } });
+      expect(jobs.map((job) => job.data.expectedAttempts).sort()).toEqual([0, 1]);
+      expect(await repository.claimForProcessing(organizationId, document.id, now, 0)).toBeNull();
+      const next = await repository.claimForProcessing(organizationId, document.id, now, 1);
+      expect(next?.document.processingAttempts).toBe(2);
+      await repository.completeProcessing(next!, [], now);
+      expect((await repository.findById(organizationId, document.id))?.status).toBe("ready");
+    } finally {
+      await queue.stop();
+    }
+  });
+
   it("shares durable AI request quotas across organization principals", async () => {
     const organizationId = "00000000-0000-0000-0000-000000000029";
     await pool.query(

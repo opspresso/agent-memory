@@ -146,7 +146,7 @@ multipart upload → S3-compatible storage → document row(pending)
 
 ### 원본 저장과 처리 claim
 
-원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v2` queue는 document ID별 exclusive job을 보장해 queued·active·retry job이 있을 때만 중복 enqueue를 병합한다.
+원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v2` queue는 document ID와 선택형 처리 세대(`expectedAttempts`)별 exclusive job을 보장해 같은 세대의 queued·active·retry job이 있을 때만 중복 enqueue를 병합한다.
 
 ### 추출·embedding과 실패
 
@@ -222,4 +222,5 @@ transaction 뒤에 수행하며, pending upload replay가 동일 ID로 queue pub
 멱등 문서 retry는 receipt와 pending 상태를 함께 commit한 뒤 queue에 발행한다. Queue 메시지의
 expectedAttempts와 현재 처리 횟수가 일치할 때만 새 처리를 claim한다. 만료된 processing lease는
 같은 횟수로 회수하므로 worker 재시작과 새 retry 요청을 구분한다. 완료된 처리의 오래된 queue
-메시지는 새 처리를 시작하지 않는다.
+메시지는 새 처리를 시작하지 않는다. 멱등 수집 queue의 중복 제거 키는 document ID와
+expectedAttempts를 함께 사용하므로 이전 세대의 queued·active·retry job이 새 세대를 막지 않는다.

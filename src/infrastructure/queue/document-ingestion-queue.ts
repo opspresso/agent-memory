@@ -89,7 +89,8 @@ export function createPgBossDocumentIngestionQueue(
       const jobId = await instance.send(
         documentIngestionQueueName,
         { organizationId, documentId, ...(expectedAttempts !== undefined ? { expectedAttempts } : {}) } satisfies DocumentIngestionJob,
-        { singletonKey: documentId }
+        // A stale job cannot claim a newer generation, so it must not suppress it.
+        { singletonKey: expectedAttempts === undefined ? documentId : `${documentId}:${expectedAttempts}` }
       );
       return jobId ? "queued" : "already_queued";
     },
