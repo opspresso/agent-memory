@@ -15,17 +15,21 @@ describe("knowledge extraction service", () => {
                     key: "api",
                     kind: "service",
                     canonicalName: "Memory API",
+                    aliases: [],
+                    evidence: ["Memory API stores data in PostgreSQL."],
                     summary: null
                   },
                   {
                     key: "db",
                     kind: "database",
                     canonicalName: "PostgreSQL",
+                    aliases: [],
+                    evidence: ["Memory API stores data in PostgreSQL."],
                     summary: "Stores Agent Memory data"
                   }
                 ],
                 relationships: [
-                  { sourceKey: "api", targetKey: "db", predicate: "stores_in" }
+                  { sourceKey: "api", targetKey: "db", predicate: "stores_in", evidence: ["Memory API stores data in PostgreSQL."] }
                 ]
               })
             }
@@ -274,6 +278,8 @@ describe("knowledge extraction service", () => {
                       key: "studio",
                       kind: "product",
                       canonicalName: "studio.opspresso.com",
+                      aliases: [],
+                      evidence: ["### Agent Studio"],
                       summary: "A production AI agent platform"
                     }
                   ],

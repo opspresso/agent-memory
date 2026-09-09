@@ -522,7 +522,7 @@ Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical nam
 - `warn`: 쓰기를 허용하고 성공 응답에 `ontologyWarnings: [{ "type": "unknown_kind" | "unknown_predicate", "term": string }]`를 포함한다(위반이 없으면 필드 생략).
 - `strict`: 미등록 용어를 `422` `{ "error": "knowledge ontology violation", "violations": [...] }`로 거부한다. AI 후보 승인은 node·edge 생성과 embedding 호출 전에 거부된다.
 
-`GET .../candidates/:candidateId/duplicates` 응답은 `duplicates`와 함께 `ontology: { "mode": string, "violations": [...] }`를 반환해 검토 화면이 미등록 용어를 표시할 수 있게 한다. 검증 모드가 `off`가 아니고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전이 힌트로 주입되며, `strict`에서는 entity kind가 사전 값으로 제약된다(predicate는 제약하지 않고 승인 시점에 검증한다).
+`GET .../candidates/:candidateId/duplicates` 응답은 `duplicates`와 함께 `ontology: { "mode": string, "violations": [...] }`를 반환해 검토 화면이 미등록 용어를 표시할 수 있게 한다. 검증 모드가 `off`가 아니고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전이 힌트로 주입되며, `strict`에서는 entity kind와 relationship predicate가 각각 비어 있지 않은 사전 값으로 제약된다. 승인 시점에도 사전을 다시 검증한다.
 
 ### 온톨로지 추천
 
@@ -547,7 +547,7 @@ curl \
 
 ### AI 후보 조회와 검토
 
-Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity와 relationship candidate를 만든다. Candidate는 source document·chunk, 원래 scope, extraction model을 포함하며 chunk 원문 전체를 응답하지 않는다.
+Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity와 relationship candidate를 만든다. Candidate는 source document·chunk, 원래 scope, extraction model을 포함하며 chunk 원문 전체를 응답하지 않는다. 새 추출의 entity는 `aliases`와 `evidence` 배열을, relationship은 `evidence` 배열을 포함한다. Evidence는 청크에서 인용한 최대 2,000자의 문구이며 각 배열은 최대 20개다. 근거 필드가 없는 기존 추출 기록도 조회할 수 있다. 서버는 NFKC·공백 정규화 후 원문에 존재하는 인용만 보존하고, 근거가 없는 개체·관계와 막연한 동시 등장 관계를 제외한다. 인용 일치는 의미적 사실 검증을 대체하지 않는다.
 
 - `GET .../knowledge/candidates?limit=<1-100>`은 pending candidate를 오래된 순으로 반환하며 기본 limit은 50이다. 응답은 `{ candidates, count }`다. 각 candidate는 `id`, `scope`, `documentId`, `chunkId`, `model`, 추출된 `graph`, `status`, `createdAt`, `updatedAt`과 값이 있는 `reviewedBy`, `reviewReason`, `reviewedAt`을 포함한다.
 - `GET .../knowledge/candidates/<candidateId>/duplicates`는 후보의 모든 entity를 한 번에 조회하고 entity key별로 같은 canonical name·scope의 읽기 가능한 기존 node를 반환한다. Semantic embedding을 생성하지 않는다.

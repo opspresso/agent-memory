@@ -269,6 +269,8 @@ export const neighborhoodResponseSchema = z.object({
 });
 
 const proposedEntityResponseSchema = z.object({
+  aliases: z.array(z.string()).optional(),
+  evidence: z.array(z.string()).optional(),
   key: z.string().min(1),
   kind: z.string().min(1),
   canonicalName: z.string().min(1),
@@ -276,6 +278,7 @@ const proposedEntityResponseSchema = z.object({
 });
 
 const proposedRelationshipResponseSchema = z.object({
+  evidence: z.array(z.string()).optional(),
   sourceKey: z.string().min(1),
   targetKey: z.string().min(1),
   predicate: z.string().min(1)
