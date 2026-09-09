@@ -135,7 +135,6 @@ export function buildFindKnowledgeCandidateDuplicates(dependencies: {
       throw new KnowledgeCandidateNotFoundError();
     }
     authorizeReviewer(access, candidate);
-    if (candidate.supersededAt) { throw new KnowledgeCandidateReviewConflictError(); }
     const settings = await dependencies.ontologyReader.findByOrganization(
       access.organizationId
     );
@@ -191,7 +190,6 @@ export function buildAcceptKnowledgeCandidate(
       throw new KnowledgeCandidateNotFoundError();
     }
     authorizeReviewer(access, candidate);
-    if (candidate.supersededAt) { throw new KnowledgeCandidateReviewConflictError(); }
     if (candidate.status === "rejected") {
       throw new KnowledgeCandidateReviewConflictError();
     }
@@ -273,7 +271,7 @@ function promotionFromAcceptResult(
   if (result.status === "source_not_ready") {
     throw new KnowledgeCandidateSourceNotReadyError();
   }
-  if (result.status === "already_rejected" || result.status === "superseded") {
+  if (result.status === "already_rejected") {
     throw new KnowledgeCandidateReviewConflictError();
   }
   return { candidate: result.candidate, nodes: result.nodes, edges: result.edges };
@@ -299,7 +297,6 @@ export function buildRejectKnowledgeCandidate(
       throw new KnowledgeCandidateNotFoundError();
     }
     authorizeReviewer(access, candidate);
-    if (candidate.supersededAt) { throw new KnowledgeCandidateReviewConflictError(); }
     const selected = selectKnowledgeCandidateItems(candidate, selection, "rejected");
     if (candidate.status === "accepted") {
       if (selection && selected.items.length === 0) { return candidate; }

@@ -1,1 +1,0 @@
-ALTER TABLE "organization_agent_tokens" ADD COLUMN "token" text;

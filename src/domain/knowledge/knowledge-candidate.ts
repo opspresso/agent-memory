@@ -13,8 +13,6 @@ export const knowledgeCandidateStatuses = [
   "rejected"
 ] as const;
 
-export const currentKnowledgeExtractionVersion = 2;
-
 export type KnowledgeCandidateStatus =
   (typeof knowledgeCandidateStatuses)[number];
 
@@ -59,8 +57,6 @@ export interface KnowledgeCandidate {
   readonly documentId: string;
   readonly chunkId: string;
   readonly model: string;
-  readonly extractionVersion: number;
-  readonly supersededAt?: Date;
   readonly graph: ProposedKnowledgeGraph;
   readonly status: KnowledgeCandidateStatus;
   readonly itemReviews?: readonly KnowledgeCandidateItemReview[];
@@ -78,7 +74,6 @@ interface NewKnowledgeCandidate {
   readonly documentId: string;
   readonly chunkId: string;
   readonly model: string;
-  readonly extractionVersion?: number;
   readonly graph: ProposedKnowledgeGraph;
   readonly now: Date;
 }
@@ -183,9 +178,6 @@ function normalizedGraph(graph: ProposedKnowledgeGraph): ProposedKnowledgeGraph 
 export function createKnowledgeCandidate(
   input: NewKnowledgeCandidate
 ): KnowledgeCandidate {
-  if (input.extractionVersion !== undefined && (!Number.isSafeInteger(input.extractionVersion) || input.extractionVersion < 1)) {
-    throw new InvalidKnowledgeCandidateError("extraction version must be a positive integer");
-  }
   if (input.scope.organizationId.trim().length === 0) {
     throw new InvalidKnowledgeCandidateError(
       "knowledge candidate organization ID must not be empty"
@@ -197,15 +189,9 @@ export function createKnowledgeCandidate(
     documentId: normalizedText(input.documentId, "document ID", 255),
     chunkId: normalizedText(input.chunkId, "document chunk ID", 255),
     model: normalizedText(input.model, "extraction model", 255),
-    extractionVersion: input.extractionVersion ?? currentKnowledgeExtractionVersion,
     graph: normalizedGraph(input.graph),
     status: "pending",
     createdAt: new Date(input.now),
     updatedAt: new Date(input.now)
   });
-}
-
-export function canUpgradeKnowledgeExtraction(candidate: KnowledgeCandidate): boolean {
-  return candidate.extractionVersion < currentKnowledgeExtractionVersion && candidate.status === "pending" &&
-    !candidate.supersededAt && !candidate.itemReviews?.some((review) => review.method !== "automatic");
 }

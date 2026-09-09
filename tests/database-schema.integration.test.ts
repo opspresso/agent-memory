@@ -9,7 +9,7 @@ import { buildRetryDocument } from "@/application/document/retry-document";
 import { createIngestionReceiptRepository } from "@/infrastructure/database/repositories/ingestion-receipt-repository";
 import { ingestionFingerprint } from "@/lib/ingestion-fingerprint";
 import { and, eq, sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { initializeSchema } from "@/infrastructure/database/schema-bootstrap.mjs";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -92,7 +92,7 @@ describe("PostgreSQL schema", () => {
     const database = createDatabase(container.getConnectionUri());
     db = database.db;
     pool = database.pool;
-    await migrate(db, { migrationsFolder: "drizzle" });
+    await Promise.all([initializeSchema(pool), initializeSchema(pool)]);
   });
 
   afterAll(async () => {
@@ -131,20 +131,39 @@ describe("PostgreSQL schema", () => {
     expect(legacyProvenanceColumns.rows).toEqual([]);
   });
 
-  it("rejects a missing migration record or ledger even when the database is reachable", async () => {
+  it("rejects a missing schema fingerprint or marker even when the database is reachable", async () => {
     await expect(checkSchemaReadiness(db)).resolves.toBeUndefined();
     const rollback = new Error("rollback readiness fixture");
     await expect(db.transaction(async (transaction) => {
-      await transaction.execute(sql`delete from drizzle.__drizzle_migrations where id = (select max(id) from drizzle.__drizzle_migrations)`);
+      await transaction.execute(sql`delete from public.application_schema`);
       await expect(checkSchemaReadiness(transaction)).rejects.toBeInstanceOf(DatabaseSchemaNotReadyError);
       throw rollback;
     })).rejects.toBe(rollback);
     await expect(db.transaction(async (transaction) => {
-      await transaction.execute(sql`alter table drizzle.__drizzle_migrations rename to readiness_test_migrations`);
+      await transaction.execute(sql`alter table public.application_schema rename to readiness_test_schema`);
       await expect(checkSchemaReadiness(transaction)).rejects.toBeInstanceOf(DatabaseSchemaNotReadyError);
       throw rollback;
     })).rejects.toBe(rollback);
     await expect(checkSchemaReadiness(db)).resolves.toBeUndefined();
+  });
+
+  it("refuses incompatible or unmarked databases without modifying their tables", async () => {
+    const original = (await pool.query("SELECT fingerprint FROM application_schema WHERE id = 1")).rows[0].fingerprint;
+    try {
+      await pool.query("UPDATE application_schema SET fingerprint = 'incompatible'");
+      await expect(initializeSchema(pool)).rejects.toThrow("does not match");
+      expect((await pool.query("SELECT fingerprint FROM application_schema")).rows[0].fingerprint).toBe("incompatible");
+    } finally {
+      await pool.query("UPDATE application_schema SET fingerprint = $1", [original]);
+    }
+    try {
+      await pool.query("ALTER TABLE application_schema RENAME TO unmarked_schema_fixture");
+      await expect(initializeSchema(pool)).rejects.toThrow("not empty");
+      expect((await pool.query("SELECT to_regclass('public.documents') IS NOT NULL AS present")).rows[0].present).toBe(true);
+    } finally {
+      await pool.query("ALTER TABLE unmarked_schema_fixture RENAME TO application_schema");
+    }
+    await expect(initializeSchema(pool)).resolves.toBeUndefined();
   });
 
   it("stores one global application settings row", async () => {
@@ -2691,29 +2710,11 @@ describe("PostgreSQL schema", () => {
     const candidates = createKnowledgeCandidateRepository(db);
     expect(await candidates.processingProgress(access)).toEqual({ totalChunks: 1, extractedChunks: 0, curatedChunks: 0 });
     expect(await candidates.processingProgress({ ...access, organizationId: organizationB })).toEqual({ totalChunks: 0, extractedChunks: 0, curatedChunks: 0 });
-    const legacy = createKnowledgeCandidate({ id: randomUUID(), documentId: documentIds[1]!, chunkId: chunkIds[1]!, scope, model: "legacy", extractionVersion: 1,
-      graph: { entities: [{ key: "old", kind: "person", canonicalName: "Guan Yu" }], relationships: [] }, now: new Date() });
-    await candidates.save(legacy);
-    const next = createKnowledgeCandidate({ ...legacy, id: randomUUID(), extractionVersion: 2, model: "current",
-      graph: { entities: [{ key: "new", kind: "person", canonicalName: "Guan Yu", summary: "A detailed account." }, { key: "other", kind: "person", canonicalName: "Another person" }], relationships: [] }, now: new Date() });
-    const replacements = await Promise.all([candidates.replaceExtraction(legacy.id, next), candidates.replaceExtraction(legacy.id, { ...next, id: randomUUID() })]);
-    expect(replacements[0]?.id).toBe(replacements[1]?.id);
-    expect((await candidates.findById(organization, legacy.id))?.graph).toEqual(legacy.graph);
-    expect((await candidates.findById(organization, legacy.id))?.supersededAt).toBeInstanceOf(Date);
-    expect((await candidates.findByChunkId(organization, chunkIds[1]!))?.extractionVersion).toBe(2);
+    const candidate = createKnowledgeCandidate({ id: randomUUID(), documentId: documentIds[1]!, chunkId: chunkIds[1]!, scope, model: "current",
+      graph: { entities: [{ key: "guan", kind: "person", canonicalName: "Guan Yu" }], relationships: [] }, now: new Date() });
+    const saved = await Promise.all([candidates.save(candidate), candidates.save({ ...candidate, id: randomUUID() })]);
+    expect(saved[0]?.id).toBe(saved[1]?.id);
     expect(await candidates.listPending(access, 100)).toHaveLength(1);
     expect(await candidates.processingProgress(access)).toEqual({ totalChunks: 1, extractedChunks: 1, curatedChunks: 0 });
-    await expect(candidates.accept({ candidateId: legacy.id, organizationId: organization, entityPromotions: [], relationshipIds: [], reviewedAt: new Date(), reviewedBy: user })).resolves.toEqual({ status: "superseded" });
-    await expect(candidates.reject({ candidateId: legacy.id, organizationId: organization, reviewedAt: new Date(), reviewedBy: user })).resolves.toBeNull();
-    const current = replacements[0]!;
-    await candidates.accept({ candidateId: current.id, organizationId: organization, selection: { entityKeys: ["new"], relationshipIndexes: [] },
-      entityPromotions: [{ key: "new", id: randomUUID() }], relationshipIds: [], reviewedAt: new Date(), reviewedBy: user });
-    const attempted = { ...next, id: randomUUID(), extractionVersion: 3 };
-    expect((await candidates.replaceExtraction(current.id, attempted)).id).toBe(current.id);
-    expect(await candidates.findById(organization, attempted.id)).toBeNull();
-    expect((await candidates.findById(organization, current.id))?.supersededAt).toBeUndefined();
-
-
   });
-
 });

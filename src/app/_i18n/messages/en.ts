@@ -421,7 +421,6 @@ export const en = {
   "knowledgeProgress.prioritize": "Prioritize knowledge for this search",
   "knowledgeProgress.prioritized": "Prioritized {count} related extractions.",
   "knowledgeProgress.unavailable": "Knowledge processing progress is unavailable.",
-  "reviewQueue.superseded": "Superseded by a newer extraction",
   "reviewQueue.history": "Curation history",
   "reviewQueue.historyDescription": "Review decisions and automatic or human actions for the 50 most recently updated assessed extractions.",
   "reviewQueue.noHistory": "No AI verification history yet.",

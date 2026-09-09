@@ -2,11 +2,11 @@ import { buildQueueKnowledgeCuration } from "@/application/knowledge/queue-knowl
 import { describe, expect, it, vi } from "vitest";
 import { readKnowledgeEnrichmentConcurrency } from "@/lib/document-worker-configuration";
 import { mergeKnowledgeDescriptions } from "@/domain/knowledge/knowledge-description";
-import { canUpgradeKnowledgeExtraction, createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
+import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 
 describe("knowledge enrichment quality", () => {
   it("prioritizes a requested entity without requeueing unrelated candidates", async () => {
-    const make = (name: string) => ({ candidate: createKnowledgeCandidate({ id: name, documentId: "d", chunkId: name, model: "old", extractionVersion: 1,
+    const make = (name: string) => ({ candidate: createKnowledgeCandidate({ id: name, documentId: "d", chunkId: name, model: "old",
       scope: { kind: "organization", organizationId: "org" }, graph: { entities: [{ key: "a", kind: "person", canonicalName: name }], relationships: [] }, now: new Date() }), documentTitle: "Novel", ordinal: 0 });
     const enqueueKnowledgeEnrichment = vi.fn().mockResolvedValue("already_queued");
     const queue = buildQueueKnowledgeCuration({ listReviewSources: vi.fn().mockResolvedValue([make("관우"), make("조조")]) }, { enqueueKnowledgeEnrichment });
@@ -25,14 +25,5 @@ describe("knowledge enrichment quality", () => {
     expect(mergeKnowledgeDescriptions(["Leads cavalry.", "Studies strategy.", " Leads  cavalry. "])).toBe("Leads cavalry.\n\nStudies strategy.");
     expect(mergeKnowledgeDescriptions([])).toBeUndefined();
     expect(mergeKnowledgeDescriptions(["a".repeat(6_000), "b".repeat(6_000)])?.length).toBeLessThanOrEqual(10_000);
-  });
-  it("upgrades legacy automatic candidates without replacing human decisions", () => {
-    const candidate = createKnowledgeCandidate({ id: "c", documentId: "d", chunkId: "ch", model: "model", now: new Date(),
-      scope: { kind: "organization", organizationId: "org" }, graph: { entities: [], relationships: [] }, extractionVersion: 1 });
-    expect(canUpgradeKnowledgeExtraction(candidate)).toBe(true);
-    expect(canUpgradeKnowledgeExtraction({ ...candidate, extractionVersion: 2 })).toBe(false);
-    expect(canUpgradeKnowledgeExtraction({ ...candidate, itemReviews: [{ item: "entity:a", decision: "accepted", method: "human", reviewedBy: "u", reviewedAt: new Date().toISOString() }] })).toBe(false);
-    expect(canUpgradeKnowledgeExtraction({ ...candidate, status: "accepted" })).toBe(false);
-    expect(canUpgradeKnowledgeExtraction({ ...candidate, supersededAt: new Date() })).toBe(false);
   });
 });

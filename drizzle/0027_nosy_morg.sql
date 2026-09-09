@@ -1,1 +1,0 @@
-ALTER TABLE "knowledge_candidates" ADD COLUMN "item_reviews" jsonb DEFAULT '[]'::jsonb NOT NULL;

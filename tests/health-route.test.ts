@@ -58,7 +58,7 @@ describe("health route", () => {
     );
   });
 
-  it("reports pending schema migrations separately from database connectivity", async () => {
+  it("reports schema fingerprint mismatch separately from database connectivity", async () => {
     execute.mockRejectedValue(new DatabaseSchemaNotReadyError());
     const response = await GET();
     expect(response.status).toBe(503);

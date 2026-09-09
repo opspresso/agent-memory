@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { initializeSchema } from "@/infrastructure/database/schema-bootstrap.mjs";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createDatabase } from "@/infrastructure/database/client";
-import { assertSingleOrganizationBeforeMigration, createInstallationRepository } from "@/infrastructure/database/repositories/installation-repository";
+import { createInstallationRepository } from "@/infrastructure/database/repositories/installation-repository";
 
 describe("single organization installation", () => {
   let container: StartedPostgreSqlContainer;
@@ -19,8 +19,7 @@ describe("single organization installation", () => {
     const database = createDatabase(container.getConnectionUri());
     pool = database.pool;
     repository = createInstallationRepository(database.db);
-    await assertSingleOrganizationBeforeMigration(database.db);
-    await migrate(database.db, { migrationsFolder: "drizzle" });
+    await initializeSchema(pool);
   });
 
   beforeEach(async () => {
@@ -49,12 +48,6 @@ describe("single organization installation", () => {
     const id = randomUUID();
     await pool.query("INSERT INTO organizations(id,slug,name) VALUES($1,'existing','Existing')", [id]);
     expect(await repository.initialize()).toMatchObject({ id, slug: "existing", name: "Existing" });
-    const database = createDatabase(container.getConnectionUri());
-    try {
-      await expect(assertSingleOrganizationBeforeMigration(database.db)).resolves.toBeUndefined();
-    } finally {
-      await database.pool.end();
-    }
   });
 
   it("does not block existing installation lookup behind an organization writer", async () => {
@@ -85,12 +78,6 @@ describe("single organization installation", () => {
     const before = await pool.query("SELECT * FROM organizations ORDER BY slug");
     await expect(repository.initialize()).rejects.toThrow("requires a single organization");
     await expect(repository.get()).rejects.toThrow("requires a single organization");
-    const database = createDatabase(container.getConnectionUri());
-    try {
-      await expect(assertSingleOrganizationBeforeMigration(database.db)).rejects.toThrow("requires a single organization");
-    } finally {
-      await database.pool.end();
-    }
     expect((await pool.query("SELECT * FROM organizations ORDER BY slug")).rows).toEqual(before.rows);
   });
 

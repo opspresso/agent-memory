@@ -420,7 +420,6 @@ export const ko: Messages = {
   "knowledgeProgress.prioritize": "이 검색어 관련 지식 우선 처리",
   "knowledgeProgress.prioritized": "관련 추출 {count}개를 우선 처리하도록 등록했습니다.",
   "knowledgeProgress.unavailable": "지식 처리 진행 상태를 확인하지 못했습니다.",
-  "reviewQueue.superseded": "새 추출로 대체됨",
   "reviewQueue.history": "처리 내역",
   "reviewQueue.historyDescription": "최근 검증한 추출 50개의 판단 이유와 자동·수동 처리 기록을 확인합니다.",
   "reviewQueue.noHistory": "아직 AI 검증 내역이 없습니다.",

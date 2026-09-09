@@ -23,7 +23,7 @@ ENV NEXT_MANUAL_SIG_HANDLE=true
 RUN addgroup -S app && adduser -S app -G app
 COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static
-COPY --from=build --chown=app:app /app/drizzle ./drizzle
+COPY --from=build --chown=app:app /app/database ./database
 COPY --from=build --chown=app:app /app/public ./public
 USER app
 

@@ -30,7 +30,7 @@ async function noOverflow(page: Page) {
 }
 
 test("completes knowledge work with real evidence, scoped access and responsive views", async ({ page, browser }, testInfo) => {
-  test.skip(process.env.E2E_AUTHENTICATED !== "true", "requires a disposable migrated PostgreSQL database");
+  test.skip(process.env.E2E_AUTHENTICATED !== "true", "requires a disposable initialized PostgreSQL database");
   test.setTimeout(240_000);
   await resetInstallationFixture();
   page.setDefaultTimeout(15_000);

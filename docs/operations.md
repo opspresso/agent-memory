@@ -8,7 +8,7 @@
 | --- | --- |
 | 로컬 실행·IDC 릴리즈 | [배포 형태](#배포-형태) |
 | 설정값·필수 조합·override | [환경 변수](#환경-변수) |
-| Migration 대상 확인 | [Database와 migration](#database와-migration) |
+| 초기화 대상 확인 | [Database 초기화](#database-초기화) |
 | Worker·queue·종료 | [문서 worker와 object storage](#문서-worker와-object-storage) |
 | Health·metrics·로그 | [상태 확인과 관측성](#상태-확인과-관측성) |
 | 역할 분리·backup·복원 | [운영 topology와 데이터 보호](#운영-topology와-데이터-보호) |
@@ -35,7 +35,7 @@ Compose: postgres, MinIO ─────┘      └── pg-boss
 
 이 저장소는 IDC Compose나 Kubernetes manifest를 보관하지 않는다. Release workflow는 image 게시 후 `argocd-env-demo`에 tag만 전달한다.
 
-IDC에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, migration, backup, 복원 단위는 분리된다.
+IDC에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, schema 초기화, backup, 복원 단위는 분리된다.
 
 ### 릴리즈와 IDC 배포
 
@@ -83,10 +83,10 @@ docker compose up --wait postgres minio
 docker compose run --rm minio-init
 ```
 
-`up --wait`가 PostgreSQL·MinIO의 health를 확인하고 `run --rm minio-init`이 bucket 생성을 완료한 뒤 migration과 서버를 실행하라. 앞 명령이 실패하면 이후 단계로 진행하지 마라. DB 주소를 기본 Compose 값에서 바꿨다면 먼저 [CLI의 환경 변수 처리](#database와-migration)를 확인한다.
+`up --wait`가 PostgreSQL·MinIO의 health를 확인하고 `run --rm minio-init`이 bucket 생성을 완료한 뒤 schema 초기화와 서버를 실행하라. 앞 명령이 실패하면 이후 단계로 진행하지 마라. DB 주소를 기본 Compose 값에서 바꿨다면 먼저 [CLI의 환경 변수 처리](#database-초기화)를 확인한다.
 
 ```bash
-pnpm db:migrate
+pnpm db:init
 pnpm dev
 ```
 
@@ -121,7 +121,6 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Database | `DATABASE_URL` | PostgreSQL 연결 문자열 |
 | Startup | `NODE_ENV` | `production`이면 운영 필수 변수 검증을 활성화 |
 | Build | `NEXT_DIST_DIR` | Next.js 출력 디렉터리. 기본값 `.next`, Playwright 서버는 `.next-e2e` 사용 |
-| Startup | `MIGRATE_ON_START` | Node.js runtime 시작 시 migration 실행 |
 
 ### 인증과 접근 정책
 
@@ -228,7 +227,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 | 적용 단위 | 변수 | 반영 시점 |
 | --- | --- | --- |
-| Bootstrap env | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `MIGRATE_ON_START`, `NODE_ENV` | DB 접근·복호화·시작 방식에 먼저 필요. Override 불가 |
+| Bootstrap env | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `NODE_ENV` | DB 접근·복호화·시작 방식에 먼저 필요. Override 불가 |
 | 요청 시 다시 읽는 설정 | `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN` | 저장한 instance에서 즉시 적용. 다른 instance는 최대 5초 cache 후 반영 |
 | Process 초기화 설정 | 인증 provider, AI, document worker·quota, S3, logging, telemetry 등 나머지 설정 | 사용하는 모든 instance 재시작 필요 |
 | Framework·검사 환경 | `NEXT_DIST_DIR`, `NEXT_RUNTIME`, `NEXT_PHASE`, `VERCEL`, `CI`, `E2E_*` 등 | 전역 설정 화면에서 관리하지 않음 |
@@ -283,29 +282,27 @@ Semantic search는 query와 같은 model 이름으로 저장된 vector를 사용
 `src/instrumentation.ts`의 Node.js runtime은 다음 순서로 초기화한다.
 
 1. Production bootstrap 설정을 검사한다.
-2. `MIGRATE_ON_START=true`이면 기존 조직 수를 확인하고 migration을 적용한다. 설정값과 관계없이 DB 연결과 journal의 모든 migration 적용 이력을 검사하고, 누락되면 설정 override·worker 준비 전에 시작을 중단한다.
+2. 빈 DB를 초기화하거나 기존 schema fingerprint를 확인한다. 일치하지 않으면 설정 override·worker 준비 전에 시작을 중단한다.
 3. DB의 secret override를 복호화하고 유효 설정을 검증한 뒤 process environment에 적용한다.
 4. 설치의 단일 조직을 초기화하고 production 설정을 확인한다.
 5. Telemetry와 종료 handler를 준비하고 `DOCUMENT_WORKER_ENABLED=true`이면 worker를 시작한다.
 
-따라서 worker를 끈 web instance도 DB·migration·설정 override가 정상이어야 시작할 수 있다. 여러 instance의 역할 분리는 [운영 topology](#운영-topology와-데이터-보호)를 따른다.
+따라서 worker를 끈 web instance도 DB·schema 초기화·설정 override가 정상이어야 시작할 수 있다. 여러 instance의 역할 분리는 [운영 topology](#운영-topology와-데이터-보호)를 따른다.
 
-## Database와 migration
+## Database 초기화
 
-`pnpm db:migrate`, `pnpm db:generate`, `pnpm db:studio`는 `.env.local`을 자동으로 읽지 않는다. Drizzle CLI는 `.env`를 읽고, 이미 shell에 있는 `DATABASE_URL`을 우선한다. 미설정 시 `drizzle.config.ts`의 로컬 Compose 주소를 사용한다. `.env.local`에서 DB 주소를 변경했다면 같은 값을 shell의 `DATABASE_URL`로 명시한 뒤 명령을 실행하라. 운영 credential은 secret manager에서 주입하고 명령 기록에 직접 남기지 마라.
-
-Schema source는 `src/infrastructure/database/schema/`, 생성된 migration은 `drizzle/`에 있다.
+Schema source는 `src/infrastructure/database/schema/`, 현재 schema의 생성 SQL은 `database/schema.sql`이다. 누적 migration과 이전 데이터 변환은 제공하지 않는다. 서버는 빈 DB에만 현재 schema를 생성하며, 기존 DB의 fingerprint가 다르면 데이터를 변경하지 않고 시작을 거부한다. 초기화는 transaction과 advisory lock으로 보호하므로 동시 시작에도 한 번만 생성한다.
 
 | 명령 | 용도 |
 | --- | --- |
-| `pnpm db:generate` | Schema 변경에서 migration·snapshot 생성 |
-| `pnpm db:migrate` | 지정한 DB에 생성된 migration 적용 |
+| `pnpm db:generate` | 현재 schema 전체 SQL 생성 |
+| `pnpm db:check` | 생성 SQL과 TypeScript schema의 일치 검사 |
+| `pnpm db:init` | 빈 DB 초기화 또는 기존 fingerprint 확인 |
 | `pnpm db:studio` | 지정한 DB를 조회·편집하는 Drizzle Studio 실행 |
 
-- Schema를 바꿀 때만 `pnpm db:generate`를 실행하고 생성된 SQL과 snapshot을 함께 검토하라.
-- Application과 별도 migration job을 운영하면 `MIGRATE_ON_START=false`를 유지하라.
-- 단일 instance 로컬 환경에서는 `MIGRATE_ON_START=true`로 시작 전에 migration을 적용할 수 있다.
-- Schema와 tenant constraint 변경은 `pnpm test:integration`으로 실제 PostgreSQL 18 + pgvector에서 검증하라.
+`db:init`은 `.env.local`을 읽고 이미 설정된 `DATABASE_URL`을 우선한다. 주소가 없으면 실패하며 기본 DB를 선택하지 않는다. `db:generate`와 `db:check`는 DB에 연결하지 않는다. Drizzle Studio는 `.env`와 shell의 `DATABASE_URL`을 사용하므로 실제 대상을 먼저 확인하라.
+
+Schema를 변경하면 배포 전에 application·worker를 중단하고 DB·전용 bucket·queue를 명시적으로 초기화한다. 계정·설정 보존이 필요하면 초기화 전에 별도 보존·복원 범위를 결정한다. 공유 Agent Studio DB·bucket은 초기화 대상에 포함하지 않는다. Application 시작에는 자동 DROP·ALTER·backfill이 없다. 임의 DDL에 의한 schema drift는 fingerprint 검사만으로 탐지하지 않는다.
 
 ## 문서 worker와 object storage
 
@@ -322,7 +319,7 @@ Schema source는 `src/infrastructure/database/schema/`, 생성된 migration은 `
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
 - AI 추출 후 같은 모델·endpoint를 사용하는 별도 검증 요청으로 원문 근거·유용성·충돌을 평가한다. 명시적이고 유용하며 인용 검증과 정책을 통과한 항목은 자동 승인한다. 불확실한 항목은 수동 검토로 남기고 근거 없는·사소한 항목은 자동 제외한다. 검증 요청도 AI quota를 소비하며 실패하면 자동 반영하지 않고 enrichment job을 재시도한다. 검증 대상 원문과 제안은 유지하고, 참고할 기존 개체 개요는 개체당 2,000자로 제한해 출처 누적으로 요청이 계속 커지는 것을 막는다.
-- 기본 자동 검토는 문서 생성자의 현재 active membership과 source scope `manage` 권한을 요구한다. 검토 화면의 일괄 실행은 인증된 요청자를 job에 기록하며 worker가 그 권한을 다시 확인한다. 현재 버전의 추출은 저장된 assessment를 재사용한다. 이전 버전의 pending 추출은 사람이 검토한 항목이 없을 때만 새 후보로 재추출하고 이전 후보를 superseded로 보존한다. Worker 실행과 최신 migration 적용이 필요하다.
+- 기본 자동 검토는 문서 생성자의 현재 active membership과 source scope `manage` 권한을 요구한다. 검토 화면의 일괄 실행은 인증된 요청자를 job에 기록하며 worker가 그 권한을 다시 확인한다. 저장된 추출과 assessment는 재사용한다. 재추출을 위한 구버전 호환 경로는 없으며 worker 실행이 필요하다.
 
 ### Queue와 종료
 
@@ -347,10 +344,10 @@ curl -i http://localhost:3100/api/health
 
 | Endpoint | 인증과 응답 | 확인하는 범위 |
 | --- | --- | --- |
-| `GET /api/health` | 인증 불필요. 정상 `200`, DB·migration 실패 `503`, cache 안 함 | DB 연결과 저장소 migration journal의 적용 이력 검사 |
+| `GET /api/health` | 인증 불필요. 정상 `200`, DB·schema 초기화 실패 `503`, cache 안 함 | DB 연결과 현재 schema fingerprint 검사 |
 | `GET /api/metrics` | `METRICS_BEARER_TOKEN`과 일치하는 Bearer 필요. 미설정·잘못된 인증은 `404` | Build version, worker 활성 설정, process CPU·memory·event loop delay |
 
-Health의 `200`은 DB 연결과 journal의 migration 적용 이력이 정상임을 뜻한다. 수동 schema 변경, S3 접근, worker 소비 상태나 AI provider 정상 여부는 보장하지 않는다. Metrics의 worker 값도 실제 처리 진척이 아닌 활성 설정이다. 배포 후에는 document 상태·queue log·필요한 provider 연결을 별도로 확인하라. Metrics token은 조직 Agent token·사용자 session과 다른 전용 credential이다.
+Health의 `200`은 DB 연결과 현재 schema fingerprint가 일치임을 뜻한다. 수동 schema 변경, S3 접근, worker 소비 상태나 AI provider 정상 여부는 보장하지 않는다. Metrics의 worker 값도 실제 처리 진척이 아닌 활성 설정이다. 배포 후에는 document 상태·queue log·필요한 provider 연결을 별도로 확인하라. Metrics token은 조직 Agent token·사용자 session과 다른 전용 credential이다.
 
 ### 로그와 trace
 
@@ -360,14 +357,14 @@ Langfuse는 public key와 secret key를 모두 설정할 때 활성화된다. `L
 
 ## 운영 topology와 데이터 보호
 
-단일 instance에서는 `MIGRATE_ON_START=true`와 `DOCUMENT_WORKER_ENABLED=true`로 application, migration, worker를 같은 process에서 실행할 수 있다.
+단일 instance에서는 `DOCUMENT_WORKER_ENABLED=true`로 application과 worker를 같은 process에서 실행할 수 있다. 빈 DB 초기화는 서버 시작 시 수행한다.
 
 여러 application instance를 운영할 때는 다음 구성을 권장한다.
 
 ```text
-migration job: MIGRATE_ON_START 또는 pnpm db:migrate를 한 번 실행
-web instances: MIGRATE_ON_START=false, DOCUMENT_WORKER_ENABLED=false
-worker instance: MIGRATE_ON_START=false, DOCUMENT_WORKER_ENABLED=true
+initialization job: pnpm db:init (선택)
+web instances: DOCUMENT_WORKER_ENABLED=false
+worker instance: DOCUMENT_WORKER_ENABLED=true
 ```
 
 이 구성에서는 `DOCUMENT_WORKER_ENABLED`의 DB override를 reset하고 각 process environment에서 값을 지정해야 한다. 같은 DB의 override는 web·worker 모두에 우선 적용되므로 역할별 값을 덮어쓴다.
@@ -397,17 +394,17 @@ Dockpad의 백업은 두 application DB와 두 bucket, 공유 host 설정을 순
 
 ### `column ... does not exist` 또는 `relation ... does not exist`
 
-누락된 migration 또는 application과 migration CLI가 서로 다른 DB를 사용했는지 확인한다. [CLI 환경 변수 처리](#database와-migration)에 따라 대상 `DATABASE_URL`을 먼저 일치시킨다.
+Schema fingerprint 불일치 또는 application과 초기화 CLI가 서로 다른 DB를 사용했는지 확인한다. [CLI 환경 변수 처리](#database-초기화)에 따라 대상 `DATABASE_URL`을 먼저 일치시킨다.
 
 ```bash
-pnpm db:migrate
+pnpm db:init
 ```
 
-실행 후 application을 다시 요청하고 `drizzle/meta/_journal.json`의 migration과 대상 Database의 적용 이력을 대조하라. 임의로 table이나 column을 수동 생성하지 마라.
+빈 DB는 현재 schema로 초기화한다. 기존 schema가 다르면 백업·중단·명시적 초기화 후 다시 배포하라. 임의로 table이나 column을 수동 생성하거나 fingerprint를 덮어쓰지 마라.
 
 ### 브라우저에서 `Unexpected end of JSON input`
 
-이 메시지는 client가 빈 응답이나 JSON이 아닌 오류 응답을 `response.json()`으로 읽을 때 나타나는 2차 오류일 수 있다. 같은 시각의 server log에서 원래 HTTP 오류와 Database·storage 예외를 먼저 확인하라. Network panel에서 status, content type, response body를 확인하고 migration 누락이나 unhandled server error를 해결하라.
+이 메시지는 client가 빈 응답이나 JSON이 아닌 오류 응답을 `response.json()`으로 읽을 때 나타나는 2차 오류일 수 있다. 같은 시각의 server log에서 원래 HTTP 오류와 Database·storage 예외를 먼저 확인하라. Network panel에서 status, content type, response body를 확인하고 schema 초기화 누락이나 unhandled server error를 해결하라.
 
 ### 문서가 `pending`에 머묾
 
@@ -461,11 +458,11 @@ Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지
 | `422` | strict ontology의 미등록 node kind·edge predicate |
 | `428` | Memory PATCH·DELETE의 `If-Match` header |
 | `429` | AI instance·organization·user quota와 `Retry-After` header, 또는 document storage·backlog·upload quota |
-| `503` | PostgreSQL 연결·migration 상태 또는 온톨로지 AI 제안 model 설정 |
+| `503` | PostgreSQL 연결·schema 초기화 상태 또는 온톨로지 AI 제안 model 설정 |
 
 ## 단일 조직 설치
 
-서버 시작 시 조직이 없으면 `default` slug와 `Agent Memory` 이름으로 생성한다. 기존 조직이 하나면 ID·이름·멤버십·데이터를 그대로 사용한다. 두 개 이상이면 서버 시작을 중단한다. `MIGRATE_ON_START=true`일 때는 schema 변경 전에 기존 조직 수를 검사해 다중 조직 설치를 거부한다. 기존 다중 조직 설치는 운영자가 조직별 독립 DB·bucket으로 분리하거나 보존할 데이터를 정리한 후 시작하라. 자동 병합·삭제는 수행하지 않는다.
+서버 시작 시 조직이 없으면 `default` slug와 `Agent Memory` 이름으로 생성한다. 기존 조직이 하나면 ID·이름·멤버십·데이터를 그대로 사용한다. 두 개 이상이면 서버 시작을 중단한다. 기존 다중 조직 설치는 운영자가 조직별 독립 DB·bucket으로 분리하거나 보존할 데이터를 정리한 후 시작하라. 자동 병합·삭제는 수행하지 않는다.
 
 가입 후 첫 콘솔 접속은 설치 조직에 대한 가입 요청으로 처리한다. active owner가 없는 경우 `ADMIN_EMAILS`의 사용자가 최초 owner가 된다. 다른 사용자의 가입은 pending 요청으로 처리되며 운영자 승인 후에만 활성 멤버가 된다. blocked·removed membership은 자동으로 복구하지 않는다. 모든 공개 HTTP endpoint는 조직 slug를 받지 않으며 MCP 주소는 `/api/mcp`다.
 
@@ -483,7 +480,7 @@ pnpm verify
 | --- | --- |
 | `E2E_AUTHENTICATED=true` | 미설정하면 가입·승인·회원 관리·Memory lifecycle을 skip하고 공개 화면만 검사 |
 | 이름이 `_e2e` 또는 `_test`로 끝나는 별도 DB | Fixture가 `TRUNCATE organizations, users CASCADE`로 데이터를 초기화하므로 개발·운영 DB 사용 금지 |
-| 같은 `DATABASE_URL`로 사전 migration | 테스트 서버와 fixture가 동일 schema 사용 |
+| 같은 `DATABASE_URL`로 사전 schema 초기화 | 테스트 서버와 fixture가 동일 schema 사용 |
 | Worker 하나 | 인증 시나리오의 초기화 충돌 방지. Playwright config에서 자동 적용 |
 | Port 3110 확보 | 로컬에서는 기존 서버를 재사용할 수 있으므로 다른 설정의 서버를 먼저 종료 |
 
@@ -499,16 +496,16 @@ docker run --detach --name agent-memory-e2e \
 docker exec agent-memory-e2e pg_isready -U agent_memory -d agent_memory_e2e
 ```
 
-`pg_isready`가 성공한 뒤 같은 shell에서 migration과 인증 E2E를 실행한다. Playwright는 별도 `.next-e2e`에 production build를 만들고 port 3110에서 서버를 실행한다.
+`pg_isready`가 성공한 뒤 같은 shell에서 schema 초기화와 인증 E2E를 실행한다. Playwright는 별도 `.next-e2e`에 production build를 만들고 port 3110에서 서버를 실행한다.
 
 ```bash
 export DATABASE_URL=postgresql://agent_memory:agent_memory@127.0.0.1:5434/agent_memory_e2e
-pnpm db:migrate
+pnpm db:init
 pnpm exec playwright install chromium
 E2E_AUTHENTICATED=true DOCUMENT_WORKER_ENABLED=false pnpm test:e2e
 ```
 
-`pnpm test:integration`은 Docker의 별도 Testcontainers PostgreSQL에 migration을 적용해 검사한다. 위 E2E DB를 재사용하지 않는다. CI는 두 검사를 모두 활성화한다.
+`pnpm test:integration`은 Docker의 별도 Testcontainers PostgreSQL에 현재 schema를 초기화해 검사한다. 위 E2E DB를 재사용하지 않는다. CI는 두 검사를 모두 활성화한다.
 
 ### 운영 설정 점검
 
@@ -518,16 +515,15 @@ E2E_AUTHENTICATED=true DOCUMENT_WORKER_ENABLED=false pnpm test:e2e
 - 필요하지 않은 password provider와 signup을 비활성화한다.
 - `ALLOWED_EMAIL_DOMAINS`와 `ADMIN_EMAILS`를 운영 정책에 맞춘다.
 - Google/OIDC callback URL과 `BETTER_AUTH_URL`을 실제 origin에 맞춘다.
-- Migration을 어떤 job 또는 instance가 한 번 적용할지 결정한다.
+- Schema가 달라지면 배포 전 초기화·보존 범위를 결정한다.
 - Web과 worker process의 `DATABASE_URL`, S3, AI provider 설정을 일치시킨다.
 - 외부 reranker를 사용하면 권한 필터된 query와 후보 본문이 provider에 전달되므로 조직의 data retention 정책과 맞는지 확인한다.
 - PostgreSQL과 object storage의 백업·복원 절차를 검증한다.
 - `/api/health`와 stdout JSON log 수집을 배포 환경에 연결한다.
 - Token, password, 본문, 검색어, embedding·reranker 입력과 출력이 log에 포함되지 않는지 확인한다.
 
-### 수집 receipt migration
+### 수집 receipt 보존
 
-멱등 Memory 생성과 내부 문서 업로드를 사용하기 전에 `pnpm db:migrate`로 `ingestion_receipts` 테이블을
-적용한다. Receipt는 resource와 함께 backup한다. Archive 이후 재생성을 막는 기록이므로 임의 TTL로
+초기화한 schema는 멱등 Memory 생성과 내부 문서 업로드를 위한 `ingestion_receipts` 테이블을 포함한다. Receipt는 resource와 함께 backup한다. Archive 이후 재생성을 막는 기록이므로 임의 TTL로
 제거하지 않는다. 클라이언트는 document_ingest_status의 processingAttempts를 retry 요청의
 expectedAttempts로 전달하고, 같은 요청의 응답 유실 시 동일한 key와 횟수를 재사용한다.

@@ -56,7 +56,7 @@ export function knowledgeNodeFromRow(
     throw new Error("knowledge node has no provenance");
   }
   const descriptions = sources.flatMap((source) => source.description ? [source.description] : []);
-  const summary = descriptions.length ? mergeKnowledgeDescriptions(descriptions) : row.summary;
+  const summary = mergeKnowledgeDescriptions(descriptions);
   return {
     id: row.id,
     scope: knowledgeScopeFromRow(row),

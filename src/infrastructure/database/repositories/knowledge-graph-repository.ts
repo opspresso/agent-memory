@@ -3,7 +3,6 @@ import {
   asc,
   desc,
   eq,
-  getTableColumns,
   inArray,
   isNull,
   ne,
@@ -161,21 +160,6 @@ function sourcesByResourceId<T extends NodeSourceRow | EdgeSourceRow>(
   return result;
 }
 
-// Once descriptions are source-specific, the shared summary cannot be used as
-// a fallback: it may have been written by a source that is no longer visible.
-function legacyNodeSummary() {
-  return sql<string | null>`CASE WHEN NOT EXISTS (
-    SELECT 1 FROM ${knowledgeNodeSources} WHERE ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
-      AND ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
-      AND ${knowledgeNodeSources.description} IS NOT NULL
-    ) THEN ${knowledgeNodes.summary} ELSE NULL END`;
-}
-
-function readableNodeColumns() {
-  // Nest the expression so Drizzle keeps correlated column qualifiers in SELECT.
-  return { ...getTableColumns(knowledgeNodes), summary: sql<string | null>`${legacyNodeSummary()}`.as("summary") };
-}
-
 function scoreExpressions(input: KnowledgeNodeSearchInput, now: Date) {
   const visibleDescriptions = sql`(SELECT string_agg(${knowledgeNodeSources.description}, ' ')
     FROM ${knowledgeNodeSources}
@@ -183,7 +167,7 @@ function scoreExpressions(input: KnowledgeNodeSearchInput, now: Date) {
       AND ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
       AND ${visibleSourcePredicate(input.access, knowledgeNodeSources, now)})`;
   return hybridSearchExpressions({
-    search: sql`to_tsvector('simple', ${knowledgeNodes.canonicalName} || ' ' || coalesce(${visibleDescriptions}, ${legacyNodeSummary()}, ''))`,
+    search: sql`to_tsvector('simple', ${knowledgeNodes.canonicalName} || ' ' || coalesce(${visibleDescriptions}, ''))`,
     embedding: knowledgeNodes.embedding,
     embeddingModel: knowledgeNodes.embeddingModel,
     query: input.query,
@@ -228,7 +212,7 @@ export function createKnowledgeGraphRepository(
         return [];
       }
       const rows = await db
-        .select(readableNodeColumns())
+        .select()
         .from(knowledgeNodes)
         .where(
           and(
@@ -656,7 +640,7 @@ export function createKnowledgeGraphRepository(
       const scores = scoreExpressions(input, now);
       const rows = await db
         .select({
-          node: readableNodeColumns(),
+          node: knowledgeNodes,
           lexicalScore: scores.lexicalScore,
           vectorScore: scores.vectorScore,
           score: scores.score
@@ -708,7 +692,7 @@ export function createKnowledgeGraphRepository(
     async findNeighborhood(access, nodeId, depth, limit) {
       const now = clock();
       const rootRows = await db
-        .select(readableNodeColumns())
+        .select()
         .from(knowledgeNodes)
         .where(
           and(
@@ -758,7 +742,7 @@ export function createKnowledgeGraphRepository(
           break;
         }
         const nextRows = await db
-          .select(readableNodeColumns())
+          .select()
           .from(knowledgeNodes)
           .where(
             and(

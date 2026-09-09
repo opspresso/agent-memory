@@ -43,17 +43,17 @@ ADMIN_EMAILS=your-admin@example.com
 - `ADMIN_EMAILS`는 실제 운영자 email로 바꾸고, domain 제한을 설정했다면 해당 email의 domain을 허용 목록에 포함하라.
 - 운영 환경에서는 `.env.example`의 `BETTER_AUTH_SECRET`과 storage credential을 사용하지 마라.
 
-## 2. Database 시작과 migration
+## 2. Database 시작과 초기화
 
-아래 명령은 기본 Compose DB 주소를 사용한다. 사용자 지정 DB를 쓰면 먼저 [migration 환경 설정](operations.md#database와-migration)에 따라 shell의 `DATABASE_URL`도 지정하라.
+아래 명령은 `.env.local`의 DB 주소를 사용하며 shell의 `DATABASE_URL`이 있으면 우선한다. [DB 초기화](operations.md#database-초기화)에서 대상 DB와 초기화 조건을 확인하라.
 
 ```bash
 docker compose up --wait postgres minio
 docker compose run --rm minio-init
-pnpm db:migrate
+pnpm db:init
 ```
 
-`up --wait`는 PostgreSQL·MinIO가 healthy일 때 완료되고 `run --rm minio-init`은 bucket 초기화가 끝날 때 종료된다. 앞 명령이 실패하면 migration을 진행하지 마라. PostgreSQL은 `localhost:5433`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. Migration이 완료되면 application을 시작하라.
+`up --wait`는 PostgreSQL·MinIO가 healthy일 때 완료되고 `run --rm minio-init`은 bucket 초기화가 끝날 때 종료된다. 앞 명령이 실패하면 초기화을 진행하지 마라. PostgreSQL은 `localhost:5433`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. 초기화이 완료되면 application을 시작하라.
 
 ```bash
 pnpm dev

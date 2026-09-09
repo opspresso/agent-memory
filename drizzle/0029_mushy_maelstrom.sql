@@ -1,1 +1,0 @@
-ALTER TABLE "knowledge_node_sources" ADD COLUMN "description" text;

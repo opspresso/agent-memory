@@ -1,7 +1,7 @@
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
 import type { DocumentKnowledgeEnrichmentQueue } from "@/domain/document/document-services";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
-import { InvalidKnowledgeCandidateError, canUpgradeKnowledgeExtraction } from "@/domain/knowledge/knowledge-candidate";
+import { InvalidKnowledgeCandidateError } from "@/domain/knowledge/knowledge-candidate";
 
 export function buildQueueKnowledgeCuration(repository: Pick<KnowledgeCandidateRepository, "listReviewSources">, queue: DocumentKnowledgeEnrichmentQueue) {
   return async (access: OrganizationAccess, query?: string) => {
@@ -13,7 +13,7 @@ export function buildQueueKnowledgeCuration(repository: Pick<KnowledgeCandidateR
       if (term && !candidate.graph.entities.some((entity) => [entity.canonicalName, ...(entity.aliases ?? [])]
         .some((name) => name.normalize("NFKC").toLowerCase().includes(term)))) { continue; }
       const reviewed = new Set(candidate.itemReviews?.map((review) => review.item));
-      if (!canUpgradeKnowledgeExtraction(candidate) && candidate.assessment && !candidate.assessment.items.some((item) => item.verdict !== "review" && !reviewed.has(item.item))) { continue; }
+      if (candidate.assessment && !candidate.assessment.items.some((item) => item.verdict !== "review" && !reviewed.has(item.item))) { continue; }
       if (term) {
         await queue.enqueueKnowledgeEnrichment(access.organizationId, candidate.chunkId, access.userId, 20);
         queued += 1;

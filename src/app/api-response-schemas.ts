@@ -285,8 +285,6 @@ const proposedRelationshipResponseSchema = z.object({
 });
 
 export const knowledgeCandidateResponseSchema = z.object({
-  extractionVersion: z.number().int().positive().optional(),
-  supersededAt: z.string().optional(),
   assessment: z.object({ model: z.string(), policyVersion: z.string(), assessedAt: z.string(),
     items: z.array(z.object({ item: z.string(), verdict: z.enum(["accept", "review", "ignore"]), evidence: z.string(), reason: z.string() })) }).optional(),
   itemReviews: z.array(z.object({ item: z.string(), decision: z.enum(["accepted", "rejected"]),

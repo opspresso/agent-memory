@@ -12,8 +12,8 @@ export async function register() {
   );
   assertProductionBootstrapConfiguration();
 
-  const { prepareDatabase } = await import("./lib/migrate-on-start");
-  await prepareDatabase(process.env.MIGRATE_ON_START === "true");
+  const { prepareDatabase } = await import("./lib/prepare-database");
+  await prepareDatabase();
 
   const { applyRuntimeSettingsOverrides } = await import(
     "./lib/runtime-settings"
