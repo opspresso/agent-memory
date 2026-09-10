@@ -543,7 +543,7 @@ export const ko: Messages = {
   "graph.unpinNode": "고정 해제",
   "graph.selectNodeHint": "노드를 선택하면 연결 관계와 원문 근거를 볼 수 있습니다.",
   "graph.expandFromNode": "확장",
-  "graph.exploreFromNode": "이 node 중심으로 탐색",
+  "graph.exploreFromNode": "탐색",
   "graph.deleteNode": "Node 삭제",
   "graph.deleteEdge": "관계 삭제",
   "candidate.requestFailed": "후보 검토 요청을 처리하지 못했습니다.",

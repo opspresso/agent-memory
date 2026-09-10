@@ -791,7 +791,7 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByRole("button", { name: "DATABASE Orders Database" }).click();
   await expect(page.getByText("← depends_on")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "이 node 중심으로 탐색" })
+    page.getByRole("button", { name: "탐색" })
   ).toBeVisible();
   const edgeDeleteResponse = page.waitForResponse(
     (response) =>

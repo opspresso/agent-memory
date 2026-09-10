@@ -404,7 +404,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await page.unroute(neighborhoodUrl);
     await page.getByRole("button", { name: "전체 화면 종료", exact: true }).click();
     await draggedNode.click({ button: "right" });
-    await page.getByRole("menuitem", { name: "이 node 중심으로 탐색", exact: true }).click();
+    await page.getByRole("menuitem", { name: "탐색", exact: true }).click();
     await expect(draggedNode).toHaveAttribute("data-center", "true");
     await expect(page.getByText("Expansion unavailable", { exact: true })).toHaveCount(0);
     await expect(page.getByText("← stores_in", { exact: true })).toBeVisible();
