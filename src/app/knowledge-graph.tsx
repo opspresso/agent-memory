@@ -35,16 +35,27 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
   const [query, setQuery] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [menuNodeId, setMenuNodeId] = useState<string>();
+  const dismissedMenuOnPointerDown = useRef(false);
   const graphRoot = useRef<HTMLElement>(null);
   const wasFullscreen = useRef(false);
   useEffect(() => {
-    if (!menuNodeId) return;
     function closeOutsideMenu(event: PointerEvent) {
-      if (event.target instanceof Element && event.target.closest("[data-graph-node-menu]")) return;
-      setMenuNodeId(undefined);
+      const insideMenu = event.target instanceof Element && event.target.closest("[data-graph-node-menu]");
+      dismissedMenuOnPointerDown.current = Boolean(menuNodeId && !insideMenu);
+      if (dismissedMenuOnPointerDown.current) setMenuNodeId(undefined);
+    }
+    function consumeDismissalClick(event: MouseEvent) {
+      if (!dismissedMenuOnPointerDown.current || event.detail === 0) return;
+      dismissedMenuOnPointerDown.current = false;
+      event.preventDefault();
+      event.stopPropagation();
     }
     document.addEventListener("pointerdown", closeOutsideMenu, true);
-    return () => document.removeEventListener("pointerdown", closeOutsideMenu, true);
+    document.addEventListener("click", consumeDismissalClick, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutsideMenu, true);
+      document.removeEventListener("click", consumeDismissalClick, true);
+    };
   }, [menuNodeId]);
   useEffect(() => {
     if (wasFullscreen.current && !fullscreen) { graphRoot.current?.querySelector<HTMLButtonElement>("[data-fullscreen-toggle]")?.focus(); }

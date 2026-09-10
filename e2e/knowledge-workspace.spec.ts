@@ -279,7 +279,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await draggedNode.click({ button: "right" });
     await page.getByRole("button", { name: "SERVICE Evidence API", exact: true }).click();
     await expect(page.getByRole("menu")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "SERVICE Evidence API", exact: true })).toHaveAttribute("data-selected", "true");
+    await expect(draggedNode).toHaveAttribute("data-selected", "true");
     await draggedNode.click({ button: "right" });
     const fullscreenBounds = (await graphSvg.boundingBox())!;
     await page.mouse.move(fullscreenBounds.x + 25, fullscreenBounds.y + 120);
@@ -291,6 +291,8 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await draggedNode.click({ button: "right" });
     await graphSvg.click({ position: { x: 25, y: 120 } });
     await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(draggedNode).toHaveAttribute("data-selected", "true");
+    await graphSvg.click({ position: { x: 25, y: 120 } });
     await expect(page.locator("[data-node-id][data-selected], [data-node-id][data-muted], [data-edge-id][data-muted]")).toHaveCount(0);
     await expect(page.getByText("노드를 선택하면 연결 관계와 원문 근거를 볼 수 있습니다.", { exact: true })).toBeVisible();
     await expect(page.getByRole("dialog")).toBeVisible();
@@ -317,6 +319,12 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await databaseFilter.click();
     await expect(draggedNode).toHaveCount(0);
     await page.getByRole("textbox", { name: "Graph node 검색", exact: true }).fill("no matching node");
+    await page.getByRole("button", { name: "SERVICE Evidence API", exact: true }).click({ button: "right" });
+    await graphSvg.click({ position: { x: 25, y: 120 } });
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(page.locator("[data-node-id]")).toHaveCount(2);
+    await expect(page.getByRole("textbox", { name: "Graph node 검색", exact: true })).toHaveValue("no matching node");
+    await expect(databaseFilter).toHaveAttribute("aria-pressed", "false");
     await graphSvg.click({ position: { x: 25, y: 120 } });
     await expect(page.locator("[data-node-id]")).toHaveCount(3);
     await expect(page.locator("[data-node-id][data-selected], [data-node-id][data-muted], [data-edge-id][data-muted]")).toHaveCount(0);
