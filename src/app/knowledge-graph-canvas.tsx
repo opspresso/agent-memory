@@ -1,7 +1,7 @@
 "use client";
 
-import { ActionIcon, Group, Text, Tooltip } from "@mantine/core";
-import { IconFocusCentered, IconMinus, IconPlus, IconRefresh, IconMaximize, IconMinimize } from "@tabler/icons-react";
+import { ActionIcon, Group, Menu, Text, Tooltip } from "@mantine/core";
+import { IconFocusCentered, IconMinus, IconPlus, IconRefresh, IconMaximize, IconMinimize, IconPinnedOff } from "@tabler/icons-react";
 import { drag, type D3DragEvent } from "d3-drag";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type D3ZoomEvent } from "d3-zoom";
@@ -14,7 +14,7 @@ const colors = ["#6675ff", "#16a085", "#d97757", "#a56de2", "#d4a72c", "#3282b8"
 export function graphKindColor(kind: string) { return colors[[...kind].reduce((sum, letter) => sum + letter.charCodeAt(0), 0) % colors.length]; }
 const label = (value: string) => value.length > 24 ? `${value.slice(0, 23)}…` : value;
 
-export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeId, matchingIds, queryActive, onSelectNode, onClearSelection, renderNode, fullscreen, onToggleFullscreen, layoutCache, allowedNodeIds }: {
+export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeIds, multipleSelection, displayedEdgeIds, matchingIds, queryActive, onSelectNode, onClearSelection, renderNode, fullscreen, onToggleFullscreen, layoutCache, allowedNodeIds }: {
   readonly allowedNodeIds: ReadonlySet<string>;
   readonly layoutCache: RefObject<{ center: string; particles: GraphParticle[] } | null>;
   readonly fullscreen: boolean;
@@ -22,22 +22,25 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
   readonly nodes: readonly KnowledgeGraphNodeView[];
   readonly edges: readonly KnowledgeGraphEdgeView[];
   readonly centerNodeId: string;
-  readonly selectedNodeId?: string;
+  readonly selectedNodeIds: ReadonlySet<string>;
+  readonly multipleSelection: boolean;
+  readonly displayedEdgeIds: ReadonlySet<string>;
   readonly matchingIds: ReadonlySet<string>;
   readonly queryActive: boolean;
-  readonly renderNode: (node: KnowledgeGraphNodeView, element: ReactElement) => ReactNode;
-  readonly onSelectNode: (id: string) => void;
+  readonly renderNode: (node: KnowledgeGraphNodeView, element: ReactElement, pinAction: ReactNode) => ReactNode;
+  readonly onSelectNode: (id: string, additive?: boolean) => void;
   readonly onClearSelection: () => void;
 }) {
   const t = useT();
   const svgRef = useRef<SVGSVGElement>(null);
   const layerRef = useRef<SVGGElement>(null);
-  const controls = useRef<{ scale: (factor: number) => void; fit: () => void; reset: () => void } | null>(null);
+  const controls = useRef<{ scale: (factor: number) => void; fit: () => void; reset: () => void; unpin: (nodeId: string) => void } | null>(null);
+  const [pinnedNodeIds, setPinnedNodeIds] = useState<ReadonlySet<string>>(new Set());
   const [scale, setScale] = useState(1);
   const [minimumScale, setMinimumScale] = useState(0.2);
   const arrowId = `graph-arrow-${useId().replaceAll(":", "")}`;
   const degrees = knowledgeNodeDegrees(nodes, edges);
-  const related = new Set(edges.filter((edge) => edge.sourceNodeId === selectedNodeId || edge.targetNodeId === selectedNodeId).flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]));
+  const related = new Set(edges.filter((edge) => selectedNodeIds.has(edge.sourceNodeId) || selectedNodeIds.has(edge.targetNodeId)).flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]));
 
   useEffect(() => {
     const svgElement = svgRef.current, layerElement = layerRef.current;
@@ -56,6 +59,9 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
     const byEdge = new Map(links.map((edge) => [edge.id, edge]));
     const nodeElements = layer.selectAll<SVGGElement, GraphParticle>("[data-node-id]").datum(function () { return byId.get(this.dataset.nodeId!)!; });
     const edgeElements = layer.selectAll<SVGGElement, unknown>("[data-edge-id]");
+    function syncPinnedNodes() {
+      setPinnedNodeIds(new Set(particles.filter((node) => node.fx != null || node.fy != null).map((node) => node.id)));
+    }
     function render() {
       nodeElements.attr("transform", (node) => `translate(${node.x ?? 0},${node.y ?? 0})`).attr("data-pinned", (node) => node.fx != null ? "true" : null);
       edgeElements.each(function () {
@@ -84,6 +90,7 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     simulation.tick(reducedMotion ? 240 : 100);
     render();
+    syncPinnedNodes();
     fit();
     simulation.on("tick", render);
     if (!reducedMotion) { simulation.alpha(0.15).restart(); }
@@ -91,6 +98,7 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
       .on("start", (event: D3DragEvent<SVGGElement, GraphParticle, GraphParticle>, node) => {
         if (!event.active && !reducedMotion) { simulation.alphaTarget(0.15).restart(); }
         node.fx = node.x; node.fy = node.y;
+        render(); syncPinnedNodes();
       }).on("drag", (event: D3DragEvent<SVGGElement, GraphParticle, GraphParticle>, node) => {
         node.fx = node.x = event.x; node.fy = node.y = event.y; render();
       }).on("end", (event: D3DragEvent<SVGGElement, GraphParticle, GraphParticle>) => {
@@ -101,10 +109,21 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
     controls.current = {
       fit,
       scale: (factor) => svg.call(behavior.scaleBy, factor),
+      unpin: (nodeId) => {
+        const node = byId.get(nodeId);
+        if (!node) return;
+        node.fx = null; node.fy = null;
+        syncPinnedNodes();
+        simulation.alpha(0.5);
+        if (reducedMotion) simulation.stop().tick(240);
+        else simulation.restart();
+        render();
+      },
       reset: () => {
         layoutCache.current = null;
         for (const node of particles) { node.fx = node.id === centerNodeId ? 0 : null; node.fy = node.id === centerNodeId ? 0 : null; }
         simulation.alpha(1).stop().tick(240); render(); fit();
+        syncPinnedNodes();
       }
     };
     return () => {
@@ -124,32 +143,36 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
       <Tooltip label={t("graph.resetLayout")}><ActionIcon aria-label={t("graph.resetLayout")} onClick={() => controls.current?.reset()} variant="default"><IconRefresh size={15} /></ActionIcon></Tooltip>
       <Tooltip label={t(fullscreen ? "graph.exitFullscreen" : "graph.fullscreen")}><ActionIcon data-fullscreen-toggle aria-label={t(fullscreen ? "graph.exitFullscreen" : "graph.fullscreen")} onClick={onToggleFullscreen} variant="default">{fullscreen ? <IconMinimize size={15} /> : <IconMaximize size={15} />}</ActionIcon></Tooltip>
     </Group></div>
-    <svg ref={svgRef} className={classes.graph} role="group" aria-label={t("graph.summary", { nodes: nodes.length, edges: edges.length })}
+    <svg ref={svgRef} className={classes.graph} role="group" aria-label={t("graph.summary", { nodes: nodes.length, edges: displayedEdgeIds.size })}
       onClick={(event) => { if (event.target === event.currentTarget) onClearSelection(); }}>
       <defs><marker id={arrowId} markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path className={classes.arrow} d="M0,0 L7,3.5 L0,7 Z" /></marker></defs>
       <g ref={layerRef} data-graph-layer>
         {edges.map((edge) => {
-          const active = edge.sourceNodeId === selectedNodeId || edge.targetNodeId === selectedNodeId;
-          return <g key={edge.id} data-edge-id={edge.id} data-muted={selectedNodeId && !active || undefined} data-active={active || undefined}>
+          const active = selectedNodeIds.has(edge.sourceNodeId) || selectedNodeIds.has(edge.targetNodeId);
+          return <g key={edge.id} data-edge-id={edge.id} display={displayedEdgeIds.has(edge.id) ? undefined : "none"} data-muted={selectedNodeIds.size > 0 && !active || undefined} data-active={active || undefined}>
             <path className={classes.edge} markerEnd={`url(#${arrowId})`} />
             <text className={classes.edgeLabel} style={{ opacity: active || edges.length < 16 ? 1 : 0 }}>{label(edge.predicate)}</text>
           </g>;
         })}
         {nodes.map((node) => {
           const radius = graphNodeRadius(degrees.get(node.id) ?? 0, node.id === centerNodeId);
-          const muted = queryActive ? !matchingIds.has(node.id) : Boolean(selectedNodeId && node.id !== selectedNodeId && !related.has(node.id));
-          return renderNode(node, <g key={node.id} data-node-id={node.id} className={classes.node} data-muted={muted || undefined} data-center={node.id === centerNodeId || undefined} data-selected={node.id === selectedNodeId || undefined} data-search-match={matchingIds.has(node.id) || undefined}
-            role="button" aria-haspopup="menu" tabIndex={0} aria-label={`${node.kind.toUpperCase()} ${node.canonicalName}`} aria-pressed={node.id === selectedNodeId}
-            style={{ "--node-accent": graphKindColor(node.kind) } as CSSProperties} onClick={() => onSelectNode(node.id)}
+          const muted = queryActive ? !matchingIds.has(node.id) : Boolean(selectedNodeIds.size > 0 && !selectedNodeIds.has(node.id) && (multipleSelection || !related.has(node.id)));
+          const pinAction = pinnedNodeIds.has(node.id)
+            ? <Menu.Item leftSection={<IconPinnedOff size={15} />} onClick={() => controls.current?.unpin(node.id)}>{t("graph.unpinNode")}</Menu.Item>
+            : null;
+          return renderNode(node, <g key={node.id} data-node-id={node.id} className={classes.node} data-muted={muted || undefined} data-center={node.id === centerNodeId || undefined} data-selected={selectedNodeIds.has(node.id) || undefined} data-search-match={matchingIds.has(node.id) || undefined}
+            role="button" aria-haspopup="menu" tabIndex={0} aria-label={`${node.kind.toUpperCase()} ${node.canonicalName}`} aria-pressed={selectedNodeIds.has(node.id)}
+            style={{ "--node-accent": graphKindColor(node.kind) } as CSSProperties} onClick={(event) => onSelectNode(node.id, event.ctrlKey || event.metaKey)}
+            onContextMenu={(event) => { if (event.ctrlKey) { event.preventDefault(); onSelectNode(node.id, true); } }}
             onKeyDown={(event) => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
               event.preventDefault();
               const bounds = event.currentTarget.getBoundingClientRect();
               event.currentTarget.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: bounds.x + bounds.width / 2, clientY: bounds.y + bounds.height / 2 }));
-            } else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectNode(node.id); } }}>
+            } else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectNode(node.id, event.ctrlKey || event.metaKey); } }}>
             <title>{`${node.canonicalName} · ${node.kind}`}</title>
             <circle className={classes.nodeAura} r={radius + 9} /><circle className={classes.nodeRing} r={radius + 4} /><circle className={classes.nodeCore} r={radius} />
             <text className={classes.nodeLabel} textAnchor="middle" y={radius + 19}>{label(node.canonicalName)}</text>
-          </g>);
+          </g>, pinAction);
         })}
       </g>
     </svg>

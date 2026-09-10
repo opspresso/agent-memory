@@ -40,6 +40,7 @@ import {
   type KnowledgeGraphEdgeView,
   type KnowledgeGraphNodeView
 } from "./knowledge-graph";
+import { emptyKnowledgeGraphSelection, inspectKnowledgeGraphNode, selectKnowledgeGraphNode, type KnowledgeGraphSelection } from "./knowledge-graph-selection";
 import { mergeKnowledgeGraphItems } from "./knowledge-graph-layout";
 import { MemoryLifecycle } from "./memory-lifecycle";
 import { useOrganization } from "./organization-context";
@@ -93,7 +94,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
   const [selectedResultKey, setSelectedResultKey] = useState<string>();
   const [selectedMemoryId, setSelectedMemoryId] = useState<string>();
   const [graphCenterNodeId, setGraphCenterNodeId] = useState<string>();
-  const [graphSelectedNodeId, setGraphSelectedNodeId] = useState<string>();
+  const [graphSelection, setGraphSelection] = useState<KnowledgeGraphSelection>(emptyKnowledgeGraphSelection);
   const [graphNodes, setGraphNodes] = useState<
     readonly KnowledgeGraphNodeView[]
   >([]);
@@ -235,7 +236,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
   function refreshAfterMemoryChange() {
     graphRequest.current?.abort();
     setGraphCenterNodeId(undefined);
-    setGraphSelectedNodeId(undefined);
+    setGraphSelection(emptyKnowledgeGraphSelection);
     setGraphNodes([]);
     setGraphEdges([]);
     setGraphError(undefined);
@@ -264,7 +265,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
       );
       if (controller.signal.aborted) return;
       if (!expand) setGraphCenterNodeId(nodeId);
-      setGraphSelectedNodeId(nodeId);
+      setGraphSelection(selectKnowledgeGraphNode(emptyKnowledgeGraphSelection, nodeId));
       setGraphNodes((current) => expand ? mergeKnowledgeGraphItems(current, body.nodes) : body.nodes);
       setGraphEdges((current) => expand ? mergeKnowledgeGraphItems(current, body.edges) : body.edges);
     } catch (caught) {
@@ -324,7 +325,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
           )
         );
         setGraphCenterNodeId(undefined);
-        setGraphSelectedNodeId(undefined);
+        setGraphSelection(emptyKnowledgeGraphSelection);
         setGraphNodes([]);
         setGraphEdges([]);
         setMergeReason("");
@@ -335,7 +336,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
           )
         );
         setGraphCenterNodeId(undefined);
-        setGraphSelectedNodeId(undefined);
+        setGraphSelection(emptyKnowledgeGraphSelection);
         setGraphNodes([]);
         setGraphEdges([]);
       } else if (action.kind === "edge") {
@@ -357,11 +358,11 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
         );
         if (graphCenterNodeId === action.id) {
           setGraphCenterNodeId(undefined);
-          setGraphSelectedNodeId(undefined);
+          setGraphSelection(emptyKnowledgeGraphSelection);
           setGraphNodes([]);
           setGraphEdges([]);
-        } else if (graphSelectedNodeId === action.id) {
-          setGraphSelectedNodeId(graphCenterNodeId);
+        } else {
+          setGraphSelection((current) => current.nodeIds.includes(action.id) ? selectKnowledgeGraphNode(current, action.id, true) : current);
         }
       }
       setPendingResourceAction(undefined);
@@ -455,9 +456,10 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
                 loadingGraph={loadingGraph}
                 onExpandNode={(nodeId) => void exploreKnowledgeNode(nodeId, true)}
                 onExploreNode={(nodeId) => void exploreKnowledgeNode(nodeId)}
-                onSelectNode={setGraphSelectedNodeId}
-                onClearSelection={() => setGraphSelectedNodeId(undefined)}
-                selectedNodeId={graphSelectedNodeId}
+                onSelectNode={(nodeId, additive) => setGraphSelection((current) => selectKnowledgeGraphNode(current, nodeId, additive))}
+                onInspectNode={(nodeId) => setGraphSelection((current) => inspectKnowledgeGraphNode(current, nodeId))}
+                onClearSelection={() => setGraphSelection(emptyKnowledgeGraphSelection)}
+                selection={graphSelection}
               />
         </Stack>
       ) : searching && hits.length === 0 && !selectedMemoryId ? <Stack aria-label={t("searchUi.loading")}><Skeleton height={120} /><Skeleton height={120} /></Stack> : hits.length > 0 || selectedMemoryId ? (
