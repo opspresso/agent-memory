@@ -5,7 +5,7 @@ import { IconFocusCentered, IconMinus, IconPlus, IconRefresh, IconMaximize, Icon
 import { drag, type D3DragEvent } from "d3-drag";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type D3ZoomEvent } from "d3-zoom";
-import { useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactElement, type ReactNode, type RefObject } from "react";
 import { useT } from "./_i18n/provider";
 import { createKnowledgeGraphSimulation, fitKnowledgeGraph, mergeGraphParticles, graphEdgeGeometry, graphNodeRadius, knowledgeNodeDegrees, type GraphParticle, type KnowledgeGraphEdgeView, type KnowledgeGraphNodeView } from "./knowledge-graph-layout";
 import classes from "./knowledge-graph.module.css";
@@ -14,7 +14,7 @@ const colors = ["#6675ff", "#16a085", "#d97757", "#a56de2", "#d4a72c", "#3282b8"
 export function graphKindColor(kind: string) { return colors[[...kind].reduce((sum, letter) => sum + letter.charCodeAt(0), 0) % colors.length]; }
 const label = (value: string) => value.length > 24 ? `${value.slice(0, 23)}…` : value;
 
-export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeId, matchingIds, queryActive, onSelectNode, fullscreen, onToggleFullscreen, layoutCache, allowedNodeIds }: {
+export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeId, matchingIds, queryActive, onSelectNode, onClearSelection, renderNode, fullscreen, onToggleFullscreen, layoutCache, allowedNodeIds }: {
   readonly allowedNodeIds: ReadonlySet<string>;
   readonly layoutCache: RefObject<{ center: string; particles: GraphParticle[] } | null>;
   readonly fullscreen: boolean;
@@ -25,7 +25,9 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
   readonly selectedNodeId?: string;
   readonly matchingIds: ReadonlySet<string>;
   readonly queryActive: boolean;
+  readonly renderNode: (node: KnowledgeGraphNodeView, element: ReactElement) => ReactNode;
   readonly onSelectNode: (id: string) => void;
+  readonly onClearSelection: () => void;
 }) {
   const t = useT();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -122,7 +124,8 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
       <Tooltip label={t("graph.resetLayout")}><ActionIcon aria-label={t("graph.resetLayout")} onClick={() => controls.current?.reset()} variant="default"><IconRefresh size={15} /></ActionIcon></Tooltip>
       <Tooltip label={t(fullscreen ? "graph.exitFullscreen" : "graph.fullscreen")}><ActionIcon data-fullscreen-toggle aria-label={t(fullscreen ? "graph.exitFullscreen" : "graph.fullscreen")} onClick={onToggleFullscreen} variant="default">{fullscreen ? <IconMinimize size={15} /> : <IconMaximize size={15} />}</ActionIcon></Tooltip>
     </Group></div>
-    <svg ref={svgRef} className={classes.graph} role="group" aria-label={t("graph.summary", { nodes: nodes.length, edges: edges.length })}>
+    <svg ref={svgRef} className={classes.graph} role="group" aria-label={t("graph.summary", { nodes: nodes.length, edges: edges.length })}
+      onClick={(event) => { if (event.target === event.currentTarget) onClearSelection(); }}>
       <defs><marker id={arrowId} markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path className={classes.arrow} d="M0,0 L7,3.5 L0,7 Z" /></marker></defs>
       <g ref={layerRef} data-graph-layer>
         {edges.map((edge) => {
@@ -135,14 +138,18 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
         {nodes.map((node) => {
           const radius = graphNodeRadius(degrees.get(node.id) ?? 0, node.id === centerNodeId);
           const muted = queryActive ? !matchingIds.has(node.id) : Boolean(selectedNodeId && node.id !== selectedNodeId && !related.has(node.id));
-          return <g key={node.id} data-node-id={node.id} className={classes.node} data-muted={muted || undefined} data-center={node.id === centerNodeId || undefined} data-selected={node.id === selectedNodeId || undefined} data-search-match={matchingIds.has(node.id) || undefined}
-            role="button" tabIndex={0} aria-label={`${node.kind.toUpperCase()} ${node.canonicalName}`} aria-pressed={node.id === selectedNodeId}
+          return renderNode(node, <g key={node.id} data-node-id={node.id} className={classes.node} data-muted={muted || undefined} data-center={node.id === centerNodeId || undefined} data-selected={node.id === selectedNodeId || undefined} data-search-match={matchingIds.has(node.id) || undefined}
+            role="button" aria-haspopup="menu" tabIndex={0} aria-label={`${node.kind.toUpperCase()} ${node.canonicalName}`} aria-pressed={node.id === selectedNodeId}
             style={{ "--node-accent": graphKindColor(node.kind) } as CSSProperties} onClick={() => onSelectNode(node.id)}
-            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectNode(node.id); } }}>
+            onKeyDown={(event) => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+              event.preventDefault();
+              const bounds = event.currentTarget.getBoundingClientRect();
+              event.currentTarget.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: bounds.x + bounds.width / 2, clientY: bounds.y + bounds.height / 2 }));
+            } else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectNode(node.id); } }}>
             <title>{`${node.canonicalName} · ${node.kind}`}</title>
             <circle className={classes.nodeAura} r={radius + 9} /><circle className={classes.nodeRing} r={radius + 4} /><circle className={classes.nodeCore} r={radius} />
             <text className={classes.nodeLabel} textAnchor="middle" y={radius + 19}>{label(node.canonicalName)}</text>
-          </g>;
+          </g>);
         })}
       </g>
     </svg>

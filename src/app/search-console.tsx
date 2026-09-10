@@ -40,6 +40,7 @@ import {
   type KnowledgeGraphEdgeView,
   type KnowledgeGraphNodeView
 } from "./knowledge-graph";
+import { mergeKnowledgeGraphItems } from "./knowledge-graph-layout";
 import { MemoryLifecycle } from "./memory-lifecycle";
 import { useOrganization } from "./organization-context";
 import { SearchResultCard, SearchHitDetails, searchResultKey } from "./search-result-card";
@@ -242,7 +243,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
     void searchForQuery(lastSearchQuery.current);
   }
 
-  async function exploreKnowledgeNode(nodeId: string) {
+  async function exploreKnowledgeNode(nodeId: string, expand = false) {
     if (!organizationSlug) {
       return;
     }
@@ -262,10 +263,10 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
         neighborhoodResponseSchema
       );
       if (controller.signal.aborted) return;
-      setGraphCenterNodeId(nodeId);
+      if (!expand) setGraphCenterNodeId(nodeId);
       setGraphSelectedNodeId(nodeId);
-      setGraphNodes(body.nodes);
-      setGraphEdges(body.edges);
+      setGraphNodes((current) => expand ? mergeKnowledgeGraphItems(current, body.nodes) : body.nodes);
+      setGraphEdges((current) => expand ? mergeKnowledgeGraphItems(current, body.edges) : body.edges);
     } catch (caught) {
       if (controller.signal.aborted) {
         return;
@@ -419,7 +420,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
       </Paper>
       {searchError ? <Alert color="red">{searchError}</Alert> : null}
       {resourceActionMessage ? <Alert color="green" role="status">{resourceActionMessage}</Alert> : null}
-      {graphError ? <Alert color="red">{graphError}</Alert> : null}
+      {graphError && !(graphCenterNodeId && graphNodes.length > 0) ? <Alert color="red">{graphError}</Alert> : null}
       {graphCenterNodeId && graphNodes.length > 0 ? (
         <Stack gap="md">
           <Group justify="space-between">
@@ -450,9 +451,13 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
                     name: node.canonicalName
                   })
                 }
+                graphError={graphError}
+                loadingGraph={loadingGraph}
+                onExpandNode={(nodeId) => void exploreKnowledgeNode(nodeId, true)}
                 onExploreNode={(nodeId) => void exploreKnowledgeNode(nodeId)}
                 onSelectNode={setGraphSelectedNodeId}
-                selectedNodeId={graphSelectedNodeId ?? graphCenterNodeId}
+                onClearSelection={() => setGraphSelectedNodeId(undefined)}
+                selectedNodeId={graphSelectedNodeId}
               />
         </Stack>
       ) : searching && hits.length === 0 && !selectedMemoryId ? <Stack aria-label={t("searchUi.loading")}><Skeleton height={120} /><Skeleton height={120} /></Stack> : hits.length > 0 || selectedMemoryId ? (

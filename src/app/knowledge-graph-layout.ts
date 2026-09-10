@@ -86,3 +86,7 @@ export function fitKnowledgeGraph(particles: readonly GraphParticle[], width: nu
   const k = Math.min(1.4, (width - 40) / Math.max(right - left, 1), (height - 170) / Math.max(bottom - top, 1));
   return { k, x: width / 2 - k * (left + right) / 2, y: height / 2 + 5 - k * (top + bottom) / 2 };
 }
+
+export function mergeKnowledgeGraphItems<T extends { readonly id: string }>(current: readonly T[], incoming: readonly T[]): T[] {
+  return [...new Map([...current, ...incoming].map((item) => [item.id, item])).values()];
+}
