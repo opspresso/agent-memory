@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createKnowledgeGraphSimulation, fitKnowledgeGraph, mergeGraphParticles, graphEdgeGeometry, knowledgeNodeDegrees, type KnowledgeGraphNodeView } from "@/app/knowledge-graph-layout";
+import { mergeKnowledgeGraphItems, createKnowledgeGraphSimulation, fitKnowledgeGraph, mergeGraphParticles, graphEdgeGeometry, knowledgeNodeDegrees, type KnowledgeGraphNodeView } from "@/app/knowledge-graph-layout";
 
 const scope = { kind: "organization" as const, organizationId: "org" };
 const nodes: readonly KnowledgeGraphNodeView[] = ["center", "document", "agent"].map((id) => Object.freeze({ id, kind: "concept", canonicalName: id, scope }));
@@ -65,4 +65,16 @@ describe("D3 knowledge graph layout", () => {
     expect(fitKnowledgeGraph([], 600, 500)).toBeNull();
   });
 
+});
+
+describe("knowledge graph expansion", () => {
+  it("retains existing branches, updates repeated IDs and leaves inputs unchanged", () => {
+    const current = Object.freeze([nodes[0]!, nodes[1]!]);
+    const updated = Object.freeze({ ...nodes[1]!, summary: "Updated evidence" });
+    const incoming = Object.freeze([updated, nodes[2]!]);
+    expect(mergeKnowledgeGraphItems(current, incoming)).toEqual([nodes[0], updated, nodes[2]]);
+    expect(current).toEqual([nodes[0], nodes[1]]);
+    expect(mergeKnowledgeGraphItems(mergeKnowledgeGraphItems(current, incoming), incoming)).toHaveLength(3);
+    expect(mergeKnowledgeGraphItems(current, [])).toEqual(current);
+  });
 });
