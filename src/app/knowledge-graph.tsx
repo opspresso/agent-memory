@@ -9,6 +9,7 @@ import { knowledgeNodeDegrees, type KnowledgeGraphNodeView, type KnowledgeGraphE
 export type { KnowledgeGraphNodeView, KnowledgeGraphEdgeView } from "./knowledge-graph-layout";
 import { useT } from "./_i18n/provider";
 import classes from "./knowledge-graph.module.css";
+import { filterSelectedKnowledgeEdges, type KnowledgeGraphSelection } from "./knowledge-graph-selection";
 import { SourceEvidence } from "./source-evidence";
 
 interface KnowledgeGraphProps {
@@ -25,11 +26,12 @@ interface KnowledgeGraphProps {
   readonly onDeleteEdge: (edge: KnowledgeGraphEdgeView) => void;
   readonly onDeleteNode: (node: KnowledgeGraphNodeView) => void;
   readonly onClearSelection: () => void;
-  readonly onSelectNode: (nodeId: string) => void;
-  readonly selectedNodeId?: string;
+  readonly onSelectNode: (nodeId: string, additive?: boolean) => void;
+  readonly onInspectNode: (nodeId: string) => void;
+  readonly selection: KnowledgeGraphSelection;
 }
 
-export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, deletingResource, edges, nodes, graphError, loadingGraph, onExpandNode, onDeleteEdge, onDeleteNode, onExploreNode, onClearSelection, onSelectNode, selectedNodeId }: KnowledgeGraphProps) {
+export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, deletingResource, edges, nodes, graphError, loadingGraph, onExpandNode, onDeleteEdge, onDeleteNode, onExploreNode, onClearSelection, onSelectNode, onInspectNode, selection }: KnowledgeGraphProps) {
   const t = useT();
   const [hiddenKinds, setHiddenKinds] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState("");
@@ -70,10 +72,13 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
     return edges.filter((edge) => ids.has(edge.sourceNodeId) && ids.has(edge.targetNodeId));
   }, [edges, visibleNodes]);
   const positions = new Map(visibleNodes.map((node) => [node.id, node]));
-  const degrees = knowledgeNodeDegrees(visibleNodes, visibleEdges);
-  const selectedNode = visibleNodes.find((node) => node.id === selectedNodeId);
+  const displayedEdges = filterSelectedKnowledgeEdges(visibleEdges, selection);
+  const displayedEdgeIds = new Set(displayedEdges.map((edge) => edge.id));
+  const selectedNodeIds = new Set(selection.nodeIds.filter((id) => visibleNodes.some((node) => node.id === id)));
+  const degrees = knowledgeNodeDegrees(visibleNodes, displayedEdges);
+  const selectedNode = positions.get([...selectedNodeIds].at(-1) ?? "");
   const selectedEdges = selectedNode
-    ? visibleEdges.filter((edge) => edge.sourceNodeId === selectedNode.id || edge.targetNodeId === selectedNode.id)
+    ? displayedEdges.filter((edge) => edge.sourceNodeId === selectedNode.id || edge.targetNodeId === selectedNode.id)
     : [];
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matchingIds = new Set(normalizedQuery
@@ -104,17 +109,18 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
           <TextInput aria-label={t("graph.searchLabel")} className={classes.search} leftSection={<IconSearch size={15} />} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("graph.searchPlaceholder")} size="xs" value={query} />
         </div>
         <KnowledgeGraphCanvas nodes={visibleNodes} edges={visibleEdges} centerNodeId={centerNodeId}
-          selectedNodeId={selectedNode?.id} matchingIds={matchingIds} queryActive={Boolean(normalizedQuery)}
+          selectedNodeIds={selectedNodeIds} multipleSelection={selection.multiple} displayedEdgeIds={displayedEdgeIds} matchingIds={matchingIds} queryActive={Boolean(normalizedQuery)}
           onSelectNode={onSelectNode}
           onClearSelection={clearSelection}
-          renderNode={(node, element) => <Menu key={node.id} shadow="md" width={240} withinPortal zIndex={400}
+          renderNode={(node, element, pinAction) => <Menu key={node.id} shadow="md" width={240} withinPortal zIndex={400}
             opened={menuNodeId === node.id}
             onChange={(opened) => setMenuNodeId((current) => opened ? node.id : current === node.id ? undefined : current)}
-            onOpen={() => onSelectNode(node.id)}>
+            onOpen={() => onInspectNode(node.id)}>
             <Menu.ContextMenu>{element}</Menu.ContextMenu>
             <Menu.Dropdown data-graph-node-menu data-mantine-stop-propagation="true">
               <Menu.Label>{node.canonicalName}</Menu.Label>
-              <Menu.Item leftSection={<IconInfoCircle size={15} />} onClick={() => onSelectNode(node.id)}>{t("graph.nodeDetails")}</Menu.Item>
+              <Menu.Item leftSection={<IconInfoCircle size={15} />} onClick={() => onInspectNode(node.id)}>{t("graph.nodeDetails")}</Menu.Item>
+              {pinAction}
               <Menu.Item disabled={loadingGraph || deletingResource || node.id === centerNodeId} leftSection={<IconFocusCentered size={15} />} onClick={() => onExploreNode(node.id)}>{t("graph.exploreFromNode")}</Menu.Item>
               <Menu.Item disabled={loadingGraph || deletingResource} leftSection={<IconPlus size={15} />} onClick={() => onExpandNode(node.id)}>{t("graph.expandFromNode")}</Menu.Item>
               {canDeleteNode(node) ? <><Menu.Divider /><Menu.Item color="red" disabled={deletingResource || loadingGraph} leftSection={<IconTrash size={15} />} onClick={() => { setFullscreen(false); onDeleteNode(node); }}>{t("graph.deleteNode")}</Menu.Item></> : null}
@@ -130,10 +136,11 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
         <details className={classes.nodeList} open>
           <summary>{t("evidence.nodeList", { count: normalizedQuery ? matchingIds.size : visibleNodes.length })}</summary>
           <Stack gap={4} mt="sm">
-            {visibleNodes.filter((node) => !normalizedQuery || matchingIds.has(node.id)).map((node) => <button type="button" className={classes.listItem} aria-pressed={node.id === selectedNode?.id} key={node.id} onClick={() => onSelectNode(node.id)}><strong>{node.canonicalName}</strong><span>{node.kind}</span></button>)}
+            {visibleNodes.filter((node) => !normalizedQuery || matchingIds.has(node.id)).map((node) => <button type="button" className={classes.listItem} aria-pressed={selectedNodeIds.has(node.id)} key={node.id} onClick={(event) => onSelectNode(node.id, event.ctrlKey || event.metaKey)}><strong>{node.canonicalName}</strong><span>{node.kind}</span></button>)}
             {normalizedQuery && matchingIds.size === 0 ? <Text size="sm" c="dimmed">{t("evidence.noNodes")}</Text> : null}
           </Stack>
         </details>
+        {selection.multiple ? <Text role="status" size="sm" mb="md">{t("graph.selectionSummary", { nodes: selectedNodeIds.size, edges: displayedEdges.length })}</Text> : null}
         {selectedNode ? <Stack gap="md">
           <Stack gap={4}><Group justify="space-between"><Badge color="gray" size="xs" variant="light">{selectedNode.kind}</Badge><Text c="dimmed" ff="monospace" size="xs">{t("graph.relations", { count: degrees.get(selectedNode.id) ?? 0 })}</Text></Group><Title order={4}>{selectedNode.canonicalName}</Title></Stack>
           <Badge variant="light">{t(`workspace.scope.${selectedNode.scope.kind}`)}</Badge>
