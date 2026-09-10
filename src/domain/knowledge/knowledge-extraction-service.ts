@@ -1,6 +1,8 @@
 import type { ProposedKnowledgeGraph } from "./knowledge-candidate";
 import type { AiRequestQuotaKey } from "../shared/ai-request-limiter";
 
+export type KnowledgeExtractionLanguage = "source" | "ko" | "en";
+
 export interface KnowledgeExtractionResult {
   readonly model: string;
   readonly graph: ProposedKnowledgeGraph;

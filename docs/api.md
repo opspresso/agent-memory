@@ -123,6 +123,8 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 - `GET /api/settings/runtime`: 전역 admin에게 env, Database override, 기본값 중 유효한 설정과 source를 반환한다. Secret은 마스킹한다.
 - `PUT /api/settings/runtime`: `values`의 항목을 Database override로 저장하고 `reset`의 항목은 env fallback으로 되돌린다. `ADMIN_EMAILS`에서 요청자 자신을 제거하거나 `ALLOWED_EMAIL_DOMAINS`에서 요청자의 domain을 제외하는 변경은 거부한다.
 
+`KNOWLEDGE_EXTRACTION_LANGUAGE`는 `ko`(기본), `source`, `en`을 허용하며 재시작이 필요하다. 한국어 추출 설정은 `values: { "KNOWLEDGE_EXTRACTION_LANGUAGE": "ko" }`로 저장한다. 기존 추출 결과는 변경하지 않는다.
+
 요청 예시는 다음과 같다.
 
 ```json

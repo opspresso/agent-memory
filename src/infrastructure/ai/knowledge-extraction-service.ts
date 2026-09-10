@@ -4,6 +4,7 @@ import { SafeOperationalError } from "@/infrastructure/observability/safe-operat
 
 import type {
   KnowledgeExtractionOntologyHint,
+  KnowledgeExtractionLanguage,
   KnowledgeExtractionService
 } from "@/domain/knowledge/knowledge-extraction-service";
 import { defaultKnowledgeOntology } from "@/domain/knowledge/knowledge-ontology";
@@ -14,6 +15,7 @@ interface KnowledgeExtractionServiceConfiguration {
   readonly apiKey?: string;
   readonly baseUrl: string;
   readonly model: string;
+  readonly language?: KnowledgeExtractionLanguage;
   readonly requestLimiter?: AiRequestLimiter;
   readonly request?: typeof fetch;
 }
@@ -110,9 +112,19 @@ function ontologyInstructions(
 }
 
 function extractionInstructions(
-  ontology: KnowledgeExtractionOntologyHint | undefined
+  ontology: KnowledgeExtractionOntologyHint | undefined,
+  language: KnowledgeExtractionLanguage
 ): string {
+  const outputLanguage = language === "ko" ? "Korean (한국어)" : language === "en" ? "English" : "the language of the supplied document content";
   return `Extract a reviewable knowledge graph from the supplied document chunk.
+
+Output language rules:
+- Write human-readable summaries in ${outputLanguage}. The language of this system prompt, JSON field names, examples, or document metadata must not determine the output language.
+- Write newly composed names for events or other descriptive entities in ${outputLanguage} as well.
+- Preserve canonicalName and aliases in the spelling and script used in the supplied content. When Korean names are present, use those Korean names verbatim; never romanize them or replace them with English or Chinese names. For example, preserve 유비, 관우, 장비 instead of Liu Bei, Guan Yu, Zhang Fei.
+- Preserve original product names, brands, code identifiers, and acronyms when no Korean form is supplied. Do not invent translated aliases.
+- Evidence must remain verbatim quotations from the source, regardless of the configured output language. Never translate evidence.
+- JSON field names, entity keys, kinds, and predicates are machine identifiers; retain the schema and ontology conventions below.
 
 General rules:
 - Extract named entities, including characters and places within a fictional work. Treat fiction as statements within that work, not verified historical facts.
@@ -272,7 +284,7 @@ export function createKnowledgeExtractionService(
         messages: [
           {
             role: "system",
-            content: extractionInstructions(input.ontology)
+            content: extractionInstructions(input.ontology, configuration.language ?? "source")
           },
           {
             role: "user",

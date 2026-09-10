@@ -108,6 +108,18 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(page.getByLabel(/EMBEDDING_API_KEY/)).toHaveValue("");
   await expect(page.getByRole("button", { name: "설치 설정 저장", exact: true })).toBeDisabled();
 
+  const extractionLanguage = page.getByRole("combobox", { name: /KNOWLEDGE_EXTRACTION_LANGUAGE/ });
+  await extractionLanguage.click();
+  await page.getByRole("option", { name: "한국어", exact: true }).click();
+  await page.getByRole("button", { name: "설치 설정 저장", exact: true }).click();
+  await expect(page.getByText("애플리케이션 설정을 저장했습니다.", { exact: true })).toBeVisible();
+  await expect(page.getByText("재시작 후 적용되는 변경이 있습니다.", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(extractionLanguage).toHaveValue("한국어");
+  await page.getByRole("button", { name: "KNOWLEDGE_EXTRACTION_LANGUAGE에 환경 변수 값 사용", exact: true }).click();
+  await page.getByRole("button", { name: "설치 설정 저장", exact: true }).click();
+  await expect(extractionLanguage).toHaveValue("원문 언어");
+
   await page.screenshot({ path: testInfo.outputPath("settings-ai-desktop-ko.png"), fullPage: true });
   await page.getByRole("button", { name: "인증 및 접근", exact: true }).click();
   await expect(page.getByLabel(/ALLOWED_EMAIL_DOMAINS/)).toHaveValue("nalbam.com");
