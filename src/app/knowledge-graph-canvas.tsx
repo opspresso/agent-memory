@@ -14,7 +14,7 @@ const colors = ["#6675ff", "#16a085", "#d97757", "#a56de2", "#d4a72c", "#3282b8"
 export function graphKindColor(kind: string) { return colors[[...kind].reduce((sum, letter) => sum + letter.charCodeAt(0), 0) % colors.length]; }
 const label = (value: string) => value.length > 24 ? `${value.slice(0, 23)}…` : value;
 
-export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeId, matchingIds, queryActive, onSelectNode, renderNode, fullscreen, onToggleFullscreen, layoutCache, allowedNodeIds }: {
+export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeId, matchingIds, queryActive, onSelectNode, onClearSelection, renderNode, fullscreen, onToggleFullscreen, layoutCache, allowedNodeIds }: {
   readonly allowedNodeIds: ReadonlySet<string>;
   readonly layoutCache: RefObject<{ center: string; particles: GraphParticle[] } | null>;
   readonly fullscreen: boolean;
@@ -27,6 +27,7 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
   readonly queryActive: boolean;
   readonly renderNode: (node: KnowledgeGraphNodeView, element: ReactElement) => ReactNode;
   readonly onSelectNode: (id: string) => void;
+  readonly onClearSelection: () => void;
 }) {
   const t = useT();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -123,7 +124,8 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
       <Tooltip label={t("graph.resetLayout")}><ActionIcon aria-label={t("graph.resetLayout")} onClick={() => controls.current?.reset()} variant="default"><IconRefresh size={15} /></ActionIcon></Tooltip>
       <Tooltip label={t(fullscreen ? "graph.exitFullscreen" : "graph.fullscreen")}><ActionIcon data-fullscreen-toggle aria-label={t(fullscreen ? "graph.exitFullscreen" : "graph.fullscreen")} onClick={onToggleFullscreen} variant="default">{fullscreen ? <IconMinimize size={15} /> : <IconMaximize size={15} />}</ActionIcon></Tooltip>
     </Group></div>
-    <svg ref={svgRef} className={classes.graph} role="group" aria-label={t("graph.summary", { nodes: nodes.length, edges: edges.length })}>
+    <svg ref={svgRef} className={classes.graph} role="group" aria-label={t("graph.summary", { nodes: nodes.length, edges: edges.length })}
+      onClick={(event) => { if (event.target === event.currentTarget) onClearSelection(); }}>
       <defs><marker id={arrowId} markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path className={classes.arrow} d="M0,0 L7,3.5 L0,7 Z" /></marker></defs>
       <g ref={layerRef} data-graph-layer>
         {edges.map((edge) => {

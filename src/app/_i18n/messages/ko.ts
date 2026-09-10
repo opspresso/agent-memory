@@ -535,6 +535,7 @@ export const ko: Messages = {
   "graph.connectedBy": "연결 관계",
   "graph.noRelations": "직접 연결된 관계가 없습니다.",
   "graph.nodeDetails": "상세 보기",
+  "graph.selectNodeHint": "노드를 선택하면 연결 관계와 원문 근거를 볼 수 있습니다.",
   "graph.expandFromNode": "이 노드 중심으로 확장",
   "graph.exploreFromNode": "이 node 중심으로 탐색",
   "graph.deleteNode": "Node 삭제",

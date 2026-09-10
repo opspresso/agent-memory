@@ -536,6 +536,7 @@ export const en = {
   "graph.connectedBy": "Connected by",
   "graph.noRelations": "There are no directly connected relationships.",
   "graph.nodeDetails": "View details",
+  "graph.selectNodeHint": "Select a node to view its relationships and source evidence.",
   "graph.expandFromNode": "Expand from this node",
   "graph.exploreFromNode": "Explore from this node",
   "graph.deleteNode": "Delete node",

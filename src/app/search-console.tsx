@@ -456,7 +456,8 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
                 onExpandNode={(nodeId) => void exploreKnowledgeNode(nodeId, true)}
                 onExploreNode={(nodeId) => void exploreKnowledgeNode(nodeId)}
                 onSelectNode={setGraphSelectedNodeId}
-                selectedNodeId={graphSelectedNodeId ?? graphCenterNodeId}
+                onClearSelection={() => setGraphSelectedNodeId(undefined)}
+                selectedNodeId={graphSelectedNodeId}
               />
         </Stack>
       ) : searching && hits.length === 0 && !selectedMemoryId ? <Stack aria-label={t("searchUi.loading")}><Skeleton height={120} /><Skeleton height={120} /></Stack> : hits.length > 0 || selectedMemoryId ? (

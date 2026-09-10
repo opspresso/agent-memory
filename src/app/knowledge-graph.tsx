@@ -24,11 +24,12 @@ interface KnowledgeGraphProps {
   readonly onExploreNode: (nodeId: string) => void;
   readonly onDeleteEdge: (edge: KnowledgeGraphEdgeView) => void;
   readonly onDeleteNode: (node: KnowledgeGraphNodeView) => void;
+  readonly onClearSelection: () => void;
   readonly onSelectNode: (nodeId: string) => void;
-  readonly selectedNodeId: string;
+  readonly selectedNodeId?: string;
 }
 
-export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, deletingResource, edges, nodes, graphError, loadingGraph, onExpandNode, onDeleteEdge, onDeleteNode, onExploreNode, onSelectNode, selectedNodeId }: KnowledgeGraphProps) {
+export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, deletingResource, edges, nodes, graphError, loadingGraph, onExpandNode, onDeleteEdge, onDeleteNode, onExploreNode, onClearSelection, onSelectNode, selectedNodeId }: KnowledgeGraphProps) {
   const t = useT();
   const [hiddenKinds, setHiddenKinds] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState("");
@@ -36,6 +37,15 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
   const [menuNodeId, setMenuNodeId] = useState<string>();
   const graphRoot = useRef<HTMLElement>(null);
   const wasFullscreen = useRef(false);
+  useEffect(() => {
+    if (!menuNodeId) return;
+    function closeOutsideMenu(event: PointerEvent) {
+      if (event.target instanceof Element && event.target.closest("[data-graph-node-menu]")) return;
+      setMenuNodeId(undefined);
+    }
+    document.addEventListener("pointerdown", closeOutsideMenu, true);
+    return () => document.removeEventListener("pointerdown", closeOutsideMenu, true);
+  }, [menuNodeId]);
   useEffect(() => {
     if (wasFullscreen.current && !fullscreen) { graphRoot.current?.querySelector<HTMLButtonElement>("[data-fullscreen-toggle]")?.focus(); }
     wasFullscreen.current = fullscreen;
@@ -50,7 +60,7 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
   }, [edges, visibleNodes]);
   const positions = new Map(visibleNodes.map((node) => [node.id, node]));
   const degrees = knowledgeNodeDegrees(visibleNodes, visibleEdges);
-  const selectedNode = visibleNodes.find((node) => node.id === selectedNodeId) ?? visibleNodes[0];
+  const selectedNode = visibleNodes.find((node) => node.id === selectedNodeId);
   const selectedEdges = selectedNode
     ? visibleEdges.filter((edge) => edge.sourceNodeId === selectedNode.id || edge.targetNodeId === selectedNode.id)
     : [];
@@ -69,6 +79,13 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
     });
   }
 
+  function clearSelection() {
+    setMenuNodeId(undefined);
+    setQuery("");
+    setHiddenKinds((current) => current.size > 0 ? new Set() : current);
+    onClearSelection();
+  }
+
   const graph = (
     <section ref={graphRoot} aria-label={t("graph.mapLabel")} className={classes.explorer} data-fullscreen={fullscreen || undefined}>
       <div className={classes.canvas}>
@@ -78,12 +95,13 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
         <KnowledgeGraphCanvas nodes={visibleNodes} edges={visibleEdges} centerNodeId={centerNodeId}
           selectedNodeId={selectedNode?.id} matchingIds={matchingIds} queryActive={Boolean(normalizedQuery)}
           onSelectNode={onSelectNode}
+          onClearSelection={clearSelection}
           renderNode={(node, element) => <Menu key={node.id} shadow="md" width={240} withinPortal zIndex={400}
             opened={menuNodeId === node.id}
             onChange={(opened) => setMenuNodeId((current) => opened ? node.id : current === node.id ? undefined : current)}
             onOpen={() => onSelectNode(node.id)}>
             <Menu.ContextMenu>{element}</Menu.ContextMenu>
-            <Menu.Dropdown data-mantine-stop-propagation="true">
+            <Menu.Dropdown data-graph-node-menu data-mantine-stop-propagation="true">
               <Menu.Label>{node.canonicalName}</Menu.Label>
               <Menu.Item leftSection={<IconInfoCircle size={15} />} onClick={() => onSelectNode(node.id)}>{t("graph.nodeDetails")}</Menu.Item>
               <Menu.Item disabled={loadingGraph || deletingResource || node.id === centerNodeId} leftSection={<IconFocusCentered size={15} />} onClick={() => onExploreNode(node.id)}>{t("graph.exploreFromNode")}</Menu.Item>
@@ -120,7 +138,7 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
           {selectedNode.id !== centerNodeId ? <Button disabled={loadingGraph || deletingResource} leftSection={<IconFocusCentered size={15} />} onClick={() => onExploreNode(selectedNode.id)} size="compact-sm" variant="light">{t("graph.exploreFromNode")}</Button> : null}
           <Button disabled={deletingResource} loading={loadingGraph} leftSection={<IconPlus size={15} />} onClick={() => onExpandNode(selectedNode.id)} size="compact-sm" variant="light">{t("graph.expandFromNode")}</Button>
           {canDeleteNode(selectedNode) ? <Button color="red" disabled={deletingResource} leftSection={<IconTrash size={15} />} onClick={() => onDeleteNode(selectedNode)} size="compact-sm" variant="subtle">{t("graph.deleteNode")}</Button> : null}
-        </Stack> : null}
+        </Stack> : <Text c="dimmed" size="sm">{t("graph.selectNodeHint")}</Text>}
       </Paper>
     </section>
   );

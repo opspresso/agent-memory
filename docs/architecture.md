@@ -194,7 +194,7 @@ Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같
 
 ### 관계 지도
 
-운영 콘솔의 관계 지도는 search hit의 node ID로 제한된 neighborhood를 요청한다. Client는 반환된 node와 방향성 edge를 D3 force simulation으로 배치하고 SVG에 표시한다. D3는 복사한 좌표 데이터만 변경하며 React는 선택 상태와 inspector를 관리한다. Drag·zoom 이벤트와 simulation은 unmount 시 해제한다. 전체 화면 전환에서도 고정한 노드 위치를 유지한다. Inspector의 `이 node 중심으로 탐색`을 실행하면 해당 node를 새 중심으로 neighborhood를 재조회한다. Inspector와 노드 우클릭 메뉴의 `이 노드 중심으로 확장`은 선택한 node의 depth 2 neighborhood(최대 100개)를 조회해 기존 지도에 ID 기준으로 병합한다. 기존 중심과 고정 위치는 유지하고 중복 resource는 최신 응답으로 갱신한다. 확장 실패 시 기존 지도를 유지한다. 우클릭 메뉴는 상세 보기·중심 탐색·확장과 관리 권한이 있는 node의 삭제를 제공하며 Shift+F10으로도 열 수 있다. Layout은 표현 계층의 책임이며 접근 가능한 node·edge 결정은 server의 application·repository 계층에 남긴다.
+운영 콘솔의 관계 지도는 search hit의 node ID로 제한된 neighborhood를 요청한다. Client는 반환된 node와 방향성 edge를 D3 force simulation으로 배치하고 SVG에 표시한다. D3는 복사한 좌표 데이터만 변경하며 React는 선택 상태와 inspector를 관리한다. Drag·zoom 이벤트와 simulation은 unmount 시 해제한다. 전체 화면 전환에서도 고정한 노드 위치를 유지한다. Inspector의 `이 node 중심으로 탐색`을 실행하면 해당 node를 새 중심으로 neighborhood를 재조회한다. Inspector와 노드 우클릭 메뉴의 `이 노드 중심으로 확장`은 선택한 node의 depth 2 neighborhood(최대 100개)를 조회해 기존 지도에 ID 기준으로 병합한다. 기존 중심과 고정 위치는 유지하고 중복 resource는 최신 응답으로 갱신한다. 확장 실패 시 기존 지도를 유지한다. 우클릭 메뉴는 상세 보기·중심 탐색·확장과 관리 권한이 있는 node의 삭제를 제공하며 Shift+F10으로도 열 수 있다. 메뉴 바깥의 pointer 입력은 D3 이벤트 처리 전에 메뉴를 닫는다. 지도 빈 공간 클릭은 선택과 검색·종류 필터를 해제해 현재 불러온 모든 노드와 관계를 표시하며, 배경 드래그는 선택을 유지한다. Layout은 표현 계층의 책임이며 접근 가능한 node·edge 결정은 server의 application·repository 계층에 남긴다.
 
 ## 실패 격리와 복구 경계
 
