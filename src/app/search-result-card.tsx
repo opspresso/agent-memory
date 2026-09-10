@@ -65,14 +65,11 @@ export function SearchHitDetails({ hit, hits, canManage, onExploreNode, onMergeN
   return (
     <Stack gap="lg">
       <Group gap="xs"><Badge>{presentation.sourceLabel}</Badge><Badge variant="outline">{presentation.scopeLabel}</Badge></Group>
-      <Text fw={650} fz="lg" className={classes.title}>{memory?.title ?? document?.title ?? node?.canonicalName}</Text>
+      <Group align="center" gap="sm" justify="space-between" wrap="nowrap"><Text fw={650} fz="lg" className={classes.title}>{memory?.title ?? document?.title ?? node?.canonicalName}</Text>{node ? <Button variant="light" loading={loadingGraph} onClick={() => onExploreNode(node.id)} leftSection={<IconTopologyStar3 size={16} />} size="compact-sm">{t("workspace.viewRelationships")}</Button> : null}</Group>
       {node ? (
         <>
           <Badge variant="dot">{node.kind}</Badge>
           <Text size="sm" className={classes.body}>{node.summary}</Text>
-          <Button variant="light" loading={loadingGraph} onClick={() => onExploreNode(node.id)} leftSection={<IconTopologyStar3 size={16} />}>
-            {t("workspace.viewRelationships")}
-          </Button>
           {duplicate && canManage(node.scope) ? <Button variant="default" color="orange" onClick={() => onMergeNodes(node.id, duplicate.id, node.canonicalName)}>{t("resource.mergeDuplicate")}</Button> : null}
           <Text fw={600} size="sm">{t("source.title")}</Text>
           {node.sources?.map((source) => <SourceEvidence key={"memoryId" in source ? source.memoryId : source.chunkId} {...source} />)}

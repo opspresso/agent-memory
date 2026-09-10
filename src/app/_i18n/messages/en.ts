@@ -543,7 +543,7 @@ export const en = {
   "graph.selectionSummary": "{nodes} selected nodes · {edges} relationships",
   "graph.unpinNode": "Unpin node",
   "graph.selectNodeHint": "Select a node to view its relationships and source evidence.",
-  "graph.expandFromNode": "Expand from this node",
+  "graph.expandFromNode": "Expand",
   "graph.exploreFromNode": "Explore from this node",
   "graph.deleteNode": "Delete node",
   "graph.deleteEdge": "Delete relationship",

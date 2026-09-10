@@ -4,24 +4,25 @@ import { ActionIcon, Group, Menu, Text, Tooltip } from "@mantine/core";
 import { IconFocusCentered, IconMinus, IconPlus, IconRefresh, IconMaximize, IconMinimize, IconPinnedOff } from "@tabler/icons-react";
 import { drag, type D3DragEvent } from "d3-drag";
 import { select } from "d3-selection";
-import { zoom, zoomIdentity, type D3ZoomEvent } from "d3-zoom";
+import { zoom, zoomIdentity, zoomTransform, type D3ZoomEvent } from "d3-zoom";
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactElement, type ReactNode, type RefObject } from "react";
 import { useT } from "./_i18n/provider";
-import { createKnowledgeGraphSimulation, fitKnowledgeGraph, mergeGraphParticles, graphEdgeGeometry, graphNodeRadius, knowledgeNodeDegrees, type GraphParticle, type KnowledgeGraphEdgeView, type KnowledgeGraphNodeView } from "./knowledge-graph-layout";
+import { createKnowledgeGraphSimulation, fitKnowledgeGraph, mergeGraphParticles, graphEdgeGeometry, graphNodeRadius, knowledgeNodeDegrees, type GraphParticle, type KnowledgeGraphEdgeView, type KnowledgeGraphNodeView, type KnowledgeGraphLayoutCache } from "./knowledge-graph-layout";
 import classes from "./knowledge-graph.module.css";
 
 const colors = ["#6675ff", "#16a085", "#d97757", "#a56de2", "#d4a72c", "#3282b8"];
 export function graphKindColor(kind: string) { return colors[[...kind].reduce((sum, letter) => sum + letter.charCodeAt(0), 0) % colors.length]; }
 const label = (value: string) => value.length > 24 ? `${value.slice(0, 23)}…` : value;
 
-export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeIds, multipleSelection, displayedEdgeIds, matchingIds, queryActive, onSelectNode, onClearSelection, renderNode, fullscreen, onToggleFullscreen, layoutCache, allowedNodeIds }: {
+export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, anchorNodeId, selectedNodeIds, multipleSelection, displayedEdgeIds, matchingIds, queryActive, onSelectNode, onClearSelection, renderNode, fullscreen, onToggleFullscreen, layoutCache, allowedNodeIds }: {
   readonly allowedNodeIds: ReadonlySet<string>;
-  readonly layoutCache: RefObject<{ center: string; particles: GraphParticle[] } | null>;
+  readonly layoutCache: RefObject<KnowledgeGraphLayoutCache | null>;
   readonly fullscreen: boolean;
   readonly onToggleFullscreen: () => void;
   readonly nodes: readonly KnowledgeGraphNodeView[];
   readonly edges: readonly KnowledgeGraphEdgeView[];
   readonly centerNodeId: string;
+  readonly anchorNodeId?: string;
   readonly selectedNodeIds: ReadonlySet<string>;
   readonly multipleSelection: boolean;
   readonly displayedEdgeIds: ReadonlySet<string>;
@@ -35,6 +36,8 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
   const svgRef = useRef<SVGSVGElement>(null);
   const layerRef = useRef<SVGGElement>(null);
   const controls = useRef<{ scale: (factor: number) => void; fit: () => void; reset: () => void; unpin: (nodeId: string) => void } | null>(null);
+  const anchorNodeIdRef = useRef<string | undefined>(anchorNodeId);
+  useEffect(() => { anchorNodeIdRef.current = anchorNodeId; }, [anchorNodeId]);
   const [pinnedNodeIds, setPinnedNodeIds] = useState<ReadonlySet<string>>(new Set());
   const [scale, setScale] = useState(1);
   const [minimumScale, setMinimumScale] = useState(0.2);
@@ -46,15 +49,7 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
     const svgElement = svgRef.current, layerElement = layerRef.current;
     if (!svgElement || !layerElement) { return; }
     const svg = select(svgElement), layer = select(layerElement);
-    const { simulation, particles, links } = createKnowledgeGraphSimulation(nodes, edges, centerNodeId);
-    const cached = layoutCache.current;
-    if (cached?.center === centerNodeId) {
-      const previous = new Map(cached.particles.map((node) => [node.id, node]));
-      for (const node of particles) {
-        const old = previous.get(node.id);
-        if (old) { node.x = old.x; node.y = old.y; node.fx = old.fx; node.fy = old.fy; }
-      }
-    }
+    const { simulation, particles, links, topology, hasCachedLayout } = createKnowledgeGraphSimulation(nodes, edges, centerNodeId, layoutCache.current, anchorNodeIdRef.current);
     const byId = new Map(particles.map((node) => [node.id, node]));
     const byEdge = new Map(links.map((edge) => [edge.id, edge]));
     const nodeElements = layer.selectAll<SVGGElement, GraphParticle>("[data-node-id]").datum(function () { return byId.get(this.dataset.nodeId!)!; });
@@ -72,7 +67,9 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
         select(this).select("text").attr("x", geometry.x).attr("y", geometry.y - 7);
       });
     }
-    const behavior = zoom<SVGSVGElement, unknown>().scaleExtent([0.2, 4])
+    const currentMinimum = Math.min(0.2, zoomTransform(svgElement).k);
+    setMinimumScale(currentMinimum);
+    const behavior = zoom<SVGSVGElement, unknown>().scaleExtent([currentMinimum, 4])
       .extent((): [[number, number], [number, number]] => [[0, 0], [svgElement.clientWidth, svgElement.clientHeight]])
       .on("zoom", (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
         layer.attr("transform", event.transform.toString());
@@ -87,24 +84,54 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
       setMinimumScale(minimum);
       svg.call(behavior.transform, zoomIdentity.translate(transform.x, transform.y).scale(transform.k));
     }
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    simulation.tick(reducedMotion ? 240 : 100);
+    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (!hasCachedLayout) { simulation.tick(motionPreference.matches ? 300 : 100); }
+    else if (motionPreference.matches && simulation.alpha() >= simulation.alphaMin()) { simulation.tick(300); }
     render();
     syncPinnedNodes();
-    fit();
     simulation.on("tick", render);
-    if (!reducedMotion) { simulation.alpha(0.15).restart(); }
+    if (!hasCachedLayout || !layerElement.hasAttribute("transform")) { fit(); }
+    if (!motionPreference.matches && simulation.alpha() >= simulation.alphaMin()) { simulation.restart(); }
+    function resume(alpha: number) {
+      simulation.alpha(Math.max(simulation.alpha(), alpha));
+      if (motionPreference.matches) { simulation.stop().tick(300); render(); }
+      else simulation.restart();
+    }
+    function onMotionPreferenceChange() {
+      if (motionPreference.matches) { simulation.alphaTarget(0).stop().tick(300); render(); }
+    }
+    motionPreference.addEventListener("change", onMotionPreferenceChange);
+    let activeDrags = 0;
     nodeElements.call(drag<SVGGElement, GraphParticle>().container(() => layerElement).clickDistance(4)
       .on("start", (event: D3DragEvent<SVGGElement, GraphParticle, GraphParticle>, node) => {
-        if (!event.active && !reducedMotion) { simulation.alphaTarget(0.15).restart(); }
-        node.fx = node.x; node.fy = node.y;
-        render(); syncPinnedNodes();
-      }).on("drag", (event: D3DragEvent<SVGGElement, GraphParticle, GraphParticle>, node) => {
-        node.fx = node.x = event.x; node.fy = node.y = event.y; render();
-      }).on("end", (event: D3DragEvent<SVGGElement, GraphParticle, GraphParticle>) => {
-        if (!event.active) { simulation.alphaTarget(0); }
+        const startX = event.x, startY = event.y;
+        let moved = false;
+        // D3 starts a gesture on pointer-down; only an actual drag should pin a node.
+        event.on("drag", (movement: D3DragEvent<SVGGElement, GraphParticle, GraphParticle>) => {
+          if (!moved && Math.hypot(movement.x - startX, movement.y - startY) * zoomTransform(svgElement).k <= 4) return;
+          node.fx = node.x = movement.x; node.fy = node.y = movement.y;
+          node.vx = 0; node.vy = 0;
+          if (!moved) {
+            moved = true;
+            activeDrags++;
+            syncPinnedNodes();
+            if (!motionPreference.matches) { simulation.alphaTarget(0.15); resume(0.15); }
+          }
+          render();
+        }).on("end", () => {
+          if (!moved) return;
+          activeDrags--;
+          if (activeDrags === 0) simulation.alphaTarget(0);
+          if (motionPreference.matches) resume(0.15);
+        });
       }));
-    const observer = new ResizeObserver(fit);
+    let width = svgElement.clientWidth, height = svgElement.clientHeight;
+    const observer = new ResizeObserver(() => {
+      // The first observer notification also fires after data updates, without a resize.
+      if (width === svgElement.clientWidth && height === svgElement.clientHeight) return;
+      width = svgElement.clientWidth; height = svgElement.clientHeight;
+      fit();
+    });
     observer.observe(svgElement);
     controls.current = {
       fit,
@@ -114,22 +141,24 @@ export function KnowledgeGraphCanvas({ nodes, edges, centerNodeId, selectedNodeI
         if (!node) return;
         node.fx = null; node.fy = null;
         syncPinnedNodes();
-        simulation.alpha(0.5);
-        if (reducedMotion) simulation.stop().tick(240);
-        else simulation.restart();
+        resume(0.22);
         render();
       },
       reset: () => {
         layoutCache.current = null;
         for (const node of particles) { node.fx = node.id === centerNodeId ? 0 : null; node.fy = node.id === centerNodeId ? 0 : null; }
-        simulation.alpha(1).stop().tick(240); render(); fit();
+        simulation.alphaTarget(0).alpha(1).stop();
+        if (motionPreference.matches) simulation.tick(300);
+        else simulation.restart();
+        render(); fit();
         syncPinnedNodes();
       }
     };
     return () => {
       simulation.stop();
       const previous = layoutCache.current?.center === centerNodeId ? layoutCache.current.particles : [];
-      layoutCache.current = { center: centerNodeId, particles: mergeGraphParticles(previous, particles, allowedNodeIds) };
+      layoutCache.current = { center: centerNodeId, particles: mergeGraphParticles(previous, particles, allowedNodeIds), topology, alpha: simulation.alpha() };
+      motionPreference.removeEventListener("change", onMotionPreferenceChange);
       observer.disconnect(); nodeElements.on(".drag", null); svg.on(".zoom", null); controls.current = null;
     };
   }, [nodes, edges, centerNodeId, layoutCache, allowedNodeIds]);

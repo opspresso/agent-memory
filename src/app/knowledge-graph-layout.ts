@@ -25,6 +25,12 @@ export interface GraphLink extends SimulationLinkDatum<GraphParticle> {
   readonly id: string;
   readonly lane: number;
 }
+export interface KnowledgeGraphLayoutCache {
+  readonly center: string;
+  readonly particles: GraphParticle[];
+  readonly topology: string;
+  readonly alpha: number;
+}
 export function knowledgeNodeDegrees(nodes: readonly KnowledgeGraphNodeView[], edges: readonly KnowledgeGraphEdgeView[]): ReadonlyMap<string, number> {
   const degrees = new Map(nodes.map((node) => [node.id, 0]));
   for (const edge of edges) {
@@ -37,11 +43,43 @@ export function knowledgeNodeDegrees(nodes: readonly KnowledgeGraphNodeView[], e
 }
 export function graphNodeRadius(degree: number, center: boolean) { return (center ? 20 : 12) + Math.min(degree, 12) * 0.6; }
 
-export function createKnowledgeGraphSimulation(nodes: readonly KnowledgeGraphNodeView[], edges: readonly KnowledgeGraphEdgeView[], centerNodeId: string) {
+export function createKnowledgeGraphSimulation(nodes: readonly KnowledgeGraphNodeView[], edges: readonly KnowledgeGraphEdgeView[], centerNodeId: string, cached?: KnowledgeGraphLayoutCache | null, anchorNodeId = centerNodeId) {
   const degrees = knowledgeNodeDegrees(nodes, edges);
   // D3 mutates simulation objects; never give it application data or source refs.
   const particles: GraphParticle[] = nodes.map((node) => ({ id: node.id, radius: graphNodeRadius(degrees.get(node.id) ?? 0, node.id === centerNodeId),
     ...(node.id === centerNodeId ? { fx: 0, fy: 0, x: 0, y: 0 } : {}) }));
+  const hasCachedLayout = cached?.center === centerNodeId && cached.particles.length > 0;
+  if (hasCachedLayout) {
+    const previous = new Map(cached.particles.map((node) => [node.id, node]));
+    for (const node of particles) {
+      const old = previous.get(node.id);
+      if (old) Object.assign(node, { x: old.x, y: old.y, vx: old.vx, vy: old.vy, fx: old.fx, fy: old.fy });
+    }
+    const positioned = new Map(previous);
+    const pending = particles.filter((node) => !previous.has(node.id));
+    const neighbors = new Map(particles.map((node) => [node.id, [] as string[]]));
+    for (const edge of edges) {
+      neighbors.get(edge.sourceNodeId)?.push(edge.targetNodeId);
+      neighbors.get(edge.targetNodeId)?.push(edge.sourceNodeId);
+    }
+    while (pending.length > 0) {
+      const connectedIndex = pending.findIndex((node) => neighbors.get(node.id)?.some((id) => positioned.has(id)));
+      const node = pending.splice(Math.max(0, connectedIndex), 1)[0]!;
+      const neighborId = neighbors.get(node.id)?.find((id) => positioned.has(id));
+      const anchor = positioned.get(neighborId ?? anchorNodeId) ?? positioned.get(anchorNodeId) ?? positioned.get(centerNodeId);
+      const originX = anchor?.x ?? 0, originY = anchor?.y ?? 0;
+      // A golden-angle spiral seeds each new branch without piling nodes on top of existing ones.
+      const phase = [...node.id].reduce((sum, letter) => sum + letter.charCodeAt(0), 0);
+      for (let attempt = 0; attempt < 256; attempt++) {
+        const angle = phase + attempt * Math.PI * (3 - Math.sqrt(5));
+        const distance = 110 + 18 * Math.sqrt(attempt);
+        node.x = originX + Math.cos(angle) * distance;
+        node.y = originY + Math.sin(angle) * distance;
+        if ([...positioned.values()].every((other) => Math.hypot(node.x! - (other.x ?? 0), node.y! - (other.y ?? 0)) >= node.radius + other.radius + 48)) break;
+      }
+      positioned.set(node.id, node);
+    }
+  }
   const ids = new Set(particles.map((node) => node.id));
   const pairs = new Map<string, KnowledgeGraphEdgeView[]>();
   for (const edge of edges) {
@@ -53,12 +91,17 @@ export function createKnowledgeGraphSimulation(nodes: readonly KnowledgeGraphNod
     id: edge.id, source: edge.sourceNodeId, target: edge.targetNodeId,
     lane: (index - (pair.length - 1) / 2) * (edge.sourceNodeId < edge.targetNodeId ? 1 : -1)
   })));
+  const topology = JSON.stringify([
+    particles.map((node) => JSON.stringify([node.id, node.radius])).sort(),
+    links.map((link) => JSON.stringify([link.id, link.source, link.target])).sort()
+  ]);
   const simulation = forceSimulation(particles).stop()
+    .alpha(hasCachedLayout ? Math.max(cached.alpha, cached.topology === topology ? 0 : 0.22) : 1)
     .force("link", forceLink<GraphParticle, GraphLink>(links).id((node) => node.id).distance(140).strength(0.35))
     .force("charge", forceManyBody<GraphParticle>().strength(-420))
     .force("collision", forceCollide<GraphParticle>().radius((node) => node.radius + 32).iterations(2))
     .force("x", forceX(0).strength(0.035)).force("y", forceY(0).strength(0.035));
-  return { simulation, particles, links };
+  return { simulation, particles, links, topology, hasCachedLayout };
 }
 export function graphEdgeGeometry(link: GraphLink) {
   const source = link.source as GraphParticle, target = link.target as GraphParticle;

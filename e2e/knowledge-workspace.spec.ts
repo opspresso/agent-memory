@@ -262,8 +262,19 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await expect(page.getByRole("menuitem", { name: "고정 해제", exact: true })).toHaveCount(0);
     await page.getByRole("menu").press("Escape");
     await draggedNode.click();
-    await expect(draggedNode).toHaveAttribute("data-pinned", "true");
+    await expect(draggedNode).not.toHaveAttribute("data-pinned", "true");
     await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(async () => {
+      const position = await draggedNode.getAttribute("transform");
+      await page.waitForTimeout(50);
+      return await draggedNode.getAttribute("transform") === position;
+    }).toBe(true);
+    const repinBounds = (await draggedNode.locator("circle").last().boundingBox())!;
+    await page.mouse.move(repinBounds.x + repinBounds.width / 2, repinBounds.y + repinBounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(repinBounds.x + repinBounds.width / 2 + 20, repinBounds.y + repinBounds.height / 2 + 15, { steps: 8 });
+    await page.mouse.up();
+    await expect(draggedNode).toHaveAttribute("data-pinned", "true");
     await page.getByRole("button", { name: "전체 화면", exact: true }).click();
     await expect(draggedNode).toHaveAttribute("data-pinned", "true");
     await draggedNode.click({ button: "right" });
@@ -296,7 +307,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await page.getByRole("menu").press("Escape");
     await draggedNode.click({ button: "right" });
     await expect(page.getByRole("menu").getByText("Evidence Database", { exact: true })).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "이 노드 중심으로 확장", exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "확장", exact: true })).toBeVisible();
     await expect(page.getByRole("menu")).toBeInViewport();
     await page.getByRole("menuitem", { name: "상세 보기", exact: true }).click({ trial: true });
     await expect(page.getByRole("menu")).toHaveCSS("opacity", "1");
@@ -334,13 +345,13 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await jsonRequest(page, "/api/knowledge/edges", "POST", { scope: { kind: "organization" }, sourceNodeId: databaseNodeId, targetNodeId: extraNode.id, predicate: "uses", source: { memoryId: shared.id } });
     await draggedNode.focus();
     await page.keyboard.press("Shift+F10");
-    await page.getByRole("menuitem", { name: "이 노드 중심으로 확장", exact: true }).click();
+    await page.getByRole("menuitem", { name: "확장", exact: true }).click();
     await expect(page.getByRole("button", { name: "SERVICE Expansion Worker", exact: true })).toBeVisible();
     await expect(page.locator("[data-center]")).toHaveAttribute("data-node-id", originalCenter!);
     await expect(page.locator("[data-node-id]")).toHaveCount(3);
     await draggedNode.click({ button: "right" });
-    await page.getByRole("menuitem", { name: "이 노드 중심으로 확장", exact: true }).click();
-    await expect(page.getByRole("button", { name: "이 노드 중심으로 확장", exact: true })).not.toHaveAttribute("data-loading");
+    await page.getByRole("menuitem", { name: "확장", exact: true }).click();
+    await expect(page.getByRole("button", { name: "확장", exact: true })).not.toHaveAttribute("data-loading");
     await expect(page.locator("[data-node-id]")).toHaveCount(3);
     const expansionNode = page.getByRole("button", { name: "SERVICE Expansion Worker", exact: true });
     await centerNode.click({ modifiers: ["Control"] });
@@ -385,7 +396,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await page.getByRole("button", { name: "전체 화면", exact: true }).click();
     await page.route(neighborhoodUrl, (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Expansion unavailable" }) }));
     await draggedNode.click({ button: "right" });
-    await page.getByRole("menuitem", { name: "이 노드 중심으로 확장", exact: true }).click();
+    await page.getByRole("menuitem", { name: "확장", exact: true }).click();
     await expect(page.getByText("Expansion unavailable", { exact: true })).toBeVisible();
     await expect(page.locator("[data-node-id]")).toHaveCount(3);
     await expect(page.locator("[data-center]")).toHaveAttribute("data-node-id", originalCenter!);

@@ -5,7 +5,7 @@ import { IconFocusCentered, IconPlus, IconInfoCircle, IconRoute, IconSearch, Ico
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { KnowledgeGraphCanvas, graphKindColor as kindColor } from "./knowledge-graph-canvas";
-import { knowledgeNodeDegrees, type KnowledgeGraphNodeView, type KnowledgeGraphEdgeView, type GraphParticle } from "./knowledge-graph-layout";
+import { knowledgeNodeDegrees, type KnowledgeGraphNodeView, type KnowledgeGraphEdgeView, type KnowledgeGraphLayoutCache } from "./knowledge-graph-layout";
 export type { KnowledgeGraphNodeView, KnowledgeGraphEdgeView } from "./knowledge-graph-layout";
 import { useT } from "./_i18n/provider";
 import classes from "./knowledge-graph.module.css";
@@ -63,7 +63,7 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
     if (wasFullscreen.current && !fullscreen) { graphRoot.current?.querySelector<HTMLButtonElement>("[data-fullscreen-toggle]")?.focus(); }
     wasFullscreen.current = fullscreen;
   }, [fullscreen]);
-  const layoutCache = useRef<{ center: string; particles: GraphParticle[] } | null>(null);
+  const layoutCache = useRef<KnowledgeGraphLayoutCache | null>(null);
   const allowedNodeIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
   const kinds = useMemo(() => [...new Set(nodes.map((node) => node.kind))].sort(), [nodes]);
   const visibleNodes = useMemo(() => nodes.filter((node) => node.id === centerNodeId || !hiddenKinds.has(node.kind)), [nodes, centerNodeId, hiddenKinds]);
@@ -108,7 +108,7 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
         <div className={classes.toolbar}>
           <TextInput aria-label={t("graph.searchLabel")} className={classes.search} leftSection={<IconSearch size={15} />} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("graph.searchPlaceholder")} size="xs" value={query} />
         </div>
-        <KnowledgeGraphCanvas nodes={visibleNodes} edges={visibleEdges} centerNodeId={centerNodeId}
+        <KnowledgeGraphCanvas nodes={visibleNodes} edges={visibleEdges} centerNodeId={centerNodeId} anchorNodeId={selectedNode?.id}
           selectedNodeIds={selectedNodeIds} multipleSelection={selection.multiple} displayedEdgeIds={displayedEdgeIds} matchingIds={matchingIds} queryActive={Boolean(normalizedQuery)}
           onSelectNode={onSelectNode}
           onClearSelection={clearSelection}
@@ -142,7 +142,7 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
         </details>
         {selection.multiple ? <Text role="status" size="sm" mb="md">{t("graph.selectionSummary", { nodes: selectedNodeIds.size, edges: displayedEdges.length })}</Text> : null}
         {selectedNode ? <Stack gap="md">
-          <Stack gap={4}><Group justify="space-between"><Badge color="gray" size="xs" variant="light">{selectedNode.kind}</Badge><Text c="dimmed" ff="monospace" size="xs">{t("graph.relations", { count: degrees.get(selectedNode.id) ?? 0 })}</Text></Group><Title order={4}>{selectedNode.canonicalName}</Title></Stack>
+          <Group align="center" gap="sm" justify="space-between" wrap="nowrap"><Stack gap={4} style={{ minWidth: 0 }}><Group justify="space-between"><Badge color="gray" size="xs" variant="light">{selectedNode.kind}</Badge><Text c="dimmed" ff="monospace" size="xs">{t("graph.relations", { count: degrees.get(selectedNode.id) ?? 0 })}</Text></Group><Title order={4} style={{ overflowWrap: "anywhere" }}>{selectedNode.canonicalName}</Title></Stack><Button disabled={deletingResource} loading={loadingGraph} leftSection={<IconPlus size={15} />} onClick={() => onExpandNode(selectedNode.id)} size="compact-sm" variant="light">{t("graph.expandFromNode")}</Button></Group>
           <Badge variant="light">{t(`workspace.scope.${selectedNode.scope.kind}`)}</Badge>
           <Text c="dimmed" size="sm">{selectedNode.summary ?? t("graph.noSummary")}</Text>
           <Stack gap="xs"><Text c="dimmed" fw={700} size="xs" tt="uppercase">{t("graph.connectedBy")}</Text>
@@ -153,8 +153,6 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
             }) : <Text c="dimmed" size="sm">{t("graph.noRelations")}</Text>}
           </Stack>
           {(selectedNode.sources?.length ?? 0) > 0 ? <Accordion variant="contained" key={selectedNode.id}><Accordion.Item value="sources"><Accordion.Control>{t("evidence.sources", { count: selectedNode.sources?.length ?? 0 })}</Accordion.Control><Accordion.Panel><Stack>{selectedNode.sources?.map((source, index) => <SourceEvidence key={`${source.memoryId ?? source.chunkId}:${index}`} {...source} />)}</Stack></Accordion.Panel></Accordion.Item></Accordion> : null}
-          {selectedNode.id !== centerNodeId ? <Button disabled={loadingGraph || deletingResource} leftSection={<IconFocusCentered size={15} />} onClick={() => onExploreNode(selectedNode.id)} size="compact-sm" variant="light">{t("graph.exploreFromNode")}</Button> : null}
-          <Button disabled={deletingResource} loading={loadingGraph} leftSection={<IconPlus size={15} />} onClick={() => onExpandNode(selectedNode.id)} size="compact-sm" variant="light">{t("graph.expandFromNode")}</Button>
           {canDeleteNode(selectedNode) ? <Button color="red" disabled={deletingResource} leftSection={<IconTrash size={15} />} onClick={() => onDeleteNode(selectedNode)} size="compact-sm" variant="subtle">{t("graph.deleteNode")}</Button> : null}
         </Stack> : <Text c="dimmed" size="sm">{t("graph.selectNodeHint")}</Text>}
       </Paper>

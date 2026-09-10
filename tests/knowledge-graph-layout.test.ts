@@ -68,6 +68,64 @@ describe("D3 knowledge graph layout", () => {
 });
 
 describe("knowledge graph expansion", () => {
+  it("continues positions, velocities, cooling and released pins across identical responses", () => {
+    const edges = [edge("1", "center", "document"), edge("2", "document", "agent")];
+    const original = createKnowledgeGraphSimulation(nodes, edges, "center");
+    original.particles[0]!.fx = null; original.particles[0]!.fy = null;
+    original.simulation.tick(30);
+    const before = structuredClone(original.particles);
+    const continued = createKnowledgeGraphSimulation(nodes, edges, "center", {
+      center: "center", particles: original.particles, topology: original.topology, alpha: original.simulation.alpha()
+    });
+    expect(continued.particles).toEqual(before);
+    expect(continued.particles[0]).not.toBe(original.particles[0]);
+    expect(continued.simulation.alpha()).toBe(original.simulation.alpha());
+    original.simulation.tick(1); continued.simulation.tick(1);
+    expect(continued.particles).toEqual(original.particles);
+  });
+
+  it("seeds connected branches without overlap and resumes gentle movement without teleporting existing nodes", () => {
+    const edges = [edge("1", "center", "document"), edge("2", "document", "agent")];
+    const original = createKnowledgeGraphSimulation(nodes, edges, "center");
+    original.simulation.tick(300);
+    const anchor = original.particles[1]!;
+    anchor.x = anchor.fx = 600; anchor.y = anchor.fy = 200;
+    const newNodes = Array.from({ length: 12 }, (_, index) => ({ id: `new-${index}`, kind: "concept", canonicalName: `new-${index}`, scope }));
+    const newEdges = newNodes.map((node) => edge(node.id, "document", node.id));
+    const expanded = createKnowledgeGraphSimulation([...nodes, ...newNodes], [...edges, ...newEdges], "center", {
+      center: "center", particles: original.particles, topology: original.topology, alpha: original.simulation.alpha()
+    }, "document");
+    for (const previous of original.particles) {
+      expect(expanded.particles.find((node) => node.id === previous.id)).toMatchObject({ x: previous.x, y: previous.y, vx: previous.vx, vy: previous.vy, fx: previous.fx, fy: previous.fy });
+    }
+    const added = expanded.particles.slice(nodes.length);
+    for (const node of added) {
+      expect(Math.hypot(node.x! - anchor.x, node.y! - anchor.y)).toBeLessThan(500);
+      for (const other of expanded.particles.filter((particle) => particle.id !== node.id)) {
+        expect(Math.hypot(node.x! - other.x!, node.y! - other.y!)).toBeGreaterThan(node.radius + other.radius);
+      }
+    }
+    const start = added.map(({ x, y }) => ({ x: x!, y: y! }));
+    expanded.simulation.tick(1);
+    expect(added.some((node, index) => Math.hypot(node.x! - start[index]!.x, node.y! - start[index]!.y) > 0.01)).toBe(true);
+    expect(Math.max(...added.map((node, index) => Math.hypot(node.x! - start[index]!.x, node.y! - start[index]!.y)))).toBeLessThan(20);
+    expanded.simulation.tick(300);
+    expect(expanded.particles[1]).toMatchObject({ x: 600, y: 200, fx: 600, fy: 200 });
+    expect(expanded.particles.every((node) => Number.isFinite(node.x) && Number.isFinite(node.y))).toBe(true);
+    expect(expanded.simulation.alpha()).toBeLessThan(expanded.simulation.alphaMin());
+  });
+
+  it("does not reheat settled layouts for duplicate expansion responses", () => {
+    const edges = [edge("1", "center", "document"), edge("2", "document", "agent")];
+    const original = createKnowledgeGraphSimulation(nodes, edges, "center");
+    original.simulation.tick(350);
+    const repeated = createKnowledgeGraphSimulation([...nodes].reverse(), [...edges].reverse(), "center", {
+      center: "center", particles: original.particles, topology: original.topology, alpha: original.simulation.alpha()
+    }, "agent");
+    expect(repeated.topology).toBe(original.topology);
+    expect(repeated.simulation.alpha()).toBeLessThan(repeated.simulation.alphaMin());
+  });
+
   it("retains existing branches, updates repeated IDs and leaves inputs unchanged", () => {
     const current = Object.freeze([nodes[0]!, nodes[1]!]);
     const updated = Object.freeze({ ...nodes[1]!, summary: "Updated evidence" });
