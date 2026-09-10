@@ -7,7 +7,7 @@ export type SettingsSection = "general" | "ontology" | ApplicationSection;
 export const settingGroups = [
   { section: "ai", key: "embedding", names: ["EMBEDDING_BASE_URL", "EMBEDDING_MODEL", "EMBEDDING_API_KEY"] },
   { section: "ai", key: "reranker", names: ["RERANKER_BASE_URL", "RERANKER_MODEL", "RERANKER_API_KEY", "RERANKER_TIMEOUT_MS", "RERANKER_MIN_SCORE"] },
-  { section: "ai", key: "extraction", names: ["KNOWLEDGE_EXTRACTION_BASE_URL", "KNOWLEDGE_EXTRACTION_MODEL", "KNOWLEDGE_EXTRACTION_API_KEY"] },
+  { section: "ai", key: "extraction", names: ["KNOWLEDGE_EXTRACTION_BASE_URL", "KNOWLEDGE_EXTRACTION_MODEL", "KNOWLEDGE_EXTRACTION_LANGUAGE", "KNOWLEDGE_EXTRACTION_API_KEY"] },
   { section: "ai", key: "limits", names: ["AI_PROVIDER_MAX_CONCURRENCY", "AI_PROVIDER_REQUESTS_PER_MINUTE", "AI_ORGANIZATION_REQUESTS_PER_MINUTE", "AI_USER_REQUESTS_PER_MINUTE"] },
   { section: "document", key: "worker", names: ["DOCUMENT_WORKER_ENABLED", "KNOWLEDGE_ENRICHMENT_CONCURRENCY"] },
   { section: "document", key: "quotas", names: ["DOCUMENT_STORAGE_QUOTA_BYTES", "DOCUMENT_PENDING_QUOTA", "DOCUMENT_UPLOADS_PER_USER_PER_HOUR"] },
@@ -35,6 +35,7 @@ export const numericSettings: Partial<Record<AppSettingName, { min: number; max?
   RERANKER_MIN_SCORE: { min: 0, max: 1, suffix: "", decimal: true }
 };
 export const choiceSettings: Partial<Record<AppSettingName, readonly string[]>> = {
+  KNOWLEDGE_EXTRACTION_LANGUAGE: ["source", "ko", "en"],
   LOG_LEVEL: ["trace", "debug", "info", "warn", "error", "fatal", "silent"],
   LANGFUSE_EXPORT_MODE: ["batched", "immediate"]
 };

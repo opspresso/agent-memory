@@ -3,6 +3,7 @@ import { readAiRequestLimits } from "@/infrastructure/ai/request-limiter";
 import { readDocumentUploadLimits } from "./document-upload-limits";
 import { readMetricsToken } from "./metrics-auth";
 import { readKnowledgeEnrichmentConcurrency } from "./document-worker-configuration";
+import { readKnowledgeExtractionLanguage } from "./knowledge-extraction-configuration";
 import { assertProductionConfiguration } from "./production-config";
 
 function paired(
@@ -39,6 +40,7 @@ export function validateRuntimeEnvironment(
   environment: Readonly<Record<string, string | undefined>>
 ): void {
   readKnowledgeEnrichmentConcurrency(environment);
+  readKnowledgeExtractionLanguage(environment);
   assertProductionConfiguration(environment);
   for (const name of ["S3_BUCKET", "S3_REGION", "S3_ENDPOINT"]) {
     if (environment[name] !== undefined && !environment[name]?.trim()) {

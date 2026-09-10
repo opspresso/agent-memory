@@ -163,6 +163,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Reranker | `RERANKER_MIN_SCORE` | 선택형 relevance 하한. `0`부터 `1` 사이이며 미설정 시 순위만 적용 |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_BASE_URL` | OpenAI-compatible chat completions API base URL |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_API_KEY` | Extraction provider의 Bearer credential. 인증 없는 local endpoint에서는 생략 가능 |
+| Knowledge extraction | `KNOWLEDGE_EXTRACTION_LANGUAGE` | 생성하는 설명·사건 이름의 언어. `ko`(기본: 한국어), `source`(원문 언어), `en`(영어). 고유명·별칭·인용은 원문 표기를 보존 |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_MODEL` | 설정 시 ready 문서에서 reviewable graph candidate 생성 |
 | AI provider | `AI_PROVIDER_MAX_CONCURRENCY` | Instance에서 동시에 실행할 embedding·reranker·extraction 요청 수. 기본값 `8` |
 | AI provider | `AI_PROVIDER_REQUESTS_PER_MINUTE` | Instance가 분당 실행할 embedding·reranker·extraction 요청의 합산 상한. 기본값 `120` |
@@ -208,6 +209,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | S3 credential | `S3_ACCESS_KEY_ID` + `S3_SECRET_ACCESS_KEY` |
 | Embedding | `EMBEDDING_MODEL`을 설정하면 `EMBEDDING_BASE_URL` 필요 |
 | Reranker | `RERANKER_BASE_URL` + `RERANKER_MODEL` |
+| Knowledge extraction | `KNOWLEDGE_EXTRACTION_LANGUAGE` | 생성하는 설명·사건 이름의 언어. `source`(기본: 원문 언어), `ko`(한국어), `en`(영어). 고유명·별칭·인용은 원문 표기를 보존 |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 `KNOWLEDGE_EXTRACTION_BASE_URL` 필요 |
 | Langfuse | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` |
 
@@ -261,6 +263,8 @@ KNOWLEDGE_EXTRACTION_MODEL=provider/structured-output-model
 ```
 
 OpenAI-compatible local endpoint를 사용하려면 embedding, reranker, knowledge extraction base URL을 해당 server의 `/v1` base URL로 바꾸고 provider가 요구하는 model ID를 지정하라. Reranker endpoint는 OpenRouter 또는 vLLM의 `documents`, `query`, `top_n` 요청과 `index`, `relevance_score` 응답 계약을 지원해야 한다. 인증이 필요하지 않으면 대응 API key를 비워 둬도 된다. Extraction endpoint는 JSON Schema structured output을 지원해야 한다.
+
+한국어 지식 추출은 설정 → AI → 지식 추출 언어에서 한국어를 선택하거나 `KNOWLEDGE_EXTRACTION_LANGUAGE=ko`로 설정한다. Application·worker를 재시작해야 반영된다. 모델 프롬프트가 생성하는 설명과 사건 이름의 언어를 지정하며, 원문에 있는 고유명·별칭과 근거 인용은 번역하지 않는다. Kind·predicate는 기존 온톨로지 식별자를 유지한다. 설정 변경은 이후 새 추출에 적용되며, 기존 후보·승인된 지식과 재사용하는 추출 결과를 자동 번역하거나 재생성하지 않는다.
 
 Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 동시 실행·분당 호출 제한과 PostgreSQL의 조직·사용자 분당 quota를 공유한다. Replica를 늘려도 같은 조직·사용자의 durable quota는 늘어나지 않는다. Provider account 전체 예산은 별도로 관리한다.
 

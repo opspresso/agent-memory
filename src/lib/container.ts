@@ -13,6 +13,7 @@ import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-s
 import { createTextRerankerService } from "@/infrastructure/ai/text-reranker-service";
 import { createKnowledgeVerificationService } from "@/infrastructure/ai/knowledge-verification-service";
 import { createKnowledgeExtractionService } from "@/infrastructure/ai/knowledge-extraction-service";
+import { readKnowledgeExtractionLanguage } from "./knowledge-extraction-configuration";
 import {
   createAiRequestLimiter,
   readAiRequestLimits
@@ -153,6 +154,7 @@ function createConfiguredKnowledgeExtractionService() {
     apiKey: process.env.KNOWLEDGE_EXTRACTION_API_KEY,
     baseUrl: knowledgeExtractionBaseUrl,
     model: knowledgeExtractionModel,
+    language: readKnowledgeExtractionLanguage(),
     requestLimiter: aiRequestLimiter
   });
 }
