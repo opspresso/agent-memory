@@ -91,7 +91,7 @@ function documentSourceAccessPredicate(access: OrganizationAccess): SQL {
   return scopedReadPredicate(access, documents);
 }
 
-function visibleSourcePredicate(
+export function visibleSourcePredicate(
   access: OrganizationAccess,
   sources: typeof knowledgeNodeSources | typeof knowledgeEdgeSources,
   now: Date

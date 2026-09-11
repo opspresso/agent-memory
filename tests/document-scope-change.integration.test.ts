@@ -159,6 +159,18 @@ describe("document scope transactions", () => {
     expect(await f.db.select().from(knowledgeNodes).where(eq(knowledgeNodes.organizationId, f.organizationId))).toEqual([]);
   });
 
+  it("does not expose skipped private knowledge through an accepted candidate replay", async () => {
+    const f = await fixture();
+    const privateDoc = await f.document();
+    await f.node("Liu Bei", privateDoc.chunkId);
+    const candidates = createKnowledgeCandidateRepository(f.db);
+    const candidate = await candidates.save(createKnowledgeCandidate({ id: randomUUID(), scope: f.scope, documentId: f.doc.id, chunkId: f.doc.chunkId, model: "test", graph: { entities: [{ key: "a", kind: "person", canonicalName: "Liu Bei" }], relationships: [] }, now: f.now }));
+    expect(await candidates.accept({ candidateId: candidate.id, organizationId: f.organizationId, entityPromotions: [{ key: "a", id: randomUUID() }], relationshipIds: [], reviewedBy: f.userId, reviewedAt: f.now })).toMatchObject({ status: "promoted", nodes: [{ canonicalName: "Liu Bei" }] });
+    await f.change();
+    await f.db.update(organizationMembers).set({ role: "admin" }).where(and(eq(organizationMembers.organizationId, f.organizationId), eq(organizationMembers.userId, f.otherUserId)));
+    expect(await candidates.accept({ candidateId: candidate.id, organizationId: f.organizationId, entityPromotions: [], relationshipIds: [], reviewedBy: f.otherUserId, reviewedAt: f.now })).toMatchObject({ status: "promoted", candidate: { status: "accepted", scope: f.target }, nodes: [], edges: [] });
+  });
+
   it("narrows verified graph and rejects stale graph writes and deletes", async () => {
     const f = await fixture();
     const doc = await f.document(f.target);

@@ -25,7 +25,8 @@ import {
 } from "../schema";
 import {
   edgeFromRow,
-  edgeValues
+  edgeValues,
+  visibleSourcePredicate
 } from "./knowledge-graph-repository";
 import {
   knowledgeScopeFromRow,
@@ -59,7 +60,9 @@ function sourcesByResourceId<
 async function promotedResourcesForCandidate(
   transaction: AgentMemoryTransaction,
   organizationId: string,
-  candidateId: string
+  candidateId: string,
+  access: OrganizationAccess,
+  now: Date
 ) {
   const [nodeRows, edgeRows] = await Promise.all([
     transaction
@@ -75,6 +78,7 @@ async function promotedResourcesForCandidate(
       .where(
         and(
           eq(knowledgeCandidateNodes.organizationId, organizationId),
+          scopedReadPredicate(access, knowledgeNodes),
           eq(knowledgeCandidateNodes.candidateId, candidateId)
         )
       )
@@ -92,6 +96,7 @@ async function promotedResourcesForCandidate(
       .where(
         and(
           eq(knowledgeCandidateEdges.organizationId, organizationId),
+          scopedReadPredicate(access, knowledgeEdges),
           eq(knowledgeCandidateEdges.candidateId, candidateId)
         )
       )
@@ -105,6 +110,7 @@ async function promotedResourcesForCandidate(
           .where(
             and(
               eq(knowledgeNodeSources.organizationId, organizationId),
+              visibleSourcePredicate(access, knowledgeNodeSources, now),
               inArray(
                 knowledgeNodeSources.nodeId,
                 nodeRows.map(({ node }) => node.id)
@@ -119,6 +125,7 @@ async function promotedResourcesForCandidate(
           .where(
             and(
               eq(knowledgeEdgeSources.organizationId, organizationId),
+              visibleSourcePredicate(access, knowledgeEdgeSources, now),
               inArray(
                 knowledgeEdgeSources.edgeId,
                 edgeRows.map(({ edge }) => edge.id)
@@ -129,11 +136,12 @@ async function promotedResourcesForCandidate(
   ]);
   const nodeSources = sourcesByResourceId(nodeSourceRows, (row) => row.nodeId);
   const edgeSources = sourcesByResourceId(edgeSourceRows, (row) => row.edgeId);
+  const visibleNodeIds = new Set(nodeRows.filter(({ node }) => nodeSources.has(node.id)).map(({ node }) => node.id));
   return {
-    nodes: nodeRows.map(({ node }) =>
+    nodes: nodeRows.filter(({ node }) => visibleNodeIds.has(node.id)).map(({ node }) =>
       knowledgeNodeFromRow(node, nodeSources.get(node.id) ?? [])
     ),
-    edges: edgeRows.map(({ edge }) =>
+    edges: edgeRows.filter(({ edge }) => edgeSources.has(edge.id) && visibleNodeIds.has(edge.sourceNodeId) && visibleNodeIds.has(edge.targetNodeId)).map(({ edge }) =>
       edgeFromRow(edge, edgeSources.get(edge.id) ?? [])
     )
   };
@@ -377,7 +385,9 @@ export function createKnowledgeCandidateRepository(
           const promoted = await promotedResourcesForCandidate(
             transaction,
             input.organizationId,
-            candidate.id
+            candidate.id,
+            reviewer,
+            input.reviewedAt
           );
           return { status: "promoted", candidate, ...promoted } as const;
         }
@@ -397,7 +407,6 @@ export function createKnowledgeCandidateRepository(
         ) {
           throw new Error("knowledge candidate promotion IDs are incomplete");
         }
-        const nodes = [];
         const nodeIds = new Map<string, string>();
         // Concurrent chunks often contain the same people in different orders.
         // Acquire identity locks in one order to avoid A→B / B→A deadlocks.
@@ -431,7 +440,6 @@ export function createKnowledgeCandidateRepository(
               createdAt: input.reviewedAt
             })
             .onConflictDoNothing();
-          nodes.push(node);
           nodeIds.set(entity.key, node.id);
         }
         const edges = [];
@@ -539,12 +547,17 @@ export function createKnowledgeCandidateRepository(
         if (!reviewed) {
           throw new Error("knowledge candidate review claim was lost");
         }
-        const nodesById = new Map(nodes.map((node) => [node.id, node]));
+        const visible = await promotedResourcesForCandidate(transaction, input.organizationId, candidate.id, reviewer, input.reviewedAt);
+        const nodesById = new Map(visible.nodes.map((node) => [node.id, node]));
+        const edgeIds = new Set(edges.map((edge) => edge.id));
         return {
           status: "promoted",
           candidate: candidateFromRow(reviewed, candidate.scope),
-          nodes: selected.graph.entities.map((entity) => nodesById.get(nodeIds.get(entity.key)!)!),
-          edges
+          nodes: selected.graph.entities.flatMap((entity) => {
+            const node = nodesById.get(nodeIds.get(entity.key)!);
+            return node ? [node] : [];
+          }),
+          edges: visible.edges.filter((edge) => edgeIds.has(edge.id))
         } as const;
       });
     },

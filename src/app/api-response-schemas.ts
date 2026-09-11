@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { knowledgeScopeSkipReasons } from "@/domain/document/document-scope-change";
 
 import {
   manageableOrganizationMemberStatuses,
@@ -158,6 +159,16 @@ export const documentLibraryResponseSchema = z.object({
   documents: z.array(documentDetailResponseSchema),
   count: z.number().int().nonnegative(),
   nextOffset: z.number().int().nonnegative().nullable()
+});
+
+const scopeChangeCountsSchema = z.object({ updated: z.number().int().nonnegative(), unchanged: z.number().int().nonnegative(), skipped: z.number().int().nonnegative() });
+export const documentScopeChangeResponseSchema = z.object({
+  document: documentDetailResponseSchema,
+  knowledge: z.object({
+    nodes: scopeChangeCountsSchema,
+    edges: scopeChangeCountsSchema,
+    skipped: z.array(z.object({ resource: z.enum(["node", "edge"]), reason: z.enum(knowledgeScopeSkipReasons), count: z.number().int().positive() }))
+  })
 });
 
 export const documentContentsResponseSchema = z.object({

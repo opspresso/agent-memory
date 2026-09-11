@@ -441,7 +441,7 @@ curl \
 
 성공은 `200`과 `{ document, knowledge }`, 새 `ETag`를 반환한다. `knowledge.nodes`와 `knowledge.edges`는 각각 `{ updated, unchanged, skipped }` 건수를 포함한다. `knowledge.skipped`는 `{ resource: "node" | "edge", reason, count }` 목록이며, 숨겨진 지식의 ID·이름·출처는 반환하지 않는다. 제외 사유는 `access_denied`(관리 권한 없음), `source_scope`(다른 비공개 출처), `source_unavailable`(현재 유효한 출처 없음), `identity_conflict`(대상 scope의 동일 지식 충돌), `endpoint_scope`(관계 끝점의 공개 범위·유효 출처 불충족), `connected_edge`(기존 연결 관계의 접근 범위를 유지해야 함)다.
 
-문서·검증된 Knowledge scope·변경 이력을 한 transaction에서 저장한다. Chunk와 AI 후보는 자체 scope를 저장하지 않고 현재 문서 scope를 따른다. 문서 chunk를 직접 근거로 갖는 node·edge의 모든 출처가 현재 유효하고 대상 scope를 포함할 때만 변경한다. Node 변경은 기존 연결 edge의 범위도 보존해야 하며, edge 변경은 양 끝 node가 대상 scope에서 읽힐 수 있어야 한다. 충돌한 지식은 자동 병합하지 않는다. 제외 항목은 원래 scope를 유지하며 해당 문서 이외의 문서·Memory를 수정하지 않는다. 같은 scope를 다시 지정하면 현재 조건으로 Knowledge를 재검증하므로, 여러 출처의 공유를 완료한 후 다시 적용할 수 있다. 원문·chunk·embedding·후보 검토 이력·provenance는 보존한다.
+문서·검증된 Knowledge scope·변경 이력을 한 transaction에서 저장한다. Chunk와 AI 후보는 자체 scope를 저장하지 않고 현재 문서 scope를 따른다. 문서 chunk를 직접 근거로 갖는 node·edge의 모든 출처가 현재 유효하고 대상 scope를 포함할 때만 변경한다. Node 변경은 기존 연결 edge의 범위도 보존해야 하며, edge 변경은 양 끝 node가 대상 scope에서 읽힐 수 있어야 한다. 충돌한 지식은 자동 병합하지 않는다. 제외 항목은 원래 scope를 유지하며 해당 문서 이외의 문서·Memory를 수정하지 않는다. 같은 scope를 다시 지정하면 현재 조건으로 Knowledge를 재검증하므로, 여러 출처의 공유를 완료한 후 다시 적용할 수 있다. 원문·chunk·embedding·후보 검토 이력·provenance는 보존한다. 승인된 후보의 재요청도 현재 읽을 수 있고 유효한 지식과 출처만 반환하므로, 범위 변경에서 제외된 개인 지식을 노출하지 않는다.
 
 ### 재시도와 archive
 
