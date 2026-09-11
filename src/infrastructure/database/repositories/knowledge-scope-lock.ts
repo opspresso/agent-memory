@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import { scopeCovers } from "@/domain/identity/scope-coverage";
 import type { KnowledgeSource } from "@/domain/knowledge/knowledge-graph";
@@ -6,6 +6,7 @@ import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-c
 import type { AgentMemoryDatabase } from "../client";
 import { documentChunks, documents, memories } from "../schema";
 import { knowledgeScopeFromRow } from "./knowledge-node-persistence";
+import { inArrayParameter } from "./array-predicate";
 
 export type KnowledgeTransaction = Parameters<Parameters<AgentMemoryDatabase["transaction"]>[0]>[0];
 
@@ -25,7 +26,7 @@ export async function loadKnowledgeSourceScopes(transaction: KnowledgeTransactio
   if (chunkIds.length) {
     const rows = await transaction.select({ id: documentChunks.id, document: documents }).from(documentChunks)
       .innerJoin(documents, and(eq(documents.organizationId, documentChunks.organizationId), eq(documents.id, documentChunks.documentId)))
-      .where(and(eq(documentChunks.organizationId, organizationId), inArray(documentChunks.id, chunkIds)))
+      .where(and(eq(documentChunks.organizationId, organizationId), inArrayParameter(documentChunks.id, chunkIds)))
       .orderBy(asc(documents.id), asc(documentChunks.id)).for("share", { of: documents });
     for (const row of rows) result.set(`chunk:${row.id}`, { scope: knowledgeScopeFromRow(row.document), available: row.document.status === "ready" });
   }
@@ -33,7 +34,7 @@ export async function loadKnowledgeSourceScopes(transaction: KnowledgeTransactio
     const rows = await transaction.select({
       id: memories.id, organizationId: memories.organizationId, scopeKind: memories.scopeKind,
       teamId: memories.teamId, userId: memories.userId, status: memories.status, validFrom: memories.validFrom, expiresAt: memories.expiresAt
-    }).from(memories).where(and(eq(memories.organizationId, organizationId), inArray(memories.id, memoryIds)))
+    }).from(memories).where(and(eq(memories.organizationId, organizationId), inArrayParameter(memories.id, memoryIds)))
       .orderBy(asc(memories.id)).for("share");
     for (const row of rows) result.set(`memory:${row.id}`, {
       scope: knowledgeScopeFromRow(row), available: row.status === "active" && row.validFrom <= now && (!row.expiresAt || now < row.expiresAt)

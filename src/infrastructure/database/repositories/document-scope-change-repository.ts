@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import type { DocumentScopeChangeRepository } from "@/domain/document/document-scope-change";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 import { sameScope, scopeCovers } from "@/domain/identity/scope-coverage";
@@ -11,6 +11,7 @@ import { createOrganizationAccessRepository } from "./organization-access-reposi
 import { documentFromRow } from "./document-repository";
 import { knowledgeScopeFromRow, knowledgeSourceFromRow } from "./knowledge-node-persistence";
 import { loadKnowledgeSourceScopes, lockKnowledgeScope, sourceKey } from "./knowledge-scope-lock";
+import { inArrayParameter } from "./array-predicate";
 
 export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): DocumentScopeChangeRepository {
   return {
@@ -36,18 +37,18 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
         const scopeValues = { scopeKind: input.scope.kind, teamId: input.scope.kind === "team" ? input.scope.teamId : null, userId: input.scope.kind === "user" ? input.scope.userId : null };
         const chunks = await transaction.select({ id: documentChunks.id }).from(documentChunks).where(and(eq(documentChunks.organizationId, organizationId), eq(documentChunks.documentId, row.id)));
         const chunkIds = chunks.map((chunk) => chunk.id);
-        const linkedNodes = chunkIds.length ? await transaction.select({ id: knowledgeNodeSources.nodeId }).from(knowledgeNodeSources).where(and(eq(knowledgeNodeSources.organizationId, organizationId), inArray(knowledgeNodeSources.chunkId, chunkIds))) : [];
-        const linkedEdges = chunkIds.length ? await transaction.select({ id: knowledgeEdgeSources.edgeId }).from(knowledgeEdgeSources).where(and(eq(knowledgeEdgeSources.organizationId, organizationId), inArray(knowledgeEdgeSources.chunkId, chunkIds))) : [];
+        const linkedNodes = chunkIds.length ? await transaction.select({ id: knowledgeNodeSources.nodeId }).from(knowledgeNodeSources).where(and(eq(knowledgeNodeSources.organizationId, organizationId), inArrayParameter(knowledgeNodeSources.chunkId, chunkIds))) : [];
+        const linkedEdges = chunkIds.length ? await transaction.select({ id: knowledgeEdgeSources.edgeId }).from(knowledgeEdgeSources).where(and(eq(knowledgeEdgeSources.organizationId, organizationId), inArrayParameter(knowledgeEdgeSources.chunkId, chunkIds))) : [];
         const nodeIds = [...new Set(linkedNodes.map((node) => node.id))];
         const edgeIds = [...new Set(linkedEdges.map((edge) => edge.id))];
         const affectedNodes = new Set(nodeIds), affectedEdges = new Set(edgeIds);
         const edges = nodeIds.length || edgeIds.length ? await transaction.select().from(knowledgeEdges).where(and(eq(knowledgeEdges.organizationId, organizationId), or(
-          inArray(knowledgeEdges.id, edgeIds), inArray(knowledgeEdges.sourceNodeId, nodeIds), inArray(knowledgeEdges.targetNodeId, nodeIds)
+          inArrayParameter(knowledgeEdges.id, edgeIds), inArrayParameter(knowledgeEdges.sourceNodeId, nodeIds), inArrayParameter(knowledgeEdges.targetNodeId, nodeIds)
         ))) : [];
         const allNodeIds = [...new Set([...nodeIds, ...edges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId])])];
-        const nodes = allNodeIds.length ? await transaction.select().from(knowledgeNodes).where(and(eq(knowledgeNodes.organizationId, organizationId), inArray(knowledgeNodes.id, allNodeIds))) : [];
-        const nodeSources = allNodeIds.length ? await transaction.select().from(knowledgeNodeSources).where(and(eq(knowledgeNodeSources.organizationId, organizationId), inArray(knowledgeNodeSources.nodeId, allNodeIds))) : [];
-        const edgeSources = edgeIds.length ? await transaction.select().from(knowledgeEdgeSources).where(and(eq(knowledgeEdgeSources.organizationId, organizationId), inArray(knowledgeEdgeSources.edgeId, edgeIds))) : [];
+        const nodes = allNodeIds.length ? await transaction.select().from(knowledgeNodes).where(and(eq(knowledgeNodes.organizationId, organizationId), inArrayParameter(knowledgeNodes.id, allNodeIds))) : [];
+        const nodeSources = allNodeIds.length ? await transaction.select().from(knowledgeNodeSources).where(and(eq(knowledgeNodeSources.organizationId, organizationId), inArrayParameter(knowledgeNodeSources.nodeId, allNodeIds))) : [];
+        const edgeSources = edgeIds.length ? await transaction.select().from(knowledgeEdgeSources).where(and(eq(knowledgeEdgeSources.organizationId, organizationId), inArrayParameter(knowledgeEdgeSources.edgeId, edgeIds))) : [];
         const sources = await loadKnowledgeSourceScopes(transaction, organizationId, [...nodeSources, ...edgeSources].map(knowledgeSourceFromRow), input.now);
         // Evaluate the proposed source scope before persisting any changes.
         for (const chunkId of chunkIds) {
@@ -61,7 +62,7 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
         }
         const names = [...new Set(nodes.filter((node) => affectedNodes.has(node.id)).map((node) => knowledgeCanonicalNameKey(node.canonicalName)))];
         const possibleDuplicates = names.length ? await transaction.select({ id: knowledgeNodes.id, kind: knowledgeNodes.kind, canonicalName: knowledgeNodes.canonicalName, organizationId: knowledgeNodes.organizationId, scopeKind: knowledgeNodes.scopeKind, teamId: knowledgeNodes.teamId, userId: knowledgeNodes.userId }).from(knowledgeNodes)
-          .where(and(eq(knowledgeNodes.organizationId, organizationId), eq(knowledgeNodes.scopeKind, input.scope.kind), inArray(knowledgeNodes.canonicalNameKey, names))) : [];
+          .where(and(eq(knowledgeNodes.organizationId, organizationId), eq(knowledgeNodes.scopeKind, input.scope.kind), inArrayParameter(knowledgeNodes.canonicalNameKey, names, "text"))) : [];
         function groupSources<T extends { memoryId: string | null; chunkId: string | null }>(rows: readonly T[], id: (row: T) => string) {
           const grouped = new Map<string, KnowledgeSource[]>();
           for (const row of rows) {
@@ -91,7 +92,7 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
         const nodeIdentities = identities([...possibleDuplicates.filter((node) => sameScope(knowledgeScopeFromRow(node), input.scope)), ...eligibleNodes], nodeIdentity);
         const sourceNodeIds = [...new Set(edges.filter((edge) => affectedEdges.has(edge.id)).map((edge) => edge.sourceNodeId))];
         const possibleEdgeDuplicates = sourceNodeIds.length ? await transaction.select().from(knowledgeEdges).where(and(
-          eq(knowledgeEdges.organizationId, organizationId), eq(knowledgeEdges.scopeKind, input.scope.kind), inArray(knowledgeEdges.sourceNodeId, sourceNodeIds)
+          eq(knowledgeEdges.organizationId, organizationId), eq(knowledgeEdges.scopeKind, input.scope.kind), inArrayParameter(knowledgeEdges.sourceNodeId, sourceNodeIds)
         )) : [];
         const edgeIdentities = identities([...possibleEdgeDuplicates.filter((edge) => sameScope(knowledgeScopeFromRow(edge), input.scope)), ...eligibleEdges], edgeIdentity);
         const plan = planKnowledgeScopeChange({
@@ -120,8 +121,8 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
         if (uncoveredNode || uncoveredEdge) return { status: "related_scope_conflict" };
         const [updated] = await transaction.update(documents).set({ ...scopeValues, updatedAt: now }).where(eq(documents.id, row.id)).returning();
         if (!updated) throw new Error("document scope update returned no row");
-        if (plan.nodeIds.length) await transaction.update(knowledgeNodes).set({ ...scopeValues, updatedAt: now }).where(and(eq(knowledgeNodes.organizationId, organizationId), inArray(knowledgeNodes.id, plan.nodeIds)));
-        if (plan.edgeIds.length) await transaction.update(knowledgeEdges).set(scopeValues).where(and(eq(knowledgeEdges.organizationId, organizationId), inArray(knowledgeEdges.id, plan.edgeIds)));
+        if (plan.nodeIds.length) await transaction.update(knowledgeNodes).set({ ...scopeValues, updatedAt: now }).where(and(eq(knowledgeNodes.organizationId, organizationId), inArrayParameter(knowledgeNodes.id, plan.nodeIds)));
+        if (plan.edgeIds.length) await transaction.update(knowledgeEdges).set(scopeValues).where(and(eq(knowledgeEdges.organizationId, organizationId), inArrayParameter(knowledgeEdges.id, plan.edgeIds)));
         await transaction.insert(documentScopeChanges).values({ organizationId, documentId: row.id, previousScope: knowledgeScopeFromRow(row), scope: input.scope, knowledge: plan.summary, changedBy: access.userId, createdAt: now });
         return { status: "changed", document: documentFromRow(updated), knowledge: plan.summary };
       });

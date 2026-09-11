@@ -240,4 +240,19 @@ describe("document scope transactions", () => {
     expect(await createDocumentRepository(f.db).findById(f.organizationId, doc.id)).toMatchObject({ scope: f.target });
     expect(await f.db.select().from(documentScopeChanges).where(eq(documentScopeChanges.documentId, doc.id))).toEqual([]);
   });
+
+  it("changes large document graphs without exceeding PostgreSQL's parameter limit", async () => {
+    const f = await fixture();
+    await f.pool.query(`INSERT INTO knowledge_nodes (organization_id, scope_kind, user_id, kind, canonical_name)
+      SELECT $1, 'user', $2, 'person', 'Person ' || n FROM generate_series(1, 35000) n`, [f.organizationId, f.userId]);
+    await f.pool.query("ANALYZE knowledge_nodes");
+    await f.pool.query(`INSERT INTO knowledge_node_sources (organization_id, node_id, chunk_id)
+      SELECT organization_id, id, $2 FROM knowledge_nodes WHERE organization_id=$1`, [f.organizationId, f.doc.chunkId]);
+    await f.pool.query("ANALYZE knowledge_node_sources");
+    const result = await f.change().catch((error: unknown) => {
+      // Keep a driver failure readable without printing tens of thousands of binds.
+      throw error instanceof Error && error.cause instanceof Error ? error.cause : error;
+    });
+    expect(result).toMatchObject({ status: "changed", knowledge: { nodes: { updated: 35000, skipped: 0 } } });
+  });
 });
