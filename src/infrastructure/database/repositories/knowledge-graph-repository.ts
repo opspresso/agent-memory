@@ -39,6 +39,11 @@ import {
   memories
 } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
+import { assertKnowledgeSourceScopes, lockKnowledgeScope } from "./knowledge-scope-lock";
+import { sameScope, scopeCovers } from "@/domain/identity/scope-coverage";
+import { canAccessScopedResource } from "@/domain/identity/organization-access";
+import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-change";
+import { createOrganizationAccessRepository } from "./organization-access-repository";
 import {
   memoryReadPredicate,
   scopedReadPredicate
@@ -198,9 +203,11 @@ export function createKnowledgeGraphRepository(
 ): KnowledgeGraphRepository {
   return {
     async saveNode(node) {
-      return db.transaction((transaction) =>
-        upsertKnowledgeNode(transaction, node)
-      );
+      return db.transaction(async (transaction) => {
+        await lockKnowledgeScope(transaction, node.scope.organizationId);
+        await assertKnowledgeSourceScopes(transaction, node.scope, node.sources);
+        return upsertKnowledgeNode(transaction, node);
+      });
     },
 
     async findNodesByCanonicalNames(access, scope, canonicalNames) {
@@ -277,21 +284,28 @@ export function createKnowledgeGraphRepository(
       );
     },
 
-    async deleteNode(organizationId, nodeId) {
-      const [deleted] = await db
-        .delete(knowledgeNodes)
-        .where(
-          and(
-            eq(knowledgeNodes.organizationId, organizationId),
-            eq(knowledgeNodes.id, nodeId)
+    async deleteNode(organizationId, nodeId, expectedScope) {
+      return db.transaction(async (transaction) => {
+        await lockKnowledgeScope(transaction, organizationId);
+        const [current] = await transaction.select().from(knowledgeNodes)
+          .where(and(eq(knowledgeNodes.organizationId, organizationId), eq(knowledgeNodes.id, nodeId))).for("update");
+        if (current && !sameScope(knowledgeScopeFromRow(current), expectedScope)) throw new KnowledgeScopeChangedError();
+        const [deleted] = await transaction
+          .delete(knowledgeNodes)
+          .where(
+            and(
+              eq(knowledgeNodes.organizationId, organizationId),
+              eq(knowledgeNodes.id, nodeId)
+            )
           )
-        )
-        .returning({ id: knowledgeNodes.id });
-      return deleted !== undefined;
+          .returning({ id: knowledgeNodes.id });
+        return deleted !== undefined;
+      });
     },
 
     async mergeNodes(input) {
       return db.transaction(async (transaction) => {
+        await lockKnowledgeScope(transaction, input.organizationId);
         const locked = await transaction
           .select()
           .from(knowledgeNodes)
@@ -311,6 +325,8 @@ export function createKnowledgeGraphRepository(
         if (!source || !target || source.id === target.id) {
           return null;
         }
+        const merger = await createOrganizationAccessRepository(transaction).findByUser(input.organizationId, input.mergedBy);
+        if (!merger || !canAccessScopedResource(merger, "manage", knowledgeScopeFromRow(source)) || !canAccessScopedResource(merger, "manage", knowledgeScopeFromRow(target))) return null;
         if (
           source.scopeKind !== target.scopeKind ||
           source.teamId !== target.teamId ||
@@ -544,6 +560,10 @@ export function createKnowledgeGraphRepository(
     async saveEdge(edge) {
       const values = edgeValues(edge);
       return db.transaction(async (transaction) => {
+        await lockKnowledgeScope(transaction, edge.organizationId);
+        await assertKnowledgeSourceScopes(transaction, edge.scope, edge.sources);
+        const endpoints = await transaction.select().from(knowledgeNodes).where(and(eq(knowledgeNodes.organizationId, edge.organizationId), inArray(knowledgeNodes.id, [edge.sourceNodeId, edge.targetNodeId]))).orderBy(asc(knowledgeNodes.id)).for("share");
+        if (endpoints.length !== 2 || endpoints.some((node) => !scopeCovers(knowledgeScopeFromRow(node), edge.scope))) throw new KnowledgeScopeChangedError();
         const [row] = await transaction
           .insert(knowledgeEdges)
           .values(values)
@@ -622,17 +642,23 @@ export function createKnowledgeGraphRepository(
       );
     },
 
-    async deleteEdge(organizationId, edgeId) {
-      const [deleted] = await db
-        .delete(knowledgeEdges)
-        .where(
-          and(
-            eq(knowledgeEdges.organizationId, organizationId),
-            eq(knowledgeEdges.id, edgeId)
+    async deleteEdge(organizationId, edgeId, expectedScope) {
+      return db.transaction(async (transaction) => {
+        await lockKnowledgeScope(transaction, organizationId);
+        const [current] = await transaction.select().from(knowledgeEdges)
+          .where(and(eq(knowledgeEdges.organizationId, organizationId), eq(knowledgeEdges.id, edgeId))).for("update");
+        if (current && !sameScope(knowledgeScopeFromRow(current), expectedScope)) throw new KnowledgeScopeChangedError();
+        const [deleted] = await transaction
+          .delete(knowledgeEdges)
+          .where(
+            and(
+              eq(knowledgeEdges.organizationId, organizationId),
+              eq(knowledgeEdges.id, edgeId)
+            )
           )
-        )
-        .returning({ id: knowledgeEdges.id });
-      return deleted !== undefined;
+          .returning({ id: knowledgeEdges.id });
+        return deleted !== undefined;
+      });
     },
 
     async searchNodes(input) {

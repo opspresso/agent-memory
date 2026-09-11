@@ -68,6 +68,16 @@ CREATE TABLE "document_chunks" (
 	CONSTRAINT "document_chunks_nonnegative_ordinal_check" CHECK ("document_chunks"."ordinal" >= 0),
 	CONSTRAINT "document_chunks_embedding_pair_check" CHECK (("document_chunks"."embedding" IS NULL) = ("document_chunks"."embedding_model" IS NULL))
 );
+CREATE TABLE "document_scope_changes" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"organization_id" uuid NOT NULL,
+	"document_id" uuid NOT NULL,
+	"previous_scope" jsonb NOT NULL,
+	"scope" jsonb NOT NULL,
+	"knowledge" jsonb NOT NULL,
+	"changed_by" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
 CREATE TABLE "documents" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"organization_id" uuid NOT NULL,
@@ -346,6 +356,7 @@ CREATE UNIQUE INDEX "document_chunks_organization_id_id_unique" ON "document_chu
 CREATE UNIQUE INDEX "document_chunks_organization_document_id_unique" ON "document_chunks" USING btree ("organization_id","document_id","id");
 CREATE UNIQUE INDEX "document_chunks_document_ordinal_unique" ON "document_chunks" USING btree ("document_id","ordinal");
 CREATE INDEX "document_chunks_search_idx" ON "document_chunks" USING gin ("search");
+CREATE INDEX "document_scope_changes_document_idx" ON "document_scope_changes" USING btree ("organization_id","document_id","created_at");
 CREATE UNIQUE INDEX "documents_organization_id_id_unique" ON "documents" USING btree ("organization_id","id");
 CREATE INDEX "documents_organization_checksum_idx" ON "documents" USING btree ("organization_id","checksum");
 CREATE INDEX "documents_scope_idx" ON "documents" USING btree ("organization_id","scope_kind","team_id","user_id");
@@ -384,6 +395,9 @@ ALTER TABLE "auth_sessions" ADD CONSTRAINT "auth_sessions_user_id_users_id_fk" F
 ALTER TABLE "ai_request_buckets" ADD CONSTRAINT "ai_request_buckets_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "document_chunks" ADD CONSTRAINT "document_chunks_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "document_chunks" ADD CONSTRAINT "document_chunks_organization_document_fk" FOREIGN KEY ("organization_id","document_id") REFERENCES "public"."documents"("organization_id","id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "document_scope_changes" ADD CONSTRAINT "document_scope_changes_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "document_scope_changes" ADD CONSTRAINT "document_scope_changes_changed_by_users_id_fk" FOREIGN KEY ("changed_by") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;
+ALTER TABLE "document_scope_changes" ADD CONSTRAINT "document_scope_changes_document_fk" FOREIGN KEY ("organization_id","document_id") REFERENCES "public"."documents"("organization_id","id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "documents" ADD CONSTRAINT "documents_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "documents" ADD CONSTRAINT "documents_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;
 ALTER TABLE "documents" ADD CONSTRAINT "documents_organization_team_fk" FOREIGN KEY ("organization_id","team_id") REFERENCES "public"."teams"("organization_id","id") ON DELETE cascade ON UPDATE no action;

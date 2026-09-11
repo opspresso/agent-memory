@@ -1,4 +1,4 @@
-import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import type { OrganizationAccess, ScopedResource } from "@/domain/identity/organization-access";
 
 import type {
   KnowledgeEdge,
@@ -36,7 +36,7 @@ export interface KnowledgeGraphRepository {
     organizationId: string,
     nodeId: string
   ): Promise<KnowledgeNode | null>;
-  deleteNode(organizationId: string, nodeId: string): Promise<boolean>;
+  deleteNode(organizationId: string, nodeId: string, expectedScope: ScopedResource): Promise<boolean>;
   mergeNodes(input: {
     readonly organizationId: string;
     readonly sourceNodeId: string;
@@ -50,7 +50,7 @@ export interface KnowledgeGraphRepository {
     organizationId: string,
     edgeId: string
   ): Promise<KnowledgeEdge | null>;
-  deleteEdge(organizationId: string, edgeId: string): Promise<boolean>;
+  deleteEdge(organizationId: string, edgeId: string, expectedScope: ScopedResource): Promise<boolean>;
   searchNodes(
     input: KnowledgeNodeSearchInput
   ): Promise<readonly KnowledgeNodeSearchHit[]>;

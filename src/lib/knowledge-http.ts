@@ -17,8 +17,10 @@ import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-on
 import type { KnowledgeNodeSearchHit } from "@/domain/knowledge/knowledge-graph-repository";
 
 import { aiErrorResponse } from "./ai-http";
+import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-change";
 
 export function knowledgeErrorResponse(error: unknown): Response | null {
+  if (error instanceof KnowledgeScopeChangedError) return Response.json({ error: error.message }, { status: 409 });
   const aiResponse = aiErrorResponse(error);
   if (aiResponse) {
     return aiResponse;

@@ -57,7 +57,7 @@ function scopeFromRow(row: DocumentRow): DocumentScope {
   return { kind: "organization", organizationId: row.organizationId };
 }
 
-function documentFromRow(row: DocumentRow): Document {
+export function documentFromRow(row: DocumentRow): Document {
   return {
     id: row.id,
     scope: scopeFromRow(row),

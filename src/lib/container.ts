@@ -8,6 +8,7 @@ import { createKnowledgeOntologyReader } from "@/infrastructure/database/reposit
 import { createKnowledgeTermUsageRepository } from "@/infrastructure/database/repositories/knowledge-term-usage-repository";
 import { createKnowledgeOntologySuggestionService } from "@/infrastructure/ai/knowledge-ontology-suggestion-service";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
+import { createDocumentScopeChangeRepository } from "@/infrastructure/database/repositories/document-scope-change-repository";
 import { createIngestionReceiptRepository } from "@/infrastructure/database/repositories/ingestion-receipt-repository";
 import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
 import { createTextRerankerService } from "@/infrastructure/ai/text-reranker-service";
@@ -70,6 +71,7 @@ export const organizationAdministrationRepository =
 
 export const memoryRepository = createMemoryRepository(database.db);
 export const documentRepository = createDocumentRepository(database.db);
+export const documentScopeChangeRepository = createDocumentScopeChangeRepository(database.db);
 export const ingestionReceiptRepository = createIngestionReceiptRepository(database.db);
 export const knowledgeGraphRepository = createKnowledgeGraphRepository(database.db);
 export const knowledgeCandidateRepository =

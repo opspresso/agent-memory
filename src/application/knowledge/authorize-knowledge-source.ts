@@ -8,6 +8,7 @@ import type { KnowledgeSource } from "@/domain/knowledge/knowledge-graph";
 import { canAccessMemory } from "@/domain/memory/memory-access";
 import { isMemoryActiveAt } from "@/domain/memory/memory";
 import type { MemoryRepository } from "@/domain/memory/memory-repository";
+import { scopeCovers } from "@/domain/identity/scope-coverage";
 
 export interface AuthorizeKnowledgeSourceDependencies {
   readonly clock: () => Date;
@@ -28,29 +29,6 @@ export type AuthorizeKnowledgeSource = (
   targetScope: ScopedResource
 ) => Promise<void>;
 
-function sourceCoversScope(
-  sourceScope: ScopedResource,
-  targetScope: ScopedResource
-): boolean {
-  if (sourceScope.organizationId !== targetScope.organizationId) {
-    return false;
-  }
-  if (sourceScope.kind === "organization") {
-    return true;
-  }
-  if (sourceScope.kind !== targetScope.kind) {
-    return false;
-  }
-  if (sourceScope.kind === "team" && targetScope.kind === "team") {
-    return sourceScope.teamId === targetScope.teamId;
-  }
-  return (
-    sourceScope.kind === "user" &&
-    targetScope.kind === "user" &&
-    sourceScope.userId === targetScope.userId
-  );
-}
-
 export function buildAuthorizeKnowledgeSource(
   dependencies: AuthorizeKnowledgeSourceDependencies
 ): AuthorizeKnowledgeSource {
@@ -64,7 +42,7 @@ export function buildAuthorizeKnowledgeSource(
         !memory ||
         !isMemoryActiveAt(memory, dependencies.clock()) ||
         !canAccessMemory(access, "read", memory) ||
-        !sourceCoversScope(memory.scope, targetScope)
+        !scopeCovers(memory.scope, targetScope)
       ) {
         throw new KnowledgeSourceNotFoundError();
       }
@@ -80,7 +58,7 @@ export function buildAuthorizeKnowledgeSource(
         !record ||
         record.document.status !== "ready" ||
         !canAccessScopedResource(access, "read", record.document.scope) ||
-        !sourceCoversScope(record.document.scope, targetScope)
+        !scopeCovers(record.document.scope, targetScope)
       ) {
         throw new KnowledgeSourceNotFoundError();
       }

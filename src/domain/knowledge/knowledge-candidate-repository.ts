@@ -21,6 +21,7 @@ export type KnowledgeCandidateAcceptResult =
   | Readonly<{ status: "promoted" } & KnowledgeCandidatePromotionResult>
   | Readonly<{ status: "not_found" }>
   | Readonly<{ status: "source_not_ready" }>
+  | Readonly<{ status: "access_denied" }>
   | Readonly<{ status: "already_rejected" }>;
 
 export interface KnowledgeCandidateRepository {

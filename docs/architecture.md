@@ -152,6 +152,14 @@ multipart upload → S3-compatible storage → document row(pending)
 
 지원 MIME type의 text를 정규화하고 문서당 최대 512개 chunk를 생성하며 embedding은 최대 64개 chunk씩 provider에 전달한다. 최대 8개 batch를 순서대로 요청하며 각 embedding HTTP 요청의 timeout은 60초다. 이 값은 S3 조회·추출·DB 저장을 포함한 전체 처리 시간의 보장이 아니다. Lease가 재발급되면 이전 worker의 저장은 거부된다. 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다. Document 삭제는 provenance를 보존하는 archive이며 원본과 chunk를 유지하되 검색, retry, AI 후보 조회·승인에서 제외한다.
 
+### 문서 공유 범위 변경
+
+Ready 문서의 scope 변경은 현재 문서와 대상 scope의 `manage` 권한을 요구한다. Chunk와 AI 후보의 scope는 문서에서 조회하며 별도 scope column을 두지 않는다. `document_scope_changes`는 이전·새 scope, 변경자, 시각, Knowledge 적용·제외 건수를 기록한다. HTTP `If-Match`는 문서 `updatedAt` 기반 ETag를 검사하며, scope 변경은 timestamp를 최소 1ms 증가시킨다.
+
+Application의 scope 변경 use case가 repository의 원자적 변경 port를 호출한다. Repository는 조직 관리 advisory lock으로 최신 membership·대상 팀을 검증하고, 조직별 Knowledge scope 배타 잠금 아래 문서와 직접 provenance로 연결된 node·edge를 검증한다. 모든 출처의 현재 유효성·대상 scope 포함 여부, graph 관리 권한, 대상 identity 충돌을 검사한다. 관계 양 끝의 최종 scope와 유효 출처를 검사하며, node scope 축소로 기존 edge를 읽을 수 없게 만드는 변경은 제외한다. 통과한 항목만 변경하고 문서·지식·audit을 함께 commit한다. 제외된 지식은 기존 scope를 유지하며 일반 검색의 현재 provenance 권한 필터를 계속 적용한다.
+
+Graph 저장·삭제·병합과 후보 검토는 같은 조직별 Knowledge scope 잠금의 공유 모드를 사용한다. Scope 변경 중에는 이 쓰기들을 대기시키며 일반 조회는 계속 허용한다. 검증한 출처 row는 공유 잠금으로 commit까지 보존한다. 지식 생성은 저장 transaction에서 source scope를 다시 확인하고, 관계 생성은 끝점 scope도 확인한다. 후보 검토는 현재 문서 scope와 검토자의 활성 멤버십·관리 권한을 다시 확인한다. 삭제는 application이 확인한 scope를 repository에서 재검사한다. Scope 변경과 겹친 오래된 mutation으로 이전 권한을 적용하지 않는다.
+
 ### 후속 Knowledge enrichment
 
 `buildIngestDocument` application operation은 문서 처리를 완료한 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. Worker는 job decode, operation 호출, queue retry와 로그를 담당한다. 후속 queue 등록 실패는 문서 처리 상태를 되돌리지 않으며 ingestion 재실행에서 chunk 등록을 다시 시도한다.

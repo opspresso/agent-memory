@@ -34,6 +34,9 @@ import {
   upsertKnowledgeNode
 } from "./knowledge-node-persistence";
 import { scopedManagePredicate, scopedReadPredicate } from "./scope-predicates";
+import { lockKnowledgeScope } from "./knowledge-scope-lock";
+import { createOrganizationAccessRepository } from "./organization-access-repository";
+import { canAccessScopedResource } from "@/domain/identity/organization-access";
 
 type CandidateRow = typeof knowledgeCandidates.$inferSelect;
 type AgentMemoryTransaction = Parameters<
@@ -338,6 +341,7 @@ export function createKnowledgeCandidateRepository(
 
     async accept(input) {
       return db.transaction(async (transaction) => {
+        await lockKnowledgeScope(transaction, input.organizationId);
         const [locked] = await transaction
           .select({ candidate: knowledgeCandidates, document: documents })
           .from(knowledgeCandidates)
@@ -363,6 +367,8 @@ export function createKnowledgeCandidateRepository(
           locked.candidate,
           knowledgeScopeFromRow(locked.document)
         );
+        const reviewer = await createOrganizationAccessRepository(transaction).findByUser(input.organizationId, input.reviewedBy);
+        if (!reviewer || !canAccessScopedResource(reviewer, "manage", candidate.scope)) return { status: "access_denied" } as const;
         // The idempotent already-accepted return must stay ahead of both the
         // source-readiness and promotion-completeness checks: callers replay
         // accepted candidates with empty promotion inputs.
@@ -545,6 +551,7 @@ export function createKnowledgeCandidateRepository(
 
     async reject(input) {
       return db.transaction(async (transaction) => {
+        await lockKnowledgeScope(transaction, input.organizationId);
         const [locked] = await transaction.select({ candidate: knowledgeCandidates, document: documents })
           .from(knowledgeCandidates).innerJoin(documents, and(
             eq(documents.organizationId, knowledgeCandidates.organizationId),
@@ -553,6 +560,8 @@ export function createKnowledgeCandidateRepository(
           .for("update").limit(1);
         if (!locked) { return null; }
         const candidate = candidateFromRow(locked.candidate, knowledgeScopeFromRow(locked.document));
+        const reviewer = await createOrganizationAccessRepository(transaction).findByUser(input.organizationId, input.reviewedBy);
+        if (!reviewer || !canAccessScopedResource(reviewer, "manage", candidate.scope)) return null;
         const selected = selectKnowledgeCandidateItems(candidate, input.selection, "rejected");
         if (candidate.status === "rejected") { return candidate; }
         if (candidate.status !== "pending") { return input.selection && selected.items.length === 0 ? candidate : null; }
