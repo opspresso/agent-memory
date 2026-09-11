@@ -265,6 +265,7 @@ export function buildAcceptKnowledgeCandidate(
 function promotionFromAcceptResult(
   result: KnowledgeCandidateAcceptResult
 ): KnowledgeCandidatePromotionResult {
+  if (result.status === "access_denied") throw new KnowledgeCandidateReviewAccessDeniedError();
   if (result.status === "not_found") {
     throw new KnowledgeCandidateNotFoundError();
   }

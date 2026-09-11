@@ -17,6 +17,8 @@ import { organizationMembers, organizations, teams, users } from "./identity";
 import { memoryScopeKind } from "./memories";
 import { tsvector, unconstrainedVector } from "./custom-types";
 import { documentStatuses } from "@/domain/document/document";
+import type { ScopedResource } from "@/domain/identity/organization-access";
+import type { KnowledgeScopeChangeSummary } from "@/domain/document/document-scope-change";
 
 export const documentStatus = pgEnum("document_status", [...documentStatuses]);
 
@@ -136,3 +138,17 @@ export const documentChunks = pgTable(
     index("document_chunks_search_idx").using("gin", table.search)
   ]
 );
+
+export const documentScopeChanges = pgTable("document_scope_changes", {
+  id: uuid().primaryKey().default(sql`uuidv7()`),
+  organizationId: uuid().notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  documentId: uuid().notNull(),
+  previousScope: jsonb().$type<ScopedResource>().notNull(),
+  scope: jsonb().$type<ScopedResource>().notNull(),
+  knowledge: jsonb().$type<KnowledgeScopeChangeSummary>().notNull(),
+  changedBy: uuid().notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
+}, (table) => [
+  foreignKey({ columns: [table.organizationId, table.documentId], foreignColumns: [documents.organizationId, documents.id], name: "document_scope_changes_document_fk" }).onDelete("cascade"),
+  index("document_scope_changes_document_idx").on(table.organizationId, table.documentId, table.createdAt)
+]);

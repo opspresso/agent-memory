@@ -10,12 +10,13 @@ import type { z } from "zod";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 
 import { useLocale, useT } from "../_i18n/provider";
-import { documentContentsResponseSchema, documentDetailResponseSchema, documentLibraryResponseSchema } from "../api-response-schemas";
+import { documentContentsResponseSchema, documentDetailResponseSchema, documentLibraryResponseSchema, documentScopeChangeResponseSchema } from "../api-response-schemas";
 import { responseJson, responseOk } from "../http-response";
 import { useOrganization } from "../organization-context";
 import { EmptyState, WorkspaceHeader, WorkspaceSection } from "../workspace-components";
 
 import { DocumentUpload } from "./document-upload";
+import { DocumentScopeEditor, DocumentScopeResult } from "./document-scope-editor";
 import classes from "./document-library.module.css";
 
 type DocumentView = z.infer<typeof documentDetailResponseSchema>;
@@ -121,6 +122,8 @@ function DocumentLibraryView({ selectedId }: { readonly selectedId?: string }) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [scopeResult, setScopeResult] = useState<z.infer<typeof documentScopeChangeResponseSchema>>();
   const [mutating, setMutating] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; documentId?: string }>();
   const [mutationError, setMutationError] = useState<string>();
@@ -138,6 +141,8 @@ function DocumentLibraryView({ selectedId }: { readonly selectedId?: string }) {
     setSelection({ id: selectedId, version: 0, retryAttempt: undefined });
     setPollPaused(false);
     setArchiveOpen(false);
+    setScopeOpen(false);
+    setScopeResult(undefined);
     setMutating(false);
     setMutationError(undefined);
   }
@@ -271,6 +276,8 @@ function DocumentLibraryView({ selectedId }: { readonly selectedId?: string }) {
           <Group justify="space-between" align="flex-start"><Stack gap={6}><Badge color={statusColor[selected.status]}>{t(`documentUi.status.${selected.status}`)}</Badge><Title order={2} className={classes.title}>{selected.title}</Title></Stack><Button variant="subtle" size="xs" leftSection={<IconRefresh size={14} />} onClick={refreshDetail}>{t("documentUi.refresh")}</Button></Group>
           <Text c="dimmed" size="sm">{t(`documentUi.help.${selected.status}`)}</Text>
           <Badge variant="light">{t(`workspace.scope.${selected.scope.kind}`)}</Badge>
+          {selected.status === "ready" && canManage ? <Button variant="light" disabled={mutating} onClick={() => setScopeOpen(true)}>{t("documentUi.scope.change")}</Button> : null}
+          {scopeResult?.document.id === selected.id ? <DocumentScopeResult knowledge={scopeResult.knowledge} /> : null}
           <dl className={classes.metadata}><dt>{t("documentUi.format")}</dt><dd>{selected.mimeType}</dd><dt>{t("documentUi.size")}</dt><dd>{new Intl.NumberFormat(locale).format(selected.sizeBytes)} bytes</dd><dt>{t("documentUi.created")}</dt><dd>{new Date(selected.createdAt).toLocaleString(locale)}</dd><dt>{t("documentUi.updated")}</dt><dd>{new Date(selected.updatedAt).toLocaleString(locale)}</dd><dt>{t("documentUi.attempts")}</dt><dd>{selected.processingAttempts}</dd></dl>
           {selected.processingError ? <Alert color="red" title={t("documentUi.processingError")}><Text size="sm" className={classes.error}>{selected.processingError}</Text></Alert> : null}
           {pollPaused ? <Alert color="gray">{t("documentUi.pollPaused")}</Alert> : null}
@@ -281,6 +288,13 @@ function DocumentLibraryView({ selectedId }: { readonly selectedId?: string }) {
         </Stack>}
       </Paper>
     </div>
+    {scopeOpen && selected ? <DocumentScopeEditor key={selected.id} document={selected} onClose={() => setScopeOpen(false)} onBusyChange={setMutating} onRefresh={() => { setScopeOpen(false); refreshDetail(); refreshList(); }} onChanged={(result) => {
+      setScopeOpen(false);
+      setScopeResult(result);
+      setDetail({ id: result.document.id, value: result.document });
+      setDocuments((current) => current.map((row) => row.id === result.document.id ? result.document : row));
+      setFeedback({ documentId: result.document.id, message: t("documentUi.scope.saved") });
+    }} /> : null}
     <Drawer position="right" size="lg" opened={uploadOpen} onClose={() => { if (!uploading) setUploadOpen(false); }} closeOnClickOutside={!uploading} closeOnEscape={!uploading} withCloseButton={!uploading} title={t("workspace.uploadTitle")} attributes={{ content: { "aria-label": t("workspace.uploadTitle") } }}>
       <DocumentUpload onUploadingChange={setUploading} onUploaded={(id) => { setUploadOpen(false); setUploading(false); refreshList(); choose(id); setFeedback({ message: t("documentUi.uploaded"), documentId: id }); }} />
     </Drawer>

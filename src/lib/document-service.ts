@@ -1,4 +1,5 @@
 import { buildListDocumentChunks } from "@/application/document/list-document-chunks";
+import { buildChangeDocumentScope } from "@/application/document/change-document-scope";
 import { buildGetDocumentChunk } from "@/application/document/get-document-chunk";
 import { buildListDocuments } from "@/application/document/list-documents";
 import { createHash, randomUUID } from "node:crypto";
@@ -16,6 +17,7 @@ import {
   documentIngestionQueue,
   documentObjectStorage,
   documentRepository,
+  documentScopeChangeRepository,
   ingestionReceiptRepository,
   textEmbeddingService
 } from "./container";
@@ -35,6 +37,7 @@ export const uploadDocumentRecord = buildUploadDocument({
 });
 
 export const getDocumentRecord = buildGetDocument(documentRepository);
+export const changeDocumentScopeRecord = buildChangeDocumentScope({ repository: documentScopeChangeRepository, clock: () => new Date() });
 
 export const archiveDocumentRecord = buildArchiveDocument({
   clock: () => new Date(),

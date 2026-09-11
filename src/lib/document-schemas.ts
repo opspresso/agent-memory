@@ -24,6 +24,14 @@ export const documentIngestSchema = z.object({
 
 export const documentIdSchema = z.uuid();
 
+export const changeDocumentScopeSchema = z.strictObject({
+  scope: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("organization") }),
+    z.strictObject({ kind: z.literal("team"), teamId: z.uuid() }),
+    z.strictObject({ kind: z.literal("user") })
+  ])
+});
+
 export const documentUploadFieldsSchema = z
   .object({
     scopeKind: z.enum(["organization", "team", "user"]),

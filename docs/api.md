@@ -187,7 +187,7 @@ AI 호출 quota의 `429`는 초 단위 `Retry-After` header를 포함한다. 문
 | `GET` | `/api/memories/:memoryId/versions` | Memory revision 조회 |
 | `GET`, `POST` | `/api/documents` | 문서 chunk 검색·원본 업로드 |
 | `GET` | `/api/documents/library` | 문서 목록과 처리 상태 |
-| `GET`, `DELETE` | `/api/documents/:documentId` | 문서 상태 조회·archive |
+| `GET`, `PATCH`, `DELETE` | `/api/documents/:documentId` | 문서 상태 조회·scope 변경·archive |
 | `POST` | `/api/documents/:documentId/retry` | 실패한 문서 처리 재시도 |
 | `GET` | `/api/documents/:documentId/chunks` | 처리된 문서 본문을 순서대로 페이지 조회 |
 | `GET` | `/api/document-chunks/:chunkId` | 현재 읽을 수 있는 원문 근거 조회 |
@@ -433,6 +433,18 @@ curl \
   "$AGENT_MEMORY_URL/api/documents/<documentId>"
 ```
 
+### 문서 scope 변경
+
+`PATCH /api/documents/:documentId`는 `{ "scope": { "kind": "organization" } }` 형태로 ready 문서의 scope를 변경한다. Team은 `{ "kind": "team", "teamId": UUID }`, 본인 전용은 `{ "kind": "user" }`다. 조직 식별자, 임의 사용자 ID, scope와 무관한 필드는 허용하지 않는다. 현재 문서와 대상 scope 모두 `manage` 권한을 요구하며, 다른 사용자의 개인 문서는 조직 관리자도 변경할 수 없다. Organization 대상은 admin·owner, team 대상은 해당 팀 manager 또는 조직 관리자만 허용한다.
+
+문서 `GET` 응답의 `ETag`를 `If-Match`로 전달한다. ETag는 큰따옴표로 감싼 `updatedAt` ISO timestamp(`"2026-09-11T00:00:00.000Z"`)다. 헤더 누락은 `428`, 잘못된 형식·입력은 `400`, 현재 값과 불일치는 `412`, ready가 아닌 문서는 `409`, 접근할 수 없거나 archived인 문서는 `404`다. 대상 팀이 현재 조직에 없으면 `400`을 반환한다.
+
+성공은 `200`과 `{ document, knowledge }`, 새 `ETag`를 반환한다. `knowledge.nodes`와 `knowledge.edges`는 각각 `{ updated, unchanged, skipped }` 건수를 포함한다. `knowledge.skipped`는 `{ resource: "node" | "edge", reason, count }` 목록이며, 숨겨진 지식의 ID·이름·출처는 반환하지 않는다. 제외 사유는 `access_denied`(관리 권한 없음), `source_scope`(다른 비공개 출처), `source_unavailable`(현재 유효한 출처 없음), `identity_conflict`(대상 scope의 동일 지식 충돌), `endpoint_scope`(관계 끝점의 공개 범위·유효 출처 불충족), `connected_edge`(기존 연결 관계의 접근 범위를 유지해야 함)다.
+
+문서·검증된 Knowledge scope·변경 이력을 한 transaction에서 저장한다. Chunk와 AI 후보는 자체 scope를 저장하지 않고 현재 문서 scope를 따른다. 문서 chunk를 직접 근거로 갖는 node·edge의 모든 출처가 현재 유효하고 대상 scope를 포함할 때만 변경한다. Node 변경은 기존 연결 edge의 범위도 보존해야 하며, edge 변경은 양 끝 node가 대상 scope에서 읽힐 수 있어야 한다. 충돌한 지식은 자동 병합하지 않는다. 제외 항목은 원래 scope를 유지하며 해당 문서 이외의 문서·Memory를 수정하지 않는다. 같은 scope를 다시 지정하면 현재 조건으로 Knowledge를 재검증하므로, 여러 출처의 공유를 완료한 후 다시 적용할 수 있다. 원문·chunk·embedding·후보 검토 이력·provenance는 보존한다. 승인된 후보의 재요청도 현재 읽을 수 있고 유효한 지식과 출처만 반환하므로, 범위 변경에서 제외된 개인 지식을 노출하지 않는다.
+
+공유 범위를 축소하거나 다른 팀으로 변경할 때, 제외된 지식이 새 문서 범위 밖에 남게 되면 `409`와 `code: "related_scope_conflict"`를 반환한다. 공통 properties·embedding은 출처별로 분리되어 있지 않으므로 해당 경우에는 문서·지식·변경 이력 모두 저장하지 않는다. 관련 지식의 충돌을 해결한 뒤 다시 변경하라.
+
 ### 재시도와 archive
 
 `failed` 상태만 retry할 수 있다.
@@ -446,7 +458,7 @@ curl -i \
 
 Retry는 원래 scope의 `write` 권한을 요구한다. 성공은 재시도 queue 등록을 수락했다는 `202`이며, 응답 Document는 등록 전 snapshot이므로 `status: "failed"`일 수 있다. 처리 완료 여부는 상태 조회 endpoint로 확인한다. `pending`, `processing`, `ready` 문서를 retry하면 `409`, archived 문서는 `404`다.
 
-`DELETE .../documents/:documentId`는 문서를 영구 제거하지 않고 archive하며 `204`를 반환한다. 원본과 chunk는 provenance 보존을 위해 유지하지만 검색, 상태 조회, retry, AI 후보 조회·승인에서는 제외한다. 삭제에는 원래 document scope의 `manage` 권한이 필요하다.
+`DELETE .../documents/:documentId`는 문서를 영구 제거하지 않고 archive하며 `204`를 반환한다. 원본과 chunk는 provenance 보존을 위해 유지하지만 검색, 상태 조회, retry, AI 후보 조회·승인에서는 제외한다. 삭제에는 원래 document scope의 `manage` 권한이 필요하다. 권한 확인 이후 scope가 달라지면 저장 시점에 보관을 거부하고 `404`를 반환한다.
 
 ### 문서 검색
 

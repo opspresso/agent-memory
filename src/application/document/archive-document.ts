@@ -32,7 +32,8 @@ export function buildArchiveDocument(
     const archived = await dependencies.repository.archive(
       access.organizationId,
       documentId,
-      dependencies.clock()
+      dependencies.clock(),
+      document.scope
     );
     if (!archived) {
       throw new DocumentNotFoundError();

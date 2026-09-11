@@ -1926,6 +1926,7 @@ describe("PostgreSQL schema", () => {
         now: createdAt
       })
     );
+    await pool.query("UPDATE team_members SET role = 'manager' WHERE organization_id = $1 AND team_id = $2 AND user_id = $3", [organization, team, user]);
     const promotion = await candidateRepository.accept({
       candidateId: candidate.id,
       organizationId: organization,
@@ -2059,7 +2060,7 @@ describe("PostgreSQL schema", () => {
       })
     );
     await expect(
-      repository.archive(organization, documentId, createdAt)
+      repository.archive(organization, documentId, createdAt, document.scope)
     ).resolves.toBe(true);
     await expect(repository.findById(organization, documentId)).resolves.toMatchObject({
       status: "archived"
@@ -2285,6 +2286,7 @@ describe("PostgreSQL schema", () => {
         now: createdAt
       })
     );
+    await pool.query("UPDATE team_members SET role = 'manager' WHERE organization_id = $1 AND team_id = $2 AND user_id = $3", [organization, team, user]);
     await expect(
       repository.mergeNodes({
         organizationId: organization,
@@ -2431,16 +2433,16 @@ describe("PostgreSQL schema", () => {
     await expect(
       repository.findEdgeById(organization, edge.id)
     ).resolves.toMatchObject({ id: edge.id });
-    await expect(repository.deleteEdge(organization, edge.id)).resolves.toBe(true);
+    await expect(repository.deleteEdge(organization, edge.id, edge.scope)).resolves.toBe(true);
     await expect(repository.findEdgeById(organization, edge.id)).resolves.toBeNull();
     const cascadingEdge = createKnowledgeEdge({
       ...edge,
       id: "70000000-0000-0000-0000-000000000010",
-      source: { memoryId: corroboratingMemoryId },
+      source: { memoryId: sourceMemoryId },
       now: createdAt
     });
     await repository.saveEdge(cascadingEdge);
-    await expect(repository.deleteNode(organization, sourceNodeId)).resolves.toBe(true);
+    await expect(repository.deleteNode(organization, sourceNodeId, scope)).resolves.toBe(true);
     await expect(
       repository.findNodeById(organization, sourceNodeId)
     ).resolves.toBeNull();

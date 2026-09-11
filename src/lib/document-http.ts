@@ -10,6 +10,15 @@ import { IngestionConflictError } from "@/domain/shared/ingestion-receipt";
 import type { DocumentSearchHit } from "@/domain/document/document-repository";
 
 import { aiErrorResponse } from "./ai-http";
+import { DocumentRelatedScopeConflictError, DocumentScopeConflictError, DocumentScopeNotReadyError } from "@/application/document/change-document-scope";
+
+export const documentScopeEtag = (document: Pick<Document, "updatedAt">) => `"${document.updatedAt.toISOString()}"`;
+
+export function parseDocumentScopeEtag(value: string): string | null {
+  const match = /^"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)"$/.exec(value);
+  if (!match || !Number.isFinite(Date.parse(match[1]!))) return null;
+  return new Date(match[1]!).toISOString() === match[1] ? match[1] : null;
+}
 
 export const maxDocumentBytes = 10 * 1_024 * 1_024;
 export const maxDocumentRequestBytes = maxDocumentBytes + 64 * 1_024;
@@ -66,6 +75,9 @@ export async function boundedFormData(
 }
 
 export function documentErrorResponse(error: unknown): Response | null {
+  if (error instanceof DocumentRelatedScopeConflictError) return Response.json({ error: error.message, code: "related_scope_conflict" }, { status: 409 });
+  if (error instanceof DocumentScopeConflictError) return Response.json({ error: error.message }, { status: 412 });
+  if (error instanceof DocumentScopeNotReadyError) return Response.json({ error: error.message }, { status: 409 });
   if (error instanceof IngestionConflictError) return Response.json({ error: error.message }, { status: 409 });
   const aiResponse = aiErrorResponse(error);
   if (aiResponse) {

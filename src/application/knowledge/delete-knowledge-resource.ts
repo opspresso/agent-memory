@@ -26,7 +26,7 @@ export function buildDeleteKnowledgeNode(repository: KnowledgeGraphRepository) {
     if (!canAccessScopedResource(access, "manage", node.scope)) {
       throw new KnowledgeGraphAccessDeniedError();
     }
-    if (!await repository.deleteNode(access.organizationId, nodeId)) {
+    if (!await repository.deleteNode(access.organizationId, nodeId, node.scope)) {
       throw new KnowledgeNodeNotFoundError();
     }
   };
@@ -44,7 +44,7 @@ export function buildDeleteKnowledgeEdge(repository: KnowledgeGraphRepository) {
     if (!canAccessScopedResource(access, "manage", edge.scope)) {
       throw new KnowledgeGraphAccessDeniedError();
     }
-    if (!await repository.deleteEdge(access.organizationId, edgeId)) {
+    if (!await repository.deleteEdge(access.organizationId, edgeId, edge.scope)) {
       throw new KnowledgeEdgeNotFoundError();
     }
   };

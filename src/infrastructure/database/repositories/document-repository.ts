@@ -57,7 +57,7 @@ function scopeFromRow(row: DocumentRow): DocumentScope {
   return { kind: "organization", organizationId: row.organizationId };
 }
 
-function documentFromRow(row: DocumentRow): Document {
+export function documentFromRow(row: DocumentRow): Document {
   return {
     id: row.id,
     scope: scopeFromRow(row),
@@ -431,7 +431,7 @@ export function createDocumentRepository(
         );
     },
 
-    async archive(organizationId, documentId, now) {
+    async archive(organizationId, documentId, now, expectedScope) {
       const [archived] = await db
         .update(documents)
         .set({
@@ -444,6 +444,10 @@ export function createDocumentRepository(
           and(
             eq(documents.organizationId, organizationId),
             eq(documents.id, documentId),
+            eq(documents.organizationId, expectedScope.organizationId),
+            eq(documents.scopeKind, expectedScope.kind),
+            expectedScope.kind === "team" ? eq(documents.teamId, expectedScope.teamId) : isNull(documents.teamId),
+            expectedScope.kind === "user" ? eq(documents.userId, expectedScope.userId) : isNull(documents.userId),
             sql`${documents.status} <> 'archived'`
           )
         )

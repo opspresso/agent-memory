@@ -11,7 +11,7 @@ import {
 } from "../schema";
 
 export function createOrganizationAccessRepository(
-  db: AgentMemoryDatabase
+  db: Pick<AgentMemoryDatabase, "select">
 ): OrganizationAccessRepository {
   async function findAccess(
     organizationPredicate: ReturnType<typeof eq>,

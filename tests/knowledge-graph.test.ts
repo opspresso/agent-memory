@@ -163,7 +163,7 @@ describe("knowledge graph", () => {
     };
 
     await expect(remove(managerAccess, existing.id)).resolves.toBeUndefined();
-    expect(deleteNode).toHaveBeenCalledWith("organization-1", existing.id);
+    expect(deleteNode).toHaveBeenCalledWith("organization-1", existing.id, existing.scope);
   });
 
   it("requires manage permission to delete a graph node", async () => {
@@ -216,7 +216,7 @@ describe("knowledge graph", () => {
     };
 
     await expect(remove(managerAccess, existing.id)).resolves.toBeUndefined();
-    expect(deleteEdge).toHaveBeenCalledWith("organization-1", existing.id);
+    expect(deleteEdge).toHaveBeenCalledWith("organization-1", existing.id, existing.scope);
   });
 
   it("requires exactly one source reference", () => {
