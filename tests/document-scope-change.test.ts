@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildChangeDocumentScope, DocumentScopeConflictError, DocumentScopeNotReadyError } from "@/application/document/change-document-scope";
+import { buildChangeDocumentScope, DocumentRelatedScopeConflictError, DocumentScopeConflictError, DocumentScopeNotReadyError } from "@/application/document/change-document-scope";
 import { DocumentAccessDeniedError } from "@/application/document/upload-document";
 import { DocumentNotFoundError } from "@/application/document/get-document";
 import { documentErrorResponse, documentScopeEtag, parseDocumentScopeEtag } from "@/lib/document-http";
@@ -20,7 +20,8 @@ describe("document scope boundary", () => {
 
   it.each([
     ["not_found", DocumentNotFoundError, 404], ["access_denied", DocumentAccessDeniedError, 403],
-    ["conflict", DocumentScopeConflictError, 412], ["not_ready", DocumentScopeNotReadyError, 409]
+    ["conflict", DocumentScopeConflictError, 412], ["not_ready", DocumentScopeNotReadyError, 409],
+    ["related_scope_conflict", DocumentRelatedScopeConflictError, 409]
   ] as const)("maps repository %s to the public error", async (status, error, code) => {
     const change = buildChangeDocumentScope({ repository: { changeScope: vi.fn().mockResolvedValue({ status }) }, clock: () => now });
     await expect(change(input)).rejects.toBeInstanceOf(error);

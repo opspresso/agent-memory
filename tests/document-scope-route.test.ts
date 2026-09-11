@@ -4,7 +4,7 @@ vi.mock("@/lib/organization-authorization", () => ({ authorizeOrganizationRoute:
 vi.mock("@/lib/document-service", () => ({ getDocumentRecord: mocks.get, changeDocumentScopeRecord: mocks.change, archiveDocumentRecord: vi.fn() }));
 import { GET, PATCH } from "@/app/api/documents/[documentId]/route";
 import { createDocument } from "@/domain/document/document";
-import { DocumentScopeConflictError } from "@/application/document/change-document-scope";
+import { DocumentRelatedScopeConflictError, DocumentScopeConflictError } from "@/application/document/change-document-scope";
 
 const id = "00000000-0000-4000-8000-000000000001";
 const context = { params: Promise.resolve({ documentId: id }) };
@@ -46,5 +46,11 @@ describe("document scope HTTP route", () => {
     expect(mocks.change).not.toHaveBeenCalled();
     mocks.change.mockRejectedValueOnce(new DocumentScopeConflictError());
     expect((await PATCH(request(), context)).status).toBe(412);
+  });
+  it("distinguishes unsafe scope restrictions from stale document state", async () => {
+    mocks.change.mockRejectedValueOnce(new DocumentRelatedScopeConflictError());
+    const response = await PATCH(request(undefined, { scope: { kind: "user" } }), context);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "related_scope_conflict" });
   });
 });

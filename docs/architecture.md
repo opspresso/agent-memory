@@ -160,6 +160,8 @@ Application의 scope 변경 use case가 repository의 원자적 변경 port를 �
 
 Graph 저장·삭제·병합과 후보 검토는 같은 조직별 Knowledge scope 잠금의 공유 모드를 사용한다. Scope 변경 중에는 이 쓰기들을 대기시키며 일반 조회는 계속 허용한다. 검증한 출처 row는 공유 잠금으로 commit까지 보존한다. 지식 생성은 저장 transaction에서 source scope를 다시 확인하고, 관계 생성은 끝점 scope도 확인한다. 후보 검토는 현재 문서 scope와 검토자의 활성 멤버십·관리 권한을 다시 확인한다. 삭제는 application이 확인한 scope를 repository에서 재검사한다. Scope 변경과 겹친 오래된 mutation으로 이전 권한을 적용하지 않는다.
 
+문서 범위 축소·이동 시 제외된 지식이 새 source scope 밖에 남는 변경은 전체를 거부한다. 출처별로 분리하지 않은 공통 properties·embedding의 노출을 방지하기 위해 문서 저장 전에 최종 graph 범위를 검증한다. 충돌 검사는 출처·권한 검증을 통과해 실제 이동할 수 있는 후보와 대상 범위의 기존 지식 사이에 수행한다. 보관 요청도 권한 검사 시 읽은 document scope를 저장 조건으로 사용해 동시 scope 변경에 이전 권한을 적용하지 않는다.
+
 ### 후속 Knowledge enrichment
 
 `buildIngestDocument` application operation은 문서 처리를 완료한 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. Worker는 job decode, operation 호출, queue retry와 로그를 담당한다. 후속 queue 등록 실패는 문서 처리 상태를 되돌리지 않으며 ingestion 재실행에서 chunk 등록을 다시 시도한다.

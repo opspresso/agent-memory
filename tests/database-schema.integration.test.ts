@@ -2060,7 +2060,7 @@ describe("PostgreSQL schema", () => {
       })
     );
     await expect(
-      repository.archive(organization, documentId, createdAt)
+      repository.archive(organization, documentId, createdAt, document.scope)
     ).resolves.toBe(true);
     await expect(repository.findById(organization, documentId)).resolves.toMatchObject({
       status: "archived"

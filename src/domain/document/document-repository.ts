@@ -1,4 +1,4 @@
-import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import type { OrganizationAccess, ScopedResource } from "@/domain/identity/organization-access";
 import type { IngestionReceipt } from "@/domain/shared/ingestion-receipt";
 
 import type { Document, DocumentChunk } from "./document";
@@ -84,7 +84,8 @@ export interface DocumentRepository {
   archive(
     organizationId: string,
     documentId: string,
-    now: Date
+    now: Date,
+    expectedScope: ScopedResource
   ): Promise<boolean>;
   search(input: DocumentSearchInput): Promise<readonly DocumentSearchHit[]>;
 }

@@ -719,6 +719,7 @@ export const en = {
   "documentUi.scope.reason.connected_edge": "Existing relation scope must be preserved",
   "documentUi.scope.reapply": "Skipped knowledge keeps its current scope. Resolve other source sharing or conflicts, then apply the same scope to check again.",
   "documentUi.scope.conflict": "This document changed. Refresh to review its current scope before applying again.",
+  "documentUi.scope.relatedConflict": "Related knowledge would remain shared more broadly. Resolve its sharing conflicts before restricting this document. No document or knowledge changes were saved.",
   "documentUi.scope.unavailable": "Document status or access changed. Refresh to check the latest state.",
   "documentUi.archiveConfirm": "Archive this document? Its contents and dependent knowledge will no longer appear in search.",
   "documentUi.archived": "Document archived.",

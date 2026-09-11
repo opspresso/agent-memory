@@ -85,7 +85,8 @@ describe("document access", () => {
     expect(archive).toHaveBeenCalledWith(
       "organization-1",
       "document-1",
-      now
+      now,
+      document().scope
     );
   });
 

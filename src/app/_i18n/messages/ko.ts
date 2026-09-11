@@ -718,6 +718,7 @@ export const ko: Messages = {
   "documentUi.scope.reason.connected_edge": "기존 연결 관계의 공개 범위 유지 필요",
   "documentUi.scope.reapply": "제외된 지식은 기존 범위를 유지합니다. 다른 출처의 공유나 충돌을 해결한 뒤 같은 범위를 다시 적용하면 재검증합니다.",
   "documentUi.scope.conflict": "문서가 변경되었습니다. 새로고침하여 최신 범위를 확인한 뒤 다시 적용하세요.",
+  "documentUi.scope.relatedConflict": "연결된 지식이 더 넓은 범위에 남아 있어 문서를 제한할 수 없습니다. 관련 지식의 공유 충돌을 먼저 해결하세요. 문서와 지식은 변경되지 않았습니다.",
   "documentUi.scope.unavailable": "문서의 상태나 접근 권한이 변경되었습니다. 새로고침하여 확인하세요.",
   "documentUi.archiveConfirm": "문서를 보관할까요? 문서 내용과 이 문서에 의존하는 지식은 검색에서 제외됩니다.",
   "documentUi.archived": "문서를 보관했습니다.",

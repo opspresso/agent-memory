@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { z } from "zod";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 import { useT } from "../_i18n/provider";
-import { documentDetailResponseSchema, documentScopeChangeResponseSchema, teamsResponseSchema } from "../api-response-schemas";
+import { documentDetailResponseSchema, documentScopeChangeResponseSchema, documentScopeRestrictionResponseSchema, teamsResponseSchema } from "../api-response-schemas";
 import { responseJson } from "../http-response";
 import { useOrganization } from "../organization-context";
 
@@ -74,6 +74,14 @@ export function DocumentScopeEditor({ document, onClose, onChanged, onBusyChange
         body: JSON.stringify({ scope: scopeKind === "team" ? { kind: scopeKind, teamId } : { kind: scopeKind } })
       });
       if (request.signal.aborted) return;
+      if (response.status === 409) {
+        const body: unknown = await response.json().catch(() => null);
+        if (request.signal.aborted) return;
+        if (documentScopeRestrictionResponseSchema.safeParse(body).success) {
+          setError(t("documentUi.scope.relatedConflict"));
+          return;
+        }
+      }
       if ([403, 404, 409, 412].includes(response.status)) {
         setNeedsRefresh(true);
         setError(t(response.status === 412 ? "documentUi.scope.conflict" : "documentUi.scope.unavailable"));

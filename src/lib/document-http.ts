@@ -10,7 +10,7 @@ import { IngestionConflictError } from "@/domain/shared/ingestion-receipt";
 import type { DocumentSearchHit } from "@/domain/document/document-repository";
 
 import { aiErrorResponse } from "./ai-http";
-import { DocumentScopeConflictError, DocumentScopeNotReadyError } from "@/application/document/change-document-scope";
+import { DocumentRelatedScopeConflictError, DocumentScopeConflictError, DocumentScopeNotReadyError } from "@/application/document/change-document-scope";
 
 export const documentScopeEtag = (document: Pick<Document, "updatedAt">) => `"${document.updatedAt.toISOString()}"`;
 
@@ -75,6 +75,7 @@ export async function boundedFormData(
 }
 
 export function documentErrorResponse(error: unknown): Response | null {
+  if (error instanceof DocumentRelatedScopeConflictError) return Response.json({ error: error.message, code: "related_scope_conflict" }, { status: 409 });
   if (error instanceof DocumentScopeConflictError) return Response.json({ error: error.message }, { status: 412 });
   if (error instanceof DocumentScopeNotReadyError) return Response.json({ error: error.message }, { status: 409 });
   if (error instanceof IngestionConflictError) return Response.json({ error: error.message }, { status: 409 });

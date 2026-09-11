@@ -162,6 +162,7 @@ export const documentLibraryResponseSchema = z.object({
 });
 
 const scopeChangeCountsSchema = z.object({ updated: z.number().int().nonnegative(), unchanged: z.number().int().nonnegative(), skipped: z.number().int().nonnegative() });
+export const documentScopeRestrictionResponseSchema = z.object({ code: z.literal("related_scope_conflict") });
 export const documentScopeChangeResponseSchema = z.object({
   document: documentDetailResponseSchema,
   knowledge: z.object({

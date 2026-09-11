@@ -96,6 +96,15 @@ test("changes document sharing with verified knowledge, reports exclusions and p
   await modal.getByRole("button", { name: "범위 적용", exact: true }).click();
   await expect(page.getByText("개체: 변경 0개 · 동일 범위 2개 · 제외 0개", { exact: true })).toBeVisible();
   await expect(page.getByText("관계: 변경 0개 · 동일 범위 1개 · 제외 0개", { exact: true })).toBeVisible();
+  await json(page, "/api/knowledge/edges", "POST", { scope: { kind: "organization" }, sourceNodeId: a.id, targetNodeId: b.id, predicate: "uses", source: { chunkId: otherChunk } });
+  const beforeRestriction = await json<{ scope: unknown; updatedAt: string }>(page, `/api/documents/${docId}`);
+  await page.getByRole("button", { name: "공유 범위 변경", exact: true }).click();
+  await modal.getByRole("combobox", { name: "공유 범위", exact: true }).click();
+  await page.getByRole("option", { name: "개인 · 나만 사용", exact: true }).click();
+  await modal.getByRole("button", { name: "범위 적용", exact: true }).click();
+  await expect(modal.getByText("연결된 지식이 더 넓은 범위에 남아 있어 문서를 제한할 수 없습니다. 관련 지식의 공유 충돌을 먼저 해결하세요. 문서와 지식은 변경되지 않았습니다.", { exact: true })).toBeVisible();
+  expect(await json(page, `/api/documents/${docId}`)).toMatchObject({ scope: beforeRestriction.scope, updatedAt: beforeRestriction.updatedAt });
+  await modal.getByRole("button", { name: "취소", exact: true }).click();
   expect(errors).toEqual([]);
   await memberContext.close();
 });

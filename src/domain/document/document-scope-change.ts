@@ -23,6 +23,6 @@ export interface ChangeDocumentScopeInput {
 export interface DocumentScopeChangeRepository {
   changeScope(input: ChangeDocumentScopeInput): Promise<
     | { readonly status: "changed"; readonly document: Document; readonly knowledge: KnowledgeScopeChangeSummary }
-    | { readonly status: "not_found" | "access_denied" | "conflict" | "not_ready" | "invalid_target" }
+    | { readonly status: "not_found" | "access_denied" | "conflict" | "not_ready" | "invalid_target" | "related_scope_conflict" }
   >;
 }

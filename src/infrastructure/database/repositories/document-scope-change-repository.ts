@@ -34,8 +34,6 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
         }
         const now = new Date(Math.max(input.now.getTime(), row.updatedAt.getTime() + 1));
         const scopeValues = { scopeKind: input.scope.kind, teamId: input.scope.kind === "team" ? input.scope.teamId : null, userId: input.scope.kind === "user" ? input.scope.userId : null };
-        const [updated] = await transaction.update(documents).set({ ...scopeValues, updatedAt: now }).where(eq(documents.id, row.id)).returning();
-        if (!updated) throw new Error("document scope update returned no row");
         const chunks = await transaction.select({ id: documentChunks.id }).from(documentChunks).where(and(eq(documentChunks.organizationId, organizationId), eq(documentChunks.documentId, row.id)));
         const chunkIds = chunks.map((chunk) => chunk.id);
         const linkedNodes = chunkIds.length ? await transaction.select({ id: knowledgeNodeSources.nodeId }).from(knowledgeNodeSources).where(and(eq(knowledgeNodeSources.organizationId, organizationId), inArray(knowledgeNodeSources.chunkId, chunkIds))) : [];
@@ -51,6 +49,11 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
         const nodeSources = allNodeIds.length ? await transaction.select().from(knowledgeNodeSources).where(and(eq(knowledgeNodeSources.organizationId, organizationId), inArray(knowledgeNodeSources.nodeId, allNodeIds))) : [];
         const edgeSources = edgeIds.length ? await transaction.select().from(knowledgeEdgeSources).where(and(eq(knowledgeEdgeSources.organizationId, organizationId), inArray(knowledgeEdgeSources.edgeId, edgeIds))) : [];
         const sources = await loadKnowledgeSourceScopes(transaction, organizationId, [...nodeSources, ...edgeSources].map(knowledgeSourceFromRow), input.now);
+        // Evaluate the proposed source scope before persisting any changes.
+        for (const chunkId of chunkIds) {
+          const source = sources.get(`chunk:${chunkId}`);
+          if (source) sources.set(`chunk:${chunkId}`, { ...source, scope: input.scope });
+        }
         function sourceIssue(provenance: readonly KnowledgeSource[]) {
           if (!provenance.length || provenance.some((source) => !sources.get(sourceKey(source))?.available)) return "source_unavailable" as const;
           if (provenance.some((source) => !scopeCovers(sources.get(sourceKey(source))!.scope, input.scope))) return "source_scope" as const;
@@ -81,12 +84,16 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
           }
           return result;
         }
-        const nodeIdentities = identities([...possibleDuplicates.filter((node) => sameScope(knowledgeScopeFromRow(node), input.scope)), ...nodes.filter((node) => affectedNodes.has(node.id))], nodeIdentity);
+        const eligibleNodes = nodes.filter((node) => affectedNodes.has(node.id) &&
+          canAccessScopedResource(access, "manage", knowledgeScopeFromRow(node)) && !sourceIssue(nodeProvenance.get(node.id) ?? []));
+        const eligibleEdges = edges.filter((edge) => affectedEdges.has(edge.id) &&
+          canAccessScopedResource(access, "manage", knowledgeScopeFromRow(edge)) && !sourceIssue(edgeProvenance.get(edge.id) ?? []));
+        const nodeIdentities = identities([...possibleDuplicates.filter((node) => sameScope(knowledgeScopeFromRow(node), input.scope)), ...eligibleNodes], nodeIdentity);
         const sourceNodeIds = [...new Set(edges.filter((edge) => affectedEdges.has(edge.id)).map((edge) => edge.sourceNodeId))];
         const possibleEdgeDuplicates = sourceNodeIds.length ? await transaction.select().from(knowledgeEdges).where(and(
           eq(knowledgeEdges.organizationId, organizationId), eq(knowledgeEdges.scopeKind, input.scope.kind), inArray(knowledgeEdges.sourceNodeId, sourceNodeIds)
         )) : [];
-        const edgeIdentities = identities([...possibleEdgeDuplicates.filter((edge) => sameScope(knowledgeScopeFromRow(edge), input.scope)), ...edges.filter((edge) => affectedEdges.has(edge.id))], edgeIdentity);
+        const edgeIdentities = identities([...possibleEdgeDuplicates.filter((edge) => sameScope(knowledgeScopeFromRow(edge), input.scope)), ...eligibleEdges], edgeIdentity);
         const plan = planKnowledgeScopeChange({
           access, target: input.scope,
           nodes: nodes.map((node) => ({
@@ -104,6 +111,15 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
             identityConflict: (edgeIdentities.get(edgeIdentity(edge))?.size ?? 0) > 1
           }))
         });
+        const changedNodes = new Set(plan.nodeIds), changedEdges = new Set(plan.edgeIds);
+        const uncoveredNode = nodes.some((node) => affectedNodes.has(node.id) && !changedNodes.has(node.id) && !scopeCovers(input.scope, knowledgeScopeFromRow(node)));
+        const uncoveredEdge = edges.some((edge) => affectedEdges.has(edge.id) && !changedEdges.has(edge.id) && !scopeCovers(input.scope, knowledgeScopeFromRow(edge)));
+        // Shared properties and embeddings are not attributed per source. A
+        // skipped, wider graph resource could retain information from this
+        // document even after its provenance is filtered from public reads.
+        if (uncoveredNode || uncoveredEdge) return { status: "related_scope_conflict" };
+        const [updated] = await transaction.update(documents).set({ ...scopeValues, updatedAt: now }).where(eq(documents.id, row.id)).returning();
+        if (!updated) throw new Error("document scope update returned no row");
         if (plan.nodeIds.length) await transaction.update(knowledgeNodes).set({ ...scopeValues, updatedAt: now }).where(and(eq(knowledgeNodes.organizationId, organizationId), inArray(knowledgeNodes.id, plan.nodeIds)));
         if (plan.edgeIds.length) await transaction.update(knowledgeEdges).set(scopeValues).where(and(eq(knowledgeEdges.organizationId, organizationId), inArray(knowledgeEdges.id, plan.edgeIds)));
         await transaction.insert(documentScopeChanges).values({ organizationId, documentId: row.id, previousScope: knowledgeScopeFromRow(row), scope: input.scope, knowledge: plan.summary, changedBy: access.userId, createdAt: now });
