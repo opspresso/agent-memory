@@ -2,9 +2,11 @@ import type { KnowledgeCandidate } from "./knowledge-candidate";
 import { InvalidKnowledgeCandidateError } from "./knowledge-candidate";
 import { entityReviewKey, relationshipReviewKey } from "./knowledge-candidate-selection";
 import type { KnowledgeAliasVerification, KnowledgeCandidateAssessment, KnowledgeItemVerification } from "./knowledge-assessment";
+import { currentKnowledgeAssessmentPolicyVersion } from "./knowledge-assessment";
 import type { OrganizationKnowledgeOntology } from "./knowledge-ontology-reader";
 import { evaluateKnowledgeOntology } from "./knowledge-ontology";
 import { knowledgeEntityEligibilityIssue } from "./knowledge-entity-eligibility";
+import { normalizeKnowledgeKind } from "./knowledge-identity";
 
 const vague = new Set(["associated_with", "related_to", "related_with", "co_occurs_with"]);
 const incidentalMovement = new Set(["comes_from", "went_to", "visits", "visited", "responds_to"]);
@@ -43,7 +45,8 @@ export function assessKnowledgeCandidate(input: {
     const verdict = result.conflict || result.support === "uncertain" ? "review"
       : result.support === "unsupported" || result.usefulness === "incidental" ? "ignore"
       : evidence && source.includes(evidence) ? "accept" : "review";
-    return [key, { item: key, verdict, evidence: evidence && source.includes(evidence) ? evidence : "", reason: result.reason }] as const;
+    return [key, { item: key, representation:result.representation, ...(result.entityKind?{ entityKind:normalizeKnowledgeKind(result.entityKind) }:{}),
+      verdict, evidence: evidence && source.includes(evidence) ? evidence : "", reason: result.reason }] as const;
   }));
   const change = (key: string, verdict: "accept" | "review" | "ignore", reason?: string) => {
     const current = items.get(key)!;
@@ -54,13 +57,19 @@ export function assessKnowledgeCandidate(input: {
   const unresolvedAliases = new Set(graph.relationships.filter((relationship) => relationship.predicate === "alias_of")
     .flatMap((relationship) => [relationship.sourceKey, relationship.targetKey]).concat(aliases.filter((alias) => alias.verdict === "review").map((alias) => alias.entityKey)));
   const ineligibleEntities = new Set<string>();
+  const kindMatches = (key: string,kind: string) => normalizeKnowledgeKind(verifications.get(entityReviewKey(key))?.entityKind??"") === normalizeKnowledgeKind(kind);
   for (const entity of graph.entities) {
     const issue = knowledgeEntityEligibilityIssue(entity, input.content);
-    if (issue) {
+    const representation = verifications.get(entityReviewKey(entity.key))!.representation;
+    if (issue || (representation && representation !== "entity" && representation !== "uncertain")) {
       ineligibleEntities.add(entity.key);
-      change(entityReviewKey(entity.key), "ignore", issue === "assertion_kind"
-        ? "An assertion must be represented as a relationship, not an entity."
-        : "The proposed entity name does not occur in the source.");
+      change(entityReviewKey(entity.key), "ignore", issue === "name_not_in_source"
+        ? "The proposed entity name does not occur in the source."
+        : "The proposed item is a reference or assertion, not an independent named entity.");
+    } else if (representation !== "entity") {
+      change(entityReviewKey(entity.key), "review", "Independent entity representation has not been established.");
+    } else if (!kindMatches(entity.key,entity.kind)) {
+      change(entityReviewKey(entity.key), "review", "Independent source verification did not confirm the proposed entity kind.");
     } else if (unresolvedAliases.has(entity.key)) {
       change(entityReviewKey(entity.key), "review", "Alias identity needs resolution before creating separate entities.");
     } else if (!allowed(entity.kind) && items.get(entityReviewKey(entity.key))?.verdict === "accept") {
@@ -73,6 +82,10 @@ export function assessKnowledgeCandidate(input: {
       change(key, "ignore", "The relationship references an ineligible entity.");
       return;
     }
+    const representation = verifications.get(key)!.representation;
+    if (representation !== "relationship") {
+      change(key, !representation || representation === "uncertain" ? "review" : "ignore", "The proposed item is not a verified relationship representation.");
+    }
     if (relationship.predicate === "alias_of") { change(key, "review", "Alias identity needs resolution before merging entities."); }
     if (vague.has(relationship.predicate)) { change(key, "ignore", "The relation does not identify a specific fact."); }
     if (incidentalMovement.has(relationship.predicate)) { change(key, "ignore", "An unqualified movement or response in one scene is not a durable relationship. Model a consequential event with its context instead."); }
@@ -80,7 +93,7 @@ export function assessKnowledgeCandidate(input: {
     const endpoints = [relationship.sourceKey, relationship.targetKey].map((key) => graph.entities.find((entity) => entity.key === key)!);
     if (!allowed(undefined, relationship.predicate) || endpoints.some((entity) => {
       const result = verifications.get(entityReviewKey(entity.key))!;
-      return unresolvedAliases.has(entity.key) || !allowed(entity.kind) || result.support !== "explicit" || result.conflict ||
+      return unresolvedAliases.has(entity.key) || !allowed(entity.kind) || !kindMatches(entity.key,entity.kind) || result.representation !== "entity" || result.support !== "explicit" || result.conflict ||
         !normalize(result.evidence) || !source.includes(normalize(result.evidence));
     })) {
       change(key, "review", "The relation or one of its endpoints needs review.");
@@ -96,5 +109,5 @@ export function assessKnowledgeCandidate(input: {
       }
     }
   });
-  return { model: input.model, policyVersion: "evidence-v2", assessedAt: input.now.toISOString(), items: [...items.values()], ...(aliases.length ? { aliases } : {}) };
+  return { model: input.model, policyVersion: currentKnowledgeAssessmentPolicyVersion, assessedAt: input.now.toISOString(), items: [...items.values()], ...(aliases.length ? { aliases } : {}) };
 }

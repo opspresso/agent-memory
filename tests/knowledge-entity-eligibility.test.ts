@@ -29,7 +29,7 @@ describe("entity eligibility independent of model confidence", () => {
         relationships: [{ sourceKey: "bad", targetKey: "liu", predicate: "involves", evidence: [content] }] } });
     const result = assessKnowledgeCandidate({ candidate, content, model: "verifier", now,
       ontology: { mode, ontology: { nodeKinds: ["person", "concept"], edgePredicates: ["involves"] } },
-      items: ["entity:bad", "entity:liu", "relationship:0"].map((item) => ({ item, support: "explicit", usefulness: "useful",
+      items: ["entity:bad", "entity:liu", "relationship:0"].map((item) => ({ item, representation: item.startsWith("entity:") ? "entity" : "relationship", entityKind: "person", support: "explicit", usefulness: "useful",
         conflict: false, evidence: content, reason: "Positive model judgement." })) });
     expect(result.items.map((item) => item.verdict)).toEqual(["ignore", "accept", "ignore"]);
   });

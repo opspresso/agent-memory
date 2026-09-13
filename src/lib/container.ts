@@ -15,8 +15,9 @@ import { createIngestionReceiptRepository } from "@/infrastructure/database/repo
 import { createTextEmbeddingService } from "@/infrastructure/ai/text-embedding-service";
 import { createTextRerankerService } from "@/infrastructure/ai/text-reranker-service";
 import { createKnowledgeVerificationService } from "@/infrastructure/ai/knowledge-verification-service";
-import { createKnowledgeExtractionService } from "@/infrastructure/ai/knowledge-extraction-service";
+import { createEntityFirstKnowledgeExtractionService } from "@/infrastructure/ai/knowledge-entity-first-extraction-service";
 import { readKnowledgeExtractionLanguage } from "./knowledge-extraction-configuration";
+import { readKnowledgeVerificationConfiguration } from "./knowledge-verification-configuration";
 import {
   createAiRequestLimiter,
   readAiRequestLimits
@@ -155,7 +156,7 @@ function createConfiguredKnowledgeExtractionService() {
       "KNOWLEDGE_EXTRACTION_BASE_URL must be set when KNOWLEDGE_EXTRACTION_MODEL is enabled"
     );
   }
-  return createKnowledgeExtractionService({
+  return createEntityFirstKnowledgeExtractionService({
     apiKey: process.env.KNOWLEDGE_EXTRACTION_API_KEY,
     baseUrl: knowledgeExtractionBaseUrl,
     model: knowledgeExtractionModel,
@@ -166,11 +167,10 @@ function createConfiguredKnowledgeExtractionService() {
 export const knowledgeExtractionService =
   createConfiguredKnowledgeExtractionService();
 
-export const knowledgeVerificationService = knowledgeExtractionModel && knowledgeExtractionBaseUrl
+const verificationConfiguration = readKnowledgeVerificationConfiguration();
+export const knowledgeVerificationService = verificationConfiguration
   ? createKnowledgeVerificationService({
-      apiKey: process.env.KNOWLEDGE_EXTRACTION_API_KEY,
-      baseUrl: knowledgeExtractionBaseUrl,
-      model: knowledgeExtractionModel,
+      ...verificationConfiguration,
       requestLimiter: aiRequestLimiter
     })
   : undefined;

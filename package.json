@@ -12,6 +12,7 @@
     "test:e2e": "playwright test",
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "test:watch": "vitest",
+    "eval:knowledge": "node --env-file-if-exists=.env.local --import tsx evaluation/knowledge/run.mts",
     "architecture": "depcruise src --config dependency-cruiser.config.cjs",
     "db:generate": "node scripts/generate-schema.mjs",
     "db:studio": "drizzle-kit studio",
@@ -63,6 +64,7 @@
     "postcss": "^8.5.26",
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",
+    "tsx": "^4.23.13",
     "typescript": "~5.9.3",
     "vitest": "^4.1.11"
   },

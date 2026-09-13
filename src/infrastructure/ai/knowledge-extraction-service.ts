@@ -13,7 +13,7 @@ import { groundKnowledgeGraph } from "@/domain/knowledge/knowledge-extraction-qu
 import { isKnowledgeEntityKind } from "@/domain/knowledge/knowledge-entity-eligibility";
 import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 
-interface KnowledgeExtractionServiceConfiguration {
+export interface KnowledgeExtractionServiceConfiguration {
   readonly apiKey?: string;
   readonly baseUrl: string;
   readonly model: string;
@@ -22,7 +22,7 @@ interface KnowledgeExtractionServiceConfiguration {
   readonly request?: typeof fetch;
 }
 
-const proposedGraphSchema = z.object({
+export const proposedGraphSchema = z.object({
   entities: z
     .array(
       z.object({
@@ -92,7 +92,7 @@ function ontologyInstructions(
   return lines;
 }
 
-function extractionInstructions(
+export function extractionInstructions(
   ontology: KnowledgeExtractionOntologyHint | undefined,
   language: KnowledgeExtractionLanguage
 ): string {
@@ -168,7 +168,7 @@ function markdownLinkNames(content: string): ReadonlyMap<string, string> {
   return names;
 }
 
-function normalizeLinkedEntityNames(
+export function normalizeLinkedEntityNames(
   content: string,
   graph: z.infer<typeof proposedGraphSchema>
 ): z.infer<typeof proposedGraphSchema> {
@@ -185,7 +185,7 @@ function normalizeLinkedEntityNames(
   };
 }
 
-function buildResponseJsonSchema(kindEnum?: readonly string[], predicateEnum?: readonly string[]) {
+export function buildResponseJsonSchema(kindEnum?: readonly string[], predicateEnum?: readonly string[]) {
   const evidence = { type: "array", minItems: 1, maxItems: 20, items: { type: "string" } };
   return {
     name: "knowledge_candidate",

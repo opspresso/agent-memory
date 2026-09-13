@@ -75,6 +75,8 @@ pnpm dev
 
 ## 개발 검증
 
+지식 추출기는 개체와 관계를 두 단계로 추출하고, 개체 자격·종류·원문 근거를 별도로 검증한다. `pnpm eval:knowledge --variants entity-first --verify`로 합성 진단 사례를 현재 모델에서 평가한다. LlamaIndex 비교와 결과 해석은 [추출기 평가 절차](docs/operations.md#추출기-평가)를 따른다.
+
 ```bash
 pnpm verify
 ```

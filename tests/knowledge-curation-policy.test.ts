@@ -9,13 +9,36 @@ const candidate = createKnowledgeCandidate({ id: "c", scope: { organizationId: "
   graph: { entities: [{ key: "liu", kind: "person", canonicalName: "유비" }, { key: "lu", kind: "person", canonicalName: "노식" }],
     relationships: [{ sourceKey: "liu", targetKey: "lu", predicate: "student_of" }] } });
 const items: readonly KnowledgeItemVerification[] = ["entity:liu", "entity:lu", "relationship:0"].map((item) => ({
-  item, support: "explicit", usefulness: "useful", conflict: false, evidence: content, reason: "원문에 명시된 사제 관계다."
+  item, representation: item.startsWith("entity:") ? "entity" : "relationship", entityKind: "person", support: "explicit", usefulness: "useful", conflict: false, evidence: content, reason: "원문에 명시된 사제 관계다."
 }));
 function assess(changes: Partial<KnowledgeItemVerification> = {}) {
   return assessKnowledgeCandidate({ candidate, content, model: "verifier", now: new Date(), ontology: null,
     items: items.map((item) => item.item === "relationship:0" ? { ...item, ...changes } : item) });
 }
 describe("automatic knowledge curation policy", () => {
+  it("rejects a true relation sentence used as a concept even when that exact name appears in the source", () => {
+    const source = "조운의 유비 섬김은 두 사람의 관계를 설명하는 문장이다. 유비가 등장한다.";
+    const proposed = { ...candidate,graph:{ entities:[{ key:"statement",kind:"concept",canonicalName:"조운의 유비 섬김" },{ key:"liu",kind:"person",canonicalName:"유비" }],
+      relationships:[{ sourceKey:"statement",targetKey:"liu",predicate:"involves" }] } };
+    const results: readonly KnowledgeItemVerification[] = ["entity:statement","entity:liu","relationship:0"].map((item) => ({ item,
+      representation:item === "entity:liu"?"entity":"relationship",entityKind:item === "entity:liu"?"person":"concept",support:"explicit",usefulness:"useful",conflict:false,evidence:source,reason:"The words occur in the source." }));
+    const result = assessKnowledgeCandidate({ candidate:proposed,content:source,model:"verifier",items:results,ontology:null,now:new Date() });
+    expect(result.items.map((item) => item.verdict)).toEqual(["ignore","accept","ignore"]);
+    expect(result.policyVersion).toBe("evidence-v3");
+    expect(result.items[0]?.representation).toBe("relationship");
+  });
+  it("does not let a positive relation revive an endpoint whose entity representation is uncertain", () => {
+    const result = assessKnowledgeCandidate({ candidate,content,model:"verifier",now:new Date(),ontology:null,
+      items:items.map((item) => item.item === "entity:liu"?{ ...item,representation:"uncertain" }:item) });
+    expect(result.items[0]?.verdict).toBe("review");
+    expect(result.items[2]?.verdict).toBe("review");
+  });
+  it("requires independent agreement on entity kind even when support and usefulness are positive", () => {
+    const result = assessKnowledgeCandidate({ candidate,content,model:"verifier",now:new Date(),ontology:null,
+      items:items.map((item) => item.item === "entity:liu"?{ ...item,entityKind:"organization" }:item) });
+    expect(result.items[0]).toMatchObject({ verdict:"review",entityKind:"organization" });
+    expect(result.items[2]?.verdict).toBe("review");
+  });
   it("does not promote a scene's departure location as a durable origin relationship", () => {
     const movement = { ...candidate, graph: { ...candidate.graph, relationships: [{ sourceKey: "liu", targetKey: "lu", predicate: "comes_from" }] } };
     const result = assessKnowledgeCandidate({ candidate: movement, content, model: "verifier", now: new Date(), ontology: null, items });

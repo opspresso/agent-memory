@@ -12,6 +12,15 @@ import { createNeo4jKnowledgeTopologyStore } from "@/infrastructure/neo4j/knowle
 import { createKnowledgeNode, createKnowledgeEdge, type KnowledgeNode } from "@/domain/knowledge/knowledge-graph";
 import { KnowledgeGraphUnavailableError, type KnowledgeTopologySnapshot } from "@/domain/knowledge/knowledge-topology";
 import type { OrganizationAccess, ScopedResource } from "@/domain/identity/organization-access";
+import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
+import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
+import { createKnowledgeOntologyReader } from "@/infrastructure/database/repositories/knowledge-ontology-reader";
+import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
+import { createEntityFirstKnowledgeExtractionService } from "@/infrastructure/ai/knowledge-entity-first-extraction-service";
+import { createKnowledgeVerificationService } from "@/infrastructure/ai/knowledge-verification-service";
+import { buildGenerateKnowledgeCandidate } from "@/application/knowledge/generate-knowledge-candidate";
+import { buildCurateKnowledgeCandidate } from "@/application/knowledge/curate-knowledge-candidate";
+import { buildAcceptKnowledgeCandidate, buildRejectKnowledgeCandidate } from "@/application/knowledge/review-knowledge-candidate";
 
 describe("Neo4j topology with PostgreSQL approval and provenance", () => {
   let postgres: StartedPostgreSqlContainer, graph: StartedNeo4jContainer, driver: Driver, pool: Pool, db: AgentMemoryDatabase;
@@ -42,11 +51,11 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     const access: OrganizationAccess = { organizationId, userId, role: "owner", teams: [] };
     const projection = createKnowledgeGraphProjection(db, store);
     const repository = createKnowledgeGraphRepository(db, () => new Date(), projection);
-    async function source(sourceScope = scope) {
+    async function source(sourceScope = scope, content = "A uses B.") {
       const documentId = randomUUID(), chunkId = randomUUID();
       await pool.query("INSERT INTO documents(id,organization_id,scope_kind,user_id,title,object_key,checksum,mime_type,status,created_by) VALUES($1,$2,$3,$4,'Topology source','test','test','text/plain','ready',$5)",
         [documentId,organizationId,sourceScope.kind,sourceScope.kind === "user" ? sourceScope.userId : null,userId]);
-      await pool.query("INSERT INTO document_chunks(id,organization_id,document_id,ordinal,content) VALUES($1,$2,$3,0,'A uses B.')", [chunkId,organizationId,documentId]);
+      await pool.query("INSERT INTO document_chunks(id,organization_id,document_id,ordinal,content) VALUES($1,$2,$3,0,$4)", [chunkId,organizationId,documentId,content]);
       return { documentId, chunkId };
     }
     const origin = await source();
@@ -80,6 +89,40 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     await f.repository.deleteNode(f.organizationId,c.id,f.scope);
     expect(await f.repository.findNeighborhood(f.access,a.id,2,100)).toMatchObject({ nodes:[{ id:a.id }], edges:[] });
     expect(await store.incidentEdgeIds(f.organizationId,[a.id],undefined,100)).toEqual([]);
+  });
+
+  it("promotes two-pass extraction through independent verification into a source-grounded Neo4j neighborhood", async () => {
+    const f = await fixture();
+    const content = "Atlas 서비스는 Neo4j 기술을 사용한다.";
+    const source = await f.source(f.scope,content);
+    const completion = (value:unknown) => Response.json({ choices:[{ message:{ content:JSON.stringify(value) } }] });
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(completion({ entities:[
+      { key:"atlas",kind:"service",canonicalName:"Atlas",summary:null,aliases:[],evidence:[content] },
+      { key:"neo4j",kind:"technology",canonicalName:"Neo4j",summary:null,aliases:[],evidence:[content] }
+    ] })).mockResolvedValueOnce(completion({ relationships:[{ sourceKey:"atlas",targetKey:"neo4j",predicate:"uses",evidence:[content] }] }));
+    const candidates = createKnowledgeCandidateRepository(db), documents = createDocumentRepository(db), ontology = createKnowledgeOntologyReader(db);
+    const clock = () => new Date();
+    await buildGenerateKnowledgeCandidate({ candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
+      extractionService:createEntityFirstKnowledgeExtractionService({ baseUrl:"http://model.test/v1",model:"extractor",request }) })(f.organizationId,source.chunkId);
+    const verificationRequest = vi.fn<typeof fetch>().mockResolvedValue(completion({ items:Object.fromEntries(Object.entries({
+      "entity:atlas":{ representation:"entity",entityKind:"service" },
+      "entity:neo4j":{ representation:"entity",entityKind:"technology" },
+      "relationship:0":{ representation:"relationship" }
+    }).map(([item,identity]) => [item,{ ...identity,support:"explicit",usefulness:"useful",conflict:false,evidence:content,reason:"The source states this fact." }])) }));
+    await buildCurateKnowledgeCandidate({ candidates,documents,ontology,clock,graph:f.repository,access:createOrganizationAccessRepository(db),
+      verification:createKnowledgeVerificationService({ baseUrl:"http://verifier.test/v1",model:"verifier",request:verificationRequest }),
+      accept:buildAcceptKnowledgeCandidate({ repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
+      reject:buildRejectKnowledgeCandidate({ repository:candidates,clock,method:"automatic" }) })(f.organizationId,source.chunkId);
+    const approved = await candidates.findByChunkId(f.organizationId,source.chunkId);
+    expect(approved?.status).toBe("accepted");
+    expect(approved?.assessment).toMatchObject({ model:"verifier",policyVersion:"evidence-v3" });
+    expect(approved?.itemReviews?.every((item) => item.method === "automatic")).toBe(true);
+    const [atlas] = await f.repository.findNodesByNames(f.access,f.scope,["Atlas"]);
+    const result = await f.repository.findNeighborhood(f.access,atlas!.id,2,100);
+    expect(result.nodes.map((node) => node.canonicalName).sort()).toEqual(["Atlas","Neo4j"]);
+    expect(result.edges).toEqual([expect.objectContaining({ predicate:"uses",sources:[{ chunkId:source.chunkId }] })]);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(verificationRequest).toHaveBeenCalledOnce();
   });
 
   it("rechecks archived provenance even if the Neo4j revision has not changed", async () => {

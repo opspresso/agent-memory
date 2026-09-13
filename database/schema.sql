@@ -193,6 +193,7 @@ CREATE TABLE "knowledge_candidates" (
 	"graph" jsonb NOT NULL,
 	"item_reviews" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"assessment" jsonb,
+	"assessment_history" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"status" "knowledge_candidate_status" DEFAULT 'pending' NOT NULL,
 	"reviewed_by" uuid,
 	"review_reason" text,

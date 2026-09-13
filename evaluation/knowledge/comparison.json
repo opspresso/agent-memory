@@ -1,0 +1,244 @@
+{
+  "evaluatedAt": "2026-09-13T13:40:43.048Z",
+  "model": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+  "verified": true,
+  "reusedExtractions": true,
+  "verificationModel": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+  "matching": "Explicitly annotated source surface forms; canonical kind/name/edge matches are reported separately.",
+  "corpusSha256": "463b67e15a82f5871781b56d00bc035ef5f5a9861bbdd0c29221e78b3502e82a",
+  "policySha256": "890ea2afce8c39c354b4e531facb8d63f912a2ca66170e0d697e42c60b14c546",
+  "summaries": [
+    {
+      "variant": "single-pass",
+      "cases": 30,
+      "errors": 0,
+      "candidates": {
+        "entities": {
+          "truePositive": 55,
+          "falsePositive": 2,
+          "falseNegative": 1,
+          "precision": 0.9649122807017544,
+          "recall": 0.9821428571428571,
+          "f1": 0.9734513274336283
+        },
+        "relationships": {
+          "truePositive": 21,
+          "falsePositive": 5,
+          "falseNegative": 1,
+          "precision": 0.8076923076923077,
+          "recall": 0.9545454545454546,
+          "f1": 0.875
+        }
+      },
+      "canonical": {
+        "entities": {
+          "truePositive": 28,
+          "falsePositive": 14,
+          "falseNegative": 28,
+          "precision": 0.6666666666666666,
+          "recall": 0.5,
+          "f1": 0.5714285714285715
+        },
+        "relationships": {
+          "truePositive": 9,
+          "falsePositive": 8,
+          "falseNegative": 13,
+          "precision": 0.5294117647058824,
+          "recall": 0.4090909090909091,
+          "f1": 0.46153846153846156
+        }
+      },
+      "entities": {
+        "truePositive": 42,
+        "falsePositive": 0,
+        "falseNegative": 14,
+        "precision": 1,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "relationships": {
+        "truePositive": 16,
+        "falsePositive": 1,
+        "falseNegative": 6,
+        "precision": 0.9411764705882353,
+        "recall": 0.7272727272727273,
+        "f1": 0.8205128205128205
+      },
+      "aliases": {
+        "truePositive": 1,
+        "falsePositive": 0,
+        "falseNegative": 2,
+        "precision": 1,
+        "recall": 0.3333333333333333,
+        "f1": 0.5
+      },
+      "falseMerges": 0,
+      "extractionLatencyMilliseconds": {
+        "median": 2192,
+        "p95": 2818
+      },
+      "casesWithErrors": []
+    },
+    {
+      "variant": "llamaindex",
+      "cases": 30,
+      "errors": 1,
+      "candidates": {
+        "entities": {
+          "truePositive": 37,
+          "falsePositive": 0,
+          "falseNegative": 19,
+          "precision": 1,
+          "recall": 0.6607142857142857,
+          "f1": 0.7956989247311829
+        },
+        "relationships": {
+          "truePositive": 19,
+          "falsePositive": 0,
+          "falseNegative": 3,
+          "precision": 1,
+          "recall": 0.8636363636363636,
+          "f1": 0.9268292682926829
+        }
+      },
+      "canonical": {
+        "entities": {
+          "truePositive": 15,
+          "falsePositive": 15,
+          "falseNegative": 41,
+          "precision": 0.5,
+          "recall": 0.26785714285714285,
+          "f1": 0.3488372093023256
+        },
+        "relationships": {
+          "truePositive": 5,
+          "falsePositive": 10,
+          "falseNegative": 17,
+          "precision": 0.3333333333333333,
+          "recall": 0.22727272727272727,
+          "f1": 0.27027027027027023
+        }
+      },
+      "entities": {
+        "truePositive": 30,
+        "falsePositive": 0,
+        "falseNegative": 26,
+        "precision": 1,
+        "recall": 0.5357142857142857,
+        "f1": 0.6976744186046512
+      },
+      "relationships": {
+        "truePositive": 15,
+        "falsePositive": 0,
+        "falseNegative": 7,
+        "precision": 1,
+        "recall": 0.6818181818181818,
+        "f1": 0.8108108108108109
+      },
+      "aliases": {
+        "truePositive": 0,
+        "falsePositive": 0,
+        "falseNegative": 3,
+        "precision": 0,
+        "recall": 0,
+        "f1": 0
+      },
+      "falseMerges": 0,
+      "extractionLatencyMilliseconds": {
+        "median": 1722,
+        "p95": 3280
+      },
+      "casesWithErrors": [
+        {
+          "id": "markdown-entity",
+          "error": "SafeOperationalError"
+        }
+      ]
+    },
+    {
+      "variant": "entity-first",
+      "cases": 30,
+      "errors": 0,
+      "candidates": {
+        "entities": {
+          "truePositive": 53,
+          "falsePositive": 4,
+          "falseNegative": 3,
+          "precision": 0.9298245614035088,
+          "recall": 0.9464285714285714,
+          "f1": 0.9380530973451328
+        },
+        "relationships": {
+          "truePositive": 20,
+          "falsePositive": 2,
+          "falseNegative": 2,
+          "precision": 0.9090909090909091,
+          "recall": 0.9090909090909091,
+          "f1": 0.9090909090909091
+        }
+      },
+      "canonical": {
+        "entities": {
+          "truePositive": 36,
+          "falsePositive": 9,
+          "falseNegative": 20,
+          "precision": 0.8,
+          "recall": 0.6428571428571429,
+          "f1": 0.7128712871287128
+        },
+        "relationships": {
+          "truePositive": 12,
+          "falsePositive": 6,
+          "falseNegative": 10,
+          "precision": 0.6666666666666666,
+          "recall": 0.5454545454545454,
+          "f1": 0.6
+        }
+      },
+      "entities": {
+        "truePositive": 45,
+        "falsePositive": 0,
+        "falseNegative": 11,
+        "precision": 1,
+        "recall": 0.8035714285714286,
+        "f1": 0.8910891089108911
+      },
+      "relationships": {
+        "truePositive": 18,
+        "falsePositive": 0,
+        "falseNegative": 4,
+        "precision": 1,
+        "recall": 0.8181818181818182,
+        "f1": 0.9
+      },
+      "aliases": {
+        "truePositive": 1,
+        "falsePositive": 0,
+        "falseNegative": 2,
+        "precision": 1,
+        "recall": 0.3333333333333333,
+        "f1": 0.5
+      },
+      "falseMerges": 0,
+      "extractionLatencyMilliseconds": {
+        "median": 2573,
+        "p95": 3200
+      },
+      "casesWithErrors": []
+    }
+  ],
+  "environment": {
+    "node": "v24.20.0",
+    "python": "3.12.12",
+    "llamaIndexCore": "0.14.24",
+    "llamaIndexOpenAILike": "0.8.0",
+    "requirementsSha256": "cd5f2b668de29a3ba910897a8062b75efd83674818c6d1f7ce4241c823f7aa1b"
+  },
+  "notes": [
+    "Synthetic diagnostic corpus, not a blind or production-wide accuracy estimate.",
+    "All variants share source grounding and evidence-v3 verification.",
+    "The single-pass comparator includes the same entity eligibility filters; it is not an unmodified v0.27.0 baseline.",
+    "LlamaIndex uses strict schema paths, typed evidence properties, and an explicit JSON Schema endpoint adapter.",
+    "Verification errors are counted as missing outputs; they are not silently retried or removed."
+  ]
+}

@@ -43,6 +43,7 @@ export const knowledgeCandidates = pgTable(
     graph: jsonb().$type<ProposedKnowledgeGraph>().notNull(),
     itemReviews: jsonb().$type<readonly KnowledgeCandidateItemReview[]>().notNull().default([]),
     assessment: jsonb().$type<KnowledgeCandidateAssessment>(),
+    assessmentHistory: jsonb().$type<readonly KnowledgeCandidateAssessment[]>().notNull().default([]),
     status: knowledgeCandidateStatus().notNull().default("pending"),
     reviewedBy: uuid().references(() => users.id, { onDelete: "restrict" }),
     reviewReason: text(),

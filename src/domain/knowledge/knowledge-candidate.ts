@@ -61,6 +61,7 @@ export interface KnowledgeCandidate {
   readonly status: KnowledgeCandidateStatus;
   readonly itemReviews?: readonly KnowledgeCandidateItemReview[];
   readonly assessment?: KnowledgeCandidateAssessment;
+  readonly assessmentHistory?: readonly KnowledgeCandidateAssessment[];
   readonly reviewedBy?: string;
   readonly reviewReason?: string;
   readonly reviewedAt?: Date;

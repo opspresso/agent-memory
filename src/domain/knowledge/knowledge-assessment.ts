@@ -1,5 +1,11 @@
+export const currentKnowledgeAssessmentPolicyVersion = "evidence-v3";
+export const knowledgeRepresentations = ["entity", "relationship", "attribute", "generic_reference", "uncertain"] as const;
+export type KnowledgeRepresentation = (typeof knowledgeRepresentations)[number];
+
 export interface KnowledgeItemVerification {
   readonly item: string;
+  readonly representation: KnowledgeRepresentation;
+  readonly entityKind?: string;
   readonly support: "explicit" | "uncertain" | "unsupported";
   readonly usefulness: "useful" | "incidental";
   readonly conflict: boolean;
@@ -17,11 +23,13 @@ export interface KnowledgeAliasVerification {
 
 export interface KnowledgeCandidateAssessment {
   readonly model: string;
-  readonly policyVersion: "evidence-v2";
+  readonly policyVersion: string;
   readonly assessedAt: string;
   readonly aliases?: readonly (KnowledgeAliasVerification & { readonly verdict: "accept" | "review" | "ignore" })[];
   readonly items: readonly {
     readonly item: string;
+    readonly representation?: KnowledgeRepresentation;
+    readonly entityKind?: string;
     readonly verdict: "accept" | "review" | "ignore";
     readonly evidence: string;
     readonly reason: string;

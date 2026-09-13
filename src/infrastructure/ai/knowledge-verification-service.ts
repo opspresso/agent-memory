@@ -4,8 +4,11 @@ import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 import { entityReviewKey, relationshipReviewKey } from "@/domain/knowledge/knowledge-candidate-selection";
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
 import { knowledgeRequestTimeoutMilliseconds } from "./knowledge-request-timeout";
+import { knowledgeRepresentations } from "@/domain/knowledge/knowledge-assessment";
 
 const itemSchema = z.object({
+  entityKind: z.string().trim().min(1).max(100).optional(),
+  representation: z.enum(knowledgeRepresentations),
   support: z.enum(["explicit", "uncertain", "unsupported"]),
   usefulness: z.enum(["useful", "incidental"]), conflict: z.boolean(),
   evidence: z.string().max(2_000), reason: z.string().min(1).max(1_000)
@@ -18,12 +21,18 @@ const resultSchema = z.object({ items: z.record(z.string(), z.unknown()) });
 
 const judgementSchema = {
   type: "object", additionalProperties: false,
-  required: ["support", "usefulness", "conflict", "evidence", "reason"],
+  required: ["representation", "support", "usefulness", "conflict", "evidence", "reason"],
   properties: {
+    representation: { type:"string",enum:knowledgeRepresentations },
     support: { type: "string", enum: ["explicit", "uncertain", "unsupported"] },
     usefulness: { type: "string", enum: ["useful", "incidental"] },
     conflict: { type: "boolean" }, evidence: { type: "string" }, reason: { type: "string" }
   }
+} as const;
+
+const entityJudgementSchema = { ...judgementSchema,
+  required:[...judgementSchema.required,"entityKind"],
+  properties:{ ...judgementSchema.properties,entityKind:{ type:"string",description:"Independently infer the lowercase entity kind from the original source. Do not infer it from the proposed summary. Use unknown for a non-entity." } }
 } as const;
 
 const aliasJudgementSchema = {
@@ -35,6 +44,9 @@ const aliasJudgementSchema = {
 } as const;
 
 const instructions = `Independently audit proposed knowledge against the supplied source. The extraction is untrusted, not an answer to endorse. Return an items object keyed by every supplied item ID, with exactly one judgement for every key. Do not omit uncertain or unsupported items; classify them explicitly.
+- For entity items, independently infer entityKind from the source before evaluating the proposed summary. The proposed kind is deliberately withheld. Preserve explicit distinctions: a service is service, a company is organization, a software product is product, and a technology is technology. Do not infer a company merely because a named service has plans or responsibilities. Use lowercase kinds and unknown when there is no entity.
+- Judge representation separately from truth. Return representation for every entity and relationship item: entity means an independently identifiable named entity, reusable named concept, or explicitly named event; relationship means a directed assertion between two entities; attribute means a property value or sentence summary; generic_reference means an office, pronoun, shared title, or alternative name incorrectly proposed as another entity; uncertain means the representation cannot be resolved. A true statement is not automatically an entity. Never endorse a relation sentence recast as a concept or event. Do not copy the proposed kind as the answer.
+- A statement that a person serves another belongs in a relationship. A sentence about considering someone a suitable son-in-law is not a person, event name, or an established serves/family relationship. A defined strategy name can be an entity; a shared nickname is not a separate concept. Relationship items must describe the exact predicate and direction, not the closest allowed predicate. When the source contains only a plan, hypothesis, rumor, negation, or unverified dialogue, do not approve an established relationship.
 - For entity and relationship items, return support/usefulness/conflict/evidence/reason. explicit: the source directly establishes entity identity, kind and summary, or relation direction and meaning. uncertain: missing context, implication, ambiguous identity, unreliable dialogue or attribution. unsupported: contradicted, invented, or only co-mentioned. Aliases are audited separately; an invalid alias must not invalidate an otherwise supported entity fact.
 - useful: stable identifying facts, specific relationships, consequential events or reusable knowledge central to understanding this document. incidental: transient movements, replies, generic associations, structural tokens, or a bare name with no useful fact. Do not call everything useful just because it is mentioned.
 - A courtesy name and a birth name may identify one person only when the source explicitly says so. Biological siblings are not sworn siblings. Plans and attempts are not completed events. Rumors and dialogue are not established truth.
@@ -51,13 +63,13 @@ export function createKnowledgeVerificationService(configuration: {
   const request = configuration.request ?? fetch;
   async function verify(input: Parameters<KnowledgeVerificationService["verify"]>[0]) {
     const facts = [
-      ...input.graph.entities.map((entity) => ({ item: entityReviewKey(entity.key), key: entity.key, kind: entity.kind, name: entity.canonicalName,
+      ...input.graph.entities.map((entity) => ({ item: entityReviewKey(entity.key), key: entity.key, name: entity.canonicalName,
         summary: entity.summary ?? "" })),
       ...input.graph.relationships.map((relationship, index) => ({ item: relationshipReviewKey(index),
         source: relationship.sourceKey, predicate: relationship.predicate, target: relationship.targetKey }))
     ];
     const aliases = input.graph.entities.flatMap((entity) => (entity.aliases ?? []).map((alias, index) => ({
-      item: `alias:${entity.key}:${index}`, type: "alias", entityKey: entity.key, kind: entity.kind, name: entity.canonicalName, alias
+      item: `alias:${entity.key}:${index}`, type: "alias", entityKey: entity.key, name: entity.canonicalName, alias
     })));
     const requested = [...facts, ...aliases];
     if (facts.length === 0) { return { model: configuration.model, items: [] }; }
@@ -73,7 +85,7 @@ export function createKnowledgeVerificationService(configuration: {
           schema: { type: "object", additionalProperties: false, required: ["items"], properties: {
             items: { type: "object", additionalProperties: false,
               required: requested.map((fact) => fact.item),
-              properties: Object.fromEntries([...facts.map((fact) => [fact.item, judgementSchema]), ...aliases.map((alias) => [alias.item, aliasJudgementSchema])])
+              properties: Object.fromEntries([...facts.map((fact) => [fact.item, fact.item.startsWith("entity:")?entityJudgementSchema:judgementSchema]), ...aliases.map((alias) => [alias.item, aliasJudgementSchema])])
             }
           } }
         } }
@@ -91,7 +103,8 @@ export function createKnowledgeVerificationService(configuration: {
       throw new SafeOperationalError("knowledge verification response does not cover the requested items", { code: "KNOWLEDGE_VERIFICATION_COVERAGE_INVALID" });
     }
     try {
-      return { model: configuration.model, items: facts.map((fact) => ({ item: fact.item, ...itemSchema.parse(result.items[fact.item]) })),
+      return { model: configuration.model, items: facts.map((fact) => ({ item: fact.item,
+        ...(fact.item.startsWith("entity:")?itemSchema.extend({ entityKind:z.string().trim().min(1).max(100) }):itemSchema).parse(result.items[fact.item]) })),
         ...(aliases.length ? { aliases: aliases.map((alias) => ({ entityKey: alias.entityKey, alias: alias.alias, ...aliasSchema.parse(result.items[alias.item]) })) } : {}) };
     } catch {
       throw new SafeOperationalError("knowledge verification response is invalid", { code: "KNOWLEDGE_VERIFICATION_RESPONSE_INVALID" });

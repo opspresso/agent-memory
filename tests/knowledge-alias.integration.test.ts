@@ -45,7 +45,7 @@ describe("source-grounded knowledge aliases", () => {
     const reject = buildRejectKnowledgeCandidate({ repository: candidates, clock, method: "automatic" });
     const verify = vi.fn<KnowledgeVerificationService["verify"]>().mockImplementation(async (input) => ({ model: "independent-verifier", items: [
       ...input.graph.entities.map((entity) => `entity:${entity.key}`), ...input.graph.relationships.map((_, index) => `relationship:${index}`)
-    ].map((item) => ({ item, support: "explicit", usefulness: "useful", conflict: false, evidence: input.content, reason: "The supplied source establishes this identity." })),
+    ].map((item) => ({ item, representation: item.startsWith("entity:") ? "entity" : "relationship", entityKind: "person", support: "explicit", usefulness: "useful", conflict: false, evidence: input.content, reason: "The supplied source establishes this identity." })),
     aliases: input.graph.entities.flatMap((entity) => (entity.aliases ?? []).map((alias) => ({ entityKey: entity.key, alias, identity: "same_entity", evidence: input.content, reason: "Explicit alternative proper name." }))) }));
     const curate = buildCurateKnowledgeCandidate({ candidates, documents, graph, ontology, clock, accept, reject, verification: { verify }, access: createOrganizationAccessRepository(db) });
     async function source(content: string, targetScope = scope) {
@@ -93,6 +93,23 @@ describe("source-grounded knowledge aliases", () => {
       source: { chunkId: second.chunkId }, now: new Date() }), test.access);
     expect(saved.id).toBe(first.node.id);
     expect(saved.aliases).toEqual(["공명"]);
+  });
+
+  it("reassesses obsolete pending policy while preserving the prior assessment for audit", async () => {
+    const test = await fixture();
+    const content = "제갈량이 전략을 세웠다.";
+    const input = await test.extract(content,{ entities:[{ key:"p",kind:"person",canonicalName:"제갈량",evidence:[content] }],relationships:[] });
+    const previous = { model:"old-verifier",policyVersion:"evidence-v2",assessedAt:new Date().toISOString(),
+      items:[{ item:"entity:p",verdict:"review" as const,evidence:content,reason:"Previous policy." }] };
+    await test.candidates.saveAssessment(test.organizationId,input.candidate.id,previous);
+    await test.curate(test.organizationId,input.chunkId);
+    const current = await test.candidates.findByChunkId(test.organizationId,input.chunkId);
+    expect(current?.assessment?.policyVersion).toBe("evidence-v3");
+    expect(current?.assessmentHistory).toEqual([previous]);
+    expect(current?.status).toBe("accepted");
+    await test.curate(test.organizationId,input.chunkId);
+    expect(test.verify).toHaveBeenCalledOnce();
+    expect((await test.candidates.findByChunkId(test.organizationId,input.chunkId))?.assessmentHistory).toEqual([previous]);
   });
 
   it("merges fragmented identities while retaining edges, provenance and previous approval bindings", async () => {
@@ -166,7 +183,7 @@ describe("source-grounded knowledge aliases", () => {
   it("does not promote aliases that verification left uncertain", async () => {
     const test = await fixture();
     test.verify.mockImplementation(async (input) => ({ model: "verifier", items: input.graph.entities.map((entity) => ({
-      item: `entity:${entity.key}`, support: "uncertain", usefulness: "useful", conflict: false, evidence: input.content, reason: "The title does not establish a unique identity."
+      item: `entity:${entity.key}`, representation: "entity", entityKind: "person", support: "uncertain", usefulness: "useful", conflict: false, evidence: input.content, reason: "The title does not establish a unique identity."
     })) }));
     const input = await test.extract("제갈량과 승상이 각각 군사를 지휘했다.", { entities: [{ key: "p", kind: "person", canonicalName: "제갈량", aliases: ["승상"] }], relationships: [] });
     await test.curate(test.organizationId, input.chunkId);
@@ -177,7 +194,7 @@ describe("source-grounded knowledge aliases", () => {
   it("keeps a supported entity without promoting its generic title as an alias", async () => {
     const test = await fixture();
     const content = "제갈량은 촉한의 승상이었다.";
-    test.verify.mockResolvedValue({ model: "verifier", items: [{ item: "entity:p", support: "explicit", usefulness: "useful", conflict: false, evidence: content, reason: "Supported office." }],
+    test.verify.mockResolvedValue({ model: "verifier", items: [{ item: "entity:p", representation: "entity", entityKind: "person", support: "explicit", usefulness: "useful", conflict: false, evidence: content, reason: "Supported office." }],
       aliases: [{ entityKey: "p", alias: "승상", identity: "generic_reference", evidence: content, reason: "An office is not an alternative proper name." }] });
     const input = await test.extract(content, { entities: [{ key: "p", kind: "person", canonicalName: "제갈량", aliases: ["승상"] }], relationships: [] });
     await test.curate(test.organizationId, input.chunkId);
@@ -192,9 +209,9 @@ describe("source-grounded knowledge aliases", () => {
     const test = await fixture();
     const content = "제갈량은 승상이며 유비를 도왔다.";
     test.verify.mockResolvedValue({ model: "verifier", items: [
-      { item: "entity:p", support: "explicit", usefulness: "useful", conflict: false, evidence: content, reason: "Supported identity." },
-      { item: "entity:q", support: "explicit", usefulness: "useful", conflict: false, evidence: content, reason: "Supported identity." },
-      { item: "relationship:0", support: "uncertain", usefulness: "useful", conflict: false, evidence: content, reason: "Review the relationship." }
+      { item: "entity:p", representation: "entity", entityKind: "person", support: "explicit", usefulness: "useful", conflict: false, evidence: content, reason: "Supported identity." },
+      { item: "entity:q", representation: "entity", entityKind: "person", support: "explicit", usefulness: "useful", conflict: false, evidence: content, reason: "Supported identity." },
+      { item: "relationship:0", representation: "relationship", support: "uncertain", usefulness: "useful", conflict: false, evidence: content, reason: "Review the relationship." }
     ], aliases: [{ entityKey: "p", alias: "승상", identity: "generic_reference", evidence: content, reason: "Shared title." }] });
     const input = await test.extract(content, { entities: [
       { key: "p", kind: "person", canonicalName: "제갈량", aliases: ["승상"] },

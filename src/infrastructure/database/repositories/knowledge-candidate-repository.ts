@@ -6,6 +6,7 @@ import { entityReviewKey, relationshipReviewKey, reviewedCandidateState, selectK
 import { AmbiguousKnowledgeIdentityError, knowledgeAliases, resolveKnowledgeIdentity } from "@/domain/knowledge/knowledge-alias";
 import { mergeKnowledgeDescriptions } from "@/domain/knowledge/knowledge-description";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
+import { currentKnowledgeAssessmentPolicyVersion } from "@/domain/knowledge/knowledge-assessment";
 import { knowledgeCanonicalNameKey, normalizeKnowledgeKind } from "@/domain/knowledge/knowledge-identity";
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
 import {
@@ -163,6 +164,7 @@ function candidateFromRow(
     graph: row.graph,
     itemReviews: row.itemReviews,
     ...(row.assessment ? { assessment: row.assessment } : {}),
+    ...(row.assessmentHistory.length ? { assessmentHistory:row.assessmentHistory } : {}),
     status: row.status,
     ...(row.reviewedBy ? { reviewedBy: row.reviewedBy } : {}),
     ...(row.reviewReason ? { reviewReason: row.reviewReason } : {}),
@@ -253,7 +255,7 @@ export function createKnowledgeCandidateRepository(
         SELECT count(*)::int AS "totalChunks", count(${knowledgeCandidates.id})::int AS "extractedChunks",
           count(*) FILTER (WHERE ${knowledgeCandidates.status} <> 'pending'
             OR (jsonb_array_length(${knowledgeCandidates.graph}->'entities') = 0
-            OR (${knowledgeCandidates.assessment} IS NOT NULL AND NOT EXISTS (
+            OR (${knowledgeCandidates.assessment}->>'policyVersion' = ${currentKnowledgeAssessmentPolicyVersion} AND NOT EXISTS (
               SELECT 1 FROM jsonb_array_elements(${knowledgeCandidates.assessment}->'items') item
               WHERE item->>'verdict' <> 'review' AND NOT EXISTS (
                 SELECT 1 FROM jsonb_array_elements(${knowledgeCandidates.itemReviews}) reviewed WHERE reviewed->>'item' = item->>'item'
@@ -280,9 +282,12 @@ export function createKnowledgeCandidateRepository(
     },
 
     async saveAssessment(organizationId, candidateId, assessment) {
-      await db.update(knowledgeCandidates).set({ assessment })
+      await db.update(knowledgeCandidates).set({ assessment,
+        assessmentHistory:sql`CASE WHEN ${knowledgeCandidates.assessment} IS NULL THEN ${knowledgeCandidates.assessmentHistory}
+          ELSE ${knowledgeCandidates.assessmentHistory} || jsonb_build_array(${knowledgeCandidates.assessment}) END` })
         .where(and(eq(knowledgeCandidates.organizationId, organizationId), eq(knowledgeCandidates.id, candidateId),
-          eq(knowledgeCandidates.status, "pending"), sql`${knowledgeCandidates.assessment} IS NULL`));
+          eq(knowledgeCandidates.status, "pending"), sql`(${knowledgeCandidates.assessment} IS NULL
+            OR ${knowledgeCandidates.assessment}->>'policyVersion' IS DISTINCT FROM ${assessment.policyVersion})`));
       return findById(organizationId, candidateId);
     },
 

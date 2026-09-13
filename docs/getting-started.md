@@ -151,6 +151,8 @@ Reranker는 권한 필터가 끝난 후보만 받는다. 설정하지 않거나 
 
 ### AI Knowledge extraction
 
+개체를 먼저 식별하고 그 개체 사이의 관계를 별도 요청으로 추출한다. 자동 검증은 원문 근거와 개체 자격·종류를 확인하고, 불확실한 항목은 검토 화면에 남긴다. 추출과 다른 검증 모델을 사용하려면 전역 설정의 `독립 검증 모델` 또는 `KNOWLEDGE_VERIFICATION_BASE_URL`·`KNOWLEDGE_VERIFICATION_MODEL`을 함께 설정하라. 설정하지 않으면 추출 모델을 사용한다. [평가 절차](operations.md#추출기-평가)로 실제 모델의 결과를 비교할 수 있다.
+
 Ready 문서에서 검토 가능한 graph 후보를 만들려면 structured output을 지원하는 OpenAI-compatible chat completions endpoint를 설정하라.
 
 ```dotenv

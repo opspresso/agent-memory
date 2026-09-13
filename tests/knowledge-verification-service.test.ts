@@ -4,7 +4,7 @@ import { createKnowledgeVerificationService } from "@/infrastructure/ai/knowledg
 const input = { content: "유비는 노식의 제자다.", documentTitle: "삼국지", existingKnowledge: [], quotaKey: { organizationId: "org", userId: "user" },
   graph: { entities: [{ key: "liu", kind: "person", canonicalName: "유비" }, { key: "lu", kind: "person", canonicalName: "노식" }], relationships: [{ sourceKey: "liu", targetKey: "lu", predicate: "student_of" }] } };
 const itemIds = ["entity:liu", "entity:lu", "relationship:0"];
-const judgement = { support: "explicit", usefulness: "useful", conflict: false, evidence: input.content, reason: "The source states the relationship." };
+const judgement = { representation: "entity", entityKind: "person", support: "explicit", usefulness: "useful", conflict: false, evidence: input.content, reason: "The source states the relationship." };
 const responseFor = (items: Record<string, unknown>) => Response.json({ choices: [{ message: { content: JSON.stringify({ items }) } }] });
 describe("independent knowledge verification", () => {
   it("sends source, original item IDs and existing knowledge to a separate structured request", async () => {
@@ -18,12 +18,21 @@ describe("independent knowledge verification", () => {
       { item: "entity:liu", key: "liu", name: "유비" }, { item: "entity:lu", key: "lu", name: "노식" },
       { item: "relationship:0", source: "liu", target: "lu" }
     ] });
+    expect(JSON.parse(body.messages[1].content).facts[0]).not.toHaveProperty("kind");
     expect(body.response_format.type).toBe("json_schema");
     const schema = body.response_format.json_schema.schema.properties.items;
     expect(schema.type).toBe("object");
     expect(schema.required).toEqual(itemIds);
     expect(Object.keys(schema.properties)).toEqual(itemIds);
     expect(schema.additionalProperties).toBe(false);
+    expect(schema.properties["entity:liu"].required).toContain("entityKind");
+    expect(schema.properties["relationship:0"].required).not.toContain("entityKind");
+  });
+  it("requires an independently inferred kind for every proposed entity", async () => {
+    const withoutKind = { ...judgement,entityKind:undefined };
+    const request = vi.fn<typeof fetch>().mockResolvedValue(responseFor(Object.fromEntries(itemIds.map((id) => [id,withoutKind]))));
+    const service = createKnowledgeVerificationService({ baseUrl:"https://example.test/v1",model:"verifier",request });
+    await expect(service.verify(input)).rejects.toMatchObject({ code:"KNOWLEDGE_VERIFICATION_RESPONSE_INVALID" });
   });
   it("rejects omitted or substituted judgements even if the provider ignores its schema", async () => {
     for (const ids of [itemIds.slice(1), ["wrong-id", ...itemIds.slice(1)], [...itemIds, "extra-id"]]) {
@@ -54,6 +63,7 @@ describe("independent knowledge verification", () => {
     ]);
     const body = JSON.parse(request.mock.calls[0]![1]!.body as string);
     expect(JSON.parse(body.messages[1].content).facts).toContainEqual(expect.objectContaining({ item: "alias:liu:1", type: "alias", alias: "장군" }));
+    expect(JSON.parse(body.messages[1].content).facts.every((fact:Record<string,unknown>) => !Object.hasOwn(fact,"kind"))).toBe(true);
     expect(body.response_format.json_schema.schema.properties.items.properties["alias:liu:1"].required).toEqual(["identity", "evidence", "reason"]);
   });
   it("fails closed when alias judgements are omitted or use the entity judgement shape", async () => {

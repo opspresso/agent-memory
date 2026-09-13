@@ -163,6 +163,10 @@ IDC의 Neo4j 서비스 추가·credential·volume·백업 정책은 Dockpad가 �
 
 ### AI 기능과 호출 제한
 
+추출은 개체 식별 → 허용된 끝점 사이의 관계 추출 순서다. 둘 이상의 개체가 있는 청크는 추출 두 번과 검증 한 번의 모델 요청이 발생하며 각각 AI 호출 quota에 포함한다. 단일 개체에는 관계 요청을 생략한다.
+
+독립 검증 모델은 `KNOWLEDGE_VERIFICATION_BASE_URL`, `KNOWLEDGE_VERIFICATION_MODEL`을 함께 설정한다. 해당 서비스가 인증을 요구하면 `KNOWLEDGE_VERIFICATION_API_KEY`도 별도로 설정한다. 세 값을 모두 비우면 추출 모델 설정을 사용한다. 별도 endpoint에는 추출용 API key를 전달하지 않는다. 전역 설정 화면의 `독립 검증 모델`에서도 관리하며 변경 후 모든 application·worker instance를 재시작해야 한다. URL 변경 시 기존 검증용 key를 명시적으로 다시 제출하거나 지워야 한다.
+
 | 그룹 | 변수 | 역할 |
 | --- | --- | --- |
 | Embedding | `EMBEDDING_BASE_URL` | OpenAI-compatible API base URL. OpenRouter는 `https://openrouter.ai/api/v1` 사용 |
@@ -282,6 +286,42 @@ Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 �
 
 #### 기존 데이터와 model 변경
 
+현재 검증은 `evidence-v3`를 사용한다. 미완료 후보의 policy가 오래되면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.
+
+#### 추출기 평가
+
+`evaluation/knowledge/corpus.json`은 업로드 문서와 무관하게 작성한 30개 합성 진단 사례다. 사람·서비스·개념·이름 있는 사건, 별칭, 부정·계획·가정·소문, Markdown·JSON 등을 포함한다. 개체 종류와 대표 이름의 정확한 일치와, 명시적으로 주석한 원문 표기 변형을 같은 개체로 보는 일치를 별도로 보고한다. 표기 변형은 평가용 대응표이며 application의 별칭으로 등록하지 않는다. 이 자료의 점수를 운영 문서 전체의 정확도로 해석하지 마라.
+
+현재 runtime만 평가할 때는 다음 명령을 사용한다.
+
+```bash
+pnpm eval:knowledge --variants entity-first --verify
+```
+
+LlamaIndex와 비교하려면 Python 3.12 이상에서 평가 전용 환경을 준비한다. Python은 application runtime 의존성이 아니다.
+
+```bash
+python3 -m venv .venv-knowledge-eval
+.venv-knowledge-eval/bin/python -m pip install -r evaluation/knowledge/requirements.txt
+pnpm eval:knowledge --python .venv-knowledge-eval/bin/python --verify
+```
+
+평가는 process 환경과 `.env.local`의 extraction·verification 설정을 사용하며 DB 설정 override를 읽지 않는다. 운영과 같은 모델을 평가하려면 해당 값을 명시하라. 현재 설정된 모델에 합성 본문을 실제로 전송한다. `single-pass`, `llamaindex`, `entity-first`를 `--variants`의 comma-separated 목록으로 선택하며 `--limit`으로 앞 사례 수를 제한한다. `--verify`는 자동 승인 정책까지 적용한다. `--reuse <이전 결과 디렉터리>`는 모델·corpus hash·사례 순서가 일치하는 저장된 추출을 재사용해 검증만 비교한다.
+
+기본 결과는 Git에서 제외한 `.eval-results/knowledge/`에 저장한다. `--output`으로 위치를 바꿀 수 있다. 요약은 model·corpus/policy hash, 개체·관계·별칭 precision/recall/F1, 잘못된 병합, 요청 오류와 추출 지연 시간을 포함한다. 오류가 있는 비교는 결과를 보존하고 종료 코드 1을 반환한다. 모델 오류를 빈 추출 성공으로 처리하지 않는다. 모델 응답이 원문과 맞는지와 관계 방향·개체 정체성은 각 사례의 저장 결과로 검토한다. 지연 시간은 공유 모델 endpoint의 관측값이며 독립적인 성능 보장은 아니다.
+
+평가 기록은 [comparison.json](../evaluation/knowledge/comparison.json)에 보존한다. 2026-09-13에 `nvidia/Qwen3.6-35B-A3B-NVFP4`와 동일 모델의 독립 검증 요청으로 측정한 결과는 다음과 같다. 모든 방식에 같은 원문 근거·개체 자격 규칙과 `evidence-v3`를 적용했다. 단일 호출 비교기도 새 개체 자격 필터를 포함하므로 수정 전 v0.27.0 전체의 재현 결과는 아니다.
+
+| 방식 | 승인 전 관계 후보 precision | 자동 반영한 정답 개체 / 56 | 자동 반영한 정답 관계 / 22 | 자동 반영한 오답 개체·관계 | 검증 요청·응답 오류 |
+| --- | --- | --- | --- | --- | --- |
+| 단일 호출 | 80.8% | 42 | 16 | 1 | 0 |
+| LlamaIndex schema path | 100% | 30 | 15 | 0 | 1 |
+| 개체 우선 두 단계 | 90.9% | 45 | 18 | 0 | 0 |
+
+Runtime은 개체 우선 두 단계를 사용한다. 이 방식은 관계 endpoint를 검증된 key로 강제하고 단일 개념과 별칭을 보존하며 Python runtime 없이 기존 승인·권한 계층에 연결된다. LlamaIndex 비교는 core 0.14.24와 OpenAI-like 0.8.0을 사용하고, 로컬 endpoint의 JSON Schema 지원을 명시적으로 활성화하며 인용 속성을 가진 엄격한 Pydantic schema를 구성했다. 경로 기반 추출은 연결 없는 개념·개체와 별칭 처리에 추가 구성이 필요하다. 비교 중 발생한 검증 오류 한 건은 제외하지 않고 누락으로 계산했다.
+
+이 표는 주석한 원문 표기 변형을 같은 개체로 취급한다. 별도로 기록한 정확한 canonical kind/name 기준에서 두 단계 방식의 승인 관계 precision은 66.7%, recall은 54.5%다. 따라서 같은 대상을 가리키는 이름의 표기 통합은 여전히 개선 대상이다. 자동 반영의 관계 recall도 81.8%이므로 모든 사실이 자동 반영됐다는 뜻이 아니다. 검토 대기·제외·요청 실패를 구분해 운영 문서에서 추가 평가하라. 이 30개 사례에서 오답이 없었다는 결과가 일반 문서의 무오류를 보장하지 않는다.
+
 AI 설정의 활성화·model 교체·재시작은 기존 resource를 자동으로 재처리하지 않는다.
 
 | 대상 | Embedding·후보를 생성하는 시점 | 기존 데이터의 영향 |
@@ -339,7 +379,7 @@ Schema를 변경하면 배포 전에 application·worker를 중단하고 DB·전
 - 추출 결과가 512 chunks를 넘으면 provider 호출 전에 실패한다. 이 한도는 작업량을 제한하며 S3·DB 지연을 포함한 전체 처리 시간이 15분 lease 안에 끝남을 보장하지는 않는다. 원본을 더 작은 문서로 나눈 뒤 다시 업로드하라.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
-- 지식 추출과 검증의 HTTP timeout은 요청당 3분이다. 로컬 모델의 긴 structured output 생성을 허용하면서 두 요청이 15분 job expiration 안에서 끝나도록 제한한다. Provider 오류·timeout은 job 실패와 재시도로 남는다.
+- 지식 추출과 검증의 HTTP timeout은 요청당 3분이다. 로컬 모델의 긴 structured output 생성을 허용하면서 최대 세 요청이 15분 job expiration 안에서 끝나도록 제한한다. Provider 오류·timeout은 job 실패와 재시도로 남는다.
 - 추출 응답의 구조를 확인한 뒤 원문 인용을 검증한다. 원문 근거가 없는 항목, 없는 개체를 참조하는 관계와 자기 자신을 가리키는 관계는 제외하며 같은 청크의 정상 지식은 보존한다. 중복 키가 동일 kind·정규화 이름을 가리키면 통합하고, 서로 다른 개체를 가리키면 해당 개체들과 그 키를 참조하는 관계를 제외한다. 이 정규화가 끝난 graph에 candidate 불변 조건과 별도 AI 검증을 적용한다.
 - AI 추출 후 같은 모델·endpoint를 사용하는 별도 검증 요청으로 원문 근거·유용성·충돌을 평가한다. 명시적이고 유용하며 인용 검증과 정책을 통과한 항목은 자동 승인한다. 불확실한 항목은 수동 검토로 남기고 근거 없는·사소한 항목은 자동 제외한다. 검증 요청도 AI quota를 소비하며 실패하면 자동 반영하지 않고 enrichment job을 재시도한다. 검증 대상 원문과 제안은 유지하고, 참고할 기존 개체 개요는 개체당 2,000자로 제한해 출처 누적으로 요청이 계속 커지는 것을 막는다.
 - 기본 자동 검토는 문서 생성자의 현재 active membership과 source scope `manage` 권한을 요구한다. 검토 화면의 일괄 실행은 인증된 요청자를 job에 기록하며 worker가 그 권한을 다시 확인한다. 저장된 추출과 assessment는 재사용한다. 재추출을 위한 구버전 호환 경로는 없으며 worker 실행이 필요하다.
