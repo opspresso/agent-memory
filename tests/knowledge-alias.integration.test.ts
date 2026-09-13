@@ -168,7 +168,7 @@ describe("source-grounded knowledge aliases", () => {
     test.verify.mockImplementation(async (input) => ({ model: "verifier", items: input.graph.entities.map((entity) => ({
       item: `entity:${entity.key}`, support: "uncertain", usefulness: "useful", conflict: false, evidence: input.content, reason: "The title does not establish a unique identity."
     })) }));
-    const input = await test.extract("승상이 군사를 지휘했다.", { entities: [{ key: "p", kind: "person", canonicalName: "제갈량", aliases: ["승상"] }], relationships: [] });
+    const input = await test.extract("제갈량과 승상이 각각 군사를 지휘했다.", { entities: [{ key: "p", kind: "person", canonicalName: "제갈량", aliases: ["승상"] }], relationships: [] });
     await test.curate(test.organizationId, input.chunkId);
     expect(await test.graph.findNodesByNames(test.access, test.scope, ["제갈량", "승상"])).toEqual([]);
     expect((await test.candidates.findByChunkId(test.organizationId, input.chunkId))?.assessment?.items[0]?.verdict).toBe("review");
@@ -225,7 +225,7 @@ describe("source-grounded knowledge aliases", () => {
     const member: OrganizationAccess = { ...test.access, userId: memberId, role: "member" };
     expect(await test.graph.findNodesByNames(member, privateScope, ["Hidden Alias"])).toEqual([]);
     expect(await test.graph.searchNodes({ access: member, query: "Hidden Alias", limit: 10 })).toEqual([]);
-    const node = await test.promote("Public Name is a different person.", "Hidden Alias");
+    const node = await test.promote("Hidden Alias is a different person.", "Hidden Alias");
     expect(node.node.id).not.toBe(privateNode.id);
   });
 

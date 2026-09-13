@@ -15,9 +15,11 @@ AI Agent ──▶ HTTP API / MCP ──▶ Next.js application
        Memory·chunk·Graph       document jobs       document objects
                   │
                   └── Full-Text Search + pgvector(optional)
+                  │
+                  └── Approved topology ──▶ Neo4j ──▶ Neighborhood traversal
 ```
 
-운영 콘솔, HTTP API, MCP는 별도 비즈니스 로직을 갖지 않고 같은 application use case를 호출한다. PostgreSQL은 transaction과 tenant constraint의 기준 저장소이며 pg-boss도 같은 Database를 사용한다. S3 호환 storage에는 문서 원본만 저장하고 권한·상태·chunk·provenance는 PostgreSQL에 둔다.
+운영 콘솔, HTTP API, MCP는 별도 비즈니스 로직을 갖지 않고 같은 application use case를 호출한다. PostgreSQL은 transaction과 tenant constraint의 기준 저장소이며 pg-boss도 같은 Database를 사용한다. S3 호환 storage에는 문서 원본만 저장하고 권한·상태·chunk·provenance는 PostgreSQL에 둔다. Neo4j는 승인된 Graph topology를 저장·탐색하고 PostgreSQL이 반환 자료의 현재 출처·권한을 검증한다.
 
 ## 계층과 의존성
 
@@ -61,7 +63,7 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 ### 시작 순서
 
-Node.js runtime은 bootstrap 설정을 검증한 뒤 빈 DB 초기화·schema fingerprint 검사, DB 설정 override 적용·검증, 설치 조직 초기화, 운영 설정 확인, 종료 hook·telemetry 등록, 선택형 worker 시작 순서로 준비된다. DB와 암호화 root 설정은 override를 읽기 전에 필요하다.
+Node.js runtime은 bootstrap 설정을 검증한 뒤 빈 DB 초기화·schema fingerprint 검사, DB 설정 override 적용·검증, 설치 조직 초기화, 운영 설정 확인, Neo4j 연결·constraint 준비, 종료 hook·telemetry 등록, 선택형 worker 시작 순서로 준비된다. DB와 암호화 root 설정은 override를 읽기 전에 필요하다.
 
 ### 단일 조직과 가입
 
@@ -171,6 +173,16 @@ Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `documen
 현재 strict 사전이 저장된 assessment의 자동 승인 묶음을 거부하면 해당 묶음을 통합 수동 검토에 표시한다. 원본 assessment는 변경하지 않으며, 현재 사전이 허용하는 개별 항목은 선택 승인할 수 있다. 개체 병합에서도 대칭 관계의 endpoint 순서를 정규화하고 중복 관계의 출처를 합친다. 개체 설명은 현재 보이는 출처별 description으로만 구성하며 공유 summary로 대체하지 않는다.
 
 ## Knowledge Graph와 통합 검색
+
+### Neo4j topology와 승인 원장
+
+Neo4j는 `MemoryEntity` node와 `MEMORY_RELATION` edge를 영속 저장하며, 관계 지도와 HTTP/MCP neighborhood의 인접 관계를 조회한다. 조직 ID와 resource ID로 개체를 구분하고 관계 유형은 `predicate` 속성으로 보존한다. 사용자 입력을 Cypher 식별자로 조립하지 않는다. PostgreSQL은 Graph의 승인 원장, identity·scope·provenance, 후보 검토·병합 이력과 다른 resource의 transaction 경계를 소유한다. Graph node·edge의 공개 정보와 lexical/vector 검색은 이 원장을 사용한다.
+
+Graph 변경 transaction은 조직별 `knowledge_graph_versions.revision`을 함께 변경한다. Neo4j의 `MemoryGraph.revision`과 다르면 첫 neighborhood 조회가 조직 Graph 쓰기 잠금 아래 승인된 node·edge snapshot을 읽고 하나의 Neo4j transaction으로 교체한다. 같은 revision은 재전송하지 않는다. 원장에는 graph 변경과 revision이 함께 commit되므로 Neo4j 장애로 동기화가 실패해도 다음 조회가 재구성할 수 있다. Node 삭제·병합·scope 변경도 같은 규칙을 사용한다. 시작 시 Neo4j uniqueness constraint를 멱등하게 준비한다.
+
+Neo4j에는 검색어·문서 본문·출처별 설명·embedding·credential을 복제하지 않는다. 탐색은 Neo4j가 반환한 인접 edge ID를 PostgreSQL에서 현재 scope와 유효 출처로 검증하고, 읽을 수 있는 끝점만 다음 탐색 단계로 전달한다. 만료·보관·권한 변경은 projection revision 변경을 기다리지 않고 조회에서 적용된다. 오래되었거나 권한 없는 edge가 앞 페이지에 있어도 다음 페이지를 조회한다. Neo4j 오류는 `503`으로 드러내며 PostgreSQL 탐색으로 자동 우회하지 않는다. Repository의 SQL topology 구현은 Neo4j 없이 권한 정책을 격리 검증하는 테스트에 사용하고 runtime composition은 Neo4j를 주입한다.
+
+Revision이 바뀐 조직은 전체 topology를 재구성하므로 변경 직후 첫 탐색에는 Graph 크기에 비례하는 비용과 쓰기 잠금이 발생한다. 현재 구현은 이를 명시적인 일관성 경계로 사용하며, 지속적인 대규모 변경이 발생하는 설치에서는 증분 projection으로 전환하기 전에 실제 동기화 시간과 Graph 크기를 측정한다. 한 조회 도중 더 최근의 변경이 commit되면 다음 조회에서 해당 revision을 반영하며, 반환 데이터의 출처 권한 검사는 계속 적용한다.
 
 ### Provenance와 현재 유효성
 

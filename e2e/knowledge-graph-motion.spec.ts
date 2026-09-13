@@ -54,6 +54,7 @@ async function sampleMotion(page: Page, frames = 60) {
 }
 
 async function dragNode(page: Page, node: Locator, dx: number, dy: number) {
+  await node.scrollIntoViewIfNeeded();
   const bounds = (await node.locator("circle").last().boundingBox())!;
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   await page.mouse.down();

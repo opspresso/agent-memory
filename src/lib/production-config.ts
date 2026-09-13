@@ -1,5 +1,8 @@
 const requiredProductionSettings = [
   "DATABASE_URL",
+  "NEO4J_URI",
+  "NEO4J_USERNAME",
+  "NEO4J_PASSWORD",
   "BETTER_AUTH_SECRET",
   "BETTER_AUTH_URL",
   "ADMIN_EMAILS",

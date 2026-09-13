@@ -4,6 +4,8 @@ import { createOrganizationAdministrationRepository } from "@/infrastructure/dat
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
+import { createKnowledgeGraphProjection } from "@/infrastructure/database/repositories/knowledge-graph-projection";
+import { knowledgeTopologyStore } from "./neo4j";
 import { createKnowledgeOntologyReader } from "@/infrastructure/database/repositories/knowledge-ontology-reader";
 import { createKnowledgeTermUsageRepository } from "@/infrastructure/database/repositories/knowledge-term-usage-repository";
 import { createKnowledgeOntologySuggestionService } from "@/infrastructure/ai/knowledge-ontology-suggestion-service";
@@ -73,7 +75,8 @@ export const memoryRepository = createMemoryRepository(database.db);
 export const documentRepository = createDocumentRepository(database.db);
 export const documentScopeChangeRepository = createDocumentScopeChangeRepository(database.db);
 export const ingestionReceiptRepository = createIngestionReceiptRepository(database.db);
-export const knowledgeGraphRepository = createKnowledgeGraphRepository(database.db);
+export const knowledgeGraphRepository = createKnowledgeGraphRepository(database.db, () => new Date(),
+  createKnowledgeGraphProjection(database.db, knowledgeTopologyStore));
 export const knowledgeCandidateRepository =
   createKnowledgeCandidateRepository(database.db);
 export const knowledgeOntologyReader = createKnowledgeOntologyReader(

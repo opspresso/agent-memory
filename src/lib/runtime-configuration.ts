@@ -5,6 +5,7 @@ import { readMetricsToken } from "./metrics-auth";
 import { readKnowledgeEnrichmentConcurrency } from "./document-worker-configuration";
 import { readKnowledgeExtractionLanguage } from "./knowledge-extraction-configuration";
 import { assertProductionConfiguration } from "./production-config";
+import { readNeo4jConfiguration } from "./neo4j-configuration";
 
 function paired(
   environment: Readonly<Record<string, string | undefined>>,
@@ -41,6 +42,7 @@ export function validateRuntimeEnvironment(
 ): void {
   readKnowledgeEnrichmentConcurrency(environment);
   readKnowledgeExtractionLanguage(environment);
+  readNeo4jConfiguration(environment);
   assertProductionConfiguration(environment);
   for (const name of ["S3_BUCKET", "S3_REGION", "S3_ENDPOINT"]) {
     if (environment[name] !== undefined && !environment[name]?.trim()) {

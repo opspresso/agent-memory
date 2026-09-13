@@ -79,11 +79,11 @@ AUTH_PASSWORD_SIGNUP=true
 ```
 
 ```bash
-docker compose up --wait postgres minio
+docker compose up --wait postgres minio neo4j
 docker compose run --rm minio-init
 ```
 
-`up --wait`가 PostgreSQL·MinIO의 health를 확인하고 `run --rm minio-init`이 bucket 생성을 완료한 뒤 schema 초기화와 서버를 실행하라. 앞 명령이 실패하면 이후 단계로 진행하지 마라. DB 주소를 기본 Compose 값에서 바꿨다면 먼저 [CLI의 환경 변수 처리](#database-초기화)를 확인한다.
+`up --wait`가 PostgreSQL·MinIO·Neo4j의 health를 확인하고 `run --rm minio-init`이 bucket 생성을 완료한 뒤 schema 초기화와 서버를 실행하라. 앞 명령이 실패하면 이후 단계로 진행하지 마라. DB 주소를 기본 Compose 값에서 바꿨다면 먼저 [CLI의 환경 변수 처리](#database-초기화)를 확인한다.
 
 ```bash
 pnpm db:init
@@ -96,7 +96,7 @@ pnpm dev
 | PostgreSQL | `localhost:5433` |
 | MinIO API / console | `http://localhost:9010` / `http://localhost:9011` |
 
-`.env.example`은 document worker와 전용 MinIO 설정을 기본 활성화한다. 기존 DB를 재사용하면 [Database 설정 override](#database-설정-override)가 `.env.local`보다 우선한다. `docker compose down -v`는 PostgreSQL·MinIO volume을 삭제하므로 데이터를 확인하지 않고 실행하지 마라.
+`.env.example`은 document worker와 전용 MinIO 설정을 기본 활성화한다. 기존 DB를 재사용하면 [Database 설정 override](#database-설정-override)가 `.env.local`보다 우선한다. `docker compose down -v`는 PostgreSQL·MinIO·Neo4j volume을 삭제하므로 데이터를 확인하지 않고 실행하지 마라.
 
 ## 화면 언어
 
@@ -112,6 +112,16 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 ## 환경 변수
 
+### Neo4j 운영
+
+로컬 Compose는 `neo4j:2026.08.1` Community Edition과 Agent Memory 전용 `neo4j-data` volume을 사용한다. Bolt는 `127.0.0.1:7687`, Browser는 `http://localhost:7474`에 바인딩한다. `.env.example`의 credential은 로컬 전용이며 운영에서는 별도 credential과 내부 네트워크 또는 TLS 연결을 사용한다. 플러그인 다운로드는 필요하지 않다.
+
+Application 시작은 PostgreSQL schema 확인 이후 Neo4j 연결과 uniqueness constraint 준비까지 성공해야 완료된다. `/api/health`의 `checks.neo4j`는 `ok`, `failed`, 또는 앞선 PostgreSQL 검사 실패 시 `unknown`을 반환한다. Neo4j가 중단되면 readiness와 관계 탐색은 `503`을 반환한다. 연결 복구 후 첫 탐색이 PostgreSQL 승인 원장의 최신 revision과 topology를 동기화한다.
+
+Neo4j는 승인된 Graph의 재구성 가능한 projection이다. 데이터 복원의 기준은 PostgreSQL의 node·edge·source·candidate·revision을 포함한 일관된 백업이다. Neo4j volume을 새로 준비하면 첫 탐색이 해당 설치 조직의 전체 topology를 복구한다. 다른 서비스가 사용하는 Neo4j database를 함께 초기화하지 마라. Schema가 달라진 PostgreSQL 설치는 기존 [명시적 초기화 절차](#database-초기화)를 따른다. Application이 기존 운영 데이터를 자동 초기화하거나 재추출하지 않는다.
+
+IDC의 Neo4j 서비스 추가·credential·volume·백업 정책은 Dockpad가 소유한다. 이 저장소는 application 연결 설정과 localdev를 제공한다. 운영 rollout 전에 Dockpad에서 전용 Neo4j 서비스를 준비해야 하며, 이 변경을 위한 운영 배포·재시작은 사용자가 별도로 실행한다.
+
 `.env.example`을 기준으로 환경별 값을 설정하라. 샘플은 bootstrap, 인증·접근 정책, 문서 worker·quota, object storage, AI 기능·호출 제한, 관측성, 개발·빌드 순으로 구분한다. 주석 처리된 선택 항목은 해당 기능을 사용할 때 활성화한다. 최초 실행 전에 secret과 관리자 email을 바꾸고 Google·OIDC·password 중 최소 한 개의 로그인 수단을 설정하라.
 
 ### Bootstrap과 빌드
@@ -119,6 +129,8 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | 그룹 | 변수 | 역할 |
 | --- | --- | --- |
 | Database | `DATABASE_URL` | PostgreSQL 연결 문자열 |
+| Graph | `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` | 필수 Neo4j 연결 정보. URI에 credential을 포함하지 않는다. 로컬 기본은 `bolt://127.0.0.1:7687`, `neo4j`, `agent_memory_dev`이며 운영에서는 명시적으로 설정한다. |
+| Graph | `NEO4J_DATABASE` | Neo4j database 이름. 기본값 `neo4j` |
 | Startup | `NODE_ENV` | `production`이면 운영 필수 변수 검증을 활성화 |
 | Build | `NEXT_DIST_DIR` | Next.js 출력 디렉터리. 기본값 `.next`, Playwright 서버는 `.next-e2e` 사용 |
 
@@ -191,7 +203,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | --- | --- |
 | 모든 환경의 로그인 | Google·OIDC·password 중 최소 한 개 활성화 |
 | Production bootstrap | DB를 읽기 전에 `DATABASE_URL`, `BETTER_AUTH_SECRET` 필요 |
-| Production 유효 설정 | 위 두 값과 `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` 필요. Override 대상은 DB에서 제공해도 됨 |
+| Production 유효 설정 | 위 두 값과 `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` 필요. Override 대상은 DB에서 제공해도 됨 |
 | Production 인증 | Secret 32자 이상. Loopback 이외의 application origin은 HTTPS이며 password self-signup 금지 |
 | HTTP endpoint URL | 인증·S3·AI·Langfuse URL은 credential을 포함하지 않는 절대 HTTP(S) 주소. PostgreSQL 연결 문자열에는 이 규칙을 적용하지 않음 |
 | Boolean | `AUTH_PASSWORD`, `AUTH_PASSWORD_SIGNUP`, `DOCUMENT_WORKER_ENABLED`, `S3_FORCE_PATH_STYLE`은 설정 시 `true` 또는 `false` |
@@ -229,7 +241,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 | 적용 단위 | 변수 | 반영 시점 |
 | --- | --- | --- |
-| Bootstrap env | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `NODE_ENV` | DB 접근·복호화·시작 방식에 먼저 필요. Override 불가 |
+| Bootstrap env | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `NEO4J_*`, `NODE_ENV` | DB 접근·복호화·시작 방식에 먼저 필요. Override 불가 |
 | 요청 시 다시 읽는 설정 | `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN` | 저장한 instance에서 즉시 적용. 다른 instance는 최대 5초 cache 후 반영 |
 | Process 초기화 설정 | 인증 provider, AI, document worker·quota, S3, logging, telemetry 등 나머지 설정 | 사용하는 모든 instance 재시작 필요 |
 | Framework·검사 환경 | `NEXT_DIST_DIR`, `NEXT_RUNTIME`, `NEXT_PHASE`, `VERCEL`, `CI`, `E2E_*` 등 | 전역 설정 화면에서 관리하지 않음 |
@@ -289,7 +301,8 @@ Semantic search는 query와 같은 model 이름으로 저장된 vector를 사용
 2. 빈 DB를 초기화하거나 기존 schema fingerprint를 확인한다. 일치하지 않으면 설정 override·worker 준비 전에 시작을 중단한다.
 3. DB의 secret override를 복호화하고 유효 설정을 검증한 뒤 process environment에 적용한다.
 4. 설치의 단일 조직을 초기화하고 production 설정을 확인한다.
-5. Telemetry와 종료 handler를 준비하고 `DOCUMENT_WORKER_ENABLED=true`이면 worker를 시작한다.
+5. Neo4j 연결을 확인하고 Graph uniqueness constraint를 준비한다.
+6. Telemetry와 종료 handler를 준비하고 `DOCUMENT_WORKER_ENABLED=true`이면 worker를 시작한다. 종료 시 queue, PostgreSQL pool, Neo4j driver, telemetry를 닫는다.
 
 따라서 worker를 끈 web instance도 DB·schema 초기화·설정 override가 정상이어야 시작할 수 있다. 여러 instance의 역할 분리는 [운영 topology](#운영-topology와-데이터-보호)를 따른다.
 
@@ -358,10 +371,10 @@ curl -i http://localhost:3100/api/health
 
 | Endpoint | 인증과 응답 | 확인하는 범위 |
 | --- | --- | --- |
-| `GET /api/health` | 인증 불필요. 정상 `200`, DB·schema 초기화 실패 `503`, cache 안 함 | DB 연결과 현재 schema fingerprint 검사 |
+| `GET /api/health` | 인증 불필요. 정상 `200`, DB·schema·Neo4j 검사 실패 `503`, cache 안 함 | PostgreSQL 연결·schema fingerprint와 Neo4j 연결 검사 |
 | `GET /api/metrics` | `METRICS_BEARER_TOKEN`과 일치하는 Bearer 필요. 미설정·잘못된 인증은 `404` | Build version, worker 활성 설정, process CPU·memory·event loop delay |
 
-Health의 `200`은 DB 연결과 현재 schema fingerprint가 일치임을 뜻한다. 수동 schema 변경, S3 접근, worker 소비 상태나 AI provider 정상 여부는 보장하지 않는다. Metrics의 worker 값도 실제 처리 진척이 아닌 활성 설정이다. 배포 후에는 document 상태·queue log·필요한 provider 연결을 별도로 확인하라. Metrics token은 조직 Agent token·사용자 session과 다른 전용 credential이다.
+Health의 `200`은 PostgreSQL 연결·현재 schema fingerprint와 Neo4j 연결 검사가 성공했음을 뜻한다. 수동 schema 변경, S3 접근, worker 소비 상태나 AI provider 정상 여부는 보장하지 않는다. Metrics의 worker 값도 실제 처리 진척이 아닌 활성 설정이다. 배포 후에는 document 상태·queue log·필요한 provider 연결을 별도로 확인하라. Metrics token은 조직 Agent token·사용자 session과 다른 전용 credential이다.
 
 ### 로그와 trace
 

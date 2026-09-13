@@ -2571,7 +2571,7 @@ describe("PostgreSQL schema", () => {
     const candidate = createKnowledgeCandidate({
       id: randomUUID(), scope: { kind: "organization", organizationId: organization }, documentId, chunkId,
       model: "test", now, graph: {
-        entities: ["a", "b", "c"].map((key) => ({ key, kind: "person", canonicalName: key })),
+        entities: ["a", "b", "c"].map((key) => ({ key, kind: "person", canonicalName: key.toUpperCase() })),
         relationships: [{ sourceKey: "a", targetKey: "b", predicate: "student_of" }, { sourceKey: "b", targetKey: "c", predicate: "associated_with" }]
       }
     });

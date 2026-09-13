@@ -115,7 +115,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 
 ### Readiness와 지표
 
-- `GET /api/health`: 인증 없이 DB 연결과 현재 schema SQL의 fingerprint을 확인한다. 성공은 `200` `{ "status": "ok", "checks": { "database": "ok", "schema": "ok" } }`다. DB 연결 실패는 `503`과 `{ "database": "failed", "schema": "unknown" }`, schema 불일치은 `503`과 `{ "database": "ok", "schema": "failed" }`를 checks에 반환한다. 모든 응답은 `Cache-Control: no-store`다. Object storage·AI provider 상태나 수동 schema 변경은 검사하지 않는다.
+- `GET /api/health`: 인증 없이 PostgreSQL 연결·현재 schema SQL의 fingerprint와 Neo4j 연결을 확인한다. 성공은 `200` `{ "status": "ok", "checks": { "database": "ok", "schema": "ok", "neo4j": "ok" } }`다. 실패는 `503`이며 DB 연결 실패 시 `database=failed`, schema 불일치 시 `database=ok, schema=failed`, Neo4j 실패 시 `database=ok, schema=ok, neo4j=failed`다. 앞 단계가 실패하여 검사하지 못한 값은 `unknown`이다. 모든 응답은 `Cache-Control: no-store`다. Object storage·AI provider 상태나 수동 schema 변경은 검사하지 않는다.
 - `GET /api/metrics`: `METRICS_BEARER_TOKEN`이 없거나 Bearer가 일치하지 않으면 `404`다. 성공하면 Prometheus text exposition format으로 build·process 지표를 반환한다.
 
 ### 전역 애플리케이션 설정
@@ -555,6 +555,8 @@ Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical nam
 AI 추출의 대표 이름은 NFKC·공백 정규화 후 원문에 존재해야 한다. 관계나 문장을 요약해 새 이름을 만든 개체는 `concept`·`event`로 분류해도 제외한다. 등록할 수 없는 개체 종류는 추출 힌트·온톨로지 추천에서도 제외한다. 자동 검증에서 이러한 개체와 그 개체를 참조하는 관계는 모델의 긍정 판정과 무관하게 제외한다. 관계 승인으로 제외된 개체를 다시 승격하지 않는다. 고유하게 이름 붙은 사건과 재사용 가능한 개념은 개체가 될 수 있으며, 연결 유무만으로 삭제하지 않는다.
 
 ### 검색과 neighborhood
+
+Neighborhood는 Neo4j의 인접 관계를 따라가며, 각 단계에서 PostgreSQL의 현재 resource scope와 provenance를 다시 검사한다. 승인·삭제·병합 뒤 첫 조회는 최신 Graph revision을 Neo4j에 반영한다. Neo4j 연결·동기화 실패는 `503 { "error": "Knowledge graph is unavailable" }`로 반환한다. 응답의 node·edge 형식과 기존 depth·limit 계약은 유지한다. 검색 후보 순위는 PostgreSQL의 이름·출처별 설명과 선택형 embedding을 사용하며, 의미 검색 일치가 두 개체 사이의 관계를 의미하지 않는다.
 
 검색은 `GET .../knowledge/nodes?q=<query>&limit=<1-100>`을 사용하며 query는 1–10,000자, 기본 검색 limit은 10이다. Neighborhood는 `depth=1-5`, `limit=1-200`을 받으며 기본값은 각각 1과 100이다. 두 조회는 호출자가 현재 읽을 수 있고 active·유효한 Memory 또는 ready document chunk 근거가 하나 이상 있는 graph resource만 반환한다.
 
