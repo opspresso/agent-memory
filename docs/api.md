@@ -475,6 +475,7 @@ Retry는 원래 scope의 `write` 권한을 요구한다. 성공은 재시도 que
 Node 생성 입력은 `scope`, `kind`, `canonicalName`, `source`와 선택형 `summary`, `properties`다. Edge 생성 입력은 `scope`, `sourceNodeId`, `targetNodeId`, `predicate`, `source`와 선택형 `properties`다.
 
 - Node의 `kind`는 1–100자, `canonicalName`은 1–500자, `summary`는 1–10,000자다.
+- `relationship`, `relation`, `employment`, `statement`, `claim`, `fact`, `attribute`는 개체 종류가 아니므로 node 생성과 온톨로지의 `nodeKinds` 등록에서 `400`으로 거부한다. 이 규칙은 `off`·`warn`·`strict` 모두에 적용한다. 해당 종류가 포함된 AI 후보의 수동 승인도 거부하며 관계로 다시 추출해야 한다.
 - Edge의 `predicate`는 1–100자다.
 - Node와 edge의 `properties`는 선택형 JSON object이며 직렬화 기준 최대 32 KiB다.
 
@@ -550,6 +551,8 @@ Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical nam
 - `POST .../knowledge/ontology/suggestions`: 관찰 용어와 현재 사전을 knowledge extraction 모델에 보내 정제된 용어(동의어 통합·정규화)를 제안받는다. 응답은 `{ "nodeKinds": string[], "edgePredicates": string[] }`이며 사전에 이미 있는 용어는 제외된다. `KNOWLEDGE_EXTRACTION_MODEL`이 설정되지 않았으면 `503`, provider 상한 초과 시 `429`를 반환한다. 요청에는 용어 문자열과 개수만 전달되며 문서 본문은 전송하지 않는다.
 
 추천·제안은 사전에 자동 반영되지 않는다 — admin이 콘솔 설정 화면에서 선택해 `PATCH /api/organization`로 저장한다.
+
+AI 추출의 대표 이름은 NFKC·공백 정규화 후 원문에 존재해야 한다. 관계나 문장을 요약해 새 이름을 만든 개체는 `concept`·`event`로 분류해도 제외한다. 등록할 수 없는 개체 종류는 추출 힌트·온톨로지 추천에서도 제외한다. 자동 검증에서 이러한 개체와 그 개체를 참조하는 관계는 모델의 긍정 판정과 무관하게 제외한다. 관계 승인으로 제외된 개체를 다시 승격하지 않는다. 고유하게 이름 붙은 사건과 재사용 가능한 개념은 개체가 될 수 있으며, 연결 유무만으로 삭제하지 않는다.
 
 ### 검색과 neighborhood
 

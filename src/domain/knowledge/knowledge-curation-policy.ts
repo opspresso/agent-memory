@@ -4,6 +4,7 @@ import { entityReviewKey, relationshipReviewKey } from "./knowledge-candidate-se
 import type { KnowledgeAliasVerification, KnowledgeCandidateAssessment, KnowledgeItemVerification } from "./knowledge-assessment";
 import type { OrganizationKnowledgeOntology } from "./knowledge-ontology-reader";
 import { evaluateKnowledgeOntology } from "./knowledge-ontology";
+import { knowledgeEntityEligibilityIssue } from "./knowledge-entity-eligibility";
 
 const vague = new Set(["associated_with", "related_to", "related_with", "co_occurs_with"]);
 const incidentalMovement = new Set(["comes_from", "went_to", "visits", "visited", "responds_to"]);
@@ -52,8 +53,15 @@ export function assessKnowledgeCandidate(input: {
     evaluateKnowledgeOntology(input.ontology.ontology, { kinds: kind ? [kind] : [], predicates: predicate ? [predicate] : [] }).length === 0;
   const unresolvedAliases = new Set(graph.relationships.filter((relationship) => relationship.predicate === "alias_of")
     .flatMap((relationship) => [relationship.sourceKey, relationship.targetKey]).concat(aliases.filter((alias) => alias.verdict === "review").map((alias) => alias.entityKey)));
+  const ineligibleEntities = new Set<string>();
   for (const entity of graph.entities) {
-    if (unresolvedAliases.has(entity.key)) {
+    const issue = knowledgeEntityEligibilityIssue(entity, input.content);
+    if (issue) {
+      ineligibleEntities.add(entity.key);
+      change(entityReviewKey(entity.key), "ignore", issue === "assertion_kind"
+        ? "An assertion must be represented as a relationship, not an entity."
+        : "The proposed entity name does not occur in the source.");
+    } else if (unresolvedAliases.has(entity.key)) {
       change(entityReviewKey(entity.key), "review", "Alias identity needs resolution before creating separate entities.");
     } else if (!allowed(entity.kind) && items.get(entityReviewKey(entity.key))?.verdict === "accept") {
       change(entityReviewKey(entity.key), "review", "The entity kind is outside the strict ontology.");
@@ -61,6 +69,10 @@ export function assessKnowledgeCandidate(input: {
   }
   graph.relationships.forEach((relationship, index) => {
     const key = relationshipReviewKey(index);
+    if (ineligibleEntities.has(relationship.sourceKey) || ineligibleEntities.has(relationship.targetKey)) {
+      change(key, "ignore", "The relationship references an ineligible entity.");
+      return;
+    }
     if (relationship.predicate === "alias_of") { change(key, "review", "Alias identity needs resolution before merging entities."); }
     if (vague.has(relationship.predicate)) { change(key, "ignore", "The relation does not identify a specific fact."); }
     if (incidentalMovement.has(relationship.predicate)) { change(key, "ignore", "An unqualified movement or response in one scene is not a durable relationship. Model a consequential event with its context instead."); }

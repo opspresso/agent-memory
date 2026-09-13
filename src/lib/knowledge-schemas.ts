@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { serializedJsonByteLength } from "@/domain/shared/json-size";
+import { isKnowledgeEntityKind } from "@/domain/knowledge/knowledge-entity-eligibility";
 
 import { memoryScopeSchema } from "./memory-schemas";
 
@@ -44,7 +45,7 @@ export const mergeKnowledgeNodesSchema = z.object({
 
 export const createKnowledgeNodeSchema = z.object({
   scope: memoryScopeSchema,
-  kind: z.string().trim().min(1).max(100),
+  kind: z.string().trim().min(1).max(100).refine(isKnowledgeEntityKind, "node kind must identify an entity, not an assertion"),
   canonicalName: z.string().trim().min(1).max(500),
   summary: z.string().trim().min(1).max(10_000).optional(),
   properties: propertiesSchema.optional(),

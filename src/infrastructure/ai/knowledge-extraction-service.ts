@@ -10,6 +10,7 @@ import type {
 } from "@/domain/knowledge/knowledge-extraction-service";
 import { defaultKnowledgeOntology } from "@/domain/knowledge/knowledge-ontology";
 import { groundKnowledgeGraph } from "@/domain/knowledge/knowledge-extraction-quality";
+import { isKnowledgeEntityKind } from "@/domain/knowledge/knowledge-entity-eligibility";
 import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 
 interface KnowledgeExtractionServiceConfiguration {
@@ -69,8 +70,9 @@ function ontologyInstructions(
   ontology: KnowledgeExtractionOntologyHint | undefined
 ): readonly string[] {
   const lines: string[] = [];
-  if (ontology && ontology.nodeKinds.length > 0) {
-    const kinds = ontology.nodeKinds.join(", ");
+  const entityKinds = ontology?.nodeKinds.filter(isKnowledgeEntityKind) ?? [];
+  if (ontology && entityKinds.length > 0) {
+    const kinds = entityKinds.join(", ");
     lines.push(
       ontology.mode === "strict"
         ? `- Use only these lowercase kinds defined by the organization: ${kinds}. Omit entities that do not fit a listed kind.`
@@ -99,7 +101,7 @@ function extractionInstructions(
 
 Output language rules:
 - Write human-readable summaries in ${outputLanguage}. The language of this system prompt, JSON field names, examples, or document metadata must not determine the output language.
-- Write newly composed names for events or other descriptive entities in ${outputLanguage} as well.
+- Entity names must be copied from the supplied content, never composed from a description of what happened.
 - Preserve canonicalName and aliases in the spelling and script used in the supplied content. When Korean names are present, use those Korean names verbatim; never romanize them or replace them with English or Chinese names. For example, preserve 유비, 관우, 장비 instead of Liu Bei, Guan Yu, Zhang Fei.
 - Preserve original product names, brands, code identifiers, and acronyms when no Korean form is supplied. Do not invent translated aliases.
 - Evidence must remain verbatim quotations from the source, regardless of the configured output language. Never translate evidence.
@@ -108,6 +110,10 @@ Output language rules:
 General rules:
 - Extract named entities, including characters and places within a fictional work. Treat fiction as statements within that work, not verified historical facts.
 - Use the human-readable name stated in the document as canonicalName.
+- An entity is an independently identifiable person, organization, place, product, named event, or reusable named concept. A statement about two entities is a relationship, never another entity. Do not use relationship, relation, employment, statement, claim, fact, or attribute as entity kinds, even if listed in the organization vocabulary.
+- Never nominalize a sentence into an entity name. For "조운은 유비를 섬겼다", extract the people 조운 and 유비 and a directed serves relationship; do not create "조운의 유비 섬김" or "조운 - 섬김 - 유비" under any kind, including concept or event.
+- A named strategy such as 반간지계 may be a concept; when the source explicitly establishes who used it, also extract that person's uses relationship to the concept. Do not leave relationships only in entity summaries.
+- "오국태는 유비를 사위감으로 여겼다" expresses an opinion, not an established family relationship. Omit the family relationship and never create "유비 - 사위감 - 오국태" as an entity.
 - Do not use a URL, domain, email address, date, duration, JSON property name, XML tag, or CSV header as an entity when it only describes or locates another named entity.
 - Extract only entities and directed relationships supported by the supplied text. Do not invent missing facts.
 - Prefer a smaller set of well-supported entities over speculative or structural tokens.
@@ -278,7 +284,7 @@ export function createKnowledgeExtractionService(
           type: "json_schema",
           json_schema: buildResponseJsonSchema(
             input.ontology?.mode === "strict"
-              ? input.ontology.nodeKinds
+              ? input.ontology.nodeKinds.filter(isKnowledgeEntityKind)
               : undefined,
             input.ontology?.mode === "strict"
               ? input.ontology.edgePredicates

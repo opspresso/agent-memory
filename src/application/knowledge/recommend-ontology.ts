@@ -9,6 +9,7 @@ import {
 } from "@/domain/knowledge/knowledge-ontology";
 import type { KnowledgeOntologyReader } from "@/domain/knowledge/knowledge-ontology-reader";
 import type { KnowledgeOntologySuggestionService } from "@/domain/knowledge/knowledge-ontology-suggestion-service";
+import { isKnowledgeEntityKind } from "@/domain/knowledge/knowledge-entity-eligibility";
 import type {
   KnowledgeOntologyTermUsage,
   KnowledgeTermUsageRepository
@@ -74,7 +75,7 @@ export function buildRecommendKnowledgeOntologyTerms(
     ]);
     const ontology = settings?.ontology ?? emptyKnowledgeOntology;
     return {
-      nodeKinds: newTerms(usage.nodeKinds, ontology.nodeKinds),
+      nodeKinds: newTerms(usage.nodeKinds.filter((entry) => isKnowledgeEntityKind(entry.term)), ontology.nodeKinds),
       edgePredicates: newTerms(usage.edgePredicates, ontology.edgePredicates)
     };
   };
@@ -106,7 +107,7 @@ export function buildSuggestKnowledgeOntology(
       }
     });
     const normalized = createKnowledgeOntology({
-      nodeKinds: suggested.nodeKinds.slice(0, RECOMMENDATION_LIMIT),
+      nodeKinds: suggested.nodeKinds.filter(isKnowledgeEntityKind).slice(0, RECOMMENDATION_LIMIT),
       edgePredicates: suggested.edgePredicates.slice(0, RECOMMENDATION_LIMIT)
     });
     const knownKinds = new Set(ontology.nodeKinds);

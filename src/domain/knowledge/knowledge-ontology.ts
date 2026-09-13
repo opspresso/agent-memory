@@ -2,6 +2,7 @@ import {
   normalizeKnowledgeKind,
   normalizeKnowledgePredicate
 } from "./knowledge-identity";
+import { isKnowledgeEntityKind } from "./knowledge-entity-eligibility";
 
 export const knowledgeOntologyModes = ["off", "warn", "strict"] as const;
 
@@ -104,6 +105,9 @@ export function createKnowledgeOntology(input: {
   readonly nodeKinds: readonly string[];
   readonly edgePredicates: readonly string[];
 }): KnowledgeOntology {
+  if (input.nodeKinds.some((kind) => !isKnowledgeEntityKind(kind))) {
+    throw new InvalidKnowledgeOntologyError("ontology node kinds must identify entities, not assertions");
+  }
   return Object.freeze({
     nodeKinds: normalizedTerms(
       input.nodeKinds,

@@ -9,6 +9,7 @@ import {
   normalizeKnowledgeName,
   normalizeKnowledgePredicate
 } from "./knowledge-identity";
+import { knowledgeEntityEligibilityIssue } from "./knowledge-entity-eligibility";
 
 const vaguePredicates = new Set(["associated_with", "related_to", "related_with", "co_occurs_with"]);
 const symmetricPredicates = new Set(["spouse_of", "sibling_of", "sworn_sibling_of"]);
@@ -29,7 +30,7 @@ export function groundKnowledgeGraph(content: string, graph: ProposedKnowledgeGr
     .filter((quote) => quote.length > 0 && source.includes(quote));
   const entities = graph.entities.flatMap((entity) => {
     const evidence = evidenceFor(entity.evidence);
-    return evidence.length ? [{ ...entity, evidence }] : [];
+    return evidence.length && !knowledgeEntityEligibilityIssue(entity, content) ? [{ ...entity, evidence }] : [];
   });
   const keys = new Set(entities.map((entity) => entity.key));
   const relationships = graph.relationships.flatMap((relationship) => {

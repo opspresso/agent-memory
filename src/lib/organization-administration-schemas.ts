@@ -6,6 +6,7 @@ import {
   teamRoles
 } from "@/domain/identity/organization-access";
 import { knowledgeOntologyModes } from "@/domain/knowledge/knowledge-ontology";
+import { isKnowledgeEntityKind } from "@/domain/knowledge/knowledge-entity-eligibility";
 
 export const organizationSlugSchema = z
   .string()
@@ -43,7 +44,7 @@ export const updateOrganizationSchema = z
     ontologyMode: z.enum(knowledgeOntologyModes).optional(),
     ontology: z
       .object({
-        nodeKinds: z.array(ontologyTermSchema).max(200),
+        nodeKinds: z.array(ontologyTermSchema.refine(isKnowledgeEntityKind, "node kinds must identify entities, not assertions")).max(200),
         edgePredicates: z.array(ontologyTermSchema).max(200)
       })
       .optional()
