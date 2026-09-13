@@ -298,6 +298,14 @@ Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 �
 pnpm eval:knowledge --variants entity-first --verify
 ```
 
+구조화된 이력서의 고용·보유 기술·프로젝트·수상·부정문 회귀 사례는 업로드 문서를 포함하지 않는 별도 합성 corpus로 평가한다.
+
+```bash
+pnpm eval:knowledge --variants entity-first --verify --corpus evaluation/knowledge/resume-corpus.json --output .eval-results/resume-regression
+```
+
+[합성 이력서 평가 기록](../evaluation/knowledge/resume-comparison.json)은 개체 18개 중 17개와 정답 관계 10개 전부를 승인했다. 승인한 오답 개체·관계·별칭과 잘못된 병합은 없었고 요청 오류도 없었다. 누락한 개체는 근무하지 않았다는 부정문에만 등장하는 회사다. 이 6개 진단 사례를 일반 문서의 정확도로 해석하지 마라.
+
 LlamaIndex와 비교하려면 Python 3.12 이상에서 평가 전용 환경을 준비한다. Python은 application runtime 의존성이 아니다.
 
 ```bash

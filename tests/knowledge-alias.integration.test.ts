@@ -104,7 +104,7 @@ describe("source-grounded knowledge aliases", () => {
     await test.candidates.saveAssessment(test.organizationId,input.candidate.id,previous);
     await test.curate(test.organizationId,input.chunkId);
     const current = await test.candidates.findByChunkId(test.organizationId,input.chunkId);
-    expect(current?.assessment?.policyVersion).toBe("evidence-v3");
+    expect(current?.assessment?.policyVersion).toBe("evidence-v5");
     expect(current?.assessmentHistory).toEqual([previous]);
     expect(current?.status).toBe("accepted");
     await test.curate(test.organizationId,input.chunkId);

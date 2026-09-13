@@ -2623,7 +2623,7 @@ describe("PostgreSQL schema", () => {
     expect(verify).toHaveBeenCalledTimes(1);
     const automatic = await repository.findById(organization, automaticCandidate.id);
     expect(automatic?.status).toBe("accepted");
-    expect(automatic?.assessment?.policyVersion).toBe("evidence-v3");
+    expect(automatic?.assessment?.policyVersion).toBe("evidence-v5");
     expect(automatic?.itemReviews).toHaveLength(5);
     expect(automatic?.itemReviews?.every((review) => review.method === "automatic")).toBe(true);
     expect(await repository.reviewSummary(access)).toEqual({ automaticAccepted: 3, automaticIgnored: 2 });

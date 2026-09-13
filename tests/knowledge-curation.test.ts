@@ -30,7 +30,7 @@ describe("automatic curation orchestration", () => {
       items:[{ item:"entity:a",verdict:"accept",evidence:"A leads the team.",reason:"Old policy." }] } });
     await test.run("org","ch");
     expect(test.verify).toHaveBeenCalledOnce();
-    expect(test.saveAssessment).toHaveBeenCalledWith("org","c",expect.objectContaining({ policyVersion:"evidence-v3" }));
+    expect(test.saveAssessment).toHaveBeenCalledWith("org","c",expect.objectContaining({ policyVersion:"evidence-v5" }));
   });
   it("bounds accumulated context without truncating the source under verification", async () => {
     const test = setup();

@@ -105,7 +105,7 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
           ...(embeddings[ordinal]
             ? { embedding: embeddings[ordinal] }
             : {}),
-          metadata: { start: part.start, end: part.end },
+          metadata: { start: part.start, end: part.end, ...(part.contextSpans ? { contextSpans: part.contextSpans } : {}) },
           now: completedAt
         })
       );

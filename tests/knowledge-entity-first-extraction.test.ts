@@ -3,10 +3,14 @@ import { createEntityFirstKnowledgeExtractionService } from "@/infrastructure/ai
 import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 
 const content = "조운은 유비를 섬겼다.";
-const entities = [{ key:"zhao",kind:"person",canonicalName:"조운",aliases:[],summary:null,evidence:[content] },
-  { key:"liu",kind:"person",canonicalName:"유비",aliases:[],summary:null,evidence:[content] }];
-const relationship = { sourceKey:"zhao",targetKey:"liu",predicate:"serves",evidence:[content] };
-const response = (value:unknown) => Response.json({ choices:[{ message:{ content:JSON.stringify(value) } }] });
+const entities = [{ key:"e0",kind:"person",canonicalName:"조운",aliases:[],summary:null,evidence:[content] },
+  { key:"e1",kind:"person",canonicalName:"유비",aliases:[],summary:null,evidence:[content] }];
+const relationship = { sourceKey:"e0",targetKey:"e1",predicate:"serves",evidence:[content] };
+const response = (value:unknown) => {
+  const graph = value as { entities?:readonly Record<string,unknown>[]; relationships?:readonly Record<string,unknown>[] };
+  const withIds = (rows:readonly Record<string,unknown>[]) => rows.map((row) => ({ ...Object.fromEntries(Object.entries(row).filter(([key]) => key !== "evidence")),evidenceIds:row.evidenceIds??["s0"] }));
+  return Response.json({ choices:[{ message:{ content:JSON.stringify({ ...(graph.entities?{ entities:withIds(graph.entities) }:{}),...(graph.relationships?{ relationships:withIds(graph.relationships) }:{}) }) } }] });
+};
 const input = { content,documentTitle:"Fixture",mimeType:"text/plain",quotaKey:{ organizationId:"org",userId:"user" } };
 
 describe("entity-first knowledge extraction", () => {
@@ -24,10 +28,14 @@ describe("entity-first knowledge extraction", () => {
     const first = JSON.parse(request.mock.calls[0]![1]!.body as string);
     const second = JSON.parse(request.mock.calls[1]![1]!.body as string);
     expect(first.response_format.json_schema.schema.required).toEqual(["entities"]);
+    expect(first.response_format.json_schema.schema.properties.entities.items.properties).not.toHaveProperty("key");
+    expect(first.response_format.json_schema.schema.$defs.sourceEvidence.enum).toEqual(["s0"]);
+    expect(second.response_format.json_schema.schema.$defs.sourceEvidence.enum).toEqual(["s0"]);
+    expect(first.response_format.json_schema.schema.properties.entities.items.properties.evidenceIds.items).toEqual({ $ref:"#/$defs/sourceEvidence" });
     expect(second.response_format.json_schema.schema.required).toEqual(["relationships"]);
     const properties = second.response_format.json_schema.schema.properties.relationships.items.properties;
-    expect(properties.sourceKey.enum).toEqual(["zhao","liu"]);
-    expect(properties.targetKey.enum).toEqual(["zhao","liu"]);
+    expect(properties.sourceKey.enum).toEqual(["e0","e1"]);
+    expect(properties.targetKey.enum).toEqual(["e0","e1"]);
     expect(JSON.parse(second.messages[1].content).entities).toHaveLength(2);
   });
 
@@ -47,6 +55,14 @@ describe("entity-first knowledge extraction", () => {
     expect((await service.extract({ ...input,content:source })).graph.entities[0]?.canonicalName).toBe("멱등성");
     expect(request).toHaveBeenCalledOnce();
   });
+  it("assigns neutral keys after extraction instead of trusting type-bearing model keys", async () => {
+    const source = "Orbit는 소프트웨어 제품이다.";
+    const request = vi.fn<typeof fetch>().mockResolvedValue(response({ entities:[{
+      key:"organization_guess",kind:"product",canonicalName:"Orbit",summary:null,aliases:[],evidence:[source]
+    }] }));
+    const service = createEntityFirstKnowledgeExtractionService({ baseUrl:"http://model.test/v1",model:"test",request });
+    expect((await service.extract({ ...input,content:source })).graph.entities[0]).toMatchObject({ key:"e0",kind:"product",canonicalName:"Orbit" });
+  });
 
   it("enforces strict vocabulary in code when a provider ignores the JSON schema", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValueOnce(response({ entities })).mockResolvedValueOnce(response({ relationships:[relationship] }));
@@ -61,5 +77,13 @@ describe("entity-first knowledge extraction", () => {
     const request = vi.fn<typeof fetch>().mockResolvedValueOnce(response({ entities })).mockResolvedValueOnce(new Response("private provider error",{ status:503 }));
     const service = createEntityFirstKnowledgeExtractionService({ baseUrl:"http://model.test/v1",model:"test",request });
     await expect(service.extract(input)).rejects.toMatchObject({ code:"KNOWLEDGE_EXTRACTION_HTTP_ERROR",message:"knowledge extraction request failed with status 503" });
+  });
+  it("rejects invented evidence IDs even when a provider ignores constrained decoding", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(response({ entities:[{
+      kind:"person",canonicalName:"조운",summary:null,aliases:[],evidenceIds:["invented"]
+    }] }));
+    const service = createEntityFirstKnowledgeExtractionService({ baseUrl:"http://model.test/v1",model:"test",request });
+    await expect(service.extract(input)).rejects.toThrow("unknown source evidence ID");
+    expect(request).toHaveBeenCalledOnce();
   });
 });

@@ -18,6 +18,7 @@ const { values } = parseArgs({ options: {
   variants: { type:"string",default:"single-pass,llamaindex,entity-first" },
   python: { type:"string",default:"python3" },
   output: { type:"string",default:".eval-results/knowledge" },
+  corpus: { type:"string" },
   limit: { type:"string" },
   verify: { type:"boolean",default:false },
   reuse: { type:"string" }
@@ -33,7 +34,7 @@ const graphSchema = z.object({ entities:z.array(z.object({ key:z.string(),kind:z
 const rowSchema = z.object({ id:z.string(),status:z.enum(["ok","error"]),error:z.string().optional(),errorLocation:z.string().optional(),milliseconds:z.number(),graph:graphSchema });
 type ExtractionRow = z.infer<typeof rowSchema>;
 
-const corpusText = await readFile(new URL("./corpus.json",import.meta.url),"utf8");
+const corpusText = await readFile(values.corpus ? resolve(values.corpus) : new URL("./corpus.json",import.meta.url),"utf8");
 const corpus = corpusSchema.parse(JSON.parse(corpusText));
 const limit = values.limit === undefined ? corpus.cases.length : Number(values.limit);
 if (!Number.isSafeInteger(limit) || limit < 1 || limit > corpus.cases.length) throw new Error("limit must select a positive number of corpus cases");
@@ -50,7 +51,8 @@ const directory = resolve(values.output);
 await mkdir(directory,{ recursive:true });
 const policyHash = createHash("sha256");
 for (const path of ["src/infrastructure/ai/knowledge-extraction-service.ts","src/infrastructure/ai/knowledge-entity-first-extraction-service.ts","src/domain/knowledge/knowledge-extraction-quality.ts",
-  "src/domain/knowledge/knowledge-entity-eligibility.ts","src/infrastructure/ai/knowledge-verification-service.ts","src/domain/knowledge/knowledge-curation-policy.ts"]) {
+  "src/domain/knowledge/knowledge-entity-eligibility.ts","src/infrastructure/ai/knowledge-verification-service.ts","src/domain/knowledge/knowledge-curation-policy.ts",
+  "src/infrastructure/ai/knowledge-source-instructions.ts","src/infrastructure/ai/knowledge-source-evidence.ts","src/domain/knowledge/knowledge-assessment.ts","src/application/document/chunk-text.ts"]) {
   policyHash.update(await readFile(path));
 }
 

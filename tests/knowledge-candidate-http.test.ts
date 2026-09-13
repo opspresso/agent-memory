@@ -14,6 +14,7 @@ import {
   publicKnowledgeCandidate
 } from "@/lib/knowledge-candidate-http";
 import { reviewKnowledgeCandidateSchema } from "@/lib/knowledge-schemas";
+import { knowledgeCandidateResponseSchema } from "@/app/api-response-schemas";
 
 describe("knowledge candidate HTTP boundary", () => {
   it("returns reviewable graph data without source chunk content", () => {
@@ -50,6 +51,21 @@ describe("knowledge candidate HTTP boundary", () => {
       reviewKnowledgeCandidateSchema.safeParse({ reason: "x".repeat(2_001) })
         .success
     ).toBe(false);
+  });
+  it("preserves verification dimensions through the browser response decoder", async () => {
+    const candidate = createKnowledgeCandidate({ id:"candidate",documentId:"document",chunkId:"chunk",model:"extractor",
+      scope:{ organizationId:"00000000-0000-0000-0000-000000000001",kind:"organization" },
+      graph:{ entities:[{ key:"api",kind:"service",canonicalName:"API" }],relationships:[] },now:new Date() });
+    const assessment = { model:"verifier",policyVersion:"evidence-v5",assessedAt:new Date().toISOString(),
+      items:[{ item:"entity:api",representation:"entity" as const,entityKind:"service",support:"explicit" as const,
+        usefulness:"useful" as const,conflict:false,verdict:"accept" as const,evidence:"API",reason:"Named service." }],
+      aliases:[{ entityKey:"api",alias:"API service",identity:"same_entity" as const,descriptiveExpansion:true,
+        verdict:"ignore" as const,evidence:"API service",reason:"Descriptive expansion." }]
+    };
+    const response = Response.json(publicKnowledgeCandidate({ ...candidate,assessment,assessmentHistory:[assessment] }));
+    const decoded = knowledgeCandidateResponseSchema.parse(await response.json());
+    expect(decoded.assessment).toEqual(assessment);
+    expect(decoded.assessmentHistory).toEqual([assessment]);
   });
 
   it.each([

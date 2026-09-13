@@ -21,6 +21,7 @@ import { createKnowledgeVerificationService } from "@/infrastructure/ai/knowledg
 import { buildGenerateKnowledgeCandidate } from "@/application/knowledge/generate-knowledge-candidate";
 import { buildCurateKnowledgeCandidate } from "@/application/knowledge/curate-knowledge-candidate";
 import { buildAcceptKnowledgeCandidate, buildRejectKnowledgeCandidate } from "@/application/knowledge/review-knowledge-candidate";
+import { buildProcessDocument } from "@/application/document/process-document";
 
 describe("Neo4j topology with PostgreSQL approval and provenance", () => {
   let postgres: StartedPostgreSqlContainer, graph: StartedNeo4jContainer, driver: Driver, pool: Pool, db: AgentMemoryDatabase;
@@ -97,25 +98,25 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     const source = await f.source(f.scope,content);
     const completion = (value:unknown) => Response.json({ choices:[{ message:{ content:JSON.stringify(value) } }] });
     const request = vi.fn<typeof fetch>().mockResolvedValueOnce(completion({ entities:[
-      { key:"atlas",kind:"service",canonicalName:"Atlas",summary:null,aliases:[],evidence:[content] },
-      { key:"neo4j",kind:"technology",canonicalName:"Neo4j",summary:null,aliases:[],evidence:[content] }
-    ] })).mockResolvedValueOnce(completion({ relationships:[{ sourceKey:"atlas",targetKey:"neo4j",predicate:"uses",evidence:[content] }] }));
+      { key:"atlas",kind:"service",canonicalName:"Atlas",summary:null,aliases:[],evidenceIds:["s0"] },
+      { key:"neo4j",kind:"technology",canonicalName:"Neo4j",summary:null,aliases:[],evidenceIds:["s0"] }
+    ] })).mockResolvedValueOnce(completion({ relationships:[{ sourceKey:"e0",targetKey:"e1",predicate:"uses",evidenceIds:["s0"] }] }));
     const candidates = createKnowledgeCandidateRepository(db), documents = createDocumentRepository(db), ontology = createKnowledgeOntologyReader(db);
     const clock = () => new Date();
     await buildGenerateKnowledgeCandidate({ candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
       extractionService:createEntityFirstKnowledgeExtractionService({ baseUrl:"http://model.test/v1",model:"extractor",request }) })(f.organizationId,source.chunkId);
     const verificationRequest = vi.fn<typeof fetch>().mockResolvedValue(completion({ items:Object.fromEntries(Object.entries({
-      "entity:atlas":{ representation:"entity",entityKind:"service" },
-      "entity:neo4j":{ representation:"entity",entityKind:"technology" },
+      "entity:e0":{ representation:"entity",entityKind:"service" },
+      "entity:e1":{ representation:"entity",entityKind:"technology" },
       "relationship:0":{ representation:"relationship" }
-    }).map(([item,identity]) => [item,{ ...identity,support:"explicit",usefulness:"useful",conflict:false,evidence:content,reason:"The source states this fact." }])) }));
+    }).map(([item,identity]) => [item,{ ...identity,support:"explicit",usefulness:"useful",conflict:false,evidenceId:"s0",reason:"The source states this fact." }])) }));
     await buildCurateKnowledgeCandidate({ candidates,documents,ontology,clock,graph:f.repository,access:createOrganizationAccessRepository(db),
       verification:createKnowledgeVerificationService({ baseUrl:"http://verifier.test/v1",model:"verifier",request:verificationRequest }),
       accept:buildAcceptKnowledgeCandidate({ repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
       reject:buildRejectKnowledgeCandidate({ repository:candidates,clock,method:"automatic" }) })(f.organizationId,source.chunkId);
     const approved = await candidates.findByChunkId(f.organizationId,source.chunkId);
     expect(approved?.status).toBe("accepted");
-    expect(approved?.assessment).toMatchObject({ model:"verifier",policyVersion:"evidence-v3" });
+    expect(approved?.assessment).toMatchObject({ model:"verifier",policyVersion:"evidence-v5" });
     expect(approved?.itemReviews?.every((item) => item.method === "automatic")).toBe(true);
     const [atlas] = await f.repository.findNodesByNames(f.access,f.scope,["Atlas"]);
     const result = await f.repository.findNeighborhood(f.access,atlas!.id,2,100);
@@ -133,6 +134,45 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     await pool.query("UPDATE documents SET status='archived' WHERE id=$1", [edgeSource.documentId]);
     expect(await f.repository.findNeighborhood(f.access,a.id,2,100)).toMatchObject({ nodes:[{ id:a.id }], edges:[] });
     expect(await store.revision(f.organizationId)).toBe(revision);
+  });
+
+  it("retains a profile heading as employment evidence through ingestion, approval and traversal", async () => {
+    const f = await fixture();
+    const source = await f.source();
+    const markdown = "# 김하늘\n\n## 경력\n\n### 북극소프트\n\n2020–2022 개발 엔지니어";
+    await pool.query("DELETE FROM document_chunks WHERE document_id=$1", [source.documentId]);
+    await pool.query("UPDATE documents SET status='pending',mime_type='text/markdown' WHERE id=$1", [source.documentId]);
+    const documents = createDocumentRepository(db), candidates = createKnowledgeCandidateRepository(db), ontology = createKnowledgeOntologyReader(db);
+    const clock = () => new Date();
+    await buildProcessDocument({ repository:documents,clock,generateId:randomUUID,
+      objectStorage:{ get:async () => new TextEncoder().encode(markdown),put:vi.fn(),delete:vi.fn() },
+      textExtractor:{ extract:async () => markdown }
+    })(f.organizationId,source.documentId);
+    const [chunk] = await documents.listChunksByDocument(f.organizationId,source.documentId);
+    expect(chunk?.content).toContain("# 김하늘\n## 경력");
+    expect(chunk?.metadata.contextSpans).toEqual([{ start:0,end:5 },{ start:7,end:12 }]);
+    const proposed = { entities:[
+      { key:"person",kind:"person",canonicalName:"김하늘",evidence:["# 김하늘"] },
+      { key:"employer",kind:"organization",canonicalName:"북극소프트",evidence:["### 북극소프트"] }
+    ],relationships:[{ sourceKey:"person",targetKey:"employer",predicate:"works_for",evidence:[chunk!.content] }] };
+    await buildGenerateKnowledgeCandidate({ candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
+      extractionService:{ extract:async () => ({ model:"fixture",graph:proposed }) }
+    })(f.organizationId,chunk!.id);
+    await buildCurateKnowledgeCandidate({ candidates,documents,ontology,clock,graph:f.repository,access:createOrganizationAccessRepository(db),
+      verification:{ verify:async () => ({ model:"fixture",items:[
+        { item:"entity:person",representation:"entity",entityKind:"person",support:"explicit",usefulness:"useful",conflict:false,evidence:"# 김하늘",reason:"Named profile owner." },
+        { item:"entity:employer",representation:"entity",entityKind:"organization",support:"explicit",usefulness:"useful",conflict:false,evidence:"### 북극소프트",reason:"Employer in career entry." },
+        { item:"relationship:0",representation:"relationship",support:"explicit",usefulness:"useful",conflict:false,evidence:chunk!.content,reason:"Career section identifies employer and period." }
+      ] }) },
+      accept:buildAcceptKnowledgeCandidate({ repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
+      reject:buildRejectKnowledgeCandidate({ repository:candidates,clock,method:"automatic" })
+    })(f.organizationId,chunk!.id);
+    const [person] = await f.repository.findNodesByNames(f.access,f.scope,["김하늘"]);
+    const neighborhood = await f.repository.findNeighborhood(f.access,person!.id,1,100);
+    expect(neighborhood.nodes.map((node) => node.canonicalName).sort()).toEqual(["김하늘","북극소프트"]);
+    expect(neighborhood.edges).toEqual([expect.objectContaining({ predicate:"works_for",sources:[{ chunkId:chunk!.id }] })]);
+    const approved = await candidates.findByChunkId(f.organizationId,chunk!.id);
+    expect(approved?.assessment?.items[2]).toMatchObject({ support:"explicit",usefulness:"useful",conflict:false,verdict:"accept" });
   });
 
   it("does not traverse a private bridge to expose another public node", async () => {

@@ -2,6 +2,7 @@ export interface TextChunk {
   readonly content: string;
   readonly start: number;
   readonly end: number;
+  readonly contextSpans?: readonly { readonly start: number; readonly end: number }[];
 }
 
 export interface ChunkTextOptions {
@@ -72,23 +73,50 @@ export function chunkText(
 
 function chunkMarkdown(input: string): readonly TextChunk[] {
   const normalized = input.replace(/\r\n?/g, "\n").trim();
-  const headings = [...normalized.matchAll(/^#{1,6}\s+.+$/gm)];
+  const headings: { text: string; level: number; start: number; end: number }[] = [];
+  let offset = 0;
+  let fence: { marker: string; length: number } | undefined;
+  for (const line of normalized.split("\n")) {
+    const delimiter = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (delimiter) {
+      const marker = delimiter[1]!;
+      if (!fence) {
+        // Backticks in an info string make this inline text, not a fence opener.
+        if (marker[0] !== "`" || !delimiter[2]!.includes("`")) {
+          fence = { marker: marker[0]!, length: marker.length };
+        }
+      } else if (marker[0] === fence.marker && marker.length >= fence.length && !delimiter[2]!.trim()) {
+        fence = undefined;
+      }
+    } else if (!fence) {
+      const heading = /^ {0,3}(#{1,6})[ \t]+\S.*$/.exec(line);
+      if (heading) headings.push({ text: line, level: heading[1]!.length, start: offset, end: offset + line.length });
+    }
+    offset += line.length + 1;
+  }
   if (headings.length === 0) {
     return chunkText(normalized);
   }
   const chunks: TextChunk[] = [];
-  const firstHeadingOffset = headings[0]?.index ?? 0;
+  const firstHeadingOffset = headings[0]?.start ?? 0;
   if (firstHeadingOffset > 0) {
     chunks.push(...chunkText(normalized.slice(0, firstHeadingOffset)));
   }
-  headings.forEach((match, index) => {
-    const sectionStart = match.index;
-    const sectionEnd = headings[index + 1]?.index ?? normalized.length;
-    const heading = match[0].trim();
+  const ancestors: typeof headings = [];
+  headings.forEach((heading, index) => {
+    while (ancestors.length && ancestors.at(-1)!.level >= heading.level) ancestors.pop();
+    const parents = [...ancestors];
+    ancestors.push(heading);
+    const sectionStart = heading.start;
+    const sectionEnd = headings[index + 1]?.start ?? normalized.length;
     const section = normalized.slice(sectionStart, sectionEnd).trimEnd();
-    const headingContextBudget = 2_000 - heading.length - 2;
+    // Heading-only sections provide scope to their children, not separate facts.
+    if (!normalized.slice(heading.end, sectionEnd).trim() && (headings[index + 1]?.level ?? 0) > heading.level) return;
+    const sectionOffset = sectionStart + section.length - section.trimStart().length;
+    const path = ancestors.map((item) => item.text).join("\n");
+    const headingContextBudget = 2_000 - path.length - 2;
     const repeatHeading =
-      headingContextBudget >= 100 && heading.length <= headingContextBudget;
+      headingContextBudget >= 100 && path.length <= headingContextBudget;
     const sectionChunks = chunkText(
       section,
       repeatHeading
@@ -102,13 +130,13 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
         : undefined
     );
     sectionChunks.forEach((chunk, chunkIndex) => {
+      const context = repeatHeading ? (chunkIndex === 0 ? parents : ancestors) : [];
+      const prefix = context.map((item) => item.text).join("\n");
       chunks.push({
-        content:
-          chunkIndex === 0 || !repeatHeading
-            ? chunk.content
-            : `${heading}\n\n${chunk.content}`,
-        start: sectionStart + chunk.start,
-        end: sectionStart + chunk.end
+        content: prefix ? `${prefix}\n\n${chunk.content}` : chunk.content,
+        start: sectionOffset + chunk.start,
+        end: sectionOffset + chunk.end,
+        ...(context.length ? { contextSpans: context.map(({ start, end }) => ({ start, end })) } : {})
       });
     });
   });
