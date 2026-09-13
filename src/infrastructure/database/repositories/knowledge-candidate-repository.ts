@@ -234,6 +234,17 @@ export function createKnowledgeCandidateRepository(
     findById,
     findByChunkId,
 
+    async listUnextractedChunks(access) {
+      const rows = await db.select({ id: documentChunks.id }).from(documents)
+        .innerJoin(documentChunks, and(eq(documentChunks.organizationId, documents.organizationId), eq(documentChunks.documentId, documents.id)))
+        .where(and(
+          eq(documents.organizationId, access.organizationId), eq(documents.status, "ready"), scopedManagePredicate(access, documents),
+          sql`NOT EXISTS (SELECT 1 FROM ${knowledgeCandidates} WHERE ${knowledgeCandidates.organizationId} = ${documentChunks.organizationId}
+            AND ${knowledgeCandidates.chunkId} = ${documentChunks.id})`
+        )).orderBy(asc(documents.createdAt), asc(documentChunks.ordinal), asc(documentChunks.id));
+      return rows.map((row) => row.id);
+    },
+
     async processingProgress(access) {
       const result = await db.execute<{ totalChunks: number; extractedChunks: number; curatedChunks: number }>(sql`
         SELECT count(*)::int AS "totalChunks", count(${knowledgeCandidates.id})::int AS "extractedChunks",

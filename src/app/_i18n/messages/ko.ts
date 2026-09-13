@@ -559,6 +559,8 @@ export const ko: Messages = {
   "knowledgeProgress.body": "전체 {total}개 청크 중 추출 {extracted}개 · 검증 및 자동 반영 {completed}개 완료",
   "knowledgeProgress.partial": "지금 보이는 결과는 처리 완료된 일부 지식입니다.",
   "knowledgeProgress.prioritize": "이 검색어 관련 지식 우선 처리",
+  "knowledgeProgress.retry": "미완료 지식 처리 재시도",
+  "knowledgeProgress.retried": "미완료 청크 {count}개를 처리하도록 등록했습니다.",
   "knowledgeProgress.prioritized": "관련 추출 {count}개를 우선 처리하도록 등록했습니다.",
   "knowledgeProgress.unavailable": "지식 처리 진행 상태를 확인하지 못했습니다.",
   "reviewQueue.history": "처리 내역",

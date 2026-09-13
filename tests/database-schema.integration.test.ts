@@ -2711,6 +2711,9 @@ describe("PostgreSQL schema", () => {
 
     const candidates = createKnowledgeCandidateRepository(db);
     expect(await candidates.processingProgress(access)).toEqual({ totalChunks: 1, extractedChunks: 0, curatedChunks: 0 });
+    expect(await candidates.listUnextractedChunks(access)).toEqual([chunkIds[1]]);
+    expect(await candidates.listUnextractedChunks({ ...access, role: "member" })).toEqual([]);
+    expect(await candidates.listUnextractedChunks({ ...access, organizationId: organizationB })).toEqual([]);
     expect(await candidates.processingProgress({ ...access, organizationId: organizationB })).toEqual({ totalChunks: 0, extractedChunks: 0, curatedChunks: 0 });
     const candidate = createKnowledgeCandidate({ id: randomUUID(), documentId: documentIds[1]!, chunkId: chunkIds[1]!, scope, model: "current",
       graph: { entities: [{ key: "guan", kind: "person", canonicalName: "Guan Yu" }], relationships: [] }, now: new Date() });
@@ -2718,5 +2721,6 @@ describe("PostgreSQL schema", () => {
     expect(saved[0]?.id).toBe(saved[1]?.id);
     expect(await candidates.listPending(access, 100)).toHaveLength(1);
     expect(await candidates.processingProgress(access)).toEqual({ totalChunks: 1, extractedChunks: 1, curatedChunks: 0 });
+    expect(await candidates.listUnextractedChunks(access)).toEqual([]);
   });
 });

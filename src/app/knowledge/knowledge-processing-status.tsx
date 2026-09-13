@@ -34,7 +34,7 @@ export function KnowledgeProcessingStatus({ query }: { readonly query: string })
     try {
       const response = await fetch(`/api/knowledge/curation?query=${encodeURIComponent(query)}`, { method: "POST" });
       const result = await responseJson(response, t("candidate.requestFailed"), z.object({ queued: z.number() }));
-      setMessage(t("knowledgeProgress.prioritized", { count: result.queued }));
+      setMessage(t(query ? "knowledgeProgress.prioritized" : "knowledgeProgress.retried", { count: result.queued }));
     } catch (error) { setMessage(error instanceof Error ? error.message : t("candidate.requestFailed")); }
     finally { setBusy(false); }
   }
@@ -44,8 +44,8 @@ export function KnowledgeProcessingStatus({ query }: { readonly query: string })
     <Text size="sm">{t("knowledgeProgress.body", { total: progress.totalChunks, extracted: progress.extractedChunks, completed: progress.curatedChunks })}</Text>
     <Progress mt="sm" value={100 * progress.curatedChunks / progress.totalChunks} aria-label={t("knowledgeProgress.title")} />
     <Group mt="sm"><Text size="sm">{t("knowledgeProgress.partial")}</Text>
-      {query && access ?
-        <Button size="xs" variant="light" loading={busy} onClick={() => void prioritize()}>{t("knowledgeProgress.prioritize")}</Button> : null}
+      {access ?
+        <Button size="xs" variant="light" loading={busy} onClick={() => void prioritize()}>{t(query ? "knowledgeProgress.prioritize" : "knowledgeProgress.retry")}</Button> : null}
     </Group>
     {message ? <Text size="sm" mt="xs" role="status">{message}</Text> : null}
     {loadError ? <Text size="sm" mt="xs" role="alert">{loadError}</Text> : null}

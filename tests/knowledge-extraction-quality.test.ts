@@ -55,6 +55,27 @@ describe("knowledge extraction quality", () => {
     expect(graph.entities).toHaveLength(3);
   });
 
+  it("merges repeated keys only for the same identity and removes ambiguous endpoints", () => {
+    const graph = consolidateKnowledgeGraph({
+      entities: [
+        ...entities,
+        { ...entities[0]!, kind: "PERSON", canonicalName: " 유비 ", evidence: ["second passage"] },
+        { key: "collision", kind: "person", canonicalName: "동명" },
+        { key: "collision", kind: "location", canonicalName: "동명" }
+      ],
+      relationships: [
+        { sourceKey: "liu", targetKey: "lu", predicate: "student_of" },
+        { sourceKey: "collision", targetKey: "liu", predicate: "knows" },
+        { sourceKey: "lu", targetKey: "collision", predicate: "lives_in" }
+      ]
+    });
+    expect(graph.entities.map((entity) => entity.key)).toEqual(["liu", "lu"]);
+    expect(graph.entities[0]?.evidence).toEqual(["유비는 노식의 제자다.", "second passage"]);
+    expect(graph.relationships).toEqual([{ sourceKey: "liu", targetKey: "lu", predicate: "student_of" }]);
+    expect(() => createKnowledgeCandidate({ id: "candidate", documentId: "document", chunkId: "chunk", model: "test",
+      scope: { kind: "organization", organizationId: "org" }, now: new Date(), graph })).not.toThrow();
+  });
+
   it("preserves immutable evidence and aliases through candidate construction", () => {
     const candidate = createKnowledgeCandidate({
       id: "candidate", scope: { organizationId: "org", kind: "organization" },

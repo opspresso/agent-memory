@@ -326,6 +326,8 @@ Schema를 변경하면 배포 전에 application·worker를 중단하고 DB·전
 - 추출 결과가 512 chunks를 넘으면 provider 호출 전에 실패한다. 이 한도는 작업량을 제한하며 S3·DB 지연을 포함한 전체 처리 시간이 15분 lease 안에 끝남을 보장하지는 않는다. 원본을 더 작은 문서로 나눈 뒤 다시 업로드하라.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
+- 지식 추출과 검증의 HTTP timeout은 요청당 3분이다. 로컬 모델의 긴 structured output 생성을 허용하면서 두 요청이 15분 job expiration 안에서 끝나도록 제한한다. Provider 오류·timeout은 job 실패와 재시도로 남는다.
+- 추출 응답의 구조를 확인한 뒤 원문 인용을 검증한다. 원문 근거가 없는 항목, 없는 개체를 참조하는 관계와 자기 자신을 가리키는 관계는 제외하며 같은 청크의 정상 지식은 보존한다. 중복 키가 동일 kind·정규화 이름을 가리키면 통합하고, 서로 다른 개체를 가리키면 해당 개체들과 그 키를 참조하는 관계를 제외한다. 이 정규화가 끝난 graph에 candidate 불변 조건과 별도 AI 검증을 적용한다.
 - AI 추출 후 같은 모델·endpoint를 사용하는 별도 검증 요청으로 원문 근거·유용성·충돌을 평가한다. 명시적이고 유용하며 인용 검증과 정책을 통과한 항목은 자동 승인한다. 불확실한 항목은 수동 검토로 남기고 근거 없는·사소한 항목은 자동 제외한다. 검증 요청도 AI quota를 소비하며 실패하면 자동 반영하지 않고 enrichment job을 재시도한다. 검증 대상 원문과 제안은 유지하고, 참고할 기존 개체 개요는 개체당 2,000자로 제한해 출처 누적으로 요청이 계속 커지는 것을 막는다.
 - 기본 자동 검토는 문서 생성자의 현재 active membership과 source scope `manage` 권한을 요구한다. 검토 화면의 일괄 실행은 인증된 요청자를 job에 기록하며 worker가 그 권한을 다시 확인한다. 저장된 추출과 assessment는 재사용한다. 재추출을 위한 구버전 호환 경로는 없으며 worker 실행이 필요하다.
 
@@ -337,6 +339,8 @@ Schema를 변경하면 배포 전에 application·worker를 중단하고 DB·전
 | `document-knowledge-enrichment-v2` | Chunk ID별 exclusive job | 최대 5회, 초기 지연 15초와 backoff |
 
 두 queue의 job expiration과 document processing lease는 15분이다. Worker가 처리 claim을 다시 얻으면 새 lease ID를 사용하며 이전 worker의 늦은 complete·fail은 거부된다. 문서 retry API의 성공은 enqueue를 뜻하며 즉시 `ready`로 바뀌는 것은 아니다.
+
+Knowledge Graph 진행률은 추출·검증 완료 수를 나타내며 실제 queue 실행 여부를 의미하지 않는다. 재시도가 소진되면 청크는 미완료 상태로 남는다. 원인과 provider 연결을 확인한 뒤 Knowledge Graph의 검색어를 비우고 `미완료 지식 처리 재시도`를 실행하거나 `POST /api/knowledge/curation`을 호출하라. 관리 가능한 ready 문서의 미추출 청크와 미완료 자동 검토만 queue에 등록하며 문서·chunk·완료된 지식은 삭제하거나 재추출하지 않는다.
 
 Process가 `SIGTERM` 또는 `SIGINT`를 받으면 새 document job 수신을 중단하고 진행 중인 job을 최대 30초 동안 drain한 뒤 Database pool과 telemetry exporter를 순서대로 종료한다. Cleanup 일부가 실패해도 나머지 단계는 계속 실행하며 process는 실패 exit code를 반환한다.
 

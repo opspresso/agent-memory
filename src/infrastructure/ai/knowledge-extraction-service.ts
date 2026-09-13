@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
+import { knowledgeRequestTimeoutMilliseconds } from "./knowledge-request-timeout";
 
 import type {
   KnowledgeExtractionOntologyHint,
@@ -50,28 +51,6 @@ const proposedGraphSchema = z.object({
       })
     )
     .max(200)
-}).superRefine((graph, context) => {
-  const keys = new Set(graph.entities.map((entity) => entity.key));
-  if (keys.size !== graph.entities.length) {
-    context.addIssue({
-      code: "custom",
-      message: "entity keys must be unique",
-      path: ["entities"]
-    });
-  }
-  graph.relationships.forEach((relationship, index) => {
-    if (
-      !keys.has(relationship.sourceKey) ||
-      !keys.has(relationship.targetKey) ||
-      relationship.sourceKey === relationship.targetKey
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "relationship endpoints are invalid",
-        path: ["relationships", index]
-      });
-    }
-  });
 });
 
 const completionResponseSchema = z.object({
@@ -313,7 +292,7 @@ export function createKnowledgeExtractionService(
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
       },
       method: "POST",
-      signal: AbortSignal.timeout(60_000)
+      signal: AbortSignal.timeout(knowledgeRequestTimeoutMilliseconds)
     });
     if (!response.ok) {
       throw new SafeOperationalError(

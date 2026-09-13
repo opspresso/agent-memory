@@ -46,6 +46,7 @@ function candidateRepository(): KnowledgeCandidateRepository {
     findById: vi.fn(),
     findByChunkId: vi.fn(),
     listReviewSources: vi.fn(),
+    listUnextractedChunks: vi.fn(),
     saveAssessment: vi.fn(),
     reviewSummary: vi.fn(),
     processingProgress: vi.fn(),

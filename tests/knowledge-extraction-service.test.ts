@@ -263,6 +263,40 @@ describe("knowledge extraction service", () => {
     ).rejects.toThrow("knowledge extraction graph is invalid");
   });
 
+  it("keeps grounded facts when the model also proposes missing endpoints or self-relations", async () => {
+    const content = "Memory API stores data in PostgreSQL.";
+    const evidence = [content];
+    const entities = [
+      { key: "api", kind: "service", canonicalName: "Memory API", aliases: [], summary: null, evidence },
+      { key: "db", kind: "database", canonicalName: "PostgreSQL", aliases: [], summary: null, evidence }
+    ];
+    const valid = { sourceKey: "api", targetKey: "db", predicate: "stores_in", evidence };
+    const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ choices: [{ message: { content: JSON.stringify({
+      entities, relationships: [valid,
+        { ...valid, targetKey: "missing" },
+        { ...valid, sourceKey: "missing" },
+        { ...valid, targetKey: "api" },
+        { ...valid, predicate: "invented", evidence: ["An invented assertion."] }
+      ]
+    }) } }] }));
+    const service = createKnowledgeExtractionService({ baseUrl: "https://example.test/v1", model: "test", request });
+    await expect(service.extract({ documentTitle: "Architecture", mimeType: "text/plain", content }))
+      .resolves.toMatchObject({ graph: { entities: entities.map((entity) => ({ ...entity, summary: undefined })), relationships: [valid] } });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("excludes ambiguous duplicate keys and their relationships while retaining independent facts", async () => {
+    const content = "Memory API stores data in PostgreSQL.";
+    const entity = { key: "same", kind: "service", canonicalName: "Memory API", aliases: [], summary: null, evidence: [content] };
+    const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ choices: [{ message: { content: JSON.stringify({
+      entities: [entity, { ...entity, canonicalName: "PostgreSQL" }, { ...entity, key: "independent" }],
+      relationships: [{ sourceKey: "same", targetKey: "independent", predicate: "uses", evidence: [content] }]
+    }) } }] }));
+    const service = createKnowledgeExtractionService({ baseUrl: "https://example.test/v1", model: "test", request });
+    await expect(service.extract({ documentTitle: "Architecture", mimeType: "text/plain", content }))
+      .resolves.toMatchObject({ graph: { entities: [{ key: "independent" }], relationships: [] } });
+  });
+
   it("normalizes a Markdown URL entity to its visible product name", async () => {
     const service = createKnowledgeExtractionService({
       baseUrl: "http://localhost:11434/v1",

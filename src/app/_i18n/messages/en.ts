@@ -560,6 +560,8 @@ export const en = {
   "knowledgeProgress.body": "{extracted} of {total} chunks extracted · {completed} verified and applied",
   "knowledgeProgress.partial": "These results include only the knowledge processed so far.",
   "knowledgeProgress.prioritize": "Prioritize knowledge for this search",
+  "knowledgeProgress.retry": "Retry incomplete knowledge processing",
+  "knowledgeProgress.retried": "Queued {count} incomplete chunks for processing.",
   "knowledgeProgress.prioritized": "Prioritized {count} related extractions.",
   "knowledgeProgress.unavailable": "Knowledge processing progress is unavailable.",
   "reviewQueue.history": "Curation history",

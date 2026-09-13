@@ -3,6 +3,7 @@ import type { KnowledgeVerificationService } from "@/domain/knowledge/knowledge-
 import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 import { entityReviewKey, relationshipReviewKey } from "@/domain/knowledge/knowledge-candidate-selection";
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
+import { knowledgeRequestTimeoutMilliseconds } from "./knowledge-request-timeout";
 
 const resultSchema = z.object({ items: z.record(z.string(), z.object({
   support: z.enum(["explicit", "uncertain", "unsupported"]),
@@ -44,7 +45,7 @@ export function createKnowledgeVerificationService(configuration: {
     if (facts.length === 0) { return { model: configuration.model, items: [] }; }
     const response = await request(`${configuration.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST", headers: { "Content-Type": "application/json", ...(configuration.apiKey ? { Authorization: `Bearer ${configuration.apiKey}` } : {}) },
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(knowledgeRequestTimeoutMilliseconds),
       body: JSON.stringify({ model: configuration.model, temperature: 0,
         messages: [{ role: "system", content: instructions }, { role: "user", content: JSON.stringify({
           documentTitle: input.documentTitle, content: input.content, facts,

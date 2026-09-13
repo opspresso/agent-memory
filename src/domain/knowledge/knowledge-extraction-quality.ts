@@ -44,9 +44,22 @@ export function groundKnowledgeGraph(content: string, graph: ProposedKnowledgeGr
 
 /** Exact identities only: aliases are preserved for review, never fuzzy-merged. */
 export function consolidateKnowledgeGraph(graph: ProposedKnowledgeGraph): ProposedKnowledgeGraph {
+  const identitiesByKey = new Map<string, string>();
+  const ambiguousKeys = new Set<string>();
+  const identityFor = (entity: ProposedKnowledgeEntity) => JSON.stringify([
+    normalizeKnowledgeKind(entity.kind), knowledgeCanonicalNameKey(entity.canonicalName)
+  ]);
+  for (const entity of graph.entities) {
+    const identity = identityFor(entity);
+    const existing = identitiesByKey.get(entity.key);
+    if (existing !== undefined && existing !== identity) { ambiguousKeys.add(entity.key); }
+    identitiesByKey.set(entity.key, identity);
+  }
   const entities = new Map<string, ProposedKnowledgeEntity>();
   const keys = new Map<string, string>();
   for (const entity of graph.entities) {
+    // A reused key cannot identify a relationship endpoint without guessing.
+    if (ambiguousKeys.has(entity.key)) { continue; }
     const kind = normalizeKnowledgeKind(entity.kind);
     const canonicalName = normalizeKnowledgeName(entity.canonicalName);
     const identity = JSON.stringify([kind, knowledgeCanonicalNameKey(canonicalName)]);

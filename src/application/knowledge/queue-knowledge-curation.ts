@@ -3,12 +3,17 @@ import type { DocumentKnowledgeEnrichmentQueue } from "@/domain/document/documen
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { InvalidKnowledgeCandidateError } from "@/domain/knowledge/knowledge-candidate";
 
-export function buildQueueKnowledgeCuration(repository: Pick<KnowledgeCandidateRepository, "listReviewSources">, queue: DocumentKnowledgeEnrichmentQueue) {
+export function buildQueueKnowledgeCuration(repository: Pick<KnowledgeCandidateRepository, "listReviewSources" | "listUnextractedChunks">, queue: DocumentKnowledgeEnrichmentQueue) {
   return async (access: OrganizationAccess, query?: string) => {
     if ((query?.length ?? 0) > 500) { throw new InvalidKnowledgeCandidateError("curation query must not exceed 500 characters"); }
     const term = query?.normalize("NFKC").trim().toLowerCase();
     const sources = await repository.listReviewSources(access);
     let queued = 0;
+    if (!term) {
+      for (const chunkId of await repository.listUnextractedChunks(access)) {
+        if (await queue.enqueueKnowledgeEnrichment(access.organizationId, chunkId, access.userId) === "queued") { queued += 1; }
+      }
+    }
     for (const { candidate } of sources) {
       if (term && !candidate.graph.entities.some((entity) => [entity.canonicalName, ...(entity.aliases ?? [])]
         .some((name) => name.normalize("NFKC").toLowerCase().includes(term)))) { continue; }

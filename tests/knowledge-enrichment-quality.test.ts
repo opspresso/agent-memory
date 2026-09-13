@@ -9,9 +9,20 @@ describe("knowledge enrichment quality", () => {
     const make = (name: string) => ({ candidate: createKnowledgeCandidate({ id: name, documentId: "d", chunkId: name, model: "old",
       scope: { kind: "organization", organizationId: "org" }, graph: { entities: [{ key: "a", kind: "person", canonicalName: name }], relationships: [] }, now: new Date() }), documentTitle: "Novel", ordinal: 0 });
     const enqueueKnowledgeEnrichment = vi.fn().mockResolvedValue("already_queued");
-    const queue = buildQueueKnowledgeCuration({ listReviewSources: vi.fn().mockResolvedValue([make("관우"), make("조조")]) }, { enqueueKnowledgeEnrichment });
+    const listUnextractedChunks = vi.fn();
+    const queue = buildQueueKnowledgeCuration({ listReviewSources: vi.fn().mockResolvedValue([make("관우"), make("조조")]), listUnextractedChunks }, { enqueueKnowledgeEnrichment });
     expect(await queue({ organizationId: "org", userId: "owner", role: "owner", teams: [] }, "관우")).toEqual({ queued: 1 });
     expect(enqueueKnowledgeEnrichment).toHaveBeenCalledExactlyOnceWith("org", "관우", "owner", 20);
+    expect(listUnextractedChunks).not.toHaveBeenCalled();
+  });
+  it("requeues chunks whose extraction failed before a candidate was saved", async () => {
+    const access = { organizationId: "org", userId: "owner", role: "owner" as const, teams: [] };
+    const listUnextractedChunks = vi.fn().mockResolvedValue(["failed-chunk", "active-chunk"]);
+    const enqueueKnowledgeEnrichment = vi.fn().mockResolvedValueOnce("queued").mockResolvedValueOnce("already_queued");
+    const queue = buildQueueKnowledgeCuration({ listReviewSources: vi.fn().mockResolvedValue([]), listUnextractedChunks }, { enqueueKnowledgeEnrichment });
+    expect(await queue(access)).toEqual({ queued: 1 });
+    expect(listUnextractedChunks).toHaveBeenCalledExactlyOnceWith(access);
+    expect(enqueueKnowledgeEnrichment.mock.calls).toEqual([["org", "failed-chunk", "owner"], ["org", "active-chunk", "owner"]]);
   });
   it("uses bounded concurrency without exceeding the shared AI ceiling", () => {
     expect(readKnowledgeEnrichmentConcurrency({})).toBe(4);

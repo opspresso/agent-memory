@@ -25,6 +25,7 @@ export type KnowledgeCandidateAcceptResult =
   | Readonly<{ status: "already_rejected" }>;
 
 export interface KnowledgeCandidateRepository {
+  listUnextractedChunks(access: OrganizationAccess): Promise<readonly string[]>;
   processingProgress(access: OrganizationAccess): Promise<{ readonly totalChunks: number; readonly extractedChunks: number; readonly curatedChunks: number }>;
   reviewSummary(access: OrganizationAccess): Promise<{ readonly automaticAccepted: number; readonly automaticIgnored: number }>;
   saveAssessment(organizationId: string, candidateId: string, assessment: KnowledgeCandidateAssessment): Promise<KnowledgeCandidate | null>;
