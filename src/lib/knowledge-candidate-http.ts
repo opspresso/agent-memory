@@ -8,6 +8,7 @@ import {
 } from "@/application/knowledge/review-knowledge-candidate";
 import { InvalidKnowledgeCandidateError, type KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
+import { AmbiguousKnowledgeIdentityError } from "@/domain/knowledge/knowledge-alias";
 
 import { aiErrorResponse } from "./ai-http";
 import { publicKnowledgeEdge, publicKnowledgeNode } from "./knowledge-http";
@@ -28,6 +29,7 @@ export function knowledgeCandidateErrorResponse(error: unknown): Response | null
   }
   if (
     error instanceof KnowledgeCandidateReviewConflictError ||
+    error instanceof AmbiguousKnowledgeIdentityError ||
     error instanceof KnowledgeCandidateSourceNotReadyError
   ) {
     return Response.json({ error: error.message }, { status: 409 });

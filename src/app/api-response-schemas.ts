@@ -218,6 +218,7 @@ export const knowledgeNodeResponseSchema = z.object({
   id: z.string().min(1),
   kind: z.string().min(1),
   canonicalName: z.string().min(1),
+  aliases: z.array(z.string()).default([]),
   summary: z.string().optional(),
   scope: scopeResponseSchema,
   sources: z.array(knowledgeSourceResponseSchema).optional()
@@ -298,6 +299,9 @@ const proposedRelationshipResponseSchema = z.object({
 
 export const knowledgeCandidateResponseSchema = z.object({
   assessment: z.object({ model: z.string(), policyVersion: z.string(), assessedAt: z.string(),
+    aliases: z.array(z.object({ entityKey: z.string(), alias: z.string(),
+      identity: z.enum(["same_entity", "generic_reference", "different_entity", "uncertain"]),
+      verdict: z.enum(["accept", "review", "ignore"]), evidence: z.string(), reason: z.string() })).optional(),
     items: z.array(z.object({ item: z.string(), verdict: z.enum(["accept", "review", "ignore"]), evidence: z.string(), reason: z.string() })) }).optional(),
   itemReviews: z.array(z.object({ item: z.string(), decision: z.enum(["accepted", "rejected"]),
     reviewedAt: z.string(), reviewedBy: z.string(), method: z.enum(["human", "automatic"]).optional(), reason: z.string().optional() })).optional(),

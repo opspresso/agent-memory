@@ -8,6 +8,7 @@ import {
 } from "@/application/knowledge/review-knowledge-candidate";
 import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
+import { AmbiguousKnowledgeIdentityError } from "@/domain/knowledge/knowledge-alias";
 import {
   knowledgeCandidateErrorResponse,
   publicKnowledgeCandidate
@@ -55,6 +56,7 @@ describe("knowledge candidate HTTP boundary", () => {
     [new KnowledgeCandidateNotFoundError(), 404],
     [new KnowledgeCandidateReviewAccessDeniedError(), 403],
     [new KnowledgeCandidateReviewConflictError(), 409],
+    [new AmbiguousKnowledgeIdentityError(["person"]), 409],
     [
       new KnowledgeOntologyViolationError([
         { type: "unknown_kind", term: "gadget" }

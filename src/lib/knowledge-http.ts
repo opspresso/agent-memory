@@ -18,8 +18,10 @@ import type { KnowledgeNodeSearchHit } from "@/domain/knowledge/knowledge-graph-
 
 import { aiErrorResponse } from "./ai-http";
 import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-change";
+import { AmbiguousKnowledgeIdentityError } from "@/domain/knowledge/knowledge-alias";
 
 export function knowledgeErrorResponse(error: unknown): Response | null {
+  if (error instanceof AmbiguousKnowledgeIdentityError) return Response.json({ error: error.message }, { status: 409 });
   if (error instanceof KnowledgeScopeChangedError) return Response.json({ error: error.message }, { status: 409 });
   const aiResponse = aiErrorResponse(error);
   if (aiResponse) {
@@ -71,6 +73,7 @@ export function publicKnowledgeNode(node: KnowledgeNode) {
     scope: node.scope,
     kind: node.kind,
     canonicalName: node.canonicalName,
+    aliases: node.aliases,
     ...(node.summary ? { summary: node.summary } : {}),
     properties: node.properties,
     sources: node.sources,

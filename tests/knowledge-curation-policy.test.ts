@@ -44,6 +44,26 @@ describe("automatic knowledge curation policy", () => {
       items: items.map((item) => item.item === "entity:liu" ? { ...item, support: "uncertain" } : item) });
     expect(result.items[2]?.verdict).toBe("review");
   });
+  it("accepts only independently grounded aliases while retaining facts with a rejected title", () => {
+    const source = `${content} 유비의 자는 현덕이며 장군으로 불렸다.`;
+    const aliased = { ...candidate, graph: { ...candidate.graph, entities: candidate.graph.entities.map((entity, index) => index === 0 ? { ...entity, aliases: ["현덕", "장군"] } : entity) } };
+    const result = assessKnowledgeCandidate({ candidate: aliased, content: source, model: "verifier", now: new Date(), ontology: null,
+      items: items.map((item) => ({ ...item, evidence: source })), aliases: [
+        { entityKey: "liu", alias: "현덕", identity: "same_entity", evidence: "유비의 자는 현덕이며 장군으로 불렸다.", reason: "Explicit courtesy name." },
+        { entityKey: "liu", alias: "장군", identity: "generic_reference", evidence: "유비의 자는 현덕이며 장군으로 불렸다.", reason: "Shared title." }
+      ] });
+    expect(result.aliases?.map((alias) => [alias.alias, alias.verdict])).toEqual([["현덕", "accept"], ["장군", "ignore"]]);
+    expect(result.items.every((item) => item.verdict === "accept")).toBe(true);
+  });
+  it("keeps unverified or ungrounded alias identity and its relationships for review", () => {
+    const aliased = { ...candidate, graph: { ...candidate.graph, entities: candidate.graph.entities.map((entity, index) => index === 0 ? { ...entity, aliases: ["현덕"] } : entity) } };
+    for (const aliases of [undefined, [{ entityKey: "liu", alias: "현덕", identity: "same_entity" as const, evidence: "Invented identity quote.", reason: "Invalid citation." }]]) {
+      const result = assessKnowledgeCandidate({ candidate: aliased, content, model: "verifier", now: new Date(), ontology: null, items, aliases });
+      expect(result.aliases?.[0]?.verdict).toBe("review");
+      expect(result.items[0]?.verdict).toBe("review");
+      expect(result.items[2]?.verdict).toBe("review");
+    }
+  });
   it("requires complete, unique item coverage before any automatic action", () => {
     for (const invalid of [items.slice(1), [...items, items[0]!], items.map((item) => ({ ...item, item: "unknown" }))]) {
       expect(() => assessKnowledgeCandidate({ candidate, content, model: "verifier", now: new Date(), ontology: null, items: invalid })).toThrow("exactly once");

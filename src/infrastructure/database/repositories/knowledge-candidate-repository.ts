@@ -2,7 +2,9 @@ import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
-import { reviewedCandidateState, selectKnowledgeCandidateItems } from "@/domain/knowledge/knowledge-candidate-selection";
+import { entityReviewKey, relationshipReviewKey, reviewedCandidateState, selectKnowledgeCandidateItems } from "@/domain/knowledge/knowledge-candidate-selection";
+import { AmbiguousKnowledgeIdentityError, knowledgeAliases, resolveKnowledgeIdentity } from "@/domain/knowledge/knowledge-alias";
+import { mergeKnowledgeDescriptions } from "@/domain/knowledge/knowledge-description";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import { knowledgeCanonicalNameKey, normalizeKnowledgeKind } from "@/domain/knowledge/knowledge-identity";
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
@@ -25,6 +27,7 @@ import {
 } from "../schema";
 import {
   edgeFromRow,
+  createKnowledgeGraphRepository,
   edgeValues,
   visibleSourcePredicate
 } from "./knowledge-graph-repository";
@@ -35,7 +38,7 @@ import {
   upsertKnowledgeNode
 } from "./knowledge-node-persistence";
 import { scopedManagePredicate, scopedReadPredicate } from "./scope-predicates";
-import { lockKnowledgeScope } from "./knowledge-scope-lock";
+import { loadKnowledgeSourceScopes, lockKnowledgeScope } from "./knowledge-scope-lock";
 import { createOrganizationAccessRepository } from "./organization-access-repository";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 
@@ -283,6 +286,24 @@ export function createKnowledgeCandidateRepository(
       return findById(organizationId, candidateId);
     },
 
+    async deferIdentityResolution(organizationId, candidateId, entityKeys) {
+      await db.transaction(async (transaction) => {
+        const [row] = await transaction.select().from(knowledgeCandidates)
+          .where(and(eq(knowledgeCandidates.organizationId, organizationId), eq(knowledgeCandidates.id, candidateId))).for("update");
+        if (!row?.assessment || row.status !== "pending") return;
+        const deferred = new Set(entityKeys.map(entityReviewKey));
+        const reviewed = new Set(row.itemReviews.map((review) => review.item));
+        row.graph.relationships.forEach((relationship, index) => {
+          if (entityKeys.includes(relationship.sourceKey) || entityKeys.includes(relationship.targetKey)) deferred.add(relationshipReviewKey(index));
+        });
+        await transaction.update(knowledgeCandidates).set({ assessment: {
+          ...row.assessment,
+          items: row.assessment.items.map((item) => deferred.has(item.item) && !reviewed.has(item.item)
+            ? { ...item, verdict: "review" as const, reason: "Several existing entities match this name. Resolve their identity before applying this knowledge." } : item)
+        } }).where(eq(knowledgeCandidates.id, candidateId));
+      });
+    },
+
     async listReviewSources(access, assessmentHistory = false) {
       const query = db.select({ candidate: knowledgeCandidates, document: documents, ordinal: documentChunks.ordinal })
         .from(knowledgeCandidates).innerJoin(documents, and(
@@ -360,7 +381,8 @@ export function createKnowledgeCandidateRepository(
 
     async accept(input) {
       return db.transaction(async (transaction) => {
-        await lockKnowledgeScope(transaction, input.organizationId);
+        // Resolve and merge names atomically with every other graph/scope mutation.
+        await lockKnowledgeScope(transaction, input.organizationId, true);
         const [locked] = await transaction
           .select({ candidate: knowledgeCandidates, document: documents })
           .from(knowledgeCandidates)
@@ -419,8 +441,9 @@ export function createKnowledgeCandidateRepository(
           throw new Error("knowledge candidate promotion IDs are incomplete");
         }
         const nodeIds = new Map<string, string>();
-        // Concurrent chunks often contain the same people in different orders.
-        // Acquire identity locks in one order to avoid A→B / B→A deadlocks.
+        const descriptions = new Map<string, string>();
+        const graphRepository = createKnowledgeGraphRepository(transaction, () => input.reviewedAt);
+        // A stable order also makes alias bridges within one candidate deterministic.
         const orderedEntities = selected.graph.entities.toSorted((left, right) => {
           const a = `${normalizeKnowledgeKind(left.kind)}:${knowledgeCanonicalNameKey(left.canonicalName)}`;
           const b = `${normalizeKnowledgeKind(right.kind)}:${knowledgeCanonicalNameKey(right.canonicalName)}`;
@@ -431,17 +454,47 @@ export function createKnowledgeCandidateRepository(
           if (!promotion) {
             throw new Error("knowledge candidate entity promotion is missing");
           }
+          const verifiedAliases = candidate.assessment?.items.find((item) => item.item === entityReviewKey(entity.key))?.verdict === "accept"
+            ? (candidate.assessment.aliases ?? []).filter((alias) => alias.entityKey === entity.key && alias.verdict === "accept").map((alias) => alias.alias) : [];
+          // A relationship review must not change an already reviewed endpoint's alias decision.
+          const priorReview = candidate.itemReviews?.find((review) => review.item === entityReviewKey(entity.key));
+          const aliasReviewMethod = priorReview ? priorReview.method ?? "human" : input.method ?? "human";
+          const aliases = aliasReviewMethod === "automatic" ? verifiedAliases : entity.aliases ?? [];
+          let existing = await graphRepository.findNodesByNames(reviewer, candidate.scope, [entity.canonicalName, ...aliases]);
+          const sources = await loadKnowledgeSourceScopes(transaction, input.organizationId, existing.flatMap((node) => node.sources), input.reviewedAt);
+          if ([...sources.values()].some((source) => !source.available)) {
+            existing = await graphRepository.findNodesByNames(reviewer, candidate.scope, [entity.canonicalName, ...aliases]);
+          }
+          const identity = resolveKnowledgeIdentity({ ...entity, aliases }, existing);
+          if (identity.status === "ambiguous") throw new AmbiguousKnowledgeIdentityError([entity.key]);
+          if (identity.status === "resolved") {
+            for (const sourceNodeId of identity.mergeNodeIds) {
+              const merged = await graphRepository.mergeNodes({ organizationId: input.organizationId, sourceNodeId,
+                targetNodeId: identity.target.id, mergedBy: input.reviewedBy, now: input.reviewedAt,
+                reason: `Verified aliases from knowledge candidate ${candidate.id} (${input.method ?? "human"}).` });
+              if (!merged) throw new Error("verified knowledge identity merge failed");
+              for (const [key, id] of nodeIds) if (id === sourceNodeId) nodeIds.set(key, identity.target.id);
+              const combined = mergeKnowledgeDescriptions([descriptions.get(identity.target.id) ?? "", descriptions.get(sourceNodeId) ?? ""]);
+              if (combined) descriptions.set(identity.target.id, combined);
+              descriptions.delete(sourceNodeId);
+            }
+          }
+          const canonicalName = identity.status === "resolved" ? identity.target.canonicalName : entity.canonicalName;
+          const summary = mergeKnowledgeDescriptions([identity.status === "resolved" ? descriptions.get(identity.target.id) ?? "" : "",
+            entity.summary ?? entity.evidence?.join(" ") ?? ""]);
           const proposedNode = createKnowledgeNode({
             id: promotion.id,
             scope: candidate.scope,
             kind: entity.kind,
-            canonicalName: entity.canonicalName,
-            ...((entity.summary ?? entity.evidence?.join(" ")) ? { summary: entity.summary ?? entity.evidence?.join(" ") } : {}),
+            canonicalName,
+            aliases: knowledgeAliases(canonicalName, [entity.canonicalName, ...aliases]),
+            ...(summary ? { summary } : {}),
             ...(promotion.embedding ? { embedding: promotion.embedding } : {}),
             source: { chunkId: candidate.chunkId },
             now: input.reviewedAt
           });
           const node = await upsertKnowledgeNode(transaction, proposedNode);
+          if (summary) descriptions.set(node.id, summary);
           await transaction
             .insert(knowledgeCandidateNodes)
             .values({

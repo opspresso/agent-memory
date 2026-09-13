@@ -537,6 +537,7 @@ export const en = {
   "graph.kindFilter": "Node kind filter",
   "graph.relations": "{count} relations",
   "graph.noSummary": "This node does not have a summary yet.",
+  "graph.aliases": "Verified aliases",
   "graph.connectedBy": "Connected by",
   "graph.noRelations": "There are no directly connected relationships.",
   "graph.nodeDetails": "View details",

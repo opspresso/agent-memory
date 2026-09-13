@@ -65,7 +65,7 @@ function repository(
 ): KnowledgeGraphRepository {
   return {
     saveNode: vi.fn(),
-    findNodesByCanonicalNames: vi.fn(),
+    findNodesByNames: vi.fn(),
     findNodeById: vi.fn(),
     deleteNode: vi.fn(),
     mergeNodes: vi.fn(),
@@ -469,7 +469,7 @@ describe("knowledge graph", () => {
       node("scope").scope
     );
     expect(saveNode).toHaveBeenCalledWith(
-      expect.objectContaining({ sources: [source] })
+      expect.objectContaining({ sources: [source] }), access
     );
   });
 

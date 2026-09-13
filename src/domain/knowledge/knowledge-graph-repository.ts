@@ -26,11 +26,11 @@ export interface KnowledgeNeighborhood {
 }
 
 export interface KnowledgeGraphRepository {
-  saveNode(node: KnowledgeNode): Promise<KnowledgeNode>;
-  findNodesByCanonicalNames(
+  saveNode(node: KnowledgeNode, access?: OrganizationAccess): Promise<KnowledgeNode>;
+  findNodesByNames(
     access: OrganizationAccess,
     scope: KnowledgeNode["scope"],
-    canonicalNames: readonly string[]
+    names: readonly string[]
   ): Promise<readonly KnowledgeNode[]>;
   findNodeById(
     organizationId: string,

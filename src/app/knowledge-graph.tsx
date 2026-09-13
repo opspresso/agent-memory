@@ -82,7 +82,7 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
     : [];
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matchingIds = new Set(normalizedQuery
-    ? visibleNodes.filter((node) => `${node.canonicalName} ${node.kind}`.toLocaleLowerCase().includes(normalizedQuery)).map((node) => node.id)
+    ? visibleNodes.filter((node) => `${node.canonicalName} ${(node.aliases ?? []).join(" ")} ${node.kind}`.toLocaleLowerCase().includes(normalizedQuery)).map((node) => node.id)
     : []);
   const kindCounts = new Map(kinds.map((kind) => [kind, nodes.filter((node) => node.kind === kind).length]));
 
@@ -144,6 +144,7 @@ export function KnowledgeGraph({ canDeleteEdge, canDeleteNode, centerNodeId, del
         {selectedNode ? <Stack gap="md">
           <Group align="center" gap="sm" justify="space-between" wrap="nowrap"><Stack gap={4} style={{ minWidth: 0 }}><Group justify="space-between"><Badge color="gray" size="xs" variant="light">{selectedNode.kind}</Badge><Text c="dimmed" ff="monospace" size="xs">{t("graph.relations", { count: degrees.get(selectedNode.id) ?? 0 })}</Text></Group><Title order={4} style={{ overflowWrap: "anywhere" }}>{selectedNode.canonicalName}</Title></Stack><Button disabled={deletingResource} loading={loadingGraph} leftSection={<IconPlus size={15} />} onClick={() => onExpandNode(selectedNode.id)} size="compact-sm" variant="light">{t("graph.expandFromNode")}</Button></Group>
           <Badge variant="light">{t(`workspace.scope.${selectedNode.scope.kind}`)}</Badge>
+          {selectedNode.aliases?.length ? <Text size="sm">{t("graph.aliases")}: {selectedNode.aliases.join(", ")}</Text> : null}
           <Text c="dimmed" size="sm">{selectedNode.summary ?? t("graph.noSummary")}</Text>
           <Stack gap="xs"><Text c="dimmed" fw={700} size="xs" tt="uppercase">{t("graph.connectedBy")}</Text>
             {selectedEdges.length > 0 ? selectedEdges.map((edge) => {

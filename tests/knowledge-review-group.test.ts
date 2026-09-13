@@ -46,7 +46,7 @@ describe("review queue after an ontology change", () => {
   it("surfaces the blocked automatic batch while retaining the verifier assessment", async () => {
     const original = source("one");
     const candidate = { ...original.candidate, assessment: {
-      model: "verifier", policyVersion: "evidence-v1" as const, assessedAt: new Date().toISOString(),
+      model: "verifier", policyVersion: "evidence-v2" as const, assessedAt: new Date().toISOString(),
       items: ["entity:liu", "entity:lu", "relationship:0"].map((item) => ({
         item, verdict: "accept" as const, evidence: "유비는 노식의 제자다.", reason: "Explicit"
       }))

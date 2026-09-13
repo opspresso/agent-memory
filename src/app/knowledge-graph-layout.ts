@@ -5,6 +5,7 @@ export interface KnowledgeGraphNodeView {
   readonly id: string;
   readonly kind: string;
   readonly canonicalName: string;
+  readonly aliases?: readonly string[];
   readonly summary?: string;
   readonly scope: ScopedResource;
   readonly sources?: readonly { readonly memoryId?: string; readonly chunkId?: string }[];

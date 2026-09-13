@@ -536,6 +536,7 @@ export const ko: Messages = {
   "graph.kindFilter": "Node 종류 필터",
   "graph.relations": "{count} relations",
   "graph.noSummary": "이 node에는 아직 요약이 없습니다.",
+  "graph.aliases": "검증된 별칭",
   "graph.connectedBy": "연결 관계",
   "graph.noRelations": "직접 연결된 관계가 없습니다.",
   "graph.nodeDetails": "상세 보기",

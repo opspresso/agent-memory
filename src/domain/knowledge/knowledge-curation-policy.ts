@@ -1,7 +1,7 @@
 import type { KnowledgeCandidate } from "./knowledge-candidate";
 import { InvalidKnowledgeCandidateError } from "./knowledge-candidate";
 import { entityReviewKey, relationshipReviewKey } from "./knowledge-candidate-selection";
-import type { KnowledgeCandidateAssessment, KnowledgeItemVerification } from "./knowledge-assessment";
+import type { KnowledgeAliasVerification, KnowledgeCandidateAssessment, KnowledgeItemVerification } from "./knowledge-assessment";
 import type { OrganizationKnowledgeOntology } from "./knowledge-ontology-reader";
 import { evaluateKnowledgeOntology } from "./knowledge-ontology";
 
@@ -11,6 +11,7 @@ const normalize = (text: string) => text.normalize("NFKC").replace(/\s+/g, " ").
 
 export function assessKnowledgeCandidate(input: {
   candidate: KnowledgeCandidate; content: string; model: string; items: readonly KnowledgeItemVerification[];
+  aliases?: readonly KnowledgeAliasVerification[];
   now: Date; ontology: OrganizationKnowledgeOntology | null;
 }): KnowledgeCandidateAssessment {
   const graph = input.candidate.graph;
@@ -20,6 +21,21 @@ export function assessKnowledgeCandidate(input: {
     throw new InvalidKnowledgeCandidateError("verification must cover each proposed item exactly once");
   }
   const source = normalize(input.content);
+  const proposedAliases = graph.entities.flatMap((entity) => (entity.aliases ?? []).map((alias) => ({ entityKey: entity.key, alias })));
+  const aliasKey = (alias: { entityKey: string; alias: string }) => JSON.stringify([alias.entityKey, alias.alias]);
+  const aliasVerifications = new Map((input.aliases ?? []).map((alias) => [aliasKey(alias), alias]));
+  if (input.aliases && (input.aliases.length !== proposedAliases.length || aliasVerifications.size !== proposedAliases.length
+    || proposedAliases.some((alias) => !aliasVerifications.has(aliasKey(alias))))) {
+    throw new InvalidKnowledgeCandidateError("alias verification must cover each proposed alias exactly once");
+  }
+  const aliases: NonNullable<KnowledgeCandidateAssessment["aliases"]> = proposedAliases.map((alias) => {
+    const result = aliasVerifications.get(aliasKey(alias)) ?? { ...alias, identity: "uncertain" as const, evidence: "", reason: "Alias identity was not independently verified." };
+    const evidence = normalize(result.evidence);
+    const grounded = evidence.length > 0 && source.includes(evidence);
+    const verdict = result.identity === "generic_reference" || result.identity === "different_entity" ? "ignore"
+      : result.identity === "same_entity" && grounded ? "accept" : "review";
+    return { ...result, verdict, evidence: grounded ? evidence : "" };
+  });
   const items = new Map(expected.map((key) => {
     const result = verifications.get(key)!;
     const evidence = normalize(result.evidence);
@@ -35,7 +51,7 @@ export function assessKnowledgeCandidate(input: {
   const allowed = (kind?: string, predicate?: string) => input.ontology?.mode !== "strict" ||
     evaluateKnowledgeOntology(input.ontology.ontology, { kinds: kind ? [kind] : [], predicates: predicate ? [predicate] : [] }).length === 0;
   const unresolvedAliases = new Set(graph.relationships.filter((relationship) => relationship.predicate === "alias_of")
-    .flatMap((relationship) => [relationship.sourceKey, relationship.targetKey]));
+    .flatMap((relationship) => [relationship.sourceKey, relationship.targetKey]).concat(aliases.filter((alias) => alias.verdict === "review").map((alias) => alias.entityKey)));
   for (const entity of graph.entities) {
     if (unresolvedAliases.has(entity.key)) {
       change(entityReviewKey(entity.key), "review", "Alias identity needs resolution before creating separate entities.");
@@ -68,5 +84,5 @@ export function assessKnowledgeCandidate(input: {
       }
     }
   });
-  return { model: input.model, policyVersion: "evidence-v1", assessedAt: input.now.toISOString(), items: [...items.values()] };
+  return { model: input.model, policyVersion: "evidence-v2", assessedAt: input.now.toISOString(), items: [...items.values()], ...(aliases.length ? { aliases } : {}) };
 }

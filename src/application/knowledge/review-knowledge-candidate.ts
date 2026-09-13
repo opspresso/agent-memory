@@ -13,6 +13,7 @@ import type {
 import type { KnowledgeNode } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
 import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
+import { knowledgeNameMap } from "@/domain/knowledge/knowledge-alias";
 import {
   enforceKnowledgeOntology,
   evaluateKnowledgeOntology,
@@ -138,18 +139,18 @@ export function buildFindKnowledgeCandidateDuplicates(dependencies: {
     const settings = await dependencies.ontologyReader.findByOrganization(
       access.organizationId
     );
-    const nodes = await dependencies.graphRepository.findNodesByCanonicalNames(
+    const nodes = await dependencies.graphRepository.findNodesByNames(
       access,
       candidate.scope,
-      candidate.graph.entities.map((entity) => entity.canonicalName)
+      candidate.graph.entities.flatMap((entity) => [entity.canonicalName, ...(entity.aliases ?? [])])
     );
     const duplicates = Object.fromEntries(
       candidate.graph.entities.map((entity) => {
-        const identity = knowledgeCanonicalNameKey(entity.canonicalName);
+        const identities = Object.keys(knowledgeNameMap([entity.canonicalName, ...(entity.aliases ?? [])]));
         return [
           entity.key,
           nodes.filter(
-            (node) => knowledgeCanonicalNameKey(node.canonicalName) === identity
+            (node) => [node.canonicalName, ...node.aliases].some((name) => identities.includes(knowledgeCanonicalNameKey(name)))
           )
         ];
       })

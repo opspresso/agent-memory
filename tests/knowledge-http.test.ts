@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createKnowledgeNode } from "@/domain/knowledge/knowledge-graph";
 import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
+import { AmbiguousKnowledgeIdentityError } from "@/domain/knowledge/knowledge-alias";
 import { knowledgeErrorResponse, publicKnowledgeNode } from "@/lib/knowledge-http";
 import {
   createKnowledgeEdgeSchema,
@@ -10,6 +11,11 @@ import {
 } from "@/lib/knowledge-schemas";
 
 describe("knowledge HTTP boundary", () => {
+  it("returns a conflict when a name cannot identify one existing entity", async () => {
+    const response = knowledgeErrorResponse(new AmbiguousKnowledgeIdentityError([]));
+    expect(response?.status).toBe(409);
+    await expect(response?.json()).resolves.toEqual({ error: expect.stringContaining("Multiple knowledge nodes") });
+  });
   it("maps a strict ontology rejection to 422 with its violations", async () => {
     const response = knowledgeErrorResponse(
       new KnowledgeOntologyViolationError([

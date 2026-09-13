@@ -69,6 +69,7 @@ export function SearchHitDetails({ hit, hits, canManage, onExploreNode, onMergeN
       {node ? (
         <>
           <Badge variant="dot">{node.kind}</Badge>
+          {node.aliases.length ? <Text size="sm">{t("graph.aliases")}: {node.aliases.join(", ")}</Text> : null}
           <Text size="sm" className={classes.body}>{node.summary}</Text>
           {duplicate && canManage(node.scope) ? <Button variant="default" color="orange" onClick={() => onMergeNodes(node.id, duplicate.id, node.canonicalName)}>{t("resource.mergeDuplicate")}</Button> : null}
           <Text fw={600} size="sm">{t("source.title")}</Text>

@@ -2246,7 +2246,7 @@ describe("PostgreSQL schema", () => {
       })
     );
     await expect(
-      repository.findNodesByCanonicalNames(
+      repository.findNodesByNames(
         {
           organizationId: organization,
           userId: user,
@@ -2340,13 +2340,13 @@ describe("PostgreSQL schema", () => {
       [organization, sourceMemoryId, new Date("2100-01-01"), new Date("2102-01-01"), corroboratingMemoryId]
     );
     expect((await clockedRepository.searchNodes({ access, query: "checkout purchases", limit: 10 }))[0]?.node.id).toBe(sourceNodeId);
-    expect(await clockedRepository.findNodesByCanonicalNames(access, scope, ["Checkout API"]))
+    expect(await clockedRepository.findNodesByNames(access, scope, ["Checkout API"]))
       .toEqual(expect.arrayContaining([expect.objectContaining({ id: sourceNodeId })]));
     expect((await clockedRepository.findNeighborhood(access, sourceNodeId, 2, 10)).edges)
       .toEqual(expect.arrayContaining([expect.objectContaining({ id: edge.id })]));
     const expiredRepository = createKnowledgeGraphRepository(db, () => new Date("2103-01-01"));
     expect(await expiredRepository.searchNodes({ access, query: "checkout purchases", limit: 10 })).toEqual([]);
-    expect(await expiredRepository.findNodesByCanonicalNames(access, scope, ["Checkout API"])).toEqual([]);
+    expect(await expiredRepository.findNodesByNames(access, scope, ["Checkout API"])).toEqual([]);
     expect(await expiredRepository.findNeighborhood(access, sourceNodeId, 2, 10)).toEqual({ nodes: [], edges: [] });
     const futureRepository = createKnowledgeGraphRepository(db, () => new Date("2099-01-01"));
     expect(await futureRepository.searchNodes({ access, query: "checkout purchases", limit: 10 })).toEqual([]);
@@ -2407,7 +2407,7 @@ describe("PostgreSQL schema", () => {
       const filteredHits = await repository.searchNodes({ access, query: "checkout", limit: 10 });
       expect(filteredHits.find((hit) => hit.node.id === sourceNodeId)?.node.sources)
         .toEqual(expectedSources);
-      const duplicates = await repository.findNodesByCanonicalNames(access, scope, ["Checkout API"]);
+      const duplicates = await repository.findNodesByNames(access, scope, ["Checkout API"]);
       expect(duplicates.find((node) => node.id === sourceNodeId)?.sources)
         .toEqual(expectedSources);
       const neighborhood = await repository.findNeighborhood(access, sourceNodeId, 2, 10);
@@ -2623,7 +2623,7 @@ describe("PostgreSQL schema", () => {
     expect(verify).toHaveBeenCalledTimes(1);
     const automatic = await repository.findById(organization, automaticCandidate.id);
     expect(automatic?.status).toBe("accepted");
-    expect(automatic?.assessment?.policyVersion).toBe("evidence-v1");
+    expect(automatic?.assessment?.policyVersion).toBe("evidence-v2");
     expect(automatic?.itemReviews).toHaveLength(5);
     expect(automatic?.itemReviews?.every((review) => review.method === "automatic")).toBe(true);
     expect(await repository.reviewSummary(access)).toEqual({ automaticAccepted: 3, automaticIgnored: 2 });
@@ -2696,7 +2696,8 @@ describe("PostgreSQL schema", () => {
     const merged = await repository.mergeNodes({ organizationId: organization, sourceNodeId: alias.id, targetNodeId: nodes[0]!.id, mergedBy: user, reason: "Same person", now: new Date() });
     expect(merged?.summary).toContain("Crimson");
     expect(merged?.summary).toContain("Emerald");
-    expect(merged?.sources).toHaveLength(2);
+    expect(merged?.sources).toEqual([{ chunkId: chunkIds[1] }]);
+    expect((await pool.query("SELECT count(*)::int AS count FROM knowledge_node_sources WHERE node_id=$1", [nodes[0]!.id])).rows[0].count).toBe(2);
 
     // A visible source without a description must not revive the shared summary
     // left by an archived source. Exercise every public node read path.
@@ -2705,7 +2706,7 @@ describe("PostgreSQL schema", () => {
     await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
       summary: "Archived secret biography.", source: { chunkId: chunkIds[0]! }, now: new Date() }));
     expect((await repository.searchNodes({ access, query: "Zhang Fei", limit: 10 }))[0]?.node.summary).toBeUndefined();
-    expect((await repository.findNodesByCanonicalNames(access, scope, ["Zhang Fei"]))[0]?.summary).toBeUndefined();
+    expect((await repository.findNodesByNames(access, scope, ["Zhang Fei"]))[0]?.summary).toBeUndefined();
     expect((await repository.findNeighborhood(access, withoutDescription.id, 1, 10)).nodes[0]?.summary).toBeUndefined();
     expect(await repository.searchNodes({ access, query: "biography", limit: 10 })).toEqual([]);
 

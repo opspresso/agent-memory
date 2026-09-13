@@ -43,6 +43,7 @@ function ontologyReader(
 
 function candidateRepository(): KnowledgeCandidateRepository {
   return {
+    deferIdentityResolution: vi.fn(),
     findById: vi.fn(),
     findByChunkId: vi.fn(),
     listReviewSources: vi.fn(),

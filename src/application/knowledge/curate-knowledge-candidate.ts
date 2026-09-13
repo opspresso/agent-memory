@@ -9,21 +9,22 @@ import type { KnowledgeCandidateSelection } from "@/domain/knowledge/knowledge-c
 import { assessKnowledgeCandidate } from "@/domain/knowledge/knowledge-curation-policy";
 import { entityReviewKey, relationshipReviewKey } from "@/domain/knowledge/knowledge-candidate-selection";
 import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
+import { AmbiguousKnowledgeIdentityError } from "@/domain/knowledge/knowledge-alias";
 
 type Review = (access: OrganizationAccess, id: string, reason: string, selection: KnowledgeCandidateSelection) => Promise<unknown>;
 
 export function buildCurateKnowledgeCandidate(dependencies: {
-  readonly candidates: Pick<KnowledgeCandidateRepository, "findByChunkId" | "saveAssessment">;
+  readonly candidates: Pick<KnowledgeCandidateRepository, "findByChunkId" | "saveAssessment" | "deferIdentityResolution">;
   readonly documents: Pick<DocumentRepository, "findChunkById">;
   readonly access: Pick<OrganizationAccessRepository, "findByUser">;
-  readonly graph: Pick<KnowledgeGraphRepository, "findNodesByCanonicalNames">;
+  readonly graph: Pick<KnowledgeGraphRepository, "findNodesByNames">;
   readonly ontology: KnowledgeOntologyReader;
   readonly verification: KnowledgeVerificationService;
   readonly accept: Review;
   readonly reject: Review;
   readonly clock: () => Date;
 }) {
-  return async (organizationId: string, chunkId: string, requestedBy?: string) => {
+  return async function curate(organizationId: string, chunkId: string, requestedBy?: string): Promise<void> {
     let candidate = await dependencies.candidates.findByChunkId(organizationId, chunkId);
     if (!candidate || candidate.status !== "pending" || candidate.graph.entities.length === 0) { return; }
     const source = await dependencies.documents.findChunkById(organizationId, chunkId);
@@ -32,10 +33,10 @@ export function buildCurateKnowledgeCandidate(dependencies: {
     let access = await dependencies.access.findByUser(organizationId, principalId);
     if (!access || !canAccessScopedResource(access, "manage", candidate.scope)) { return; }
     if (!candidate.assessment) {
-      const existing = await dependencies.graph.findNodesByCanonicalNames(access, candidate.scope, candidate.graph.entities.map((entity) => entity.canonicalName));
+      const existing = await dependencies.graph.findNodesByNames(access, candidate.scope, candidate.graph.entities.flatMap((entity) => [entity.canonicalName, ...(entity.aliases ?? [])]));
       const verification = await dependencies.verification.verify({
         content: source.chunk.content, documentTitle: source.document.title, graph: candidate.graph,
-        existingKnowledge: existing.map((node) => ({ name: node.canonicalName, kind: node.kind, summary: node.summary?.slice(0, 2_000) })),
+        existingKnowledge: existing.map((node) => ({ name: node.canonicalName, aliases: node.aliases.slice(0, 100), kind: node.kind, summary: node.summary?.slice(0, 2_000) })),
         quotaKey: { organizationId, userId: access.userId }
       });
       const ontology = await dependencies.ontology.findByOrganization(organizationId);
@@ -56,15 +57,19 @@ export function buildCurateKnowledgeCandidate(dependencies: {
     const accept = selectionFor("accept");
     if (accept.entityKeys.length + accept.relationshipIndexes.length > 0) {
       try {
-        await dependencies.accept(access, candidate.id, "Automatic curation: explicit, useful, source-grounded knowledge (evidence-v1).", accept);
+        await dependencies.accept(access, candidate.id, "Automatic curation: explicit, useful, source-grounded knowledge (evidence-v2).", accept);
       } catch (error) {
+        if (error instanceof AmbiguousKnowledgeIdentityError) {
+          await dependencies.candidates.deferIdentityResolution(organizationId, candidate.id, error.entityKeys);
+          return curate(organizationId, chunkId, requestedBy);
+        }
         if (!(error instanceof KnowledgeOntologyViolationError)) { throw error; }
         // A stricter dictionary changed after assessment; leave these items for a reviewer.
       }
     }
     const ignore = selectionFor("ignore");
     if (ignore.entityKeys.length + ignore.relationshipIndexes.length > 0) {
-      await dependencies.reject(access, candidate.id, "Automatic curation: unsupported, incidental, or non-specific knowledge (evidence-v1).", ignore);
+      await dependencies.reject(access, candidate.id, "Automatic curation: unsupported, incidental, or non-specific knowledge (evidence-v2).", ignore);
     }
   };
 }

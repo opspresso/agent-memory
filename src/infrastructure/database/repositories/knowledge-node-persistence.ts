@@ -7,6 +7,7 @@ import type {
 } from "@/domain/knowledge/knowledge-graph";
 import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
 import { mergeKnowledgeDescriptions } from "@/domain/knowledge/knowledge-description";
+import { knowledgeAliases, knowledgeNameMap } from "@/domain/knowledge/knowledge-alias";
 
 import type { AgentMemoryDatabase } from "../client";
 import { knowledgeNodes, knowledgeNodeSources } from "../schema";
@@ -20,8 +21,10 @@ export function knowledgeSourceFromRow(row: {
   memoryId: string | null;
   chunkId: string | null;
   description?: string | null;
-}): KnowledgeSource & { readonly description?: string } {
+  names?: Readonly<Record<string, string>>;
+}): KnowledgeSource & { readonly description?: string; readonly names?: Readonly<Record<string, string>> } {
   return { ...(row.memoryId ? { memoryId: row.memoryId } : { chunkId: row.chunkId! }),
+    ...(row.names ? { names: row.names } : {}),
     ...(row.description ? { description: row.description } : {}) };
 }
 
@@ -50,7 +53,7 @@ export function knowledgeScopeFromRow(row: {
 
 export function knowledgeNodeFromRow(
   row: NodeRow,
-  sources: readonly (KnowledgeSource & { readonly description?: string })[]
+  sources: readonly (KnowledgeSource & { readonly description?: string; readonly names?: Readonly<Record<string, string>> })[]
 ): KnowledgeNode {
   if (sources.length === 0) {
     throw new Error("knowledge node has no provenance");
@@ -62,6 +65,7 @@ export function knowledgeNodeFromRow(
     scope: knowledgeScopeFromRow(row),
     kind: row.kind,
     canonicalName: row.canonicalName,
+    aliases: knowledgeAliases(row.canonicalName, sources.flatMap((source) => Object.values(source.names ?? {}))),
     ...(summary ? { summary } : {}),
     ...(row.embedding && row.embeddingModel
       ? { embedding: { model: row.embeddingModel, values: row.embedding } }
@@ -174,11 +178,13 @@ export async function upsertKnowledgeNode(
         memoryId: source.memoryId ?? null,
         chunkId: source.chunkId ?? null,
         description: node.summary ?? null,
+        names: knowledgeNameMap([node.canonicalName, ...node.aliases]),
         createdAt: node.updatedAt
       })
       .onConflictDoUpdate({
         target: [knowledgeNodeSources.organizationId, knowledgeNodeSources.nodeId, knowledgeNodeSources.memoryId, knowledgeNodeSources.chunkId],
-        set: { description: sql`coalesce(excluded.description, ${knowledgeNodeSources.description})` }
+        set: { description: sql`coalesce(excluded.description, ${knowledgeNodeSources.description})`,
+          names: sql`${knowledgeNodeSources.names} || excluded.names` }
       });
   }
   const sourceRows = await transaction

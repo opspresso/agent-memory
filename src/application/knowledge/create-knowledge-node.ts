@@ -92,7 +92,7 @@ export function buildCreateKnowledgeNode(
       source: input.source,
       now: dependencies.clock()
     });
-    const node = await dependencies.repository.saveNode(created);
+    const node = await dependencies.repository.saveNode(created, input.access);
     return { node, ontologyWarnings };
   };
 }

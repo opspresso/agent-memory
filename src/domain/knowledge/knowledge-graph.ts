@@ -1,5 +1,6 @@
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import { serializedJsonByteLength } from "@/domain/shared/json-size";
+import { knowledgeAliases } from "./knowledge-alias";
 
 import {
   isSymmetricKnowledgePredicate,
@@ -23,6 +24,7 @@ export interface KnowledgeNode {
   readonly scope: ScopedResource;
   readonly kind: string;
   readonly canonicalName: string;
+  readonly aliases: readonly string[];
   readonly summary?: string;
   readonly embedding?: KnowledgeEmbedding;
   readonly properties: Readonly<Record<string, unknown>>;
@@ -48,6 +50,7 @@ export interface NewKnowledgeNode {
   readonly scope: ScopedResource;
   readonly kind: string;
   readonly canonicalName: string;
+  readonly aliases?: readonly string[];
   readonly summary?: string;
   readonly embedding?: KnowledgeEmbedding;
   readonly properties?: Readonly<Record<string, unknown>>;
@@ -142,6 +145,8 @@ export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNode {
   const embedding = validatedEmbedding(input.embedding);
   const source = validatedSource(input.source);
   const summary = input.summary?.trim();
+  if ((input.aliases?.length ?? 0) > 100) throw new InvalidKnowledgeGraphError("knowledge aliases must not exceed 100 names per source");
+  const aliases = knowledgeAliases(input.canonicalName, (input.aliases ?? []).map((alias) => normalizedText(normalizeKnowledgeName(alias), "knowledge alias", 500)));
   if (summary && summary.length > 10_000) {
     throw new InvalidKnowledgeGraphError(
       "knowledge node summary must not exceed 10000 characters"
@@ -161,6 +166,7 @@ export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNode {
       "knowledge node canonical name",
       500
     ),
+    aliases: Object.freeze([...aliases]),
     ...(summary ? { summary } : {}),
     ...(embedding ? { embedding } : {}),
     properties: validatedProperties(input.properties),

@@ -49,6 +49,7 @@ function repository(
   overrides: Partial<KnowledgeCandidateRepository> = {}
 ): KnowledgeCandidateRepository {
   return {
+    deferIdentityResolution: vi.fn(),
     findById: vi.fn(),
     findByChunkId: vi.fn(),
     listReviewSources: vi.fn(),
@@ -75,7 +76,7 @@ function graphRepository(
 ): KnowledgeGraphRepository {
   return {
     saveNode: vi.fn(),
-    findNodesByCanonicalNames: vi.fn(),
+    findNodesByNames: vi.fn(),
     findNodeById: vi.fn(),
     deleteNode: vi.fn(),
     mergeNodes: vi.fn(),
@@ -116,14 +117,14 @@ describe("knowledge candidate review", () => {
       source: { chunkId: candidate.chunkId },
       now
     });
-    const findNodesByCanonicalNames = vi
+    const findNodesByNames = vi
       .fn()
       .mockResolvedValue([memoryApi, postgres]);
     const findDuplicates = buildFindKnowledgeCandidateDuplicates({
       candidateRepository: repository({
         findById: vi.fn().mockResolvedValue(candidate)
       }),
-      graphRepository: graphRepository({ findNodesByCanonicalNames }),
+      graphRepository: graphRepository({ findNodesByNames }),
       ontologyReader: ontologyReader()
     });
 
@@ -134,8 +135,8 @@ describe("knowledge candidate review", () => {
       },
       ontology: { mode: "off", violations: [] }
     });
-    expect(findNodesByCanonicalNames).toHaveBeenCalledOnce();
-    expect(findNodesByCanonicalNames).toHaveBeenCalledWith(
+    expect(findNodesByNames).toHaveBeenCalledOnce();
+    expect(findNodesByNames).toHaveBeenCalledWith(
       admin,
       candidate.scope,
       ["Memory API", "PostgreSQL"]
@@ -143,19 +144,19 @@ describe("knowledge candidate review", () => {
   });
 
   it("does not reveal candidate duplicates to an unauthorized reviewer", async () => {
-    const findNodesByCanonicalNames = vi.fn();
+    const findNodesByNames = vi.fn();
     const findDuplicates = buildFindKnowledgeCandidateDuplicates({
       candidateRepository: repository({
         findById: vi.fn().mockResolvedValue(candidate)
       }),
-      graphRepository: graphRepository({ findNodesByCanonicalNames }),
+      graphRepository: graphRepository({ findNodesByNames }),
       ontologyReader: ontologyReader()
     });
 
     await expect(findDuplicates(member, candidate.id)).rejects.toBeInstanceOf(
       KnowledgeCandidateReviewAccessDeniedError
     );
-    expect(findNodesByCanonicalNames).not.toHaveBeenCalled();
+    expect(findNodesByNames).not.toHaveBeenCalled();
   });
 
   it("prepares deterministic source-bound nodes and relationships for atomic promotion", async () => {
@@ -255,7 +256,7 @@ describe("knowledge candidate review", () => {
         findById: vi.fn().mockResolvedValue(candidate)
       }),
       graphRepository: graphRepository({
-        findNodesByCanonicalNames: vi.fn().mockResolvedValue([])
+        findNodesByNames: vi.fn().mockResolvedValue([])
       }),
       ontologyReader: ontologyReader({
         mode: "warn",

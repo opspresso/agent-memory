@@ -174,6 +174,7 @@ export const knowledgeNodeSources = pgTable(
     memoryId: uuid(),
     chunkId: uuid(),
     description: text(),
+    names: jsonb().$type<Readonly<Record<string, string>>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
@@ -181,6 +182,7 @@ export const knowledgeNodeSources = pgTable(
       "knowledge_node_sources_exactly_one_source_check",
       sql`(${table.memoryId} IS NOT NULL) <> (${table.chunkId} IS NOT NULL)`
     ),
+    check("knowledge_node_sources_names_object_check", sql`jsonb_typeof(${table.names}) = 'object'`),
     foreignKey({
       columns: [table.organizationId, table.nodeId],
       foreignColumns: [knowledgeNodes.organizationId, knowledgeNodes.id],
@@ -204,7 +206,8 @@ export const knowledgeNodeSources = pgTable(
       table.nodeId
     ),
     index("knowledge_node_sources_memory_idx").on(table.memoryId),
-    index("knowledge_node_sources_chunk_idx").on(table.chunkId)
+    index("knowledge_node_sources_chunk_idx").on(table.chunkId),
+    index("knowledge_node_sources_names_idx").using("gin", table.names)
   ]
 );
 

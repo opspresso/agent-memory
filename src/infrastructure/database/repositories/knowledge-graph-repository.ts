@@ -24,6 +24,7 @@ import type {
   KnowledgeNodeSearchInput
 } from "@/domain/knowledge/knowledge-graph-repository";
 import { isSymmetricKnowledgePredicate, knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
+import { AmbiguousKnowledgeIdentityError, knowledgeAliases, knowledgeNameMap, resolveKnowledgeIdentity } from "@/domain/knowledge/knowledge-alias";
 
 import type { AgentMemoryDatabase } from "../client";
 import {
@@ -39,7 +40,7 @@ import {
   memories
 } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
-import { assertKnowledgeSourceScopes, lockKnowledgeScope } from "./knowledge-scope-lock";
+import { assertKnowledgeSourceScopes, loadKnowledgeSourceScopes, lockKnowledgeScope } from "./knowledge-scope-lock";
 import { sameScope, scopeCovers } from "@/domain/identity/scope-coverage";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-change";
@@ -171,13 +172,28 @@ function scoreExpressions(input: KnowledgeNodeSearchInput, now: Date) {
     WHERE ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
       AND ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
       AND ${visibleSourcePredicate(input.access, knowledgeNodeSources, now)})`;
+  const visibleNames = sql`(SELECT string_agg(name.value, ' ')
+    FROM ${knowledgeNodeSources} CROSS JOIN LATERAL jsonb_each_text(${knowledgeNodeSources.names}) AS name
+    WHERE ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
+      AND ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
+      AND ${visibleSourcePredicate(input.access, knowledgeNodeSources, now)})`;
   return hybridSearchExpressions({
-    search: sql`to_tsvector('simple', ${knowledgeNodes.canonicalName} || ' ' || coalesce(${visibleDescriptions}, ''))`,
+    search: sql`to_tsvector('simple', ${knowledgeNodes.canonicalName} || ' ' || coalesce(${visibleNames}, '') || ' ' || coalesce(${visibleDescriptions}, ''))`,
     embedding: knowledgeNodes.embedding,
     embeddingModel: knowledgeNodes.embeddingModel,
     query: input.query,
     ...(input.queryEmbedding ? { queryEmbedding: input.queryEmbedding } : {})
   });
+}
+
+function nodeNamePredicate(access: OrganizationAccess, names: readonly string[], now: Date) {
+  return or(inArray(knowledgeNodes.canonicalNameKey, [...names]), sql`EXISTS (
+    SELECT 1 FROM ${knowledgeNodeSources}
+    WHERE ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
+      AND ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
+      AND ${knowledgeNodeSources.names} ?| ${sql.param([...names])}::text[]
+      AND ${visibleSourcePredicate(access, knowledgeNodeSources, now)}
+  )`)!;
 }
 
 function vectorLiteral(values: readonly number[] | null | undefined) {
@@ -198,24 +214,43 @@ function nodeScopePredicate(scope: ScopedResource) {
 }
 
 export function createKnowledgeGraphRepository(
-  db: AgentMemoryDatabase,
+  db: Omit<AgentMemoryDatabase, "$client">,
   clock: () => Date = () => new Date()
 ): KnowledgeGraphRepository {
   return {
-    async saveNode(node) {
+    async saveNode(node, access) {
       return db.transaction(async (transaction) => {
-        await lockKnowledgeScope(transaction, node.scope.organizationId);
+        await lockKnowledgeScope(transaction, node.scope.organizationId, access !== undefined);
         await assertKnowledgeSourceScopes(transaction, node.scope, node.sources);
-        return upsertKnowledgeNode(transaction, node);
+        let proposed = node;
+        if (access) {
+          const now = clock();
+          const repository = createKnowledgeGraphRepository(transaction, () => now);
+          let existing = await repository.findNodesByNames(access, node.scope, [node.canonicalName]);
+          const evidence = await loadKnowledgeSourceScopes(transaction, node.scope.organizationId, existing.flatMap((node) => node.sources), now);
+          if ([...evidence.values()].some((source) => !source.available)) existing = await repository.findNodesByNames(access, node.scope, [node.canonicalName]);
+          const identity = resolveKnowledgeIdentity({ ...node, aliases: [] }, existing);
+          if (identity.status === "ambiguous") throw new AmbiguousKnowledgeIdentityError([]);
+          if (identity.status === "resolved") proposed = { ...node, canonicalName: identity.target.canonicalName,
+            aliases: knowledgeAliases(identity.target.canonicalName, [node.canonicalName, ...node.aliases]) };
+        }
+        const saved = await upsertKnowledgeNode(transaction, proposed);
+        if (!access) return saved;
+        const [row] = await transaction.select().from(knowledgeNodes).where(eq(knowledgeNodes.id, saved.id));
+        const sources = await transaction.select().from(knowledgeNodeSources).where(and(
+          eq(knowledgeNodeSources.organizationId, access.organizationId), eq(knowledgeNodeSources.nodeId, saved.id),
+          visibleSourcePredicate(access, knowledgeNodeSources, clock())
+        ));
+        return knowledgeNodeFromRow(row!, sources.map(knowledgeSourceFromRow));
       });
     },
 
-    async findNodesByCanonicalNames(access, scope, canonicalNames) {
+    async findNodesByNames(access, scope, names) {
       const now = clock();
-      const canonicalNameKeys = [
-        ...new Set(canonicalNames.map(knowledgeCanonicalNameKey))
+      const nameKeys = [
+        ...new Set(names.map(knowledgeCanonicalNameKey))
       ];
-      if (canonicalNameKeys.length === 0) {
+      if (nameKeys.length === 0) {
         return [];
       }
       const rows = await db
@@ -227,7 +262,7 @@ export function createKnowledgeGraphRepository(
             nodeScopePredicate(scope),
             nodeAccessPredicate(access),
             nodeHasVisibleSource(access, now),
-            inArray(knowledgeNodes.canonicalNameKey, canonicalNameKeys)
+            nodeNamePredicate(access, nameKeys, now)
           )
         )
         .orderBy(asc(knowledgeNodes.canonicalName), asc(knowledgeNodes.kind));
@@ -305,7 +340,7 @@ export function createKnowledgeGraphRepository(
 
     async mergeNodes(input) {
       return db.transaction(async (transaction) => {
-        await lockKnowledgeScope(transaction, input.organizationId);
+        await lockKnowledgeScope(transaction, input.organizationId, true);
         const locked = await transaction
           .select()
           .from(knowledgeNodes)
@@ -327,6 +362,10 @@ export function createKnowledgeGraphRepository(
         }
         const merger = await createOrganizationAccessRepository(transaction).findByUser(input.organizationId, input.mergedBy);
         if (!merger || !canAccessScopedResource(merger, "manage", knowledgeScopeFromRow(source)) || !canAccessScopedResource(merger, "manage", knowledgeScopeFromRow(target))) return null;
+        const visible = await transaction.select({ id: knowledgeNodes.id }).from(knowledgeNodes).where(and(
+          eq(knowledgeNodes.organizationId, input.organizationId), inArray(knowledgeNodes.id, [source.id, target.id]), nodeHasVisibleSource(merger, input.now)
+        ));
+        if (visible.length !== 2) return null;
         if (
           source.scopeKind !== target.scopeKind ||
           source.teamId !== target.teamId ||
@@ -355,11 +394,12 @@ export function createKnowledgeGraphRepository(
               memoryId: sourceReference.memoryId ?? null,
               chunkId: sourceReference.chunkId ?? null,
               description: sourceReference.description ?? null,
+              names: { ...knowledgeNameMap([source.canonicalName]), ...sourceReference.names },
               createdAt: input.now
             })
             .onConflictDoUpdate({
               target: [knowledgeNodeSources.organizationId, knowledgeNodeSources.nodeId, knowledgeNodeSources.memoryId, knowledgeNodeSources.chunkId],
-              set: { description: sql`CASE
+              set: { names: sql`${knowledgeNodeSources.names} || excluded.names`, description: sql`CASE
                 WHEN ${knowledgeNodeSources.description} IS NULL THEN excluded.description
                 WHEN excluded.description IS NULL OR excluded.description = ${knowledgeNodeSources.description} THEN ${knowledgeNodeSources.description}
                 ELSE ${knowledgeNodeSources.description} || E'\n\n' || excluded.description END` }
@@ -547,7 +587,8 @@ export function createKnowledgeGraphRepository(
           .where(
             and(
               eq(knowledgeNodeSources.organizationId, input.organizationId),
-              eq(knowledgeNodeSources.nodeId, target.id)
+              eq(knowledgeNodeSources.nodeId, target.id),
+              visibleSourcePredicate(merger, knowledgeNodeSources, input.now)
             )
           );
         return knowledgeNodeFromRow(
@@ -681,7 +722,7 @@ export function createKnowledgeGraphRepository(
           )
         )
         .orderBy(
-          desc(sql<number>`CASE WHEN ${knowledgeNodes.canonicalNameKey} = ${knowledgeCanonicalNameKey(input.query)} THEN 1 ELSE 0 END`),
+          desc(sql<number>`CASE WHEN ${nodeNamePredicate(input.access, [knowledgeCanonicalNameKey(input.query)], now)} THEN 1 ELSE 0 END`),
           desc(scores.score), knowledgeNodes.canonicalName
         )
         .limit(input.limit);
