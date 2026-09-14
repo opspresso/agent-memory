@@ -4,6 +4,7 @@ import { checkSchemaReadiness } from "@/infrastructure/database/schema-readiness
 import { database } from "./database";
 
 export { DatabaseSchemaNotReadyError } from "@/infrastructure/database/schema-readiness";
+export { checkKnowledgeGraphReadiness } from "./neo4j";
 
 export async function checkDatabaseReadiness(): Promise<void> {
   await database.db.execute(sql`select 1`);

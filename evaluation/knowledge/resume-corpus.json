@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "description": "Authored synthetic profile and structured-document regressions. Names and text are invented; no uploaded resume content is included. Source headings are part of the evidence.",
+  "nodeKinds": ["person", "organization", "product", "service", "technology", "recognition", "concept"],
+  "patterns": [
+    {"sourceKind": "person", "predicate": "works_for", "targetKind": "organization"},
+    {"sourceKind": "person", "predicate": "has_skill", "targetKind": "technology"},
+    {"sourceKind": "person", "predicate": "has_skill", "targetKind": "product"},
+    {"sourceKind": "person", "predicate": "contributed_to", "targetKind": "product"},
+    {"sourceKind": "person", "predicate": "received", "targetKind": "recognition"},
+    {"sourceKind": "product", "predicate": "uses", "targetKind": "technology"}
+  ],
+  "cases": [
+    {
+      "id": "markdown-resume-employer",
+      "content": "# 김하늘\n## 경력\n### 북극소프트 | 개발 엔지니어\n2020–2022\n사내 도구를 개발했다.",
+      "entities": [{"kind": "person", "name": "김하늘"}, {"kind": "organization", "name": "북극소프트"}],
+      "relationships": [{"source": "김하늘", "predicate": "works_for", "target": "북극소프트"}]
+    },
+    {
+      "id": "markdown-resume-skills",
+      "content": "# 박서준\n## 보유 기술\n프로그래밍 언어: TypeScript, Rust\n데이터베이스 제품: Redis",
+      "entities": [{"kind": "person", "name": "박서준"}, {"kind": "technology", "name": "TypeScript"}, {"kind": "technology", "name": "Rust"}, {"kind": "product", "name": "Redis"}],
+      "relationships": [{"source": "박서준", "predicate": "has_skill", "target": "TypeScript"}, {"source": "박서준", "predicate": "has_skill", "target": "Rust"}, {"source": "박서준", "predicate": "has_skill", "target": "Redis"}]
+    },
+    {
+      "id": "markdown-resume-personal-product",
+      "content": "# 김하늘\n## 개인 프로젝트\n### 별빛도구\n터미널 작업을 관리하는 소프트웨어 제품이다.\n기술 스택: Rust 프로그래밍 언어",
+      "entities": [{"kind": "person", "name": "김하늘"}, {"kind": "product", "name": "별빛도구"}, {"kind": "technology", "name": "Rust"}],
+      "relationships": [{"source": "김하늘", "predicate": "contributed_to", "target": "별빛도구"}, {"source": "별빛도구", "predicate": "uses", "target": "Rust"}]
+    },
+    {
+      "id": "markdown-resume-multiple-people",
+      "content": "# 김하늘\n## 경력\n### 북극소프트\n개발 엔지니어 (2020–2022)\n# 박서준\n## 경력\n### 새벽연구소\n연구원 (2023–2024)",
+      "entities": [{"kind": "person", "name": "김하늘"}, {"kind": "organization", "name": "북극소프트"}, {"kind": "person", "name": "박서준"}, {"kind": "organization", "name": "새벽연구소"}],
+      "relationships": [{"source": "김하늘", "predicate": "works_for", "target": "북극소프트"}, {"source": "박서준", "predicate": "works_for", "target": "새벽연구소"}]
+    },
+    {
+      "id": "markdown-resume-recognition",
+      "content": "# 김하늘\n## 수상\n2024년 별빛개발자상을 수상했다.",
+      "entities": [{"kind": "person", "name": "김하늘"}, {"kind": "recognition", "name": "별빛개발자상"}],
+      "relationships": [{"source": "김하늘", "predicate": "received", "target": "별빛개발자상"}]
+    },
+    {
+      "id": "markdown-resume-negated-employment",
+      "content": "# 박서준\n## 경력 정정\n북극소프트에는 근무한 적이 없다. 실제 근무처는 새벽연구소다.",
+      "entities": [{"kind": "person", "name": "박서준"}, {"kind": "organization", "name": "북극소프트"}, {"kind": "organization", "name": "새벽연구소"}],
+      "relationships": [{"source": "박서준", "predicate": "works_for", "target": "새벽연구소"}]
+    }
+  ]
+}

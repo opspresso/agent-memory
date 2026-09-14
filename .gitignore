@@ -29,6 +29,9 @@ next-env.d.ts
 coverage/
 playwright-report/
 test-results/
+.eval-results/
+.venv-knowledge-eval/
+evaluation/**/__pycache__/
 
 # logs
 npm-debug.log*

@@ -193,6 +193,7 @@ CREATE TABLE "knowledge_candidates" (
 	"graph" jsonb NOT NULL,
 	"item_reviews" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"assessment" jsonb,
+	"assessment_history" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"status" "knowledge_candidate_status" DEFAULT 'pending' NOT NULL,
 	"reviewed_by" uuid,
 	"review_reason" text,
@@ -275,6 +276,10 @@ CREATE TABLE "knowledge_nodes" (
         OR ("knowledge_nodes"."scope_kind" = 'team' AND "knowledge_nodes"."team_id" IS NOT NULL AND "knowledge_nodes"."user_id" IS NULL)
         OR ("knowledge_nodes"."scope_kind" = 'user' AND "knowledge_nodes"."team_id" IS NULL AND "knowledge_nodes"."user_id" IS NOT NULL)),
 	CONSTRAINT "knowledge_nodes_embedding_pair_check" CHECK (("knowledge_nodes"."embedding" IS NULL) = ("knowledge_nodes"."embedding_model" IS NULL))
+);
+CREATE TABLE "knowledge_graph_versions" (
+	"organization_id" uuid PRIMARY KEY NOT NULL,
+	"revision" uuid DEFAULT uuidv7() NOT NULL
 );
 CREATE TABLE "memories" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
@@ -443,6 +448,7 @@ ALTER TABLE "knowledge_node_sources" ADD CONSTRAINT "knowledge_node_sources_orga
 ALTER TABLE "knowledge_nodes" ADD CONSTRAINT "knowledge_nodes_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "knowledge_nodes" ADD CONSTRAINT "knowledge_nodes_organization_team_fk" FOREIGN KEY ("organization_id","team_id") REFERENCES "public"."teams"("organization_id","id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "knowledge_nodes" ADD CONSTRAINT "knowledge_nodes_organization_user_fk" FOREIGN KEY ("organization_id","user_id") REFERENCES "public"."organization_members"("organization_id","user_id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "knowledge_graph_versions" ADD CONSTRAINT "knowledge_graph_versions_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "memories" ADD CONSTRAINT "memories_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "memories" ADD CONSTRAINT "memories_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;
 ALTER TABLE "memories" ADD CONSTRAINT "memories_organization_team_fk" FOREIGN KEY ("organization_id","team_id") REFERENCES "public"."teams"("organization_id","id") ON DELETE cascade ON UPDATE no action;

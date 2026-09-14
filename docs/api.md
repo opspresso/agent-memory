@@ -115,7 +115,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 
 ### Readiness와 지표
 
-- `GET /api/health`: 인증 없이 DB 연결과 현재 schema SQL의 fingerprint을 확인한다. 성공은 `200` `{ "status": "ok", "checks": { "database": "ok", "schema": "ok" } }`다. DB 연결 실패는 `503`과 `{ "database": "failed", "schema": "unknown" }`, schema 불일치은 `503`과 `{ "database": "ok", "schema": "failed" }`를 checks에 반환한다. 모든 응답은 `Cache-Control: no-store`다. Object storage·AI provider 상태나 수동 schema 변경은 검사하지 않는다.
+- `GET /api/health`: 인증 없이 PostgreSQL 연결·현재 schema SQL의 fingerprint와 Neo4j 연결을 확인한다. 성공은 `200` `{ "status": "ok", "checks": { "database": "ok", "schema": "ok", "neo4j": "ok" } }`다. 실패는 `503`이며 DB 연결 실패 시 `database=failed`, schema 불일치 시 `database=ok, schema=failed`, Neo4j 실패 시 `database=ok, schema=ok, neo4j=failed`다. 앞 단계가 실패하여 검사하지 못한 값은 `unknown`이다. 모든 응답은 `Cache-Control: no-store`다. Object storage·AI provider 상태나 수동 schema 변경은 검사하지 않는다.
 - `GET /api/metrics`: `METRICS_BEARER_TOKEN`이 없거나 Bearer가 일치하지 않으면 `404`다. 성공하면 Prometheus text exposition format으로 build·process 지표를 반환한다.
 
 ### 전역 애플리케이션 설정
@@ -475,6 +475,7 @@ Retry는 원래 scope의 `write` 권한을 요구한다. 성공은 재시도 que
 Node 생성 입력은 `scope`, `kind`, `canonicalName`, `source`와 선택형 `summary`, `properties`다. Edge 생성 입력은 `scope`, `sourceNodeId`, `targetNodeId`, `predicate`, `source`와 선택형 `properties`다.
 
 - Node의 `kind`는 1–100자, `canonicalName`은 1–500자, `summary`는 1–10,000자다.
+- `relationship`, `relation`, `employment`, `statement`, `claim`, `fact`, `attribute`는 개체 종류가 아니므로 node 생성과 온톨로지의 `nodeKinds` 등록에서 `400`으로 거부한다. 이 규칙은 `off`·`warn`·`strict` 모두에 적용한다. 해당 종류가 포함된 AI 후보의 수동 승인도 거부하며 관계로 다시 추출해야 한다.
 - Edge의 `predicate`는 1–100자다.
 - Node와 edge의 `properties`는 선택형 JSON object이며 직렬화 기준 최대 32 KiB다.
 
@@ -551,7 +552,11 @@ Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical nam
 
 추천·제안은 사전에 자동 반영되지 않는다 — admin이 콘솔 설정 화면에서 선택해 `PATCH /api/organization`로 저장한다.
 
+AI 추출의 대표 이름은 NFKC·공백 정규화 후 원문에 존재해야 한다. 관계나 문장을 요약해 새 이름을 만든 개체는 `concept`·`event`로 분류해도 제외한다. 등록할 수 없는 개체 종류는 추출 힌트·온톨로지 추천에서도 제외한다. 자동 검증에서 이러한 개체와 그 개체를 참조하는 관계는 모델의 긍정 판정과 무관하게 제외한다. 관계 승인으로 제외된 개체를 다시 승격하지 않는다. 고유하게 이름 붙은 사건과 재사용 가능한 개념은 개체가 될 수 있으며, 연결 유무만으로 삭제하지 않는다.
+
 ### 검색과 neighborhood
+
+Neighborhood는 Neo4j의 인접 관계를 따라가며, 각 단계에서 PostgreSQL의 현재 resource scope와 provenance를 다시 검사한다. 승인·삭제·병합 뒤 첫 조회는 최신 Graph revision을 Neo4j에 반영한다. Neo4j 연결·동기화 실패는 `503 { "error": "Knowledge graph is unavailable" }`로 반환한다. 응답의 node·edge 형식과 기존 depth·limit 계약은 유지한다. 검색 후보 순위는 PostgreSQL의 이름·출처별 설명과 선택형 embedding을 사용하며, 의미 검색 일치가 두 개체 사이의 관계를 의미하지 않는다.
 
 검색은 `GET .../knowledge/nodes?q=<query>&limit=<1-100>`을 사용하며 query는 1–10,000자, 기본 검색 limit은 10이다. Neighborhood는 `depth=1-5`, `limit=1-200`을 받으며 기본값은 각각 1과 100이다. 두 조회는 호출자가 현재 읽을 수 있고 active·유효한 Memory 또는 ready document chunk 근거가 하나 이상 있는 graph resource만 반환한다.
 
@@ -565,13 +570,17 @@ curl \
 
 ### AI 후보 조회와 검토
 
+Runtime은 개체를 먼저 식별·검증한 뒤, 살아남은 entity key만 관계의 `sourceKey`·`targetKey`로 허용하는 두 단계 추출을 사용한다. 관계가 없는 결과도 정상이며 0–1개 개체에는 관계 모델을 호출하지 않는다. 이후의 자동 검증은 별도 요청이다.
+
+현재 검증 policy는 `evidence-v5`다. 핵심 관계는 다른 검증을 모두 통과하면 모델의 `incidental` 표기에도 보존될 수 있으며, 판정 이유에 이를 기록한다. 근거 없는 주장·불확실성·종류 불일치·일시적 이동·응답은 이 규칙으로 승격하지 않는다. 새 assessment 항목에는 `support`(explicit/uncertain/unsupported), `usefulness`(useful/incidental), `conflict`(boolean)를 함께 반환한다. 과거 assessment에는 이 선택형 필드가 없을 수 있다. `reason`은 최대 1,000자의 설명이며 긴 응답은 끝의 `…`로 축약을 표시한다. `assessment.items[].representation`은 `entity`, `relationship`, `attribute`, `generic_reference`, `uncertain` 중 하나다. 개체 항목의 `entityKind`는 제안 종류를 보지 않은 검증 모델이 원문에서 추론한 종류이며 제안과 다르면 자동 승격하지 않는다. 관계·속성·호칭을 개체로 판정하거나 끝점의 개체 자격·종류가 확인되지 않은 관계도 자동 승인하지 않는다. 이전 policy의 미완료 후보는 다시 검증하며, 이전 판정은 선택형 `assessmentHistory` 배열에 같은 assessment 형식으로 보존한다. 이미 처리한 항목의 결정과 완료된 Graph를 자동 철회하지 않는다.
+
 `GET /api/knowledge/progress`는 읽기 가능한 ready 문서 청크를 대상으로 `{ totalChunks, extractedChunks, curatedChunks, enabled }`를 반환한다. Curated는 검증과 자동 처리가 끝났거나 사람이 완료한 청크다. 이 숫자는 수동 검토까지 모두 끝났다는 의미가 아니다.
 
 `GET /api/knowledge/curation`은 검토 권한이 있는 ready 문서의 최근 assessment 기록 50개를 `{ sources: [{ candidate, documentTitle, ordinal }] }`로 반환한다. Candidate는 assessment와 항목별 자동·수동 처리 기록을 포함한다.
 
 `POST /api/knowledge/curation?query=관우`는 검토 권한이 있는 후보 중 이름·추출된 별칭에 해당 검색어가 포함된 후보를 우선 처리한다. Query는 선택 사항이며 최대 500자다. 기존 queued job도 우선순위를 올린다. 이미 저장된 추출을 재사용하며 원문 전체 재검색이나 재추출은 수행하지 않는다. Query가 있으면 `queued`는 기존 대기·실행 중 작업을 포함한 우선 처리 요청 대상 수이며, 생략하면 새로 등록된 작업 수다. Query를 생략하면 미검증 추출·미완료 자동 처리 항목과 아직 추출 결과가 없는 ready 청크를 등록한다. 추출 실패로 재시도가 소진된 청크도 포함하며 source의 현재 `manage` 권한을 요구한다. 완료된 추출은 보존하고 queued·active 작업은 중복 등록하지 않는다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐 요청자(기본 ingestion은 문서 생성자)의 현재 권한을 검증한 후 실행한다.
 
-자동 검증은 추출과 별도의 structured-output 요청이며 같은 설정의 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다. `evidence-v2`의 `assessment.aliases`에는 `entityKey`, `alias`, `identity`, `verdict`, `evidence`, `reason`을 저장한다. 별칭 identity는 `same_entity`, `generic_reference`, `different_entity`, `uncertain` 중 하나이며 원문 인용이 일치하는 `same_entity`만 자동 승격한다. 직함·호칭과 다른 개체의 이름은 별칭에서 제외하고, 불확실한 별칭은 개체와 연결 관계를 수동 검토로 남긴다. Provider 응답 스키마는 모든 항목 ID를 필수 object key로 지정하고 추가 key를 금지한다. 서버에서도 전체 항목 집합을 다시 검증한다. 모든 항목이 정확히 한 번 평가되어야 하고 명시적·유용한 사실만 자동 승인 대상이다. 불확실성, 충돌, strict 사전 위반, 불명확한 양 끝 개체와 모호한 별칭 identity는 사람에게 남긴다. 검증된 별칭은 승인 시 출처와 함께 node에 보존한다. 후속 후보는 대표 이름과 별칭으로 기존 지식을 조회해 같은 scope·kind의 유일한 ID를 재사용한다. 다른 대표 이름을 가진 개체들이 별칭끼리만 공유하는 경우에는 자동 병합하지 않으며, 후보에 각 기존 대표 이름의 명시적인 동일인 근거가 있어야 통합한다. 명시적으로 동일인으로 검증된 이름들이 각각 별도 node로 존재하면 출처·관계·과거 승인 binding을 보존해 통합한다. 명시적인 동일인 근거로 해소되지 않은 이름이 여러 node와 일치하면 자동 검토는 해당 개체·관계를 수동 검토로 전환한다. 사람이 이 상태에서 승인을 요청하면 `409`를 반환하므로 기존 node identity를 먼저 정리해야 한다. 인용은 원문과 대조하며 실패·불완전 응답은 자동 승인의 근거가 될 수 없다. `itemReviews[].method`는 human 또는 automatic으로 처리 주체를 구분한다. 인증된 공개 승인 body로 method를 지정할 수 없다.
+자동 검증은 추출과 별도의 structured-output 요청이다. 기본은 추출 모델이며 `KNOWLEDGE_VERIFICATION_BASE_URL`과 `KNOWLEDGE_VERIFICATION_MODEL`을 함께 지정하면 독립 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다. `evidence-v5`의 `assessment.aliases`에는 `entityKey`, `alias`, `identity`, `verdict`, `evidence`, `reason`을 저장한다. 별칭 identity는 `same_entity`, `generic_reference`, `different_entity`, `uncertain` 중 하나이며 원문 인용과 별칭 자체의 원문 출현이 확인된 `same_entity`만 자동 승격한다. 기존 이름 뒤에 수식어를 붙인 별칭은 선택형 `assessment.aliases[].descriptiveExpansion`으로 설명형 확장 여부를 따로 검증하며, `true`이면 같은 대상을 가리켜도 별칭으로 승격하지 않는다. 직함·호칭과 다른 개체의 이름은 별칭에서 제외하고, 불확실한 별칭은 개체와 연결 관계를 수동 검토로 남긴다. Provider 응답 스키마는 모든 항목 ID를 필수 object key로 지정하고 추가 key를 금지한다. 서버에서도 전체 항목 집합을 다시 검증한다. 모든 항목이 정확히 한 번 평가되어야 하고 명시적·유용한 사실만 자동 승인 대상이다. 불확실성, 충돌, strict 사전 위반, 불명확한 양 끝 개체와 모호한 별칭 identity는 사람에게 남긴다. 검증된 별칭은 승인 시 출처와 함께 node에 보존한다. 후속 후보는 대표 이름과 별칭으로 기존 지식을 조회해 같은 scope·kind의 유일한 ID를 재사용한다. 다른 대표 이름을 가진 개체들이 별칭끼리만 공유하는 경우에는 자동 병합하지 않으며, 후보에 각 기존 대표 이름의 명시적인 동일인 근거가 있어야 통합한다. 명시적으로 동일인으로 검증된 이름들이 각각 별도 node로 존재하면 출처·관계·과거 승인 binding을 보존해 통합한다. 명시적인 동일인 근거로 해소되지 않은 이름이 여러 node와 일치하면 자동 검토는 해당 개체·관계를 수동 검토로 전환한다. 사람이 이 상태에서 승인을 요청하면 `409`를 반환하므로 기존 node identity를 먼저 정리해야 한다. 인용은 원문과 대조하며 실패·불완전 응답은 자동 승인의 근거가 될 수 없다. `itemReviews[].method`는 human 또는 automatic으로 처리 주체를 구분한다. 인증된 공개 승인 body로 method를 지정할 수 없다.
 
 `GET /api/knowledge/review-groups?offset=0&limit=25&query=유비`는 AI가 수동 검토로 분류한 항목과 현재 strict 사전에 막힌 자동 승인 묶음의 pending 항목에서 동일 scope·kind·정규화 이름의 개체와 동일 양 끝 개체·predicate의 관계를 통합한 후 페이지를 반환한다. 응답은 `{ groups, total, sourceCount, offset, limit, automaticAccepted, automaticIgnored, unassessedCount }`이다. 자동 처리 수는 개체·관계 항목 단위이며 검토 권한이 있는 ready source만 집계한다. Limit은 1–100, offset은 0 이상의 정수이며 query는 최대 500자다. 그룹의 `occurrences`는 후보 ID, 문서 제목·ID, chunk ID·ordinal, 근거, 별칭·설명과 해당 항목을 검토할 `selection`을 제공한다. 빈 결과와 이미 검토한 항목은 제외한다. 각 그룹의 `ontology`는 검증 모드와 해당 항목의 위반 목록을 제공한다. 구체적인 관계와 인용 근거가 있는 항목을 우선하며 정렬은 진실성 점수가 아니다. 대칭 관계만 역방향을 통합한다. 원본 인용이 다른 사건·시점을 나타내는지는 검토자가 확인한다.
 
@@ -753,6 +762,8 @@ Token은 client의 secret 또는 environment variable 기능으로 주입하고 
 ### Chunk 원문
 
 `GET /api/document-chunks/{chunkId}`는 후보 검토와 Graph 출처 확인을 위한 원문을 반환한다. 응답은 `{ document, chunk: { id, ordinal, content, metadata } }`이다. Document는 기존 공개 응답을 사용하고 object key나 embedding은 노출하지 않는다. 같은 조직의 ready 문서이며 현재 사용자가 source를 읽을 수 있을 때만 반환한다. 없는 chunk, 권한 없는 source, ready가 아닌 source는 모두 `404`로 처리한다. 원본 파일 download endpoint가 아니라 처리된 chunk 원문 조회다.
+
+Markdown chunk의 `content`에는 문맥을 보존하기 위한 원문의 상위 제목이 포함될 수 있다. `metadata.start/end`는 정규화한 원본의 본문 범위이며, 반복한 제목의 범위는 선택형 `metadata.contextSpans: [{ start, end }]`로 제공한다.
 
 ### 문서 본문 페이지
 

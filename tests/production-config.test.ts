@@ -8,6 +8,9 @@ import {
 const complete = {
   NODE_ENV: "production",
   DATABASE_URL: "postgresql://user:pass@db:5432/agent_memory",
+  NEO4J_URI: "bolt://neo4j:7687",
+  NEO4J_USERNAME: "neo4j",
+  NEO4J_PASSWORD: "test-graph-password",
   BETTER_AUTH_SECRET: "a-production-secret-with-at-least-32-characters",
   BETTER_AUTH_URL: "https://memory.example.com",
   ADMIN_EMAILS: "admin@example.com",

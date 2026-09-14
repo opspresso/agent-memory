@@ -74,7 +74,7 @@ describe("knowledge extraction service", () => {
     expect(body).toMatchObject({
       model: "test/model",
       messages: [
-        { content: expect.stringContaining("Markdown: treat a heading") },
+        { content: expect.stringContaining("Markdown: preserve the ancestor heading scope") },
         {
           content: JSON.stringify({
             documentTitle: "Architecture",

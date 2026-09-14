@@ -43,6 +43,10 @@ export default defineConfig({
       DATABASE_URL:
         process.env.DATABASE_URL ??
         "postgresql://agent_memory:agent_memory@127.0.0.1:5433/agent_memory",
+      NEO4J_URI: process.env.NEO4J_URI ?? "bolt://127.0.0.1:7687",
+      NEO4J_USERNAME: process.env.NEO4J_USERNAME ?? "neo4j",
+      NEO4J_PASSWORD: process.env.NEO4J_PASSWORD ?? "agent_memory_dev",
+      NEO4J_DATABASE: process.env.NEO4J_DATABASE ?? "neo4j",
       AUTH_PASSWORD: "true",
       AUTH_PASSWORD_SIGNUP: "true",
       ADMIN_EMAILS: e2eAdminEmails,

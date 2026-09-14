@@ -23,6 +23,8 @@ import type {
   KnowledgeGraphRepository,
   KnowledgeNodeSearchInput
 } from "@/domain/knowledge/knowledge-graph-repository";
+import type { KnowledgeTopologyReader } from "@/domain/knowledge/knowledge-topology";
+import { connectedKnowledgeNeighborhood } from "@/domain/knowledge/knowledge-connected-component";
 import { isSymmetricKnowledgePredicate, knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
 import { AmbiguousKnowledgeIdentityError, knowledgeAliases, knowledgeNameMap, resolveKnowledgeIdentity } from "@/domain/knowledge/knowledge-alias";
 
@@ -215,7 +217,8 @@ function nodeScopePredicate(scope: ScopedResource) {
 
 export function createKnowledgeGraphRepository(
   db: Omit<AgentMemoryDatabase, "$client">,
-  clock: () => Date = () => new Date()
+  clock: () => Date = () => new Date(),
+  topology?: KnowledgeTopologyReader
 ): KnowledgeGraphRepository {
   return {
     async saveNode(node, access) {
@@ -775,55 +778,51 @@ export function createKnowledgeGraphRepository(
         return { nodes: [], edges: [] };
       }
 
+      await topology?.prepare(access.organizationId);
+
       const nodesById = new Map([[root.id, root]]);
       const edgesById = new Map<string, EdgeRow>();
       let frontier = [root.id];
       for (let level = 0; level < depth && frontier.length > 0; level += 1) {
-        const edgeRows = await db
-          .select()
-          .from(knowledgeEdges)
-          .where(
-            and(
-              eq(knowledgeEdges.organizationId, access.organizationId),
-              edgeAccessPredicate(access),
-              edgeHasVisibleSource(access, now),
-              or(
-                inArray(knowledgeEdges.sourceNodeId, frontier),
-                inArray(knowledgeEdges.targetNodeId, frontier)
-              )
-            )
-          )
-          .limit(limit * 4);
-        const candidateIds = new Set<string>();
-        for (const edge of edgeRows) {
-          edgesById.set(edge.id, edge);
-          if (!nodesById.has(edge.sourceNodeId)) {
-            candidateIds.add(edge.sourceNodeId);
+        const nextFrontier: string[] = [];
+        const pageSize = limit * 4;
+        let afterId: string | undefined;
+        while (true) {
+          // Production resolves adjacency in Neo4j. The SQL topology path is
+          // available to repository policy tests; a Neo4j error never falls back.
+          const ids: readonly string[] = topology
+            ? await topology.incidentEdgeIds(access.organizationId, frontier, afterId, pageSize)
+            : (await db.select({ id: knowledgeEdges.id }).from(knowledgeEdges).where(and(
+                eq(knowledgeEdges.organizationId, access.organizationId),
+                or(inArray(knowledgeEdges.sourceNodeId, frontier), inArray(knowledgeEdges.targetNodeId, frontier)),
+                afterId ? sql`${knowledgeEdges.id} > ${afterId}::uuid` : undefined
+              )).orderBy(asc(knowledgeEdges.id)).limit(pageSize)).map((row) => row.id);
+          if (ids.length === 0) break;
+          const edgeRows = await db.select().from(knowledgeEdges).where(and(
+            eq(knowledgeEdges.organizationId, access.organizationId), inArray(knowledgeEdges.id, [...ids]),
+            edgeAccessPredicate(access), edgeHasVisibleSource(access, now),
+            or(inArray(knowledgeEdges.sourceNodeId, frontier), inArray(knowledgeEdges.targetNodeId, frontier))
+          )).orderBy(asc(knowledgeEdges.id));
+          const candidateIds = [...new Set(edgeRows.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId]))]
+            .filter((id) => !nodesById.has(id));
+          const remaining = limit - nodesById.size;
+          if (candidateIds.length && remaining > 0) {
+            const nextRows = await db.select().from(knowledgeNodes).where(and(
+              eq(knowledgeNodes.organizationId, access.organizationId), inArray(knowledgeNodes.id, candidateIds),
+              nodeAccessPredicate(access), nodeHasVisibleSource(access, now)
+            )).orderBy(asc(knowledgeNodes.id)).limit(remaining);
+            for (const row of nextRows) {
+              nodesById.set(row.id, row);
+              nextFrontier.push(row.id);
+            }
           }
-          if (!nodesById.has(edge.targetNodeId)) {
-            candidateIds.add(edge.targetNodeId);
+          for (const edge of edgeRows) {
+            if (nodesById.has(edge.sourceNodeId) && nodesById.has(edge.targetNodeId)) edgesById.set(edge.id, edge);
           }
+          if (ids.length < pageSize || nodesById.size >= limit) break;
+          afterId = ids.at(-1);
         }
-        const remaining = limit - nodesById.size;
-        if (candidateIds.size === 0 || remaining <= 0) {
-          break;
-        }
-        const nextRows = await db
-          .select()
-          .from(knowledgeNodes)
-          .where(
-            and(
-              eq(knowledgeNodes.organizationId, access.organizationId),
-              inArray(knowledgeNodes.id, [...candidateIds]),
-              nodeAccessPredicate(access),
-              nodeHasVisibleSource(access, now)
-            )
-          )
-          .limit(remaining);
-        frontier = nextRows.map((row) => row.id);
-        for (const row of nextRows) {
-          nodesById.set(row.id, row);
-        }
+        frontier = nextFrontier;
       }
 
       const nodeRows = [...nodesById.values()];
@@ -869,7 +868,7 @@ export function createKnowledgeGraphRepository(
       }
       const visibleNodeRows = nodeRows.filter((row) => nodeSources.has(row.id));
       const visibleNodeIds = new Set(visibleNodeRows.map((row) => row.id));
-      return {
+      return connectedKnowledgeNeighborhood({
         nodes: visibleNodeRows.map((row) =>
           knowledgeNodeFromRow(
             row,
@@ -888,7 +887,7 @@ export function createKnowledgeGraphRepository(
               edgeSources.get(row.id) ?? []
             )
           )
-      };
+      }, root.id);
     }
   };
 }

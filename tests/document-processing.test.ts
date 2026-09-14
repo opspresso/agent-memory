@@ -115,6 +115,46 @@ describe("document processing", () => {
     }
   });
 
+  it("retains profile ownership and career scope without carrying sibling employers", () => {
+    const source = "# 김하늘\n\n## 경력\n\n### 북극소프트\n\n2020–2022 엔지니어\n\n### 새벽연구소\n\n2023–현재 연구원";
+    const chunks = chunkDocumentText(source, "text/markdown");
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0]?.content).toBe("# 김하늘\n## 경력\n\n### 북극소프트\n\n2020–2022 엔지니어");
+    expect(chunks[1]?.content).toBe("# 김하늘\n## 경력\n\n### 새벽연구소\n\n2023–현재 연구원");
+    for (const chunk of chunks) {
+      const context = chunk.contextSpans!.map(({ start, end }) => source.slice(start, end)).join("\n");
+      expect(chunk.content).toBe(`${context}\n\n${source.slice(chunk.start, chunk.end)}`);
+    }
+  });
+
+  it("resets heading ownership for another profile and ignores headings in fenced examples", () => {
+    const source = "# 김하늘\n\n## 기술\n\n```md\n# 다른 사람\n```\n\nTypeScript\n\n# 박서준\n\n## 경력\n\n### 달빛회사\n\n엔지니어";
+    const chunks = chunkDocumentText(source, "text/markdown");
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0]?.content).toContain("```md\n# 다른 사람\n```");
+    expect(chunks[1]?.content).toBe("# 박서준\n## 경력\n\n### 달빛회사\n\n엔지니어");
+  });
+
+  it("preserves hierarchy on long sections with bounded chunks and exact source spans", () => {
+    const source = `# 김하늘\n\n## 프로젝트\n\n  ### 별빛도구\n\n${"작업 내용과 기술 근거입니다. ".repeat(400)}`;
+    const chunks = chunkDocumentText(source, "text/markdown");
+    expect(chunks.length).toBeGreaterThan(2);
+    for (const chunk of chunks) {
+      expect(chunk.content).toContain("# 김하늘\n## 프로젝트");
+      expect(chunk.content).toContain("### 별빛도구");
+      expect(chunk.content.length).toBeLessThanOrEqual(2_000);
+      const context = chunk.contextSpans!.map(({ start, end }) => source.slice(start, end)).join("\n");
+      expect(chunk.content).toBe(`${context}\n\n${source.slice(chunk.start, chunk.end)}`);
+    }
+    expect(chunkDocumentText("# 단일 제목", "text/markdown")[0]?.content).toBe("# 단일 제목");
+  });
+  it("does not let backticks inside an invalid fence opener hide following headings", () => {
+    const source = "# 김하늘\n\n## 기술\n\n```inline code```\nTypeScript\n\n## 경력\n\n북극소프트에서 근무했다.";
+    const chunks = chunkDocumentText(source, "text/markdown");
+    expect(chunks).toHaveLength(2);
+    expect(chunks[1]?.content).toBe("# 김하늘\n\n## 경력\n\n북극소프트에서 근무했다.");
+  });
+
   it("preserves CSV headers across record-aligned chunks", () => {
     const chunks = chunkDocumentText(
       ["name,url,description", ...Array.from({ length: 100 }, (_, index) =>

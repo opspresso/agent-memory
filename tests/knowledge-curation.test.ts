@@ -8,7 +8,7 @@ const candidate = createKnowledgeCandidate({ id: "c", documentId: "d", chunkId: 
   graph: { entities: [{ key: "a", kind: "person", canonicalName: "A" }], relationships: [] } });
 function setup() {
   const findByUser = vi.fn().mockResolvedValue({ organizationId: "org", userId: "owner", role: "owner", teams: [] });
-  const verify = vi.fn().mockResolvedValue({ model: "verifier", items: [{ item: "entity:a", support: "explicit", usefulness: "useful", conflict: false, evidence: "A leads the team.", reason: "Explicit role" }] });
+  const verify = vi.fn().mockResolvedValue({ model: "verifier", items: [{ item: "entity:a", representation: "entity", entityKind: "person", support: "explicit", usefulness: "useful", conflict: false, evidence: "A leads the team.", reason: "Explicit role" }] });
   const accept = vi.fn();
   const reject = vi.fn();
   const saveAssessment = vi.fn().mockImplementation(async (_org, _id, assessment) => ({ ...candidate, assessment }));
@@ -24,6 +24,14 @@ function setup() {
   return { run, findByUser, verify, accept, reject, saveAssessment, findByChunkId, existingKnowledge, deferIdentityResolution };
 }
 describe("automatic curation orchestration", () => {
+  it("reassesses pending extraction when its saved policy is obsolete", async () => {
+    const test = setup();
+    test.findByChunkId.mockResolvedValue({ ...candidate,assessment:{ model:"old",policyVersion:"evidence-v2",assessedAt:now.toISOString(),
+      items:[{ item:"entity:a",verdict:"accept",evidence:"A leads the team.",reason:"Old policy." }] } });
+    await test.run("org","ch");
+    expect(test.verify).toHaveBeenCalledOnce();
+    expect(test.saveAssessment).toHaveBeenCalledWith("org","c",expect.objectContaining({ policyVersion:"evidence-v5" }));
+  });
   it("bounds accumulated context without truncating the source under verification", async () => {
     const test = setup();
     test.existingKnowledge.mockResolvedValue([{ canonicalName: "A", aliases: [], kind: "person", summary: "x".repeat(10_000) }]);

@@ -22,6 +22,7 @@ import {
 } from "@/domain/knowledge/knowledge-ontology";
 import type { KnowledgeOntologyReader } from "@/domain/knowledge/knowledge-ontology-reader";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
+import { isKnowledgeEntityKind } from "@/domain/knowledge/knowledge-entity-eligibility";
 
 export class KnowledgeCandidateReviewAccessDeniedError extends Error {
   constructor() {
@@ -209,6 +210,9 @@ export function buildAcceptKnowledgeCandidate(
     const selected = selectKnowledgeCandidateItems(candidate, selection);
     if (candidate.graph.entities.length === 0) {
       throw new InvalidKnowledgeCandidateReviewError("empty extraction cannot be accepted");
+    }
+    if (selected.graph.entities.some((entity) => !isKnowledgeEntityKind(entity.kind))) {
+      throw new InvalidKnowledgeCandidateReviewError("assertions must be represented as relationships, not nodes");
     }
     const settings = await dependencies.ontologyReader.findByOrganization(
       access.organizationId

@@ -297,12 +297,20 @@ const proposedRelationshipResponseSchema = z.object({
   predicate: z.string().min(1)
 });
 
-export const knowledgeCandidateResponseSchema = z.object({
-  assessment: z.object({ model: z.string(), policyVersion: z.string(), assessedAt: z.string(),
+const knowledgeAssessmentResponseSchema = z.object({ model: z.string(), policyVersion: z.string(), assessedAt: z.string(),
     aliases: z.array(z.object({ entityKey: z.string(), alias: z.string(),
+      descriptiveExpansion:z.boolean().optional(),
       identity: z.enum(["same_entity", "generic_reference", "different_entity", "uncertain"]),
       verdict: z.enum(["accept", "review", "ignore"]), evidence: z.string(), reason: z.string() })).optional(),
-    items: z.array(z.object({ item: z.string(), verdict: z.enum(["accept", "review", "ignore"]), evidence: z.string(), reason: z.string() })) }).optional(),
+    items: z.array(z.object({ item: z.string(), representation:z.enum(["entity","relationship","attribute","generic_reference","uncertain"]).optional(),
+      entityKind:z.string().optional(),
+      support:z.enum(["explicit","uncertain","unsupported"]).optional(),
+      usefulness:z.enum(["useful","incidental"]).optional(), conflict:z.boolean().optional(),
+      verdict: z.enum(["accept", "review", "ignore"]), evidence: z.string(), reason: z.string() })) });
+
+export const knowledgeCandidateResponseSchema = z.object({
+  assessment: knowledgeAssessmentResponseSchema.optional(),
+  assessmentHistory:z.array(knowledgeAssessmentResponseSchema).optional(),
   itemReviews: z.array(z.object({ item: z.string(), decision: z.enum(["accepted", "rejected"]),
     reviewedAt: z.string(), reviewedBy: z.string(), method: z.enum(["human", "automatic"]).optional(), reason: z.string().optional() })).optional(),
   id: z.string().min(1),

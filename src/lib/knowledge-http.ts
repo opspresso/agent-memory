@@ -19,8 +19,10 @@ import type { KnowledgeNodeSearchHit } from "@/domain/knowledge/knowledge-graph-
 import { aiErrorResponse } from "./ai-http";
 import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-change";
 import { AmbiguousKnowledgeIdentityError } from "@/domain/knowledge/knowledge-alias";
+import { KnowledgeGraphUnavailableError } from "@/domain/knowledge/knowledge-topology";
 
 export function knowledgeErrorResponse(error: unknown): Response | null {
+  if (error instanceof KnowledgeGraphUnavailableError) return Response.json({ error: error.message }, { status: 503 });
   if (error instanceof AmbiguousKnowledgeIdentityError) return Response.json({ error: error.message }, { status: 409 });
   if (error instanceof KnowledgeScopeChangedError) return Response.json({ error: error.message }, { status: 409 });
   const aiResponse = aiErrorResponse(error);

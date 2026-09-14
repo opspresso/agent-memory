@@ -1,0 +1,88 @@
+{
+  "evaluatedAt": "2026-09-13T17:15:04.232Z",
+  "model": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+  "verified": true,
+  "reusedExtractions": false,
+  "verificationModel": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+  "matching": "Explicitly annotated source surface forms; canonical kind/name/edge matches are reported separately.",
+  "corpusSha256": "cd6be5128105b0736beba1d1bcfe75cc61c2683c3db4fffbf0531f0fdcc4de65",
+  "policySha256": "9538e1d2b201f31d6e6032b362e8479fc8976cd2db77124586dd09e699f7d66b",
+  "summaries": [
+    {
+      "variant": "entity-first",
+      "cases": 6,
+      "errors": 0,
+      "candidates": {
+        "entities": {
+          "truePositive": 17,
+          "falsePositive": 0,
+          "falseNegative": 1,
+          "precision": 1,
+          "recall": 0.9444444444444444,
+          "f1": 0.9714285714285714
+        },
+        "relationships": {
+          "truePositive": 10,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      },
+      "canonical": {
+        "entities": {
+          "truePositive": 17,
+          "falsePositive": 0,
+          "falseNegative": 1,
+          "precision": 1,
+          "recall": 0.9444444444444444,
+          "f1": 0.9714285714285714
+        },
+        "relationships": {
+          "truePositive": 10,
+          "falsePositive": 0,
+          "falseNegative": 0,
+          "precision": 1,
+          "recall": 1,
+          "f1": 1
+        }
+      },
+      "entities": {
+        "truePositive": 17,
+        "falsePositive": 0,
+        "falseNegative": 1,
+        "precision": 1,
+        "recall": 0.9444444444444444,
+        "f1": 0.9714285714285714
+      },
+      "relationships": {
+        "truePositive": 10,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
+      },
+      "aliases": {
+        "truePositive": 0,
+        "falsePositive": 0,
+        "falseNegative": 0,
+        "precision": 0,
+        "recall": 0,
+        "f1": 0
+      },
+      "falseMerges": 0,
+      "extractionLatencyMilliseconds": {
+        "median": 3705,
+        "p95": 4383
+      },
+      "casesWithErrors": []
+    }
+  ],
+  "notes": [
+    "Six authored synthetic regression cases; no uploaded resume content is included.",
+    "The omitted entity is named only in a negated employment statement. All ten positive gold relationships were approved.",
+    "These diagnostic results do not establish production-wide accuracy."
+  ]
+}

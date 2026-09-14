@@ -1,6 +1,7 @@
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import { serializedJsonByteLength } from "@/domain/shared/json-size";
 import { knowledgeAliases } from "./knowledge-alias";
+import { isKnowledgeEntityKind } from "./knowledge-entity-eligibility";
 
 import {
   isSymmetricKnowledgePredicate,
@@ -142,6 +143,9 @@ function validatedEmbedding(embedding: KnowledgeEmbedding | undefined) {
 }
 
 export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNode {
+  if (!isKnowledgeEntityKind(input.kind)) {
+    throw new InvalidKnowledgeGraphError("knowledge node kind must identify an entity, not an assertion");
+  }
   const embedding = validatedEmbedding(input.embedding);
   const source = validatedSource(input.source);
   const summary = input.summary?.trim();

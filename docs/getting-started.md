@@ -48,12 +48,12 @@ ADMIN_EMAILS=your-admin@example.com
 아래 명령은 `.env.local`의 DB 주소를 사용하며 shell의 `DATABASE_URL`이 있으면 우선한다. [DB 초기화](operations.md#database-초기화)에서 대상 DB와 초기화 조건을 확인하라.
 
 ```bash
-docker compose up --wait postgres minio
+docker compose up --wait postgres minio neo4j
 docker compose run --rm minio-init
 pnpm db:init
 ```
 
-`up --wait`는 PostgreSQL·MinIO가 healthy일 때 완료되고 `run --rm minio-init`은 bucket 초기화가 끝날 때 종료된다. 앞 명령이 실패하면 초기화을 진행하지 마라. PostgreSQL은 `localhost:5433`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. 초기화이 완료되면 application을 시작하라.
+`up --wait`는 PostgreSQL·MinIO·Neo4j가 healthy일 때 완료되고 `run --rm minio-init`은 bucket 초기화가 끝날 때 종료된다. 앞 명령이 실패하면 초기화을 진행하지 마라. PostgreSQL은 `localhost:5433`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. 초기화이 완료되면 application을 시작하라.
 
 ```bash
 pnpm dev
@@ -150,6 +150,8 @@ RERANKER_MODEL=voyageai/rerank-2.5-lite
 Reranker는 권한 필터가 끝난 후보만 받는다. 설정하지 않거나 provider가 실패하면 통합 검색과 Memory 회상은 기존 hybrid 순위를 사용한다.
 
 ### AI Knowledge extraction
+
+개체를 먼저 식별하고 그 개체 사이의 관계를 별도 요청으로 추출한다. 자동 검증은 원문 근거와 개체 자격·종류를 확인하고, 불확실한 항목은 검토 화면에 남긴다. 추출과 다른 검증 모델을 사용하려면 전역 설정의 `독립 검증 모델` 또는 `KNOWLEDGE_VERIFICATION_BASE_URL`·`KNOWLEDGE_VERIFICATION_MODEL`을 함께 설정하라. 설정하지 않으면 추출 모델을 사용한다. [평가 절차](operations.md#추출기-평가)로 실제 모델의 결과를 비교할 수 있다.
 
 Ready 문서에서 검토 가능한 graph 후보를 만들려면 structured output을 지원하는 OpenAI-compatible chat completions endpoint를 설정하라.
 

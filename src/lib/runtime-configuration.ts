@@ -5,6 +5,8 @@ import { readMetricsToken } from "./metrics-auth";
 import { readKnowledgeEnrichmentConcurrency } from "./document-worker-configuration";
 import { readKnowledgeExtractionLanguage } from "./knowledge-extraction-configuration";
 import { assertProductionConfiguration } from "./production-config";
+import { readNeo4jConfiguration } from "./neo4j-configuration";
+import { readKnowledgeVerificationConfiguration } from "./knowledge-verification-configuration";
 
 function paired(
   environment: Readonly<Record<string, string | undefined>>,
@@ -41,6 +43,8 @@ export function validateRuntimeEnvironment(
 ): void {
   readKnowledgeEnrichmentConcurrency(environment);
   readKnowledgeExtractionLanguage(environment);
+  readKnowledgeVerificationConfiguration(environment);
+  readNeo4jConfiguration(environment);
   assertProductionConfiguration(environment);
   for (const name of ["S3_BUCKET", "S3_REGION", "S3_ENDPOINT"]) {
     if (environment[name] !== undefined && !environment[name]?.trim()) {
@@ -50,7 +54,7 @@ export function validateRuntimeEnvironment(
   paired(environment, ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]);
   for (const name of [
     "BETTER_AUTH_URL", "EMBEDDING_BASE_URL", "RERANKER_BASE_URL",
-    "KNOWLEDGE_EXTRACTION_BASE_URL", "OIDC_ISSUER", "S3_ENDPOINT",
+    "KNOWLEDGE_EXTRACTION_BASE_URL", "KNOWLEDGE_VERIFICATION_BASE_URL", "OIDC_ISSUER", "S3_ENDPOINT",
     "LANGFUSE_BASE_URL"
   ]) {
     const value = environment[name];

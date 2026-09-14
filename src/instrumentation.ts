@@ -28,6 +28,9 @@ export async function register() {
   );
   assertProductionConfiguration();
 
+  const { initializeKnowledgeGraph, neo4jDriver } = await import("./lib/neo4j");
+  await initializeKnowledgeGraph();
+
   const { initializeTelemetry, shutdownTelemetry } = await import(
     "./infrastructure/observability/telemetry"
   );
@@ -52,6 +55,7 @@ export async function register() {
             name: "database pool",
             execute: () => database.pool.end()
           },
+          { name: "Neo4j driver", execute: () => neo4jDriver.close() },
           { name: "telemetry", execute: shutdownTelemetry }
         ]);
       },

@@ -56,6 +56,7 @@ export function publicKnowledgeCandidate(candidate: KnowledgeCandidate) {
     graph: candidate.graph,
     itemReviews: candidate.itemReviews ?? [],
     ...(candidate.assessment ? { assessment: candidate.assessment } : {}),
+    ...(candidate.assessmentHistory?.length ? { assessmentHistory:candidate.assessmentHistory } : {}),
     status: candidate.status,
     ...(candidate.reviewedBy ? { reviewedBy: candidate.reviewedBy } : {}),
     ...(candidate.reviewReason

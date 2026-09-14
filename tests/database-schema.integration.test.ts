@@ -2571,7 +2571,7 @@ describe("PostgreSQL schema", () => {
     const candidate = createKnowledgeCandidate({
       id: randomUUID(), scope: { kind: "organization", organizationId: organization }, documentId, chunkId,
       model: "test", now, graph: {
-        entities: ["a", "b", "c"].map((key) => ({ key, kind: "person", canonicalName: key })),
+        entities: ["a", "b", "c"].map((key) => ({ key, kind: "person", canonicalName: key.toUpperCase() })),
         relationships: [{ sourceKey: "a", targetKey: "b", predicate: "student_of" }, { sourceKey: "b", targetKey: "c", predicate: "associated_with" }]
       }
     });
@@ -2609,7 +2609,7 @@ describe("PostgreSQL schema", () => {
     const automaticCandidate = createKnowledgeCandidate({ ...candidate, id: randomUUID(), chunkId: automaticChunkId, now });
     await repository.save(automaticCandidate);
     const verify = vi.fn().mockResolvedValue({ model: "independent-verifier", items: ["entity:a", "entity:b", "entity:c", "relationship:0", "relationship:1"].map((item) => ({
-      item, support: "explicit", usefulness: item === "entity:c" ? "incidental" : "useful", conflict: false, evidence: "A learns from B.", reason: "Synthetic source judgement"
+      item, representation: item.startsWith("entity:") ? "entity" : "relationship", entityKind: "person", support: "explicit", usefulness: item === "entity:c" ? "incidental" : "useful", conflict: false, evidence: "A learns from B.", reason: "Synthetic source judgement"
     })) });
     const ontology = createKnowledgeOntologyReader(db);
     const curate = buildCurateKnowledgeCandidate({
@@ -2623,7 +2623,7 @@ describe("PostgreSQL schema", () => {
     expect(verify).toHaveBeenCalledTimes(1);
     const automatic = await repository.findById(organization, automaticCandidate.id);
     expect(automatic?.status).toBe("accepted");
-    expect(automatic?.assessment?.policyVersion).toBe("evidence-v2");
+    expect(automatic?.assessment?.policyVersion).toBe("evidence-v5");
     expect(automatic?.itemReviews).toHaveLength(5);
     expect(automatic?.itemReviews?.every((review) => review.method === "automatic")).toBe(true);
     expect(await repository.reviewSummary(access)).toEqual({ automaticAccepted: 3, automaticIgnored: 2 });

@@ -11,6 +11,12 @@ import {
 } from "@/lib/knowledge-schemas";
 
 describe("knowledge HTTP boundary", () => {
+  it("rejects assertion kinds before creating a node", () => {
+    for (const kind of ["relationship", " EMPLOYMENT ", "claim"]) {
+      expect(createKnowledgeNodeSchema.safeParse({ scope: { kind: "organization" }, kind, canonicalName: "조운의 유비 섬김",
+        source: { chunkId: "50000000-0000-4000-8000-000000000001" } }).success).toBe(false);
+    }
+  });
   it("returns a conflict when a name cannot identify one existing entity", async () => {
     const response = knowledgeErrorResponse(new AmbiguousKnowledgeIdentityError([]));
     expect(response?.status).toBe(409);

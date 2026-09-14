@@ -129,14 +129,16 @@ describe("application settings", () => {
   it.each([
     ["EMBEDDING_BASE_URL", "EMBEDDING_API_KEY"],
     ["RERANKER_BASE_URL", "RERANKER_API_KEY"],
-    ["KNOWLEDGE_EXTRACTION_BASE_URL", "KNOWLEDGE_EXTRACTION_API_KEY"]
+    ["KNOWLEDGE_EXTRACTION_BASE_URL", "KNOWLEDGE_EXTRACTION_API_KEY"],
+    ["KNOWLEDGE_VERIFICATION_BASE_URL", "KNOWLEDGE_VERIFICATION_API_KEY"]
   ] as const)("protects credentials when changing %s", async (target, key) => {
     const { useCases } = dependencies({
       ADMIN_EMAILS: "admin@example.com",
       [target]: "https://original.example/v1",
       [key]: "original-secret",
       RERANKER_MODEL: "model",
-      RERANKER_BASE_URL: "https://original.example/v1"
+      RERANKER_BASE_URL: "https://original.example/v1",
+      ...(target === "KNOWLEDGE_VERIFICATION_BASE_URL" ? { KNOWLEDGE_EXTRACTION_MODEL:"extractor",KNOWLEDGE_EXTRACTION_BASE_URL:"https://extractor.example/v1",KNOWLEDGE_VERIFICATION_MODEL:"verifier" } : {})
     });
     await expect(useCases.update({ values: { [target]: "https://new.example/v1" } }, "admin@example.com"))
       .rejects.toThrow(`Changing ${target}`);

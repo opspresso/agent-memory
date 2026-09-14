@@ -7,6 +7,7 @@ import type { KnowledgeOntologyReader } from "@/domain/knowledge/knowledge-ontol
 import type { KnowledgeVerificationService } from "@/domain/knowledge/knowledge-verification-service";
 import type { KnowledgeCandidateSelection } from "@/domain/knowledge/knowledge-candidate";
 import { assessKnowledgeCandidate } from "@/domain/knowledge/knowledge-curation-policy";
+import { currentKnowledgeAssessmentPolicyVersion } from "@/domain/knowledge/knowledge-assessment";
 import { entityReviewKey, relationshipReviewKey } from "@/domain/knowledge/knowledge-candidate-selection";
 import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
 import { AmbiguousKnowledgeIdentityError } from "@/domain/knowledge/knowledge-alias";
@@ -32,7 +33,7 @@ export function buildCurateKnowledgeCandidate(dependencies: {
     const principalId = requestedBy ?? source.document.createdBy;
     let access = await dependencies.access.findByUser(organizationId, principalId);
     if (!access || !canAccessScopedResource(access, "manage", candidate.scope)) { return; }
-    if (!candidate.assessment) {
+    if (candidate.assessment?.policyVersion !== currentKnowledgeAssessmentPolicyVersion) {
       const existing = await dependencies.graph.findNodesByNames(access, candidate.scope, candidate.graph.entities.flatMap((entity) => [entity.canonicalName, ...(entity.aliases ?? [])]));
       const verification = await dependencies.verification.verify({
         content: source.chunk.content, documentTitle: source.document.title, graph: candidate.graph,
@@ -57,7 +58,7 @@ export function buildCurateKnowledgeCandidate(dependencies: {
     const accept = selectionFor("accept");
     if (accept.entityKeys.length + accept.relationshipIndexes.length > 0) {
       try {
-        await dependencies.accept(access, candidate.id, "Automatic curation: explicit, useful, source-grounded knowledge (evidence-v2).", accept);
+        await dependencies.accept(access, candidate.id, `Automatic curation: verified representation and source-grounded knowledge (${currentKnowledgeAssessmentPolicyVersion}).`, accept);
       } catch (error) {
         if (error instanceof AmbiguousKnowledgeIdentityError) {
           await dependencies.candidates.deferIdentityResolution(organizationId, candidate.id, error.entityKeys);
@@ -69,7 +70,7 @@ export function buildCurateKnowledgeCandidate(dependencies: {
     }
     const ignore = selectionFor("ignore");
     if (ignore.entityKeys.length + ignore.relationshipIndexes.length > 0) {
-      await dependencies.reject(access, candidate.id, "Automatic curation: unsupported, incidental, or non-specific knowledge (evidence-v2).", ignore);
+      await dependencies.reject(access, candidate.id, `Automatic curation: unsupported, incidental, or invalid representation (${currentKnowledgeAssessmentPolicyVersion}).`, ignore);
     }
   };
 }

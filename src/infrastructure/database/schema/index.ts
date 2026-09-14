@@ -5,5 +5,6 @@ export * from "./identity";
 export * from "./ingestion-receipts";
 export * from "./knowledge-candidates";
 export * from "./knowledge-graph";
+export * from "./knowledge-graph-versions";
 export * from "./memories";
 export * from "./settings";

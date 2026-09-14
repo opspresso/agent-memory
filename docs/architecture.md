@@ -15,9 +15,11 @@ AI Agent ──▶ HTTP API / MCP ──▶ Next.js application
        Memory·chunk·Graph       document jobs       document objects
                   │
                   └── Full-Text Search + pgvector(optional)
+                  │
+                  └── Approved topology ──▶ Neo4j ──▶ Neighborhood traversal
 ```
 
-운영 콘솔, HTTP API, MCP는 별도 비즈니스 로직을 갖지 않고 같은 application use case를 호출한다. PostgreSQL은 transaction과 tenant constraint의 기준 저장소이며 pg-boss도 같은 Database를 사용한다. S3 호환 storage에는 문서 원본만 저장하고 권한·상태·chunk·provenance는 PostgreSQL에 둔다.
+운영 콘솔, HTTP API, MCP는 별도 비즈니스 로직을 갖지 않고 같은 application use case를 호출한다. PostgreSQL은 transaction과 tenant constraint의 기준 저장소이며 pg-boss도 같은 Database를 사용한다. S3 호환 storage에는 문서 원본만 저장하고 권한·상태·chunk·provenance는 PostgreSQL에 둔다. Neo4j는 승인된 Graph topology를 저장·탐색하고 PostgreSQL이 반환 자료의 현재 출처·권한을 검증한다.
 
 ## 계층과 의존성
 
@@ -61,7 +63,7 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 ### 시작 순서
 
-Node.js runtime은 bootstrap 설정을 검증한 뒤 빈 DB 초기화·schema fingerprint 검사, DB 설정 override 적용·검증, 설치 조직 초기화, 운영 설정 확인, 종료 hook·telemetry 등록, 선택형 worker 시작 순서로 준비된다. DB와 암호화 root 설정은 override를 읽기 전에 필요하다.
+Node.js runtime은 bootstrap 설정을 검증한 뒤 빈 DB 초기화·schema fingerprint 검사, DB 설정 override 적용·검증, 설치 조직 초기화, 운영 설정 확인, Neo4j 연결·constraint 준비, 종료 hook·telemetry 등록, 선택형 worker 시작 순서로 준비된다. DB와 암호화 root 설정은 override를 읽기 전에 필요하다.
 
 ### 단일 조직과 가입
 
@@ -152,6 +154,8 @@ multipart upload → S3-compatible storage → document row(pending)
 
 지원 MIME type의 text를 정규화하고 문서당 최대 512개 chunk를 생성하며 embedding은 최대 64개 chunk씩 provider에 전달한다. 최대 8개 batch를 순서대로 요청하며 각 embedding HTTP 요청의 timeout은 60초다. 이 값은 S3 조회·추출·DB 저장을 포함한 전체 처리 시간의 보장이 아니다. Lease가 재발급되면 이전 worker의 저장은 거부된다. 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다. Document 삭제는 provenance를 보존하는 archive이며 원본과 chunk를 유지하되 검색, retry, AI 후보 조회·승인에서 제외한다.
 
+Markdown chunk는 2,000자 문맥 예산에 들어가는 상위 제목 경로를 원문 그대로 함께 보존한다. 제목 경로 자체가 예산을 초과하면 일반 텍스트 분할로 처리한다. 같은 단계의 제목이나 새 최상위 제목을 만나면 이전 경로를 제거하며 fenced code 안의 제목은 문서 구조로 해석하지 않는다. 본문 없는 상위 제목은 자식 chunk의 문맥으로 사용한다. `metadata.start/end`는 정규화한 원본의 본문 범위이고, 반복한 제목의 원본 범위는 `metadata.contextSpans`에 기록한다. 이력서의 주인·경력·기술·프로젝트 구분도 같은 chunk의 근거로 조회할 수 있다.
+
 ### 문서 공유 범위 변경
 
 Ready 문서의 scope 변경은 현재 문서와 대상 scope의 `manage` 권한을 요구한다. Chunk와 AI 후보의 scope는 문서에서 조회하며 별도 scope column을 두지 않는다. `document_scope_changes`는 이전·새 scope, 변경자, 시각, Knowledge 적용·제외 건수를 기록한다. HTTP `If-Match`는 문서 `updatedAt` 기반 ETag를 검사하며, scope 변경은 timestamp를 최소 1ms 증가시킨다.
@@ -164,13 +168,33 @@ Graph 쓰기는 같은 조직별 Knowledge scope 잠금을 사용한다. 공개 
 
 ### 후속 Knowledge enrichment
 
+Runtime 추출기는 개체 식별과 관계 추출을 별도의 structured-output 요청으로 실행한다. 첫 단계에서 원문에 이름과 인용이 있는 개체를 정규화하고 부적격 개체를 제거한다. 두 번째 단계는 살아남은 개체 key만 endpoint enum으로 받아 관계를 제안한다. 개체가 0–1개면 관계 요청을 생략하고, 관계가 없는 결과도 정상 결과로 보존한다. 관계 단계가 실패하면 부분 Graph를 승인 후보로 반환하지 않는다. 각 요청은 동일한 AI limiter를 개별적으로 통과한다. 단일 호출 추출기는 평가 비교용이며 runtime composition은 두 단계 추출기를 사용한다.
+
+`evidence-v5` 검증은 명시성·유용성과 별개로 항목의 `representation`을 판단한다. Entity·relationship·attribute·generic_reference·uncertain을 구분하며, 관계나 속성·호칭을 개체로 승인하지 않는다. 검증 모델에는 제안된 entity kind를 전달하지 않고 원문에서 `entityKind`를 독립적으로 추론하게 한다. 종류가 포함될 수 있는 추출 key도 중립적인 검증용 ID로 변환하며, 항목 ID·별칭 참조·관계 endpoint에 원래 key를 노출하지 않는다. 반환된 판정은 서버가 원래 candidate key에 다시 연결한다. 정규화한 kind가 제안과 다르거나 독립 개체 여부가 불분명하면 해당 개체와 연결 관계를 수동 검토로 남긴다. 추출과 다른 검증 모델·endpoint를 설정할 수 있으며, 별도 endpoint가 추출용 API key를 상속하지 않는다.
+
+명시성·인용·종류·충돌·온톨로지·끝점 검증을 모두 통과한 핵심 관계(사용·의존·고용·소속·거주·사제·기여 등)는 모델의 `incidental` 유용성 표기만으로 버리지 않는다. 단독 이름과 그 밖의 관계에는 유용성 판정을 적용하고, 이동·응답·모호한 연관은 계속 제외한다.
+
+추출과 검증은 동일한 종류·관계 정의와 구조 해석 규칙을 사용한다. 종류는 설명문보다 먼저 판단하도록 출력 순서를 고정한다. 새 추출의 entity key는 모델이 만들지 않고 서버가 부여한다. 제목은 문맥이며 항상 행위자는 아니다. 이력서의 경력·보유 기술·개인 프로젝트는 이름이 확인된 주체와 연결하고, 짧은 목록도 구조가 명시하는 사실을 평가한다. Adapter는 원문의 구절과 중립적인 ID를 모델 입력에 제공한다. 추출의 `evidenceIds`와 검증의 `evidenceId`는 이 ID 집합만 선택하도록 제한하며, 서버가 ID를 실제 인용으로 변환한다. 존재하지 않는 ID는 거부한다. 인용 문장을 모델이 다시 쓰거나 생략 기호로 조합하지 않는다. 검증 항목은 `support`, `usefulness`, `conflict`를 함께 보존하여 최종 verdict와 모델의 원래 판단을 구분한다. 설명문은 표시용 필드로 최대 1,000자에 맞춰 말줄임표로 줄이며, 설명 길이만으로 전체 판정을 실패시키지 않는다. 인용과 판단 필드의 유효성 검사는 그대로 적용한다.
+
+미완료 후보의 assessment policy가 현재 버전과 다르면 검증을 다시 실행하고 이전 assessment를 `assessmentHistory`에 보존한다. 같은 policy의 결과와 이미 처리한 항목은 멱등하게 재사용한다. 재검증은 원본 extraction과 기존 승인·거절 결정을 바꾸거나 이미 승인된 Graph를 자동 삭제하지 않는다. 완료된 과거 Graph의 재추출·정리는 별도 데이터 운영 범위다.
+
 `buildIngestDocument` application operation은 문서 처리를 완료한 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. Worker는 job decode, operation 호출, queue retry와 로그를 담당한다. 후속 queue 등록 실패는 문서 처리 상태를 되돌리지 않으며 ingestion 재실행에서 chunk 등록을 다시 시도한다.
 
-Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `document-knowledge-enrichment-v2` queue의 별도 job으로 enqueue해 entity와 relationship 후보를 생성한다. Chunk ID별 exclusive job이 독립적으로 retry되며 한 chunk의 실패는 문서의 ready 상태나 다른 chunk의 검색·후보 생성을 되돌리지 않는다. 후보는 source chunk, scope, model을 보존하며 청크별 후보를 하나만 유지한다. 재시도는 저장된 추출을 재사용한다. 새 추출은 별칭을 entity 속성으로 표현하고 entity·relationship마다 원문의 인용 근거를 요구한다. Adapter는 원문에 없는 인용과 근거 없는 항목, 범용 동시 등장 관계를 제거한다. 동일 kind·정규화 이름은 청크 안에서 통합하고 대칭 관계의 역방향 반복을 제거하며 근거를 합친다. 모델이 하나의 키를 서로 다른 개체에 사용하면 해당 개체들과 그 키를 참조하는 관계를 제외한다. 없는 개체를 참조하는 관계와 자기 관계도 정규화 단계에서 제외하며 같은 청크의 정상 지식은 보존한다. Candidate의 키 고유성과 관계 끝점 불변 조건은 정규화된 graph에 적용한다. 이는 인용 존재 검증이며 사실의 함의·진실성 판정은 검토자의 책임이다. AI 추출 결과는 별도 검증 adapter에서 원문·현재 읽을 수 있는 대표 이름과 별칭으로 조회한 기존 지식과 대조한다. 검증은 개체·관계 주장과 별칭 identity를 각각 평가한다. 별칭은 `same_entity`, `generic_reference`, `different_entity`, `uncertain`으로 분류하며 원문 인용이 확인된 `same_entity`만 자동 승인한다. 공통 직함·호칭은 별칭에서 제외해도 유효한 개체 사실은 보존한다. 불확실한 별칭은 해당 개체와 연결 관계를 수동 검토로 남긴다. `evidence-v2` 정책은 명시성·유용성·인용 일치·충돌 여부·온톨로지와 관계 endpoint를 평가해 자동 승인·수동 검토·자동 제외로 분리한다. 모델의 자기 보고 숫자 점수를 승인 임계값으로 사용하지 않는다. 자동 검토도 source scope의 `manage` 권한과 active membership을 요구하며 긴 AI 호출 뒤 principal을 다시 읽는다. Assessment를 먼저 보존하고 항목별 검토를 멱등 적용하므로 retry가 검증 요청·Graph를 반복 생성하지 않는다. 자동 처리에는 `method: automatic`을 기록한다. 승인 transaction은 candidate를 잠그고 node·edge upsert, candidate→resource 관계, 항목별 reviewer audit을 함께 저장한다. 부분 검토는 원본 graph를 보존하고 itemReviews에 결정을 누적하며 미검토 항목을 pending으로 유지한다. 빈 추출은 처리 이력으로 남기고 기본 검토 큐에서 제외한다. 통합 검토 큐는 서버에서 권한 필터한 수동 검토로 평가된 pending 항목을 개체·관계 identity로 묶은 뒤 페이지를 구성한다. Node merge로 resource ID가 바뀌면 candidate 관계도 surviving resource로 옮겨 재승인 응답의 정합성을 유지한다.
+Knowledge extraction model을 설정하면 ready 문서의 각 chunk를 `document-knowledge-enrichment-v2` queue의 별도 job으로 enqueue해 entity와 relationship 후보를 생성한다. Chunk ID별 exclusive job이 독립적으로 retry되며 한 chunk의 실패는 문서의 ready 상태나 다른 chunk의 검색·후보 생성을 되돌리지 않는다. 후보는 source chunk, scope, model을 보존하며 청크별 후보를 하나만 유지한다. 재시도는 저장된 추출을 재사용한다. 새 추출은 별칭을 entity 속성으로 표현하고 entity·relationship마다 원문의 인용 근거를 요구한다. Adapter는 원문에 없는 인용과 근거 없는 항목, 범용 동시 등장 관계를 제거한다. 동일 kind·정규화 이름은 청크 안에서 통합하고 대칭 관계의 역방향 반복을 제거하며 근거를 합친다. 모델이 하나의 키를 서로 다른 개체에 사용하면 해당 개체들과 그 키를 참조하는 관계를 제외한다. 없는 개체를 참조하는 관계와 자기 관계도 정규화 단계에서 제외하며 같은 청크의 정상 지식은 보존한다. Candidate의 키 고유성과 관계 끝점 불변 조건은 정규화된 graph에 적용한다. 이는 인용 존재 검증이며 사실의 함의·진실성 판정은 검토자의 책임이다. AI 추출 결과는 별도 검증 adapter에서 원문·현재 읽을 수 있는 대표 이름과 별칭으로 조회한 기존 지식과 대조한다. 검증은 개체·관계 주장과 별칭 identity를 각각 평가한다. 별칭은 `same_entity`, `generic_reference`, `different_entity`, `uncertain`으로 분류하며 원문 인용이 확인된 `same_entity`만 자동 승인한다. 별칭 자체가 원문에 없는 경우에는 제외한다. 검증은 별칭의 표현 형태와 동일 개체 여부를 별도로 판단하며, 설명형 확장·공통 직함·호칭은 같은 대상을 가리켜도 별칭에서 제외한다. 유효한 개체 사실은 보존한다. 불확실한 별칭은 해당 개체와 연결 관계를 수동 검토로 남긴다. `evidence-v5` 정책은 명시성·유용성·인용 일치·충돌 여부·온톨로지와 관계 endpoint를 평가해 자동 승인·수동 검토·자동 제외로 분리한다. 모델의 자기 보고 숫자 점수를 승인 임계값으로 사용하지 않는다. 자동 검토도 source scope의 `manage` 권한과 active membership을 요구하며 긴 AI 호출 뒤 principal을 다시 읽는다. Assessment를 먼저 보존하고 항목별 검토를 멱등 적용하므로 retry가 검증 요청·Graph를 반복 생성하지 않는다. 자동 처리에는 `method: automatic`을 기록한다. 승인 transaction은 candidate를 잠그고 node·edge upsert, candidate→resource 관계, 항목별 reviewer audit을 함께 저장한다. 부분 검토는 원본 graph를 보존하고 itemReviews에 결정을 누적하며 미검토 항목을 pending으로 유지한다. 빈 추출은 처리 이력으로 남기고 기본 검토 큐에서 제외한다. 통합 검토 큐는 서버에서 권한 필터한 수동 검토로 평가된 pending 항목을 개체·관계 identity로 묶은 뒤 페이지를 구성한다. Node merge로 resource ID가 바뀌면 candidate 관계도 surviving resource로 옮겨 재승인 응답의 정합성을 유지한다.
 
 현재 strict 사전이 저장된 assessment의 자동 승인 묶음을 거부하면 해당 묶음을 통합 수동 검토에 표시한다. 원본 assessment는 변경하지 않으며, 현재 사전이 허용하는 개별 항목은 선택 승인할 수 있다. 개체 병합에서도 대칭 관계의 endpoint 순서를 정규화하고 중복 관계의 출처를 합친다. 개체 설명은 현재 보이는 출처별 description으로만 구성하며 공유 summary로 대체하지 않는다.
 
 ## Knowledge Graph와 통합 검색
+
+### Neo4j topology와 승인 원장
+
+Neo4j는 `MemoryEntity` node와 `MEMORY_RELATION` edge를 영속 저장하며, 관계 지도와 HTTP/MCP neighborhood의 인접 관계를 조회한다. 조직 ID와 resource ID로 개체를 구분하고 관계 유형은 `predicate` 속성으로 보존한다. 사용자 입력을 Cypher 식별자로 조립하지 않는다. PostgreSQL은 Graph의 승인 원장, identity·scope·provenance, 후보 검토·병합 이력과 다른 resource의 transaction 경계를 소유한다. Graph node·edge의 공개 정보와 lexical/vector 검색은 이 원장을 사용한다.
+
+Graph 변경 transaction은 조직별 `knowledge_graph_versions.revision`을 함께 변경한다. Neo4j의 `MemoryGraph.revision`과 다르면 첫 neighborhood 조회가 조직 Graph 쓰기 잠금 아래 승인된 node·edge snapshot을 읽고 하나의 Neo4j transaction으로 교체한다. 같은 revision은 재전송하지 않는다. 원장에는 graph 변경과 revision이 함께 commit되므로 Neo4j 장애로 동기화가 실패해도 다음 조회가 재구성할 수 있다. Node 삭제·병합·scope 변경도 같은 규칙을 사용한다. 시작 시 Neo4j uniqueness constraint를 멱등하게 준비한다.
+
+Neo4j에는 검색어·문서 본문·출처별 설명·embedding·credential을 복제하지 않는다. 탐색은 Neo4j가 반환한 인접 edge ID를 PostgreSQL에서 현재 scope와 유효 출처로 검증하고, 읽을 수 있는 끝점만 다음 탐색 단계로 전달한다. 만료·보관·권한 변경은 projection revision 변경을 기다리지 않고 조회에서 적용된다. 오래되었거나 권한 없는 edge가 앞 페이지에 있어도 다음 페이지를 조회한다. Neo4j 오류는 `503`으로 드러내며 PostgreSQL 탐색으로 자동 우회하지 않는다. Repository의 SQL topology 구현은 Neo4j 없이 권한 정책을 격리 검증하는 테스트에 사용하고 runtime composition은 Neo4j를 주입한다.
+
+Revision이 바뀐 조직은 전체 topology를 재구성하므로 변경 직후 첫 탐색에는 Graph 크기에 비례하는 비용과 쓰기 잠금이 발생한다. 현재 구현은 이를 명시적인 일관성 경계로 사용하며, 지속적인 대규모 변경이 발생하는 설치에서는 증분 projection으로 전환하기 전에 실제 동기화 시간과 Graph 크기를 측정한다. 한 조회 도중 더 최근의 변경이 commit되면 다음 조회에서 해당 revision을 반영하며, 반환 데이터의 출처 권한 검사는 계속 적용한다.
 
 ### Provenance와 현재 유효성
 
@@ -179,6 +203,12 @@ Graph 검색·이름 기반 중복 조회·관계 탐색은 각 작업 시작 �
 Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenance 행은 DB constraint로 정확히 하나의 memory 또는 document chunk를 참조한다. Canonical resource가 여러 근거에서 발견되면 resource를 중복 생성하지 않고 provenance를 누적한다. 생성 시 호출자가 source를 읽을 수 있어야 하고 graph scope는 source scope보다 넓을 수 없다. 검색·Neighborhood·node 및 edge 생성은 source의 현재 권한과 active·유효·ready 상태를 다시 확인한다. Memory의 유효성은 domain의 `isMemoryActiveAt` 정책으로 정의하며 `validFrom <= now`이고 `expiresAt`이 없거나 `now < expiresAt`인 active Memory만 검색과 Graph 근거로 허용한다.
 
 Graph의 검색·중복 후보 조회·Neighborhood repository port는 읽을 수 있고 현재 유효한 provenance만 반환한다. Resource 선택과 개별 source 필터는 같은 SQL predicate를 사용하며, source를 다시 조회하는 사이 유효한 근거가 사라진 resource는 결과에서 제외한다. 내부 mutation을 위한 `findNodeById`와 `findEdgeById`는 전체 provenance를 보존하므로 공개 검색 결과로 직접 사용하지 않는다.
+
+### 개체와 관계의 표현
+
+개체의 정체성과 그 개체에 대한 주장을 구분한다. `relationship`, `relation`, `employment`, `statement`, `claim`, `fact`, `attribute`는 node 종류와 온톨로지 node kind로 등록할 수 없다. 이 불변 조건은 사전 검증 모드와 무관하며 HTTP·후보 승인·domain 생성에서 적용한다. 추출 프롬프트와 사전 추천도 이 종류를 제외한다.
+
+AI가 제안한 대표 이름은 NFKC·공백 정규화 후 원문에 있어야 한다. 인용문이 존재하더라도 원문에 없는 문장 요약형 이름은 개체가 될 수 없다. 자동 검증에서 부적격 개체와 그 끝점을 참조하는 관계를 함께 제외하고, 관계 승인 단계가 해당 개체를 재승격하지 않게 한다. 원문에 이름이 있는 개념과 사건은 보존한다. 인용 존재·이름 존재 검사는 사실의 함의나 개체의 의미적 적절성까지 보장하지 않으므로 별도의 AI 검증을 유지한다.
 
 ### Identity·온톨로지·변경
 

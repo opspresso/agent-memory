@@ -79,11 +79,11 @@ AUTH_PASSWORD_SIGNUP=true
 ```
 
 ```bash
-docker compose up --wait postgres minio
+docker compose up --wait postgres minio neo4j
 docker compose run --rm minio-init
 ```
 
-`up --wait`가 PostgreSQL·MinIO의 health를 확인하고 `run --rm minio-init`이 bucket 생성을 완료한 뒤 schema 초기화와 서버를 실행하라. 앞 명령이 실패하면 이후 단계로 진행하지 마라. DB 주소를 기본 Compose 값에서 바꿨다면 먼저 [CLI의 환경 변수 처리](#database-초기화)를 확인한다.
+`up --wait`가 PostgreSQL·MinIO·Neo4j의 health를 확인하고 `run --rm minio-init`이 bucket 생성을 완료한 뒤 schema 초기화와 서버를 실행하라. 앞 명령이 실패하면 이후 단계로 진행하지 마라. DB 주소를 기본 Compose 값에서 바꿨다면 먼저 [CLI의 환경 변수 처리](#database-초기화)를 확인한다.
 
 ```bash
 pnpm db:init
@@ -96,7 +96,7 @@ pnpm dev
 | PostgreSQL | `localhost:5433` |
 | MinIO API / console | `http://localhost:9010` / `http://localhost:9011` |
 
-`.env.example`은 document worker와 전용 MinIO 설정을 기본 활성화한다. 기존 DB를 재사용하면 [Database 설정 override](#database-설정-override)가 `.env.local`보다 우선한다. `docker compose down -v`는 PostgreSQL·MinIO volume을 삭제하므로 데이터를 확인하지 않고 실행하지 마라.
+`.env.example`은 document worker와 전용 MinIO 설정을 기본 활성화한다. 기존 DB를 재사용하면 [Database 설정 override](#database-설정-override)가 `.env.local`보다 우선한다. `docker compose down -v`는 PostgreSQL·MinIO·Neo4j volume을 삭제하므로 데이터를 확인하지 않고 실행하지 마라.
 
 ## 화면 언어
 
@@ -112,6 +112,16 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 ## 환경 변수
 
+### Neo4j 운영
+
+로컬 Compose는 `neo4j:2026.08.1` Community Edition과 Agent Memory 전용 `neo4j-data` volume을 사용한다. Bolt는 `127.0.0.1:7687`, Browser는 `http://localhost:7474`에 바인딩한다. `.env.example`의 credential은 로컬 전용이며 운영에서는 별도 credential과 내부 네트워크 또는 TLS 연결을 사용한다. 플러그인 다운로드는 필요하지 않다.
+
+Application 시작은 PostgreSQL schema 확인 이후 Neo4j 연결과 uniqueness constraint 준비까지 성공해야 완료된다. `/api/health`의 `checks.neo4j`는 `ok`, `failed`, 또는 앞선 PostgreSQL 검사 실패 시 `unknown`을 반환한다. Neo4j가 중단되면 readiness와 관계 탐색은 `503`을 반환한다. 연결 복구 후 첫 탐색이 PostgreSQL 승인 원장의 최신 revision과 topology를 동기화한다.
+
+Neo4j는 승인된 Graph의 재구성 가능한 projection이다. 데이터 복원의 기준은 PostgreSQL의 node·edge·source·candidate·revision을 포함한 일관된 백업이다. Neo4j volume을 새로 준비하면 첫 탐색이 해당 설치 조직의 전체 topology를 복구한다. 다른 서비스가 사용하는 Neo4j database를 함께 초기화하지 마라. Schema가 달라진 PostgreSQL 설치는 기존 [명시적 초기화 절차](#database-초기화)를 따른다. Application이 기존 운영 데이터를 자동 초기화하거나 재추출하지 않는다.
+
+IDC의 Neo4j 서비스 추가·credential·volume·백업 정책은 Dockpad가 소유한다. 이 저장소는 application 연결 설정과 localdev를 제공한다. 운영 rollout 전에 Dockpad에서 전용 Neo4j 서비스를 준비해야 하며, 이 변경을 위한 운영 배포·재시작은 사용자가 별도로 실행한다.
+
 `.env.example`을 기준으로 환경별 값을 설정하라. 샘플은 bootstrap, 인증·접근 정책, 문서 worker·quota, object storage, AI 기능·호출 제한, 관측성, 개발·빌드 순으로 구분한다. 주석 처리된 선택 항목은 해당 기능을 사용할 때 활성화한다. 최초 실행 전에 secret과 관리자 email을 바꾸고 Google·OIDC·password 중 최소 한 개의 로그인 수단을 설정하라.
 
 ### Bootstrap과 빌드
@@ -119,6 +129,8 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | 그룹 | 변수 | 역할 |
 | --- | --- | --- |
 | Database | `DATABASE_URL` | PostgreSQL 연결 문자열 |
+| Graph | `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` | 필수 Neo4j 연결 정보. URI에 credential을 포함하지 않는다. 로컬 기본은 `bolt://127.0.0.1:7687`, `neo4j`, `agent_memory_dev`이며 운영에서는 명시적으로 설정한다. |
+| Graph | `NEO4J_DATABASE` | Neo4j database 이름. 기본값 `neo4j` |
 | Startup | `NODE_ENV` | `production`이면 운영 필수 변수 검증을 활성화 |
 | Build | `NEXT_DIST_DIR` | Next.js 출력 디렉터리. 기본값 `.next`, Playwright 서버는 `.next-e2e` 사용 |
 
@@ -150,6 +162,10 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | Object storage | `S3_FORCE_PATH_STYLE` | MinIO 같은 path-style endpoint 사용 여부 |
 
 ### AI 기능과 호출 제한
+
+추출은 개체 식별 → 허용된 끝점 사이의 관계 추출 순서다. 둘 이상의 개체가 있는 청크는 추출 두 번과 검증 한 번의 모델 요청이 발생하며 각각 AI 호출 quota에 포함한다. 단일 개체에는 관계 요청을 생략한다.
+
+독립 검증 모델은 `KNOWLEDGE_VERIFICATION_BASE_URL`, `KNOWLEDGE_VERIFICATION_MODEL`을 함께 설정한다. 해당 서비스가 인증을 요구하면 `KNOWLEDGE_VERIFICATION_API_KEY`도 별도로 설정한다. 세 값을 모두 비우면 추출 모델 설정을 사용한다. 별도 endpoint에는 추출용 API key를 전달하지 않는다. 전역 설정 화면의 `독립 검증 모델`에서도 관리하며 변경 후 모든 application·worker instance를 재시작해야 한다. URL 변경 시 기존 검증용 key를 명시적으로 다시 제출하거나 지워야 한다.
 
 | 그룹 | 변수 | 역할 |
 | --- | --- | --- |
@@ -191,7 +207,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 | --- | --- |
 | 모든 환경의 로그인 | Google·OIDC·password 중 최소 한 개 활성화 |
 | Production bootstrap | DB를 읽기 전에 `DATABASE_URL`, `BETTER_AUTH_SECRET` 필요 |
-| Production 유효 설정 | 위 두 값과 `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` 필요. Override 대상은 DB에서 제공해도 됨 |
+| Production 유효 설정 | 위 두 값과 `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` 필요. Override 대상은 DB에서 제공해도 됨 |
 | Production 인증 | Secret 32자 이상. Loopback 이외의 application origin은 HTTPS이며 password self-signup 금지 |
 | HTTP endpoint URL | 인증·S3·AI·Langfuse URL은 credential을 포함하지 않는 절대 HTTP(S) 주소. PostgreSQL 연결 문자열에는 이 규칙을 적용하지 않음 |
 | Boolean | `AUTH_PASSWORD`, `AUTH_PASSWORD_SIGNUP`, `DOCUMENT_WORKER_ENABLED`, `S3_FORCE_PATH_STYLE`은 설정 시 `true` 또는 `false` |
@@ -229,7 +245,7 @@ English catalogue인 `src/app/_i18n/messages/en.ts`가 message key의 source다.
 
 | 적용 단위 | 변수 | 반영 시점 |
 | --- | --- | --- |
-| Bootstrap env | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `NODE_ENV` | DB 접근·복호화·시작 방식에 먼저 필요. Override 불가 |
+| Bootstrap env | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `NEO4J_*`, `NODE_ENV` | DB 접근·복호화·시작 방식에 먼저 필요. Override 불가 |
 | 요청 시 다시 읽는 설정 | `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN` | 저장한 instance에서 즉시 적용. 다른 instance는 최대 5초 cache 후 반영 |
 | Process 초기화 설정 | 인증 provider, AI, document worker·quota, S3, logging, telemetry 등 나머지 설정 | 사용하는 모든 instance 재시작 필요 |
 | Framework·검사 환경 | `NEXT_DIST_DIR`, `NEXT_RUNTIME`, `NEXT_PHASE`, `VERCEL`, `CI`, `E2E_*` 등 | 전역 설정 화면에서 관리하지 않음 |
@@ -270,6 +286,50 @@ Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 �
 
 #### 기존 데이터와 model 변경
 
+현재 검증은 `evidence-v3`를 사용한다. 미완료 후보의 policy가 오래되면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.
+
+#### 추출기 평가
+
+`evaluation/knowledge/corpus.json`은 업로드 문서와 무관하게 작성한 30개 합성 진단 사례다. 사람·서비스·개념·이름 있는 사건, 별칭, 부정·계획·가정·소문, Markdown·JSON 등을 포함한다. 개체 종류와 대표 이름의 정확한 일치와, 명시적으로 주석한 원문 표기 변형을 같은 개체로 보는 일치를 별도로 보고한다. 표기 변형은 평가용 대응표이며 application의 별칭으로 등록하지 않는다. 이 자료의 점수를 운영 문서 전체의 정확도로 해석하지 마라.
+
+현재 runtime만 평가할 때는 다음 명령을 사용한다.
+
+```bash
+pnpm eval:knowledge --variants entity-first --verify
+```
+
+구조화된 이력서의 고용·보유 기술·프로젝트·수상·부정문 회귀 사례는 업로드 문서를 포함하지 않는 별도 합성 corpus로 평가한다.
+
+```bash
+pnpm eval:knowledge --variants entity-first --verify --corpus evaluation/knowledge/resume-corpus.json --output .eval-results/resume-regression
+```
+
+[합성 이력서 평가 기록](../evaluation/knowledge/resume-comparison.json)은 개체 18개 중 17개와 정답 관계 10개 전부를 승인했다. 승인한 오답 개체·관계·별칭과 잘못된 병합은 없었고 요청 오류도 없었다. 누락한 개체는 근무하지 않았다는 부정문에만 등장하는 회사다. 이 6개 진단 사례를 일반 문서의 정확도로 해석하지 마라.
+
+LlamaIndex와 비교하려면 Python 3.12 이상에서 평가 전용 환경을 준비한다. Python은 application runtime 의존성이 아니다.
+
+```bash
+python3 -m venv .venv-knowledge-eval
+.venv-knowledge-eval/bin/python -m pip install -r evaluation/knowledge/requirements.txt
+pnpm eval:knowledge --python .venv-knowledge-eval/bin/python --verify
+```
+
+평가는 process 환경과 `.env.local`의 extraction·verification 설정을 사용하며 DB 설정 override를 읽지 않는다. 운영과 같은 모델을 평가하려면 해당 값을 명시하라. 현재 설정된 모델에 합성 본문을 실제로 전송한다. `single-pass`, `llamaindex`, `entity-first`를 `--variants`의 comma-separated 목록으로 선택하며 `--limit`으로 앞 사례 수를 제한한다. `--verify`는 자동 승인 정책까지 적용한다. `--reuse <이전 결과 디렉터리>`는 모델·corpus hash·사례 순서가 일치하는 저장된 추출을 재사용해 검증만 비교한다.
+
+기본 결과는 Git에서 제외한 `.eval-results/knowledge/`에 저장한다. `--output`으로 위치를 바꿀 수 있다. 요약은 model·corpus/policy hash, 개체·관계·별칭 precision/recall/F1, 잘못된 병합, 요청 오류와 추출 지연 시간을 포함한다. 오류가 있는 비교는 결과를 보존하고 종료 코드 1을 반환한다. 모델 오류를 빈 추출 성공으로 처리하지 않는다. 모델 응답이 원문과 맞는지와 관계 방향·개체 정체성은 각 사례의 저장 결과로 검토한다. 지연 시간은 공유 모델 endpoint의 관측값이며 독립적인 성능 보장은 아니다.
+
+평가 기록은 [comparison.json](../evaluation/knowledge/comparison.json)에 보존한다. 2026-09-13에 `nvidia/Qwen3.6-35B-A3B-NVFP4`와 동일 모델의 독립 검증 요청으로 측정한 결과는 다음과 같다. 모든 방식에 같은 원문 근거·개체 자격 규칙과 `evidence-v3`를 적용했다. 단일 호출 비교기도 새 개체 자격 필터를 포함하므로 수정 전 v0.27.0 전체의 재현 결과는 아니다.
+
+| 방식 | 승인 전 관계 후보 precision | 자동 반영한 정답 개체 / 56 | 자동 반영한 정답 관계 / 22 | 자동 반영한 오답 개체·관계 | 검증 요청·응답 오류 |
+| --- | --- | --- | --- | --- | --- |
+| 단일 호출 | 80.8% | 42 | 16 | 1 | 0 |
+| LlamaIndex schema path | 100% | 30 | 15 | 0 | 1 |
+| 개체 우선 두 단계 | 90.9% | 45 | 18 | 0 | 0 |
+
+Runtime은 개체 우선 두 단계를 사용한다. 이 방식은 관계 endpoint를 검증된 key로 강제하고 단일 개념과 별칭을 보존하며 Python runtime 없이 기존 승인·권한 계층에 연결된다. LlamaIndex 비교는 core 0.14.24와 OpenAI-like 0.8.0을 사용하고, 로컬 endpoint의 JSON Schema 지원을 명시적으로 활성화하며 인용 속성을 가진 엄격한 Pydantic schema를 구성했다. 경로 기반 추출은 연결 없는 개념·개체와 별칭 처리에 추가 구성이 필요하다. 비교 중 발생한 검증 오류 한 건은 제외하지 않고 누락으로 계산했다.
+
+이 표는 주석한 원문 표기 변형을 같은 개체로 취급한다. 별도로 기록한 정확한 canonical kind/name 기준에서 두 단계 방식의 승인 관계 precision은 66.7%, recall은 54.5%다. 따라서 같은 대상을 가리키는 이름의 표기 통합은 여전히 개선 대상이다. 자동 반영의 관계 recall도 81.8%이므로 모든 사실이 자동 반영됐다는 뜻이 아니다. 검토 대기·제외·요청 실패를 구분해 운영 문서에서 추가 평가하라. 이 30개 사례에서 오답이 없었다는 결과가 일반 문서의 무오류를 보장하지 않는다.
+
 AI 설정의 활성화·model 교체·재시작은 기존 resource를 자동으로 재처리하지 않는다.
 
 | 대상 | Embedding·후보를 생성하는 시점 | 기존 데이터의 영향 |
@@ -289,7 +349,8 @@ Semantic search는 query와 같은 model 이름으로 저장된 vector를 사용
 2. 빈 DB를 초기화하거나 기존 schema fingerprint를 확인한다. 일치하지 않으면 설정 override·worker 준비 전에 시작을 중단한다.
 3. DB의 secret override를 복호화하고 유효 설정을 검증한 뒤 process environment에 적용한다.
 4. 설치의 단일 조직을 초기화하고 production 설정을 확인한다.
-5. Telemetry와 종료 handler를 준비하고 `DOCUMENT_WORKER_ENABLED=true`이면 worker를 시작한다.
+5. Neo4j 연결을 확인하고 Graph uniqueness constraint를 준비한다.
+6. Telemetry와 종료 handler를 준비하고 `DOCUMENT_WORKER_ENABLED=true`이면 worker를 시작한다. 종료 시 queue, PostgreSQL pool, Neo4j driver, telemetry를 닫는다.
 
 따라서 worker를 끈 web instance도 DB·schema 초기화·설정 override가 정상이어야 시작할 수 있다. 여러 instance의 역할 분리는 [운영 topology](#운영-topology와-데이터-보호)를 따른다.
 
@@ -326,7 +387,7 @@ Schema를 변경하면 배포 전에 application·worker를 중단하고 DB·전
 - 추출 결과가 512 chunks를 넘으면 provider 호출 전에 실패한다. 이 한도는 작업량을 제한하며 S3·DB 지연을 포함한 전체 처리 시간이 15분 lease 안에 끝남을 보장하지는 않는다. 원본을 더 작은 문서로 나눈 뒤 다시 업로드하라.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
-- 지식 추출과 검증의 HTTP timeout은 요청당 3분이다. 로컬 모델의 긴 structured output 생성을 허용하면서 두 요청이 15분 job expiration 안에서 끝나도록 제한한다. Provider 오류·timeout은 job 실패와 재시도로 남는다.
+- 지식 추출과 검증의 HTTP timeout은 요청당 3분이다. 로컬 모델의 긴 structured output 생성을 허용하면서 최대 세 요청이 15분 job expiration 안에서 끝나도록 제한한다. Provider 오류·timeout은 job 실패와 재시도로 남는다.
 - 추출 응답의 구조를 확인한 뒤 원문 인용을 검증한다. 원문 근거가 없는 항목, 없는 개체를 참조하는 관계와 자기 자신을 가리키는 관계는 제외하며 같은 청크의 정상 지식은 보존한다. 중복 키가 동일 kind·정규화 이름을 가리키면 통합하고, 서로 다른 개체를 가리키면 해당 개체들과 그 키를 참조하는 관계를 제외한다. 이 정규화가 끝난 graph에 candidate 불변 조건과 별도 AI 검증을 적용한다.
 - AI 추출 후 같은 모델·endpoint를 사용하는 별도 검증 요청으로 원문 근거·유용성·충돌을 평가한다. 명시적이고 유용하며 인용 검증과 정책을 통과한 항목은 자동 승인한다. 불확실한 항목은 수동 검토로 남기고 근거 없는·사소한 항목은 자동 제외한다. 검증 요청도 AI quota를 소비하며 실패하면 자동 반영하지 않고 enrichment job을 재시도한다. 검증 대상 원문과 제안은 유지하고, 참고할 기존 개체 개요는 개체당 2,000자로 제한해 출처 누적으로 요청이 계속 커지는 것을 막는다.
 - 기본 자동 검토는 문서 생성자의 현재 active membership과 source scope `manage` 권한을 요구한다. 검토 화면의 일괄 실행은 인증된 요청자를 job에 기록하며 worker가 그 권한을 다시 확인한다. 저장된 추출과 assessment는 재사용한다. 재추출을 위한 구버전 호환 경로는 없으며 worker 실행이 필요하다.
@@ -358,10 +419,10 @@ curl -i http://localhost:3100/api/health
 
 | Endpoint | 인증과 응답 | 확인하는 범위 |
 | --- | --- | --- |
-| `GET /api/health` | 인증 불필요. 정상 `200`, DB·schema 초기화 실패 `503`, cache 안 함 | DB 연결과 현재 schema fingerprint 검사 |
+| `GET /api/health` | 인증 불필요. 정상 `200`, DB·schema·Neo4j 검사 실패 `503`, cache 안 함 | PostgreSQL 연결·schema fingerprint와 Neo4j 연결 검사 |
 | `GET /api/metrics` | `METRICS_BEARER_TOKEN`과 일치하는 Bearer 필요. 미설정·잘못된 인증은 `404` | Build version, worker 활성 설정, process CPU·memory·event loop delay |
 
-Health의 `200`은 DB 연결과 현재 schema fingerprint가 일치임을 뜻한다. 수동 schema 변경, S3 접근, worker 소비 상태나 AI provider 정상 여부는 보장하지 않는다. Metrics의 worker 값도 실제 처리 진척이 아닌 활성 설정이다. 배포 후에는 document 상태·queue log·필요한 provider 연결을 별도로 확인하라. Metrics token은 조직 Agent token·사용자 session과 다른 전용 credential이다.
+Health의 `200`은 PostgreSQL 연결·현재 schema fingerprint와 Neo4j 연결 검사가 성공했음을 뜻한다. 수동 schema 변경, S3 접근, worker 소비 상태나 AI provider 정상 여부는 보장하지 않는다. Metrics의 worker 값도 실제 처리 진척이 아닌 활성 설정이다. 배포 후에는 document 상태·queue log·필요한 provider 연결을 별도로 확인하라. Metrics token은 조직 Agent token·사용자 session과 다른 전용 credential이다.
 
 ### 로그와 trace
 

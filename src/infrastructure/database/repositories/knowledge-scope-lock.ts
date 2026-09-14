@@ -4,7 +4,7 @@ import { scopeCovers } from "@/domain/identity/scope-coverage";
 import type { KnowledgeSource } from "@/domain/knowledge/knowledge-graph";
 import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-change";
 import type { AgentMemoryDatabase } from "../client";
-import { documentChunks, documents, memories } from "../schema";
+import { documentChunks, documents, memories, knowledgeGraphVersions } from "../schema";
 import { knowledgeScopeFromRow } from "./knowledge-node-persistence";
 import { inArrayParameter } from "./array-predicate";
 
@@ -15,6 +15,9 @@ export async function lockKnowledgeScope(transaction: KnowledgeTransaction, orga
   await transaction.execute(exclusive
     ? sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`
     : sql`select pg_advisory_xact_lock_shared(hashtextextended(${key}, 0))`);
+  await transaction.insert(knowledgeGraphVersions).values({ organizationId }).onConflictDoUpdate({
+    target: knowledgeGraphVersions.organizationId, set: { revision: sql`uuidv7()` }
+  });
 }
 
 export const sourceKey = (source: KnowledgeSource) => source.memoryId ? `memory:${source.memoryId}` : `chunk:${source.chunkId}`;

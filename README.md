@@ -17,6 +17,8 @@ Embedding을 설정하지 않아도 키워드 검색을 사용할 수 있다. �
 
 ## 빠른 시작
 
+Neo4j가 노드·관계의 topology를 저장하고 관계 지도와 MCP neighborhood의 탐색을 수행한다. PostgreSQL은 계정·문서·출처·승인 원장을 보존한다. 승인 원장의 변경은 탐색 전에 Neo4j에 원자적으로 동기화하며, 반환할 자료의 현재 권한과 출처 상태는 PostgreSQL에서 다시 확인한다. Neo4j는 필수 실행 구성 요소이며 시작 및 health check에서 연결을 확인한다.
+
 Node.js 24, pnpm 11, Docker가 필요하다. 아래는 새 로컬 설치의 기본 Compose 구성을 사용하는 절차다.
 
 ```bash
@@ -34,7 +36,7 @@ ADMIN_EMAILS=your-admin@example.com
 ```
 
 ```bash
-docker compose up --wait postgres minio
+docker compose up --wait postgres minio neo4j
 docker compose run --rm minio-init
 pnpm db:init
 pnpm dev
@@ -53,7 +55,7 @@ pnpm dev
 ## 기술 구성
 
 - Next.js App Router, TypeScript strict, React, Mantine
-- Better Auth, Drizzle, PostgreSQL·pgvector, pg-boss
+- Better Auth, Drizzle, PostgreSQL·pgvector, pg-boss, Neo4j
 - S3 호환 object storage, OpenAI-compatible embedding·reranker·extraction adapter
 - HTTP API, Streamable HTTP MCP, Pino, OpenTelemetry·Langfuse
 
@@ -73,18 +75,20 @@ pnpm dev
 
 ## 개발 검증
 
+지식 추출기는 개체와 관계를 두 단계로 추출하고, 개체 자격·종류·원문 근거를 별도로 검증한다. `pnpm eval:knowledge --variants entity-first --verify`로 합성 진단 사례를 현재 모델에서 평가한다. LlamaIndex 비교와 결과 해석은 [추출기 평가 절차](docs/operations.md#추출기-평가)를 따른다.
+
 ```bash
 pnpm verify
 ```
 
 이 명령은 현재 schema SQL과 TypeScript schema의 일치 검사, lint, typecheck, architecture, unit test, production build를 실행한다. DB·repository 변경에는 `pnpm test:integration`, 화면·브라우저 흐름 변경에는 `pnpm test:e2e`를 추가한다. 인증 E2E는 폐기 가능한 별도 DB와 `E2E_AUTHENTICATED=true`가 필요하다. [검증 절차](docs/operations.md#배포-전-확인)를 따른다.
 
-Pull request와 `main` push CI는 빈 DB 초기화, 위 전체 검사, PostgreSQL integration test, 인증 E2E를 실행한다.
+Pull request와 `main` push CI는 빈 DB 초기화, 위 전체 검사, PostgreSQL·Neo4j integration test, 인증 E2E를 실행한다.
 
 ## 데이터 보호
 
 누적 migration과 구버전 데이터 변환은 제공하지 않는다. 현재 스키마는 `database/schema.sql`로 관리하며, 스키마가 달라지면 배포 전에 백업·쓰기 중단·명시적 초기화가 필요하다. 계정·설정 보존은 운영자가 별도로 수행하며 서버가 기존 데이터를 자동 삭제하거나 변환하지 않는다. [DB 초기화 절차](docs/operations.md#database-초기화)를 따른다.
 
-로컬 Compose의 PostgreSQL·MinIO volume은 Agent Memory 전용이다. `docker compose down -v`는 데이터를 삭제한다.
+로컬 Compose의 PostgreSQL·MinIO·Neo4j volume은 Agent Memory 전용이다. `docker compose down -v`는 데이터를 삭제한다.
 
 운영 배포는 `../dockpad`가 담당하며 서비스 주소는 `https://memory.opspresso.com/`이다. 이 저장소의 Release workflow는 image를 게시하고 `../argocd-env-demo`의 alpha version 목록에 tag를 전달한다. IDC rollout과 backup·복원 절차는 [운영 가이드](docs/operations.md#배포-형태)를 따른다. EKS는 현재 배포·검증 대상이 아니다.
