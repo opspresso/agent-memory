@@ -30,6 +30,7 @@ coverage/
 playwright-report/
 test-results/
 .eval-results/
+.local-backups/
 .venv-knowledge-eval/
 evaluation/**/__pycache__/
 

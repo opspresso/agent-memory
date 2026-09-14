@@ -4,6 +4,10 @@ node_modules
 .env*
 !.env.example
 coverage
+.local-backups
+.eval-results
+.venv-knowledge-eval
+evaluation
 *.log
 .DS_Store
 docs
