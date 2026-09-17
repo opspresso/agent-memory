@@ -43,7 +43,7 @@ IDC에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라
 
 릴리즈는 다음 순서로 진행한다.
 
-1. `v*` tag push가 `.github/workflows/release.yml`을 시작한다. GitHub-hosted Ubuntu 24.04 runner에서 `pnpm verify`, PostgreSQL integration, 인증 E2E를 실행한다.
+1. `v*` tag push가 `.github/workflows/release.yml`을 시작한다. self-hosted runner에서 `pnpm verify`, PostgreSQL integration, 인증 E2E를 실행한다.
 2. 검증 후 GitHub Release 생성과 image build가 독립 job으로 실행된다. Image는 ECR·GHCR에 `<tag>`와 `latest`로 게시한다.
 3. Image 게시 성공 후 GitHub App installation token으로 `argocd-env-demo`에 project `agent-memory`, container `app`, phase `alpha`의 GitOps dispatch를 보낸다. Dockpad가 읽는 alpha image version 목록이 갱신됐는지 확인한다.
 
