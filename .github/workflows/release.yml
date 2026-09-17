@@ -22,7 +22,8 @@ env:
 jobs:
   verify:
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: self-hosted
+    # GitHub service containers require a Linux runner.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
       neo4j:
