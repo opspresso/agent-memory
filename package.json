@@ -1,6 +1,6 @@
 {
   "name": "agent-memory",
-  "version": "0.28.4",
+  "version": "0.28.5",
   "private": true,
   "scripts": {
     "dev": "WATCHPACK_POLLING=true next dev --port 3100",
