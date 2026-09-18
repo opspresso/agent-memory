@@ -15,6 +15,8 @@ import {
 import { IconCheck, IconCopy } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 
+import { organizationMemoryServerName } from "@/lib/organization-memory-server-name";
+
 import { WorkspaceHeader } from "../workspace-components";
 
 import { useT } from "../_i18n/provider";
@@ -35,7 +37,7 @@ interface AgentTokenStatus {
 
 export function AgentConnect({ origin }: { readonly origin: string }) {
   const t = useT();
-  const { access, organizationSlug } = useOrganization();
+  const { access, activeOrganization, organizationSlug } = useOrganization();
   const canManageToken = access?.role === "admin" || access?.role === "owner";
   const mcpEndpoint =
     organizationSlug && origin
@@ -55,6 +57,7 @@ export function AgentConnect({ origin }: { readonly origin: string }) {
         <StudioRegistrationTemplate
           key={`template:${organizationSlug}`}
           mcpEndpoint={mcpEndpoint}
+          organizationName={activeOrganization?.name ?? organizationSlug}
           organizationSlug={organizationSlug}
         />
       ) : null}
@@ -64,24 +67,33 @@ export function AgentConnect({ origin }: { readonly origin: string }) {
 
 function StudioRegistrationTemplate({
   mcpEndpoint,
+  organizationName,
   organizationSlug
 }: {
   readonly mcpEndpoint: string;
+  readonly organizationName: string;
   readonly organizationSlug: string;
 }) {
   const t = useT();
   const fields = [
-    { label: "Name", value: `${organizationSlug}-memory` },
+    {
+      label: "Name",
+      value: organizationMemoryServerName(organizationName, organizationSlug)
+    },
     { label: "URL", value: mcpEndpoint },
     {
       label: "Description",
-      value: t("workspace.studioTemplateDescription", { organizationSlug })
+      value: t("workspace.studioTemplateDescription", {
+        organizationSlug: organizationName
+      })
     },
     { label: "Headers · Key", value: "Authorization" },
     { label: "Headers · Value", value: "Bearer <amt_token>" },
     {
       label: "Content",
-      value: t("workspace.studioTemplateContent", { organizationSlug })
+      value: t("workspace.studioTemplateContent", {
+        organizationSlug: organizationName
+      })
     }
   ];
 
