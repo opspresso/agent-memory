@@ -20,4 +20,10 @@ describe("organizationMemoryServerName", () => {
       "acme-inc-memory"
     );
   });
+
+  it("does not duplicate the memory suffix", () => {
+    expect(organizationMemoryServerName("Agent Memory", "default")).toBe(
+      "agent-memory"
+    );
+  });
 });

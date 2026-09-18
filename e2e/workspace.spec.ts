@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { organizationMemoryServerName } from "../src/lib/organization-memory-server-name";
 import { resetInstallationFixture } from "./installation-fixture";
 
 const authenticatedE2e = process.env.E2E_AUTHENTICATED === "true";
@@ -412,10 +413,11 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     page.getByRole("heading", { name: "통합 검색", exact: true })
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "첫 조직 만들기" })).toHaveCount(0);
-  const organizationSlug = "default";
   const response = await page.request.get("/api/organization");
   expect(response.ok()).toBe(true);
-  const organization = await response.json() as { id: string };
+  const organization = await response.json() as { id: string; name: string; slug: string };
+  const organizationName = organization.name;
+  const memoryServerName = organizationMemoryServerName(organizationName, organization.slug);
   expect((await page.request.post("/api/organization", { data: { name: "Forbidden", slug: "other" } })).status()).toBe(405);
   expect((await page.request.delete("/api/organization")).status()).toBe(405);
   const team = await postJson<{ id: string }>(
@@ -479,12 +481,12 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
     name: "Agent Studio 등록 템플릿"
   });
   await expect(registrationTemplate.getByText(mcpEndpoint, { exact: true })).toBeVisible();
-  await expect(registrationTemplate.getByText(`${organizationSlug}-memory`, { exact: true })).toBeVisible();
+  await expect(registrationTemplate.getByText(memoryServerName, { exact: true })).toBeVisible();
   await registrationTemplate.getByRole("button", { name: "등록 템플릿 URL 복사" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(mcpEndpoint);
   await registrationTemplate.getByRole("button", { name: "등록 템플릿 Description 복사" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
-    `${organizationSlug} 조직에 저장된 결정·규칙·경험, 문서 근거, 지식 간 관계를 확인할 때 사용합니다. Memory·RAG·Knowledge Graph를 검색하고 공유할 정보를 조직 범위 Memory로 저장합니다.`
+    `${organizationName} 조직에 저장된 결정·규칙·경험, 문서 근거, 지식 간 관계를 확인할 때 사용합니다. Memory·RAG·Knowledge Graph를 검색하고 공유할 정보를 조직 범위 Memory로 저장합니다.`
   );
   await expect(registrationTemplate).toContainText("Content는 운영자에게만 표시됩니다.");
   await registrationTemplate.getByRole("button", { name: "등록 템플릿 Content 복사" }).click();
@@ -550,10 +552,10 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   const englishTemplate = page.getByRole("region", {
     name: "Agent Studio registration template"
   });
-  await expect(englishTemplate).toContainText(`knowledge relationships stored in the ${organizationSlug} organization`);
+  await expect(englishTemplate).toContainText(`knowledge relationships stored in the ${organizationName} organization`);
   await expect(englishTemplate).toContainText("optional Content is shown only to operators.");
   await englishTemplate.getByRole("button", { name: "Copy template Name", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${organizationSlug}-memory`);
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(memoryServerName);
   await page.context().addCookies([
     { name: "agent-memory-locale", value: "ko", domain: "127.0.0.1", path: "/" }
   ]);

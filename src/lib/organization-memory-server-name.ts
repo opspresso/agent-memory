@@ -11,5 +11,5 @@ export function organizationMemoryServerName(
   organizationSlug: string
 ): string {
   const base = slugifyOrganizationName(organizationName) || organizationSlug;
-  return `${base}-memory`;
+  return base.endsWith("-memory") ? base : `${base}-memory`;
 }
