@@ -12,12 +12,20 @@ describe("single organization installation", () => {
   let container: StartedPostgreSqlContainer;
   let pool: Pool;
   let repository: ReturnType<typeof createInstallationRepository>;
+  const connectionClosures: Promise<void>[] = [];
+
+  function trackConnectionClosures(databasePool: Pool) {
+    databasePool.on("connect", (client) => {
+      connectionClosures.push(new Promise<void>((resolve) => client.once("end", resolve)));
+    });
+  }
 
   beforeAll(async () => {
     container = await new PostgreSqlContainer("pgvector/pgvector:0.8.6-pg18-trixie")
       .withDatabase("installation_test").withUsername("agent_memory").withPassword("agent_memory").start();
     const database = createDatabase(container.getConnectionUri());
     pool = database.pool;
+    trackConnectionClosures(pool);
     repository = createInstallationRepository(database.db);
     await initializeSchema(pool);
   });
@@ -28,6 +36,8 @@ describe("single organization installation", () => {
 
   afterAll(async () => {
     await pool?.end();
+    // pg-pool removes clients before their socket close callbacks complete.
+    await Promise.all(connectionClosures);
     await container?.stop();
   });
 
@@ -56,6 +66,7 @@ describe("single organization installation", () => {
     const connection = new URL(container.getConnectionUri());
     connection.searchParams.set("options", "-c lock_timeout=100ms");
     const reader = createDatabase(connection.toString());
+    trackConnectionClosures(reader.pool);
     try {
       await blocker.query("BEGIN");
       await blocker.query("LOCK TABLE organizations IN ROW EXCLUSIVE MODE");
