@@ -14,6 +14,7 @@
 node --version
 pnpm --version
 docker version
+docker compose version
 ```
 
 ## 1. 의존성과 환경 설정
@@ -43,9 +44,9 @@ ADMIN_EMAILS=your-admin@example.com
 - `ADMIN_EMAILS`는 실제 운영자 email로 바꾸고, domain 제한을 설정했다면 해당 email의 domain을 허용 목록에 포함하라.
 - 운영 환경에서는 `.env.example`의 `BETTER_AUTH_SECRET`과 storage credential을 사용하지 마라.
 
-## 2. Database 시작과 초기화
+## 2. 로컬 인프라 시작과 Database 초기화
 
-아래 명령은 `.env.local`의 DB 주소를 사용하며 shell의 `DATABASE_URL`이 있으면 우선한다. [DB 초기화](operations.md#database-초기화)에서 대상 DB와 초기화 조건을 확인하라.
+저장소 루트의 `compose.yaml`로 PostgreSQL·MinIO·Neo4j를 실행한다. `pnpm db:init`은 `.env.local`의 DB 주소를 사용하며 shell의 `DATABASE_URL`이 있으면 우선한다. [DB 초기화](operations.md#database-초기화)에서 대상 DB와 초기화 조건을 확인하라.
 
 ```bash
 docker compose up --wait postgres minio neo4j
@@ -53,7 +54,7 @@ docker compose run --rm minio-init
 pnpm db:init
 ```
 
-`up --wait`는 PostgreSQL·MinIO·Neo4j가 healthy일 때 완료되고 `run --rm minio-init`은 bucket 초기화가 끝날 때 종료된다. 앞 명령이 실패하면 초기화을 진행하지 마라. PostgreSQL은 `localhost:5433`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. 초기화이 완료되면 application을 시작하라.
+`up --wait`는 PostgreSQL·MinIO·Neo4j가 healthy일 때 완료되고 `run --rm minio-init`은 bucket 초기화가 끝날 때 종료된다. 앞 명령이 실패하면 초기화를 진행하지 마라. PostgreSQL은 `localhost:5433`, Neo4j Bolt는 `127.0.0.1:7687`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. 초기화가 완료되면 application을 host에서 시작하라.
 
 ```bash
 pnpm dev
@@ -68,7 +69,7 @@ curl -i http://localhost:3100/api/health
 정상 상태는 HTTP `200`과 다음 body를 반환한다.
 
 ```json
-{ "status": "ok", "checks": { "database": "ok" } }
+{ "status": "ok", "checks": { "database": "ok", "schema": "ok", "neo4j": "ok" } }
 ```
 
 ## 3. 최초 운영자 준비와 가입 요청
@@ -100,7 +101,7 @@ Memory를 만든 뒤 운영 콘솔에서 다음 순서로 확인한다.
 
 ## 5. 문서 수집 활성화
 
-문서 업로드에는 S3 호환 storage가 필요하다. localdev는 Agent Memory 전용 MinIO를 사용한다.
+문서 업로드에는 S3 호환 storage가 필요하다. 로컬 Compose는 Agent Memory 전용 MinIO를 사용한다.
 
 - MinIO API: `http://localhost:9010`
 - MinIO console: `http://localhost:9011`

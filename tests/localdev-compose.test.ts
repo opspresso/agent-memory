@@ -18,7 +18,8 @@ describe("localdev compose", () => {
 
   it("initializes the agent-memory bucket", () => {
     expect(compose).toContain("minio-init:");
-    expect(compose).toContain("mc mb --ignore-existing local/agent-memory");
+    expect(compose).toContain('mc mb --ignore-existing "local/$$S3_BUCKET_NAME"');
+    expect(compose).toContain("S3_BUCKET_NAME: agent-memory");
   });
 });
 

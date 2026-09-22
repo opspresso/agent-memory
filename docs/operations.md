@@ -6,7 +6,7 @@
 
 | 운영 작업 | 위치 |
 | --- | --- |
-| 로컬 실행·IDC 릴리즈 | [배포 형태](#배포-형태) |
+| 로컬 실행·k3s 릴리즈 | [배포 형태](#배포-형태) |
 | 설정값·필수 조합·override | [환경 변수](#환경-변수) |
 | 초기화 대상 확인 | [Database 초기화](#database-초기화) |
 | Worker·queue·종료 | [문서 worker와 object storage](#문서-worker와-object-storage) |
@@ -14,56 +14,52 @@
 | 역할 분리·backup·복원 | [운영 topology와 데이터 보호](#운영-topology와-데이터-보호) |
 | 장애 복구·배포 검증 | [장애 대응](#장애-대응), [배포 전 확인](#배포-전-확인) |
 
-로컬 개발은 독립된 `agent-memory-local` PostgreSQL 18·MinIO를 사용하고 Next.js를 host에서 직접 실행한다.
+로컬 개발은 루트 `compose.yaml`의 독립된 `agent-memory-local` PostgreSQL 18·MinIO·Neo4j를 사용하고 Next.js를 host에서 직접 실행한다.
 
 ```text
-로컬 개발
-host: pnpm dev ───────────────┐
-                             ├──▶ PostgreSQL
-Compose: postgres, MinIO ─────┘      └── pg-boss
+host: pnpm dev
+  └──▶ Docker Compose (agent-memory-local)
+         ├── postgres: PostgreSQL + pg-boss
+         ├── minio: 문서 원본
+         └── neo4j: Graph topology
 ```
 
 ## 배포 형태
 
 배포 환경마다 application image는 같고 infrastructure 연결 방식만 다르다.
 
-| 환경 | Application | PostgreSQL·Object storage | 진입점 |
+| 환경 | Application | PostgreSQL·Object storage·Neo4j | 진입점 |
 | --- | --- | --- | --- |
-| Local 개발 | host `pnpm dev` | 독립 `agent-memory-local` PostgreSQL 18·MinIO | `http://localhost:3100` |
-| IDC (운영) | `../dockpad` | 배포 저장소가 소유 | `https://memory.opspresso.com/` |
+| Local 개발 | host `pnpm dev` | 독립 `agent-memory-local` PostgreSQL 18·MinIO·Neo4j | `http://localhost:3100` |
+| AWS EC2 k3s (운영) | `../argocd-env-demo`의 Helm·Argo CD | 공유 PostgreSQL·MinIO, Memory 전용 Neo4j | `https://memory.opspresso.com/` |
 | EKS (중지) | 배포·검증 대상에서 제외 | — | — |
 
-이 저장소는 IDC Compose나 Kubernetes manifest를 보관하지 않는다. Release workflow는 image 게시 후 `argocd-env-demo`에 tag만 전달한다.
+이 저장소는 로컬 개발용 Compose와 application image를 관리한다. 운영 manifest는 `../argocd-env-demo`가 소유하며, Release workflow는 image 게시 후 해당 저장소의 alpha image tag를 갱신한다.
 
-IDC에서 PostgreSQL process와 MinIO service를 Agent Studio와 공유하더라도 데이터 경계는 합치지 마라. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용한다. 이렇게 하면 compute·storage service 운영은 공유하면서 schema, backup, 복원 단위는 분리된다.
+k3s의 PostgreSQL과 MinIO는 `agent-studio` namespace의 공유 서비스를 사용한다. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용하고, Neo4j는 `agent-memory` namespace의 `memory-neo4j` 서비스를 사용한다. Compute·storage service 운영을 공유하더라도 schema, backup, 복원 단위는 분리한다.
 
-### 릴리즈와 IDC 배포
+### 릴리즈와 k3s 배포
 
-릴리즈는 tag·GitHub Release·image 게시·alpha version 목록 갱신까지다. IDC 배포는 사용자가 `../dockpad`에서 직접 명령하는 별도 작업이다. Agent는 릴리즈 요청만으로 Dockpad 배포나 운영 서비스 재시작·재생성을 실행하지 않는다.
+릴리즈는 tag·GitHub Release·image 게시·alpha version 목록 갱신까지다. `agent-memory-k3s` Application의 `syncPolicy.automated`는 해제되어 있으므로 운영 반영에는 수동 Sync가 필요하다. Agent는 릴리즈 요청만으로 DB 초기화, Argo CD Sync, 운영 서비스 재시작·재생성을 실행하지 않는다.
 
 릴리즈는 다음 순서로 진행한다.
 
-1. Pull request는 `.github/workflows/release.yml`의 검증 job을 실행한다. `v*` tag push는 같은 검증을 통과한 뒤 Release job을 이어서 시작한다. 서비스 컨테이너를 포함한 모든 job은 Linux runner에서 실행한다.
+1. Pull request는 `.github/workflows/pr.yml`의 검증 job을 실행한다. `v*` tag push는 `.github/workflows/release.yml`에서 같은 검증을 통과한 뒤 Release job을 이어서 시작한다. 서비스 컨테이너를 포함한 모든 job은 Linux runner에서 실행한다.
 2. 검증 후 GitHub Release 생성과 image build가 독립 job으로 실행된다. Image는 ECR·GHCR에 `<tag>`와 `latest`로 게시한다.
-3. Image 게시 성공 후 GitHub App installation token으로 `argocd-env-demo`에 project `agent-memory`, container `app`, phase `alpha`의 GitOps dispatch를 보낸다. Dockpad가 읽는 alpha image version 목록이 갱신됐는지 확인한다.
+3. Image 게시 성공 후 `GHP_TOKEN`으로 `argocd-env-demo`에 project `agent-memory`, container `app`, phase `alpha`의 GitOps dispatch를 보낸다. `charts/agent-memory/values-alpha.yaml`과 `versions-alpha.json`에 새 tag가 반영됐는지 확인한다.
 
-릴리즈 완료 후 IDC 배포가 필요하면 사용자가 다음 절차를 직접 수행한다.
+릴리즈 완료 후 운영 배포가 필요하면 별도 승인 범위에서 다음 절차를 수행한다.
 
-1. 다음 명령으로 IDC의 기존 설치를 백업하고 배포 설정을 동기화한 뒤 Agent Memory image tag를 갱신한다.
+1. `agent-memory-k3s`의 자동 동기화가 해제되어 있는지 확인하고 운영 DB와 문서 원본을 백업한다.
+2. 새 image의 `database/schema.sql`과 운영 DB fingerprint를 비교한다. 스키마가 다르면 [Database 초기화](#database-초기화)에 따라 데이터 보존·복원 범위를 결정하고, application·worker를 중단한 뒤 명시적으로 초기화한다. 기존 Pod가 다시 시작되지 않도록 배포 설정과 replica 상태도 함께 관리한다.
+3. DB 준비 후 `agent-memory-k3s`만 수동 Sync하고 rollout 완료를 기다린다. 현재 rolling update 설정은 기존 Pod를 유지하므로 스키마 변경 시 구버전과 신버전을 동시에 실행하지 마라.
+4. 실제 container image, `https://memory.opspresso.com/api/health`, 로그인과 공개 화면의 version을 확인한다.
 
-   ```bash
-   ../dockpad/scripts/remote.sh deploy-selected alpha agent-memory
-   ```
-
-2. 실제 container image와 `https://memory.opspresso.com/api/health`, 공개 화면의 version을 확인한다.
-
-Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, alpha version 목록 갱신이다. IDC rollout은 별도 사용자 작업이며 릴리즈 완료 조건에 포함하지 않는다. EKS는 중지 상태이므로 Argo CD sync나 EKS 접속은 요구하지 않는다.
-
-선택 배포는 다른 서비스의 image tag를 유지한다. 다만 Dockpad는 공통 Compose 설정도 적용하므로 다른 서비스가 같은 버전으로 재기동될 수 있다. 백업·health check 역시 공유 설치를 대상으로 한다.
+Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, alpha version 목록 갱신이다. k3s rollout은 별도 작업이며 릴리즈 완료 조건에 포함하지 않는다. EKS는 현재 배포·검증 대상이 아니다.
 
 ### 로컬 개발
 
-Node.js 24, pnpm 11, Docker가 필요하다.
+Node.js 24, pnpm 11, Docker와 Docker Compose가 필요하다. 다음 명령은 저장소 루트에서 실행한다.
 
 ```bash
 corepack enable
@@ -95,6 +91,17 @@ pnpm dev
 | Application | `http://localhost:3100` |
 | PostgreSQL | `localhost:5433` |
 | MinIO API / console | `http://localhost:9010` / `http://localhost:9011` |
+| Neo4j Bolt / Browser | `bolt://127.0.0.1:7687` / `http://localhost:7474` |
+
+실행 상태와 로그를 확인하거나 로컬 인프라를 종료할 때도 같은 Compose project를 사용한다.
+
+```bash
+docker compose ps
+docker compose logs --tail=100 postgres minio neo4j
+docker compose down
+```
+
+`pnpm dev`는 실행한 terminal에서 `Ctrl+C`로 종료한다. `docker compose down`은 container와 network를 제거하고 named volume의 데이터는 보존한다.
 
 `.env.example`은 document worker와 전용 MinIO 설정을 기본 활성화한다. 기존 DB를 재사용하면 [Database 설정 override](#database-설정-override)가 `.env.local`보다 우선한다. `docker compose down -v`는 PostgreSQL·MinIO·Neo4j volume을 삭제하므로 데이터를 확인하지 않고 실행하지 마라.
 
@@ -120,7 +127,7 @@ Application 시작은 PostgreSQL schema 확인 이후 Neo4j 연결과 uniqueness
 
 Neo4j는 승인된 Graph의 재구성 가능한 projection이다. 데이터 복원의 기준은 PostgreSQL의 node·edge·source·candidate·revision을 포함한 일관된 백업이다. Neo4j volume을 새로 준비하면 첫 탐색이 해당 설치 조직의 전체 topology를 복구한다. 다른 서비스가 사용하는 Neo4j database를 함께 초기화하지 마라. Schema가 달라진 PostgreSQL 설치는 기존 [명시적 초기화 절차](#database-초기화)를 따른다. Application이 기존 운영 데이터를 자동 초기화하거나 재추출하지 않는다.
 
-IDC의 Neo4j 서비스 추가·credential·volume·백업 정책은 Dockpad가 소유한다. 이 저장소는 application 연결 설정과 localdev를 제공한다. 운영 rollout 전에 Dockpad에서 전용 Neo4j 서비스를 준비해야 하며, 이 변경을 위한 운영 배포·재시작은 사용자가 별도로 실행한다.
+k3s의 Neo4j 서비스·credential 참조·volume 설정은 `../argocd-env-demo/charts/neo4j`가 소유한다. 이 저장소는 application 연결 설정과 로컬 Compose를 제공한다. 운영 rollout 전에 전용 Neo4j의 readiness와 External Secret 동기화 상태를 확인한다.
 
 `.env.example`을 기준으로 환경별 값을 설정하라. 샘플은 bootstrap, 인증·접근 정책, 문서 worker·quota, object storage, AI 기능·호출 제한, 관측성, 개발·빌드 순으로 구분한다. 주석 처리된 선택 항목은 해당 기능을 사용할 때 활성화한다. 최초 실행 전에 secret과 관리자 email을 바꾸고 Google·OIDC·password 중 최소 한 개의 로그인 수단을 설정하라.
 
@@ -457,7 +464,7 @@ Worker는 `document-ingestion-v2`와 `document-knowledge-enrichment-v2`를 소�
 
 Database만 복원하고 object storage를 복원하지 않으면 document metadata는 남지만 원본 재처리가 실패할 수 있다. Object storage만 복원하면 권한·상태·chunk·provenance를 복구할 수 없다. 두 저장소의 보존 시점과 복원 절차를 함께 관리하라. 암호화된 설정과 Agent token을 복원하려면 백업 당시의 `BETTER_AUTH_SECRET`도 필요하다. 이 값은 DB·object backup과 별도의 secret manager에서 보존하라.
 
-Dockpad의 백업은 두 application DB와 두 bucket, 공유 host 설정을 순서대로 복사한다. DB dump와 object mirror 전체를 하나의 transaction으로 묶지 않으므로 쓰기 중에는 두 저장소의 시점이 달라질 수 있다. 일관된 복원 지점이 필요하면 web과 worker의 쓰기를 함께 중단하는 운영 절차를 마련하라.
+DB dump와 object mirror 전체를 하나의 transaction으로 묶지 않으므로 쓰기 중에는 두 저장소의 시점이 달라질 수 있다. 일관된 복원 지점이 필요하면 web과 worker의 쓰기를 함께 중단하는 운영 절차를 마련하라. Agent Memory의 백업·복원 작업은 공유 PostgreSQL·MinIO에 있는 Agent Studio DB와 bucket을 변경하지 않아야 한다.
 
 ### 삭제와 원본 보존
 

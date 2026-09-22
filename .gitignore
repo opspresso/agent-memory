@@ -13,11 +13,6 @@ build/
 # env
 .env*
 !.env.example
-deploy/**/.env
-deploy/**/.env.aws
-deploy/**/.env.secrets
-deploy/**/.env.infrastructure
-deploy/**/.env.runtime-secrets
 
 # misc
 .DS_Store

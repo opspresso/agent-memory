@@ -15,7 +15,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["memory.nyala-blenny.ts.net"],
+  allowedDevOrigins: ["localhost:3100"],
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
   reactStrictMode: true,
   output: "standalone",

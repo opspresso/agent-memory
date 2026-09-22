@@ -19,7 +19,7 @@ Embedding을 설정하지 않아도 키워드 검색을 사용할 수 있다. �
 
 Neo4j가 노드·관계의 topology를 저장하고 관계 지도와 MCP neighborhood의 탐색을 수행한다. PostgreSQL은 계정·문서·출처·승인 원장을 보존한다. 승인 원장의 변경은 탐색 전에 Neo4j에 원자적으로 동기화하며, 반환할 자료의 현재 권한과 출처 상태는 PostgreSQL에서 다시 확인한다. Neo4j는 필수 실행 구성 요소이며 시작 및 health check에서 연결을 확인한다.
 
-Node.js 24, pnpm 11, Docker가 필요하다. 아래는 새 로컬 설치의 기본 Compose 구성을 사용하는 절차다.
+Node.js 24, pnpm 11, Docker와 Docker Compose가 필요하다. 로컬 개발은 루트 `compose.yaml`로 PostgreSQL·MinIO·Neo4j를 실행하고, Next.js는 host의 `pnpm dev`로 실행한다. 새 로컬 설치는 다음 절차를 따른다.
 
 ```bash
 corepack enable
@@ -83,7 +83,7 @@ pnpm verify
 
 이 명령은 현재 schema SQL과 TypeScript schema의 일치 검사, lint, typecheck, architecture, unit test, production build를 실행한다. DB·repository 변경에는 `pnpm test:integration`, 화면·브라우저 흐름 변경에는 `pnpm test:e2e`를 추가한다. 인증 E2E는 폐기 가능한 별도 DB와 `E2E_AUTHENTICATED=true`가 필요하다. [검증 절차](docs/operations.md#배포-전-확인)를 따른다.
 
-Pull request와 `main` push CI는 빈 DB 초기화, 위 전체 검사, PostgreSQL·Neo4j integration test, 인증 E2E를 실행한다.
+Pull request와 release tag CI는 빈 DB 초기화, 위 전체 검사, PostgreSQL·Neo4j integration test, 인증 E2E를 실행한다.
 
 ## 데이터 보호
 
@@ -91,4 +91,4 @@ Pull request와 `main` push CI는 빈 DB 초기화, 위 전체 검사, PostgreSQ
 
 로컬 Compose의 PostgreSQL·MinIO·Neo4j volume은 Agent Memory 전용이다. `docker compose down -v`는 데이터를 삭제한다.
 
-운영 배포는 `../dockpad`가 담당하며 서비스 주소는 `https://memory.opspresso.com/`이다. 이 저장소의 Release workflow는 image를 게시하고 `../argocd-env-demo`의 alpha version 목록에 tag를 전달한다. IDC rollout과 backup·복원 절차는 [운영 가이드](docs/operations.md#배포-형태)를 따른다. EKS는 현재 배포·검증 대상이 아니다.
+운영 환경은 AWS EC2의 k3s이며 서비스 주소는 `https://memory.opspresso.com/`이다. 이 저장소의 Release workflow는 image를 게시하고 `../argocd-env-demo`의 alpha version 목록에 tag를 전달한다. Argo CD 자동 동기화는 해제되어 있으므로 DB 준비 후 수동 Sync로 운영에 반영한다. 배포와 backup·복원 절차는 [운영 가이드](docs/operations.md#배포-형태)를 따른다. EKS는 현재 배포·검증 대상이 아니다.
