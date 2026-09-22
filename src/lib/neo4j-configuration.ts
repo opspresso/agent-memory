@@ -7,7 +7,7 @@ export function readNeo4jConfiguration(environment: Readonly<Record<string, stri
     throw new Error("NEO4J_URI must use Bolt or Neo4j without embedded credentials");
   }
   const username = environment.NEO4J_USERNAME ?? "neo4j";
-  const password = environment.NEO4J_PASSWORD ?? "agent_memory_dev";
+  const password = environment.NEO4J_PASSWORD ?? "agent_memory_secret";
   const database = environment.NEO4J_DATABASE ?? "neo4j";
   for (const [name, value] of [["NEO4J_USERNAME", username], ["NEO4J_PASSWORD", password], ["NEO4J_DATABASE", database]]) {
     if (!value?.trim()) throw new Error(`${name} must not be empty`);

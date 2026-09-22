@@ -129,7 +129,7 @@ IDC의 Neo4j 서비스 추가·credential·volume·백업 정책은 Dockpad가 �
 | 그룹 | 변수 | 역할 |
 | --- | --- | --- |
 | Database | `DATABASE_URL` | PostgreSQL 연결 문자열 |
-| Graph | `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` | 필수 Neo4j 연결 정보. URI에 credential을 포함하지 않는다. 로컬 기본은 `bolt://127.0.0.1:7687`, `neo4j`, `agent_memory_dev`이며 운영에서는 명시적으로 설정한다. |
+| Graph | `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` | 필수 Neo4j 연결 정보. URI에 credential을 포함하지 않는다. 로컬 기본은 `bolt://127.0.0.1:7687`, `neo4j`, `agent_memory_secret`이며 운영에서는 명시적으로 설정한다. |
 | Graph | `NEO4J_DATABASE` | Neo4j database 이름. 기본값 `neo4j` |
 | Startup | `NODE_ENV` | `production`이면 운영 필수 변수 검증을 활성화 |
 | Build | `NEXT_DIST_DIR` | Next.js 출력 디렉터리. 기본값 `.next`, Playwright 서버는 `.next-e2e` 사용 |
