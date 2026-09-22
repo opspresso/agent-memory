@@ -47,6 +47,16 @@ k3s의 PostgreSQL과 MinIO는 `agent-studio` namespace의 공유 서비스를 �
 1. Pull request는 `.github/workflows/pr.yml`의 검증 job을 실행한다. `v*` tag push는 `.github/workflows/release.yml`에서 같은 검증을 통과한 뒤 Release job을 이어서 시작한다. 서비스 컨테이너를 포함한 모든 job은 Linux runner에서 실행한다.
 2. 검증 후 GitHub Release 생성과 image build가 독립 job으로 실행된다. Image는 ECR·GHCR에 `<tag>`와 `latest`로 게시한다.
 3. Image 게시 성공 후 `GHP_TOKEN`으로 `argocd-env-demo`에 project `agent-memory`, container `app`, phase `alpha`의 GitOps dispatch를 보낸다. `charts/agent-memory/values-alpha.yaml`과 `versions-alpha.json`에 새 tag가 반영됐는지 확인한다.
+4. `gitops-prod`는 alpha 전달 성공 후 `prod` Environment의 사용자 승인을 기다린다. 승인되면 같은 tag를 phase `prod`로 dispatch한다.
+
+`prod` Environment의 required reviewer는 `nalbam`이다. Repository Settings → Environments →
+`prod`에서 관리하며, 릴리즈를 시작한 사용자도 직접 승인할 수 있다. Actions run의
+**Review deployments → prod → Approve and deploy**를 선택해야 `gitops-prod`가 실행된다.
+승인을 거절하면 prod dispatch는 실행되지 않는다. 승인 대기 중에도 alpha 배포는 완료된다.
+
+prod dispatch는 기존 `argocd-env-demo`의 prod PR 절차를 사용한다. PR 반영과 Argo CD Sync는
+별도 단계이며, 이 job은 이미지 재빌드나 클러스터 Sync를 실행하지 않는다.
+
 
 릴리즈 완료 후 운영 배포가 필요하면 별도 승인 범위에서 다음 절차를 수행한다.
 
@@ -55,7 +65,7 @@ k3s의 PostgreSQL과 MinIO는 `agent-studio` namespace의 공유 서비스를 �
 3. DB 준비 후 `agent-memory-k3s`만 수동 Sync하고 rollout 완료를 기다린다. 현재 rolling update 설정은 기존 Pod를 유지하므로 스키마 변경 시 구버전과 신버전을 동시에 실행하지 마라.
 4. 실제 container image, `https://memory.opsp.dev/api/health`, 로그인과 공개 화면의 version을 확인한다.
 
-Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, alpha version 목록 갱신이다. k3s rollout은 별도 작업이며 릴리즈 완료 조건에 포함하지 않는다. EKS는 `values-prod.yaml`로 별도 승격하며 `agent-memory-eks-demo`를 수동 Sync한다. EKS readiness 주소는 `https://memory.opspresso.com/api/health`이다. 두 환경의 image는 `linux/amd64` 노드에서 실행한다.
+Alpha 릴리즈 완료 조건은 verify·GitHub Release·image 게시·gitops job 성공과 alpha version 목록 갱신이다. Workflow 전체는 prod 승인 대기로 남을 수 있다. k3s rollout은 별도 작업이며 릴리즈 완료 조건에 포함하지 않는다. EKS는 `values-prod.yaml`로 별도 승격하며 `agent-memory-eks-demo`를 수동 Sync한다. EKS readiness 주소는 `https://memory.opspresso.com/api/health`이다. 두 환경의 image는 `linux/amd64` 노드에서 실행한다.
 
 ### 로컬 개발
 
