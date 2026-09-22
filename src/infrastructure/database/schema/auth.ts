@@ -39,7 +39,6 @@ export const authAccounts = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     accountId: text().notNull(),
     providerId: text().notNull(),
-    issuer: text().notNull(),
     accessToken: text(),
     refreshToken: text(),
     idToken: text(),
@@ -52,8 +51,8 @@ export const authAccounts = pgTable(
   },
   (table) => [
     index("auth_accounts_user_id_idx").on(table.userId),
-    uniqueIndex("auth_accounts_issuer_account_id_unique").on(
-      table.issuer,
+    uniqueIndex("auth_accounts_provider_id_account_id_unique").on(
+      table.providerId,
       table.accountId
     )
   ]

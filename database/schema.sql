@@ -17,7 +17,6 @@ CREATE TABLE "auth_accounts" (
 	"user_id" uuid NOT NULL,
 	"account_id" text NOT NULL,
 	"provider_id" text NOT NULL,
-	"issuer" text NOT NULL,
 	"access_token" text,
 	"refresh_token" text,
 	"id_token" text,
@@ -354,7 +353,7 @@ CREATE TABLE "app_settings" (
 	CONSTRAINT "app_settings_singleton_check" CHECK ("app_settings"."id" = 1)
 );
 CREATE INDEX "auth_accounts_user_id_idx" ON "auth_accounts" USING btree ("user_id");
-CREATE UNIQUE INDEX "auth_accounts_issuer_account_id_unique" ON "auth_accounts" USING btree ("issuer","account_id");
+CREATE UNIQUE INDEX "auth_accounts_provider_id_account_id_unique" ON "auth_accounts" USING btree ("provider_id","account_id");
 CREATE UNIQUE INDEX "auth_sessions_token_unique" ON "auth_sessions" USING btree ("token");
 CREATE INDEX "auth_sessions_user_id_idx" ON "auth_sessions" USING btree ("user_id");
 CREATE INDEX "auth_verifications_identifier_idx" ON "auth_verifications" USING btree ("identifier");

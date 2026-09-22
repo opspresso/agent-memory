@@ -429,6 +429,24 @@ describe("PostgreSQL schema", () => {
     );
     expect(await signedOutSessionResponse.json()).toBeNull();
 
+    const signInResponse = await testAuth.handler(
+      new Request("http://localhost:3100/api/auth/sign-in/email", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://localhost:3100"
+        },
+        body: JSON.stringify({
+          email,
+          password: "correct-horse-battery-staple"
+        })
+      })
+    );
+    expect(signInResponse.status).toBe(200);
+    expect(await signInResponse.json()).toMatchObject({
+      user: { id: session.user?.id, email }
+    });
+
     const blockedSignUpResponse = await testAuth.handler(
       new Request("http://localhost:3100/api/auth/sign-up/email", {
         method: "POST",
@@ -445,6 +463,40 @@ describe("PostgreSQL schema", () => {
     );
 
     expect(blockedSignUpResponse.status).toBe(403);
+  });
+
+  it("keeps account identities unique within each provider", async () => {
+    const firstUser = randomUUID();
+    const secondUser = randomUUID();
+    await pool.query(
+      `INSERT INTO users (id, email, name) VALUES
+       ($1, 'first-account@example.com', 'First Account'),
+       ($2, 'second-account@example.com', 'Second Account')`,
+      [firstUser, secondUser]
+    );
+    await pool.query(
+      `INSERT INTO auth_accounts (user_id, provider_id, account_id) VALUES
+       ($1, 'google', 'shared-subject'), ($2, 'oidc', 'shared-subject'),
+       ($1, 'google', 'another-subject')`,
+      [firstUser, secondUser]
+    );
+
+    const accounts = await pool.query(
+      `SELECT provider_id, user_id FROM auth_accounts
+       WHERE account_id = 'shared-subject' ORDER BY provider_id`
+    );
+    expect(accounts.rows).toEqual([
+      { provider_id: "google", user_id: firstUser },
+      { provider_id: "oidc", user_id: secondUser }
+    ]);
+    await expect(pool.query(
+      `INSERT INTO auth_accounts (user_id, provider_id, account_id)
+       VALUES ($1, 'google', 'shared-subject')`,
+      [secondUser]
+    )).rejects.toMatchObject({
+      code: "23505",
+      constraint: "auth_accounts_provider_id_account_id_unique"
+    });
   });
 
   it("loads organization and team membership through the repository", async () => {
