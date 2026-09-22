@@ -1,3 +1,4 @@
+import { readS3Configuration } from "./s3-configuration";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createOrganizationAgentTokenRepository } from "@/infrastructure/database/repositories/organization-agent-token-repository";
 import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
@@ -189,13 +190,7 @@ function createConfiguredKnowledgeOntologySuggestionService() {
 export const knowledgeOntologySuggestionService =
   createConfiguredKnowledgeOntologySuggestionService();
 
-const s3Client = createS3Client({
-  endpoint: process.env.S3_ENDPOINT ?? "http://localhost:9010",
-  region: process.env.S3_REGION ?? "ap-northeast-2",
-  accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "agent_memory",
-  secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "agent_memory_secret",
-  forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false"
-});
+const s3Client = createS3Client(readS3Configuration());
 
 export const documentObjectStorage = createS3DocumentObjectStorage({
   bucket: process.env.S3_BUCKET ?? "agent-memory",

@@ -37,6 +37,19 @@ describe("production configuration", () => {
     expect(() => assertProductionConfiguration(complete)).not.toThrow();
   });
 
+  it("accepts native S3 with the default AWS credential provider", () => {
+    expect(() => assertProductionConfiguration({
+      ...complete, S3_ENDPOINT: undefined,
+      S3_ACCESS_KEY_ID: undefined, S3_SECRET_ACCESS_KEY: undefined
+    })).not.toThrow();
+  });
+
+  it("rejects a partial static S3 credential pair", () => {
+    expect(() => assertProductionConfiguration({
+      ...complete, S3_SECRET_ACCESS_KEY: undefined
+    })).toThrow("must be set together");
+  });
+
   it("allows unrestricted email domains in production", () => {
     expect(() =>
       assertProductionConfiguration({

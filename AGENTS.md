@@ -39,8 +39,8 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 - Studio의 capability catalog 검색과 Agent Memory의 조직 지식 검색을 구분하라. Agent 실행 기능은 Studio에, 공유 Memory·RAG·Graph 기능은 Agent Memory에 둔다.
 - Plugin은 사용 지침과 MCP 선언을, 설치 측은 credential·서비스 URL·model 선택·version binding을 소유한다. Studio용 skill은 shell·filesystem·network를 직접 사용할 수 있다고 가정하지 않는다.
 - `릴리즈` 요청은 tag·GitHub Release·image 게시·`../argocd-env-demo`의 alpha version 목록 갱신까지만 허용한다. 운영 rollout을 릴리즈 완료 조건으로 삼지 마라. DB 초기화, Argo CD Sync, 운영 서비스 재시작·재생성은 별도의 명시적 지시가 필요하다.
-- 운영 배포 대상은 AWS EC2의 k3s이며 `../argocd-env-demo`가 Helm과 Argo CD 설정을 소유한다. `agent-memory-k3s`의 자동 동기화는 해제되어 있으며 운영 반영은 수동 Sync로 수행한다. 서비스 주소는 `https://memory.opspresso.com/`이다. EKS는 중지 상태이므로 릴리즈 검증에 EKS 접속을 요구하지 마라.
-- k3s에서는 PostgreSQL·MinIO 인프라를 Agent Studio와 공유하되 database(`agent_studio`, `agent_memory`)와 bucket(`agent-studio`, `agent-memory`)을 분리한다. Neo4j는 `agent-memory` namespace의 전용 서비스를 사용한다. Application image와 로컬 Compose는 각 앱이 소유하며, 릴리즈의 alpha image tag 전달을 유지한다.
+- `../argocd-env-demo`가 Helm과 Argo CD 설정을 소유한다. k3s는 alpha(`https://memory.opsp.dev/`), EKS는 prod(`https://memory.opspresso.com/`)다. `agent-memory-k3s`와 `agent-memory-eks-demo`는 수동 Sync로 반영한다. EKS는 PostgreSQL·Neo4j Helm chart와 S3 Pod Identity를 사용한다. 릴리즈의 alpha 갱신과 prod 승격·rollout을 구분한다.
+- k3s에서는 PostgreSQL·MinIO 인프라를 Agent Studio와 공유하되 database(`agent_studio`, `agent_memory`)와 bucket(`agent-studio-static`, `agent-memory`)을 분리한다. Neo4j는 `agent-memory` namespace의 전용 서비스를 사용한다. Application image와 로컬 Compose는 각 앱이 소유하며, 릴리즈의 alpha image tag 전달을 유지한다.
 
 ## Toolchain
 

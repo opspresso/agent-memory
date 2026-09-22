@@ -1,3 +1,5 @@
+import { readS3Configuration } from "./s3-configuration";
+
 const requiredProductionSettings = [
   "DATABASE_URL",
   "NEO4J_URI",
@@ -6,9 +8,6 @@ const requiredProductionSettings = [
   "BETTER_AUTH_SECRET",
   "BETTER_AUTH_URL",
   "ADMIN_EMAILS",
-  "S3_ENDPOINT",
-  "S3_ACCESS_KEY_ID",
-  "S3_SECRET_ACCESS_KEY",
   "S3_BUCKET"
 ] as const;
 
@@ -72,6 +71,7 @@ export function assertProductionConfiguration(
   if ((environment.BETTER_AUTH_SECRET?.trim().length ?? 0) < 32) {
     throw new Error("BETTER_AUTH_SECRET must contain at least 32 characters");
   }
+  readS3Configuration(environment);
   const authUrl = productionBaseUrl(environment.BETTER_AUTH_URL ?? "");
   if (
     !isLoopbackHostname(authUrl.hostname) &&

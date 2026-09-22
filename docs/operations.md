@@ -31,14 +31,14 @@ host: pnpm dev
 | 환경 | Application | PostgreSQL·Object storage·Neo4j | 진입점 |
 | --- | --- | --- | --- |
 | Local 개발 | host `pnpm dev` | 독립 `agent-memory-local` PostgreSQL 18·MinIO·Neo4j | `http://localhost:3100` |
-| AWS EC2 k3s (운영) | `../argocd-env-demo`의 Helm·Argo CD | 공유 PostgreSQL·MinIO, Memory 전용 Neo4j | `https://memory.opspresso.com/` |
-| EKS (중지) | 배포·검증 대상에서 제외 | — | — |
+| AWS EC2 k3s (alpha) | `../argocd-env-demo`의 Helm·Argo CD | 공유 PostgreSQL·MinIO, Memory 전용 Neo4j | `https://memory.opsp.dev/` |
+| EKS (prod) | 같은 저장소의 Helm·Argo CD | PostgreSQL·Neo4j Helm chart, S3·Pod Identity | `https://memory.opspresso.com/` |
 
 이 저장소는 로컬 개발용 Compose와 application image를 관리한다. 운영 manifest는 `../argocd-env-demo`가 소유하며, Release workflow는 image 게시 후 해당 저장소의 alpha image tag를 갱신한다.
 
 k3s의 PostgreSQL과 MinIO는 `agent-studio` namespace의 공유 서비스를 사용한다. Agent Memory는 별도 `agent_memory` database와 `agent-memory` bucket을 사용하고, Neo4j는 `agent-memory` namespace의 `memory-neo4j` 서비스를 사용한다. Compute·storage service 운영을 공유하더라도 schema, backup, 복원 단위는 분리한다.
 
-### 릴리즈와 k3s 배포
+### 릴리즈와 환경별 배포
 
 릴리즈는 tag·GitHub Release·image 게시·alpha version 목록 갱신까지다. `agent-memory-k3s` Application의 `syncPolicy.automated`는 해제되어 있으므로 운영 반영에는 수동 Sync가 필요하다. Agent는 릴리즈 요청만으로 DB 초기화, Argo CD Sync, 운영 서비스 재시작·재생성을 실행하지 않는다.
 
@@ -53,9 +53,9 @@ k3s의 PostgreSQL과 MinIO는 `agent-studio` namespace의 공유 서비스를 �
 1. `agent-memory-k3s`의 자동 동기화가 해제되어 있는지 확인하고 운영 DB와 문서 원본을 백업한다.
 2. 새 image의 `database/schema.sql`과 운영 DB fingerprint를 비교한다. 스키마가 다르면 [Database 초기화](#database-초기화)에 따라 데이터 보존·복원 범위를 결정하고, application·worker를 중단한 뒤 명시적으로 초기화한다. 기존 Pod가 다시 시작되지 않도록 배포 설정과 replica 상태도 함께 관리한다.
 3. DB 준비 후 `agent-memory-k3s`만 수동 Sync하고 rollout 완료를 기다린다. 현재 rolling update 설정은 기존 Pod를 유지하므로 스키마 변경 시 구버전과 신버전을 동시에 실행하지 마라.
-4. 실제 container image, `https://memory.opspresso.com/api/health`, 로그인과 공개 화면의 version을 확인한다.
+4. 실제 container image, `https://memory.opsp.dev/api/health`, 로그인과 공개 화면의 version을 확인한다.
 
-Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, alpha version 목록 갱신이다. k3s rollout은 별도 작업이며 릴리즈 완료 조건에 포함하지 않는다. EKS는 현재 배포·검증 대상이 아니다.
+Release 완료 조건은 workflow 성공, ECR·GHCR image 게시, alpha version 목록 갱신이다. k3s rollout은 별도 작업이며 릴리즈 완료 조건에 포함하지 않는다. EKS는 `values-prod.yaml`로 별도 승격하며 `agent-memory-eks-demo`를 수동 Sync한다. EKS readiness 주소는 `https://memory.opspresso.com/api/health`이다. 두 환경의 image는 `linux/amd64` 노드에서 실행한다.
 
 ### 로컬 개발
 
@@ -164,8 +164,8 @@ k3s의 Neo4j 서비스·credential 참조·volume 설정은 `../argocd-env-demo/
 | Document quota | `DOCUMENT_STORAGE_QUOTA_BYTES` | Organization별 누적 원본 크기 상한. 기본값 1 GiB(`1073741824`) |
 | Document quota | `DOCUMENT_PENDING_QUOTA` | Organization별 `pending`·`processing` 문서 합산 상한. 기본값 `100` |
 | Document quota | `DOCUMENT_UPLOADS_PER_USER_PER_HOUR` | 사용자별 organization 문서 업로드 시간당 상한. 기본값 `100` |
-| Object storage | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | S3 호환 endpoint와 bucket |
-| Object storage | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | S3 credential |
+| Object storage | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | S3 bucket과 region. AWS 기본 endpoint는 `S3_ENDPOINT` 생략 |
+| Object storage | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | 정적 credential 쌍. 생략하면 AWS SDK credential chain 사용 |
 | Object storage | `S3_FORCE_PATH_STYLE` | MinIO 같은 path-style endpoint 사용 여부 |
 
 ### AI 기능과 호출 제한
@@ -214,7 +214,7 @@ k3s의 Neo4j 서비스·credential 참조·volume 설정은 `../argocd-env-demo/
 | --- | --- |
 | 모든 환경의 로그인 | Google·OIDC·password 중 최소 한 개 활성화 |
 | Production bootstrap | DB를 읽기 전에 `DATABASE_URL`, `BETTER_AUTH_SECRET` 필요 |
-| Production 유효 설정 | 위 두 값과 `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` 필요. Override 대상은 DB에서 제공해도 됨 |
+| Production 유효 설정 | 위 두 값과 `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `BETTER_AUTH_URL`, `ADMIN_EMAILS`, `S3_BUCKET` 필요. Override 대상은 DB에서 제공해도 됨 |
 | Production 인증 | Secret 32자 이상. Loopback 이외의 application origin은 HTTPS이며 password self-signup 금지 |
 | HTTP endpoint URL | 인증·S3·AI·Langfuse URL은 credential을 포함하지 않는 절대 HTTP(S) 주소. PostgreSQL 연결 문자열에는 이 규칙을 적용하지 않음 |
 | Boolean | `AUTH_PASSWORD`, `AUTH_PASSWORD_SIGNUP`, `DOCUMENT_WORKER_ENABLED`, `S3_FORCE_PATH_STYLE`은 설정 시 `true` 또는 `false` |
@@ -229,7 +229,7 @@ k3s의 Neo4j 서비스·credential 참조·volume 설정은 `../argocd-env-demo/
 | Password 가입 | `AUTH_PASSWORD_SIGNUP=true`이면 `AUTH_PASSWORD=true` |
 | Google | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` |
 | OIDC | `OIDC_ISSUER` + `OIDC_CLIENT_ID` + `OIDC_CLIENT_SECRET` |
-| S3 credential | `S3_ACCESS_KEY_ID` + `S3_SECRET_ACCESS_KEY` |
+| 정적 credential 쌍. 생략하면 AWS SDK credential chain 사용 | `S3_ACCESS_KEY_ID` + `S3_SECRET_ACCESS_KEY` |
 | Embedding | `EMBEDDING_MODEL`을 설정하면 `EMBEDDING_BASE_URL` 필요 |
 | Reranker | `RERANKER_BASE_URL` + `RERANKER_MODEL` |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_LANGUAGE` | 생성하는 설명·사건 이름의 언어. `source`(기본: 원문 언어), `ko`(한국어), `en`(영어). 고유명·별칭·인용은 원문 표기를 보존 |
@@ -381,6 +381,11 @@ Schema source는 `src/infrastructure/database/schema/`, 현재 schema의 생성 
 Schema를 변경하면 배포 전에 application·worker를 중단하고 DB·전용 bucket·queue를 명시적으로 초기화한다. 계정·설정 보존이 필요하면 초기화 전에 별도 보존·복원 범위를 결정한다. 공유 Agent Studio DB·bucket은 초기화 대상에 포함하지 않는다. Application 시작에는 자동 DROP·ALTER·backfill이 없다. 임의 DDL에 의한 schema drift는 fingerprint 검사만으로 탐지하지 않는다.
 
 ## 문서 worker와 object storage
+
+AWS S3에서는 `S3_BUCKET`과 `S3_REGION`을 설정하고 `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`,
+`S3_SECRET_ACCESS_KEY`를 생략하면 AWS SDK 기본 credential chain(EKS Pod Identity 포함)을
+사용한다. `S3_FORCE_PATH_STYLE=false`를 사용한다. MinIO에서는 endpoint와 credential 쌍을
+명시하며 path-style을 사용한다. 코드가 개발용 endpoint나 credential을 자동으로 주입하지 않는다.
 
 ### 업로드와 처리
 
