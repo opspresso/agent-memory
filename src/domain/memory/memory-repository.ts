@@ -5,6 +5,7 @@ import type { IngestionReceipt } from "@/domain/shared/ingestion-receipt";
 export interface MemorySearchInput {
   readonly access: OrganizationAccess;
   readonly query: string;
+  readonly minimumVectorScore?: number;
   readonly queryEmbedding?: Readonly<{
     model: string;
     values: readonly number[];

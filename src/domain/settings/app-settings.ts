@@ -1,3 +1,5 @@
+import { defaultEmbeddingMinimumScore } from "@/domain/shared/semantic-search";
+
 export const appSettingDefinitions = [
   { name: "DOCUMENT_WORKER_ENABLED", defaultValue: "false", restartRequired: true },
   { name: "BETTER_AUTH_URL", defaultValue: "http://localhost:3100", restartRequired: true },
@@ -14,6 +16,8 @@ export const appSettingDefinitions = [
   { name: "EMBEDDING_BASE_URL", restartRequired: true },
   { name: "EMBEDDING_API_KEY", secret: true, restartRequired: true },
   { name: "EMBEDDING_MODEL", restartRequired: true },
+  { name: "EMBEDDING_DIM", defaultValue: "native", restartRequired: true },
+  { name: "EMBEDDING_MIN_SCORE", defaultValue: String(defaultEmbeddingMinimumScore), restartRequired: false },
   { name: "RERANKER_BASE_URL", restartRequired: true },
   { name: "RERANKER_API_KEY", secret: true, restartRequired: true },
   { name: "RERANKER_MODEL", restartRequired: true },

@@ -65,6 +65,8 @@ Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 �
 
 Node.js runtime은 bootstrap 설정을 검증한 뒤 빈 DB 초기화·schema fingerprint 검사, DB 설정 override 적용·검증, 설치 조직 초기화, 운영 설정 확인, Neo4j 연결·constraint 준비, 종료 hook·telemetry 등록, 선택형 worker 시작 순서로 준비된다. DB와 암호화 root 설정은 override를 읽기 전에 필요하다.
 
+Production 초기화가 실패하면 안전한 오류 로그를 남기고 process를 exit code `1`로 종료한다. Next.js가 초기화 실패 promise를 보존한 채 TCP listener를 유지하므로, supervisor가 process를 다시 시작해야 의존성 복구 후 초기화를 재실행할 수 있다. 초기화 완료 이후의 의존성 장애는 readiness 실패로 처리한다.
+
 ### 단일 조직과 가입
 
 한 설치는 하나의 조직을 사용한다. 서버 시작 시 조직이 없으면 기본 조직을 만들고, 하나면 기존 데이터를 사용하며, 둘 이상이면 시작을 거부한다. 조직 생성 시 PostgreSQL table lock으로 직렬화하고 기존 조직 조회에는 이 잠금을 사용하지 않는다. 요청 권한 검사는 조직을 읽기만 하며 조직을 생성하지 않는다. 일반 HTTP와 session MCP는 사용자 인증을 먼저 확인한다. 내부 organization ID와 tenant FK는 scope·provenance 검증을 위해 유지한다. 공개 API에는 조직 선택 경로가 없고 `/api/organization`은 조회·설정 변경만 제공한다. MCP 주소는 `/api/mcp`다.
@@ -135,7 +137,8 @@ Memory 종류는 `rule`, `experience`, `decision`, `preference`, `fact`다. 생�
 - 각 변경 전 상태는 revision으로 보존한다. Revision 조회는 `manage` 권한이 필요하다.
 - 검색·라이브러리·회상은 접근 가능하고 `active`이며 현재 유효한 Memory만 반환한다. ID 조회는 읽을 수 있는 active Memory를 반환하므로 만료·미래 유효 Memory도 조회할 수 있다. Archive된 Memory는 일반 ID 조회에서도 제외한다.
 - `EMBEDDING_MODEL`이 설정되면 같은 model의 vector score와 PostgreSQL Full-Text Search를 결합한다. 설정하지 않으면 lexical search만 사용한다.
-- Embedding은 model 이름과 함께 저장한다. 검색 시 같은 model의 vector만 비교한다. 차원과 ANN index를 특정 model에 미리 고정하지 않는다.
+- Embedding은 model 이름과 함께 저장한다. `EMBEDDING_DIM`은 provider에 요청할 차원을 지정하며 기본 `native`는 파라미터를 생략한다. 검색 시 같은 model·같은 차원의 vector만 비교하고 다른 차원은 키워드 검색에 남긴다. 차원과 ANN index를 특정 model에 미리 고정하지 않는다.
+- Memory·문서·Knowledge 검색은 같은 hybrid SQL 정책을 사용한다. Vector score는 코사인 유사도(`1 - cosine distance`)를 `0–1`로 제한하며 영벡터는 비교에서 제외한다. Provider 응답은 16,000차원 이하의 유한한 float32 값과 nonzero norm을 요구한다. `EMBEDDING_MIN_SCORE` 하한은 권한·상태 조건과 함께 SQL에서 `LIMIT` 전에 적용하며 키워드 일치를 제외하지 않는다. 설정 override는 다음 검색에서 읽으며 재시작·재색인이 필요 없다.
 - 제목·본문을 포함한 revision은 현재 embedding 설정으로 vector를 다시 만들며, embedding이 비활성화된 경우 기존 vector를 제거한다. 다른 필드만 바꾸면 기존 vector를 유지한다. 전체 Memory를 자동 재색인하는 작업은 제공하지 않는다.
 
 ## 문서 수집 흐름

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
+import { maximumEmbeddingDimensions, type TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 import type {
   AiRequestLimiter,
   AiRequestQuotaKey
@@ -11,6 +11,7 @@ interface TextEmbeddingServiceConfiguration {
   readonly apiKey?: string;
   readonly baseUrl: string;
   readonly model: string;
+  readonly dimensions?: number;
   readonly requestLimiter?: AiRequestLimiter;
   readonly request?: typeof fetch;
 }
@@ -18,7 +19,9 @@ interface TextEmbeddingServiceConfiguration {
 const embeddingResponseSchema = z.object({
   data: z.array(
     z.object({
-      embedding: z.array(z.number()).min(1),
+      embedding: z.array(z.number()).min(1).max(maximumEmbeddingDimensions)
+        .refine((values) => values.every((value) => Number.isFinite(Math.fround(value))) &&
+          values.some((value) => Math.fround(value) !== 0), "embedding must contain finite nonzero float32 values"),
       index: z.number().int().nonnegative()
     })
   )
@@ -43,10 +46,17 @@ export function createTextEmbeddingService(
   const model = requiredSetting(configuration.model, "embedding model");
   const apiKey = configuration.apiKey?.trim();
   const request = configuration.request ?? fetch;
+  const dimensions = configuration.dimensions;
+  if (dimensions !== undefined && (!Number.isSafeInteger(dimensions) || dimensions < 1 || dimensions > maximumEmbeddingDimensions)) {
+    throw new Error(`embedding dimensions must be an integer between 1 and ${maximumEmbeddingDimensions}`);
+  }
 
   async function requestEmbeddings(texts: readonly string[]) {
     const response = await request(endpoint, {
-      body: JSON.stringify({ input: [...texts], model }),
+      body: JSON.stringify({
+        input: [...texts], model, encoding_format: "float",
+        ...(dimensions !== undefined ? { dimensions } : {})
+      }),
       headers: {
         "Content-Type": "application/json",
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
@@ -78,6 +88,12 @@ export function createTextEmbeddingService(
         "embedding response count does not match inputs",
         { code: "EMBEDDING_RESPONSE_COUNT_MISMATCH" }
       );
+    }
+    const expectedDimensions = dimensions ?? ordered[0]?.embedding.length;
+    if (ordered.some(({ embedding }) => embedding.length !== expectedDimensions)) {
+      throw new SafeOperationalError("embedding response dimensions do not match", {
+        code: "EMBEDDING_RESPONSE_DIMENSION_MISMATCH"
+      });
     }
     return ordered.map(({ embedding }) => ({ model, values: embedding }));
   }

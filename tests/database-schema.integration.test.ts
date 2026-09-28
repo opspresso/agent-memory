@@ -1514,6 +1514,22 @@ describe("PostgreSQL schema", () => {
       vectorScore: expect.any(Number),
       score: expect.any(Number)
     });
+    const memorySearch = { access, now: new Date("2026-08-27T00:00:00.000Z"), limit: 10, query: "unrelated lexical query" };
+    expect(await repository.search({ ...memorySearch, queryEmbedding: { model: "test-embedding", values: [0, 0, 1] } })).toEqual([]);
+    expect(await repository.search({ ...memorySearch, minimumVectorScore: 1, queryEmbedding: { model: "test-embedding", values: [1, 0, 0] } })).toEqual([]);
+    const changedDimensionHits = await repository.search({ ...memorySearch, query: "rollback", queryEmbedding: { model: "test-embedding", values: [1, 0] } });
+    expect(changedDimensionHits).toMatchObject([{ memory: { id: memoryId }, vectorScore: 0 }]);
+    await repository.save(createMemory({ ...original, id: randomUUID(), title: "Unrelated candidate", content: "No lexical match", embedding: { model: "test-embedding", values: [1, 0, 0.1] }, now: createdAt }));
+    // The weak vector would outrank the keyword hit if filtering ran after LIMIT.
+    const limitedHits = await repository.search({ ...memorySearch, limit: 1, query: "rollback", queryEmbedding: { model: "test-embedding", values: [0, 0, 1] } });
+    expect(limitedHits.map((hit) => hit.memory.id)).toEqual([memoryId]);
+    await pool.query("UPDATE memories SET embedding='[0,0,0]'::vector WHERE organization_id=$1 AND id=$2", [organization, memoryId]);
+    const zeroVectorHits = await repository.search({ ...memorySearch, minimumVectorScore: 0, queryEmbedding: { model: "test-embedding", values: [1, 0, 0] } });
+    expect(zeroVectorHits.map((hit) => hit.memory.id)).not.toContain(memoryId);
+    const zeroVectorKeywordHits = await repository.search({ ...memorySearch, query: "rollback", queryEmbedding: { model: "test-embedding", values: [0, 0, 1] } });
+    expect(zeroVectorKeywordHits).toMatchObject([{ memory: { id: memoryId }, vectorScore: 0 }]);
+    expect(await repository.search({ ...memorySearch, minimumVectorScore: 0, queryEmbedding: { model: "test-embedding", values: [0, 0, 0] } })).toEqual([]);
+    await pool.query("UPDATE memories SET embedding='[0.9,0.1,0]'::vector WHERE organization_id=$1 AND id=$2", [organization, memoryId]);
     await expect(repository.findById(organization, memoryId)).resolves.toMatchObject({
       accessGrants: [
         { principalKind: "user", userId: otherUser, permission: "write" }
@@ -1869,6 +1885,12 @@ describe("PostgreSQL schema", () => {
       document: { id: documentId },
       vectorScore: expect.any(Number)
     });
+    const documentSearch = { access, query: "unrelated terms", limit: 10, queryEmbedding: { model: "test-embedding", values: [0.1, 1, 0] } };
+    expect(await repository.search(documentSearch)).toEqual([]);
+    const relaxedHits = await repository.search({ ...documentSearch, minimumVectorScore: 0.05 });
+    expect(relaxedHits[0]?.vectorScore).toBeCloseTo(0.1 / Math.sqrt(1.01), 5);
+    const changedDimensionHits = await repository.search({ ...documentSearch, query: "rollback approvers", queryEmbedding: { model: "test-embedding", values: [1, 0] } });
+    expect(changedDimensionHits).toMatchObject([{ document: { id: documentId }, vectorScore: 0 }]);
     await expect(
       repository.search({
         access: {
@@ -2416,6 +2438,11 @@ describe("PostgreSQL schema", () => {
       node: { id: sourceNodeId },
       vectorScore: expect.any(Number)
     });
+    const knowledgeSearch = { access, query: "unrelated terms", limit: 10, queryEmbedding: { model: "test-embedding", values: [0.1, 1, 0] } };
+    expect(await repository.searchNodes(knowledgeSearch)).toEqual([]);
+    expect((await repository.searchNodes({ ...knowledgeSearch, minimumVectorScore: 0.05 }))[0]?.node.id).toBe(sourceNodeId);
+    const changedDimensionHits = await repository.searchNodes({ ...knowledgeSearch, query: "checkout", queryEmbedding: { model: "test-embedding", values: [1, 0] } });
+    expect(changedDimensionHits).toEqual(expect.arrayContaining([expect.objectContaining({ node: expect.objectContaining({ id: sourceNodeId }), vectorScore: 0 })]));
     await expect(
       repository.searchNodes({
         access: {

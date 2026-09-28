@@ -3,79 +3,92 @@ import type { Instrumentation } from "next";
 let shutdownRegistered = false;
 
 export async function register() {
-  if (process.env.NEXT_RUNTIME !== "nodejs") {
-    return;
-  }
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    try {
+      const { assertProductionBootstrapConfiguration } = await import(
+        "./lib/production-config"
+      );
+      assertProductionBootstrapConfiguration();
 
-  const { assertProductionBootstrapConfiguration } = await import(
-    "./lib/production-config"
-  );
-  assertProductionBootstrapConfiguration();
+      const { prepareDatabase } = await import("./lib/prepare-database");
+      await prepareDatabase();
 
-  const { prepareDatabase } = await import("./lib/prepare-database");
-  await prepareDatabase();
+      const { applyRuntimeSettingsOverrides } = await import(
+        "./lib/runtime-settings"
+      );
+      await applyRuntimeSettingsOverrides();
 
-  const { applyRuntimeSettingsOverrides } = await import(
-    "./lib/runtime-settings"
-  );
-  await applyRuntimeSettingsOverrides();
+      const { installationRepository } = await import("./lib/installation");
+      await installationRepository.initialize();
 
-  const { installationRepository } = await import("./lib/installation");
-  await installationRepository.initialize();
+      const { assertProductionConfiguration } = await import(
+        "./lib/production-config"
+      );
+      assertProductionConfiguration();
 
-  const { assertProductionConfiguration } = await import(
-    "./lib/production-config"
-  );
-  assertProductionConfiguration();
+      const { initializeKnowledgeGraph, neo4jDriver } = await import("./lib/neo4j");
+      await initializeKnowledgeGraph();
 
-  const { initializeKnowledgeGraph, neo4jDriver } = await import("./lib/neo4j");
-  await initializeKnowledgeGraph();
+      const { initializeTelemetry, shutdownTelemetry } = await import(
+        "./infrastructure/observability/telemetry"
+      );
 
-  const { initializeTelemetry, shutdownTelemetry } = await import(
-    "./infrastructure/observability/telemetry"
-  );
-
-  if (!shutdownRegistered) {
-    const [{ logger }, { registerRuntimeShutdown, runRuntimeShutdownSteps }] =
-      await Promise.all([
-        import("./infrastructure/observability/logger"),
-        import("./lib/runtime-lifecycle")
-      ]);
-    registerRuntimeShutdown(
-      async () => {
-        const { database, documentIngestionQueue } = await import(
-          "./lib/container"
+      if (!shutdownRegistered) {
+        const [{ logger }, { registerRuntimeShutdown, runRuntimeShutdownSteps }] =
+          await Promise.all([
+            import("./infrastructure/observability/logger"),
+            import("./lib/runtime-lifecycle")
+          ]);
+        registerRuntimeShutdown(
+          async () => {
+            const { database, documentIngestionQueue } = await import(
+              "./lib/container"
+            );
+            await runRuntimeShutdownSteps([
+              {
+                name: "document ingestion queue",
+                execute: () => documentIngestionQueue.stop()
+              },
+              {
+                name: "database pool",
+                execute: () => database.pool.end()
+              },
+              { name: "Neo4j driver", execute: () => neo4jDriver.close() },
+              { name: "telemetry", execute: shutdownTelemetry }
+            ]);
+          },
+          logger
         );
-        await runRuntimeShutdownSteps([
-          {
-            name: "document ingestion queue",
-            execute: () => documentIngestionQueue.stop()
-          },
-          {
-            name: "database pool",
-            execute: () => database.pool.end()
-          },
-          { name: "Neo4j driver", execute: () => neo4jDriver.close() },
-          { name: "telemetry", execute: shutdownTelemetry }
-        ]);
-      },
-      logger
-    );
-    shutdownRegistered = true;
-  }
+        shutdownRegistered = true;
+      }
 
-  const [{ readAiRequestLimits }, { readMetricsToken }] = await Promise.all([
-    import("./infrastructure/ai/request-limiter"),
-    import("./lib/metrics-auth")
-  ]);
-  readAiRequestLimits();
-  readMetricsToken();
+      const [{ readAiRequestLimits }, { readMetricsToken }] = await Promise.all([
+        import("./infrastructure/ai/request-limiter"),
+        import("./lib/metrics-auth")
+      ]);
+      readAiRequestLimits();
+      readMetricsToken();
 
-  initializeTelemetry();
+      initializeTelemetry();
 
-  if (process.env.DOCUMENT_WORKER_ENABLED === "true") {
-    const { startDocumentWorker } = await import("./lib/document-worker");
-    await startDocumentWorker();
+      if (process.env.DOCUMENT_WORKER_ENABLED === "true") {
+        const { startDocumentWorker } = await import("./lib/document-worker");
+        await startDocumentWorker();
+      }
+    } catch (err) {
+      if (process.env.NODE_ENV === "production") {
+        // Next.js caches a rejected instrumentation promise while its TCP listener
+        // stays open. Exit so the supervisor can recover after dependencies return.
+        try {
+          const { logger } = await import("./infrastructure/observability/logger");
+          logger.error({ err }, "runtime initialization failed");
+          logger.flush();
+        } finally {
+          process.exit(1);
+        }
+      }
+      throw err;
+    }
   }
 }
 

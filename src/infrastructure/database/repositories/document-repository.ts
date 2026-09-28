@@ -106,6 +106,7 @@ function scoreExpressions(input: DocumentSearchInput) {
     embedding: documentChunks.embedding,
     embeddingModel: documentChunks.embeddingModel,
     query: input.query,
+    minimumVectorScore: input.minimumVectorScore,
     ...(input.queryEmbedding ? { queryEmbedding: input.queryEmbedding } : {})
   });
 }

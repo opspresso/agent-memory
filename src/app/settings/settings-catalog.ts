@@ -5,7 +5,7 @@ export type ApplicationSection = typeof applicationSections[number];
 export type SettingsSection = "general" | "ontology" | ApplicationSection;
 
 export const settingGroups = [
-  { section: "ai", key: "embedding", names: ["EMBEDDING_BASE_URL", "EMBEDDING_MODEL", "EMBEDDING_API_KEY"] },
+  { section: "ai", key: "embedding", names: ["EMBEDDING_BASE_URL", "EMBEDDING_MODEL", "EMBEDDING_DIM", "EMBEDDING_MIN_SCORE", "EMBEDDING_API_KEY"] },
   { section: "ai", key: "reranker", names: ["RERANKER_BASE_URL", "RERANKER_MODEL", "RERANKER_API_KEY", "RERANKER_TIMEOUT_MS", "RERANKER_MIN_SCORE"] },
   { section: "ai", key: "extraction", names: ["KNOWLEDGE_EXTRACTION_BASE_URL", "KNOWLEDGE_EXTRACTION_MODEL", "KNOWLEDGE_EXTRACTION_LANGUAGE", "KNOWLEDGE_EXTRACTION_API_KEY"] },
   { section: "ai", key: "verification", names: ["KNOWLEDGE_VERIFICATION_BASE_URL", "KNOWLEDGE_VERIFICATION_MODEL", "KNOWLEDGE_VERIFICATION_API_KEY"] },
@@ -24,6 +24,7 @@ export const settingGroups = [
 
 export const booleanSettings = new Set<AppSettingName>(["DOCUMENT_WORKER_ENABLED", "AUTH_PASSWORD", "AUTH_PASSWORD_SIGNUP", "S3_FORCE_PATH_STYLE"]);
 export const numericSettings: Partial<Record<AppSettingName, { min: number; max?: number; suffix: string; decimal?: boolean }>> = {
+  EMBEDDING_MIN_SCORE: { min: 0, max: 1, suffix: "", decimal: true },
   KNOWLEDGE_ENRICHMENT_CONCURRENCY: { min: 1, max: 16, suffix: "" },
   AI_PROVIDER_MAX_CONCURRENCY: { min: 1, suffix: "" },
   AI_PROVIDER_REQUESTS_PER_MINUTE: { min: 1, suffix: " / min" },

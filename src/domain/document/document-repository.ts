@@ -6,6 +6,7 @@ import type { Document, DocumentChunk } from "./document";
 export interface DocumentSearchInput {
   readonly access: OrganizationAccess;
   readonly query: string;
+  readonly minimumVectorScore?: number;
   readonly queryEmbedding?: Readonly<{
     model: string;
     values: readonly number[];

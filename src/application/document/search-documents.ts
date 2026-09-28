@@ -11,6 +11,7 @@ import type { TextEmbeddingService } from "@/domain/shared/text-embedding-servic
 
 export interface SearchDocumentsDependencies {
   readonly embeddingService?: TextEmbeddingService;
+  readonly minimumVectorScore?: () => Promise<number>;
   readonly repository: DocumentRepository;
 }
 
@@ -55,10 +56,11 @@ export function buildSearchDocuments(
             userId: access.userId
           })
         : undefined);
+    const minimumVectorScore = queryEmbedding ? await dependencies.minimumVectorScore?.() : undefined;
     const hits = await dependencies.repository.search({
       access,
       query: normalizedQuery,
-      ...(queryEmbedding ? { queryEmbedding } : {}),
+      ...(queryEmbedding ? { queryEmbedding, minimumVectorScore } : {}),
       limit
     });
 

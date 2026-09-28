@@ -6,6 +6,7 @@ import { createAppSettingsSecretCipher } from "@/infrastructure/security/app-set
 import { getAdminEmails, getAllowedEmailDomains } from "./access-control";
 import { database } from "./database";
 import { validateRuntimeEnvironment } from "./runtime-configuration";
+import { readEmbeddingMinimumScore } from "./embedding-configuration";
 
 const environmentSymbol = Symbol.for("agent-memory.runtime-settings.base-environment");
 const runtimeGlobal = globalThis as typeof globalThis & {
@@ -93,4 +94,8 @@ export async function getEffectiveAllowedEmailDomains(): Promise<readonly string
 
 export async function getEffectiveAdminEmails(): Promise<readonly string[]> {
   return getAdminEmails(await getEffectiveRuntimeEnvironment());
+}
+
+export async function getEffectiveEmbeddingMinimumScore(): Promise<number> {
+  return readEmbeddingMinimumScore(await getEffectiveRuntimeEnvironment());
 }

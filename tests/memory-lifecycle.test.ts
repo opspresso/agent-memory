@@ -348,4 +348,16 @@ describe("memory lifecycle", () => {
 
     await expect(search(access, "decision")).resolves.toEqual([candidates[0]]);
   });
+
+  it("reads the current vector floor on each semantic search and passes it to persistence", async () => {
+    const searchRepository = vi.fn().mockResolvedValue([]);
+    const minimumVectorScore = vi.fn().mockResolvedValueOnce(0.2).mockResolvedValueOnce(0.7);
+    const search = buildSearchMemories({ clock: () => now, repository: repository({ search: searchRepository }), minimumVectorScore });
+    const embedding = { model: "test-model", values: [1, 0] };
+    await search(access, "query", 5, embedding);
+    await search(access, "query", 5, embedding);
+    expect(searchRepository.mock.calls.map(([input]) => input.minimumVectorScore)).toEqual([0.2, 0.7]);
+    await search(access, "keyword only");
+    expect(minimumVectorScore).toHaveBeenCalledTimes(2);
+  });
 });

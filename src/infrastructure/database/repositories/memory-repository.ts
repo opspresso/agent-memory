@@ -220,6 +220,7 @@ function scoreExpressions(input: MemorySearchInput) {
     embedding: memories.embedding,
     embeddingModel: memories.embeddingModel,
     query: input.query,
+    minimumVectorScore: input.minimumVectorScore,
     ...(input.queryEmbedding ? { queryEmbedding: input.queryEmbedding } : {})
   });
 }

@@ -109,6 +109,21 @@ test("onboards, approves, and manages members through the console", async ({
   await expect(page.getByLabel(/EMBEDDING_API_KEY/)).toHaveValue("");
   await expect(page.getByRole("button", { name: "설치 설정 저장", exact: true })).toBeDisabled();
 
+  await expect(page.getByRole("textbox", { name: /EMBEDDING_DIM/ })).toHaveValue("native");
+  const embeddingFloor = page.getByRole("textbox", { name: /EMBEDDING_MIN_SCORE/ });
+  await expect(embeddingFloor).toHaveValue("0.25");
+  await embeddingFloor.fill("0.6");
+  await page.getByRole("button", { name: "설치 설정 저장", exact: true }).click();
+  await expect(page.getByText("애플리케이션 설정을 저장했습니다.", { exact: true })).toBeVisible();
+  await expect(page.getByText("재시작 후 적용되는 변경이 있습니다.", { exact: true })).not.toBeVisible();
+  const floorView = await (await page.request.get("/api/settings/runtime")).json();
+  expect(floorView.fields.EMBEDDING_MIN_SCORE).toMatchObject({ value: "0.6", source: "override", restartRequired: false });
+  await page.reload();
+  await expect(embeddingFloor).toHaveValue("0.6");
+  await page.getByRole("button", { name: "EMBEDDING_MIN_SCORE에 환경 변수 값 사용", exact: true }).click();
+  await page.getByRole("button", { name: "설치 설정 저장", exact: true }).click();
+  await expect(embeddingFloor).toHaveValue("0.25");
+
   const extractionLanguage = page.getByRole("combobox", { name: /KNOWLEDGE_EXTRACTION_LANGUAGE/ });
   await expect(extractionLanguage).toHaveValue("한국어");
   await extractionLanguage.click();

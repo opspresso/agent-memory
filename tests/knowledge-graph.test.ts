@@ -599,4 +599,11 @@ describe("knowledge graph", () => {
       expect.objectContaining({ node: visible })
     ]);
   });
+
+  it("passes the live vector floor to knowledge persistence", async () => {
+    const search = vi.fn().mockResolvedValue([]);
+    const searchNodes = buildSearchKnowledgeNodes({ repository: repository({ searchNodes: search }), minimumVectorScore: async () => 0.6 });
+    await searchNodes(access, "checkout", 10, { model: "model", values: [1, 0] });
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({ minimumVectorScore: 0.6 }));
+  });
 });
