@@ -1,4 +1,5 @@
 import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { defaultEmbeddingMinimumScore } from "@/domain/shared/semantic-search";
 
 const lexicalWeight = 0.4;
 const vectorWeight = 0.6;
@@ -8,6 +9,7 @@ interface HybridSearchInput {
   readonly embedding: SQLWrapper;
   readonly embeddingModel: SQLWrapper;
   readonly query: string;
+  readonly minimumVectorScore?: number;
   readonly queryEmbedding?: Readonly<{
     model: string;
     values: readonly number[];
@@ -47,10 +49,12 @@ export function hybridSearchExpressions(
   }
 
   const vectorLiteral = `[${input.queryEmbedding.values.join(",")}]`;
+  const compatibleEmbedding = sql`${input.embedding} IS NOT NULL
+    AND ${input.embeddingModel} = ${input.queryEmbedding.model}
+    AND vector_dims(${input.embedding}) = ${input.queryEmbedding.values.length}`;
   const vectorScore = sql<number>`CASE
-    WHEN ${input.embedding} IS NOT NULL
-      AND ${input.embeddingModel} = ${input.queryEmbedding.model}
-    THEN GREATEST(0, LEAST(1, 1 - ((${input.embedding} <=> ${vectorLiteral}::vector) / 2)))
+    WHEN ${compatibleEmbedding}
+    THEN GREATEST(0, LEAST(1, 1 - (${input.embedding} <=> ${vectorLiteral}::vector)))
     ELSE 0
   END`;
   return {
@@ -58,8 +62,8 @@ export function hybridSearchExpressions(
     vectorScore,
     score: sql<number>`(${lexicalWeight} * ${lexicalScore}) + (${vectorWeight} * ${vectorScore})`,
     matches: sql`(${lexicalMatches}) OR (
-      ${input.embedding} IS NOT NULL
-      AND ${input.embeddingModel} = ${input.queryEmbedding.model}
+      ${compatibleEmbedding}
+      AND ${vectorScore} >= ${input.minimumVectorScore ?? defaultEmbeddingMinimumScore}
     )`
   };
 }

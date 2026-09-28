@@ -137,7 +137,8 @@ Memory 종류는 `rule`, `experience`, `decision`, `preference`, `fact`다. 생�
 - 각 변경 전 상태는 revision으로 보존한다. Revision 조회는 `manage` 권한이 필요하다.
 - 검색·라이브러리·회상은 접근 가능하고 `active`이며 현재 유효한 Memory만 반환한다. ID 조회는 읽을 수 있는 active Memory를 반환하므로 만료·미래 유효 Memory도 조회할 수 있다. Archive된 Memory는 일반 ID 조회에서도 제외한다.
 - `EMBEDDING_MODEL`이 설정되면 같은 model의 vector score와 PostgreSQL Full-Text Search를 결합한다. 설정하지 않으면 lexical search만 사용한다.
-- Embedding은 model 이름과 함께 저장한다. 검색 시 같은 model의 vector만 비교한다. 차원과 ANN index를 특정 model에 미리 고정하지 않는다.
+- Embedding은 model 이름과 함께 저장한다. `EMBEDDING_DIM`은 provider에 요청할 차원을 지정하며 기본 `native`는 파라미터를 생략한다. 검색 시 같은 model·같은 차원의 vector만 비교하고 다른 차원은 키워드 검색에 남긴다. 차원과 ANN index를 특정 model에 미리 고정하지 않는다.
+- Memory·문서·Knowledge 검색은 같은 hybrid SQL 정책을 사용한다. Vector score는 코사인 유사도(`1 - cosine distance`)를 `0–1`로 제한한다. `EMBEDDING_MIN_SCORE` 하한은 권한·상태 조건과 함께 SQL에서 `LIMIT` 전에 적용하며 키워드 일치를 제외하지 않는다. 설정 override는 다음 검색에서 읽으며 재시작·재색인이 필요 없다.
 - 제목·본문을 포함한 revision은 현재 embedding 설정으로 vector를 다시 만들며, embedding이 비활성화된 경우 기존 vector를 제거한다. 다른 필드만 바꾸면 기존 vector를 유지한다. 전체 Memory를 자동 재색인하는 작업은 제공하지 않는다.
 
 ## 문서 수집 흐름

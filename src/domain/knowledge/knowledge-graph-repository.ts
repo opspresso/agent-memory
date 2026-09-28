@@ -9,6 +9,7 @@ import type {
 export interface KnowledgeNodeSearchInput {
   readonly access: OrganizationAccess;
   readonly query: string;
+  readonly minimumVectorScore?: number;
   readonly queryEmbedding?: KnowledgeEmbedding;
   readonly limit: number;
 }

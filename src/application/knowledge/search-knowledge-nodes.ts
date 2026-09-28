@@ -11,6 +11,7 @@ import type { TextEmbeddingService } from "@/domain/shared/text-embedding-servic
 
 export interface SearchKnowledgeNodesDependencies {
   readonly embeddingService?: TextEmbeddingService;
+  readonly minimumVectorScore?: () => Promise<number>;
   readonly repository: KnowledgeGraphRepository;
 }
 
@@ -50,10 +51,11 @@ export function buildSearchKnowledgeNodes(
             userId: access.userId
           })
         : undefined);
+    const minimumVectorScore = queryEmbedding ? await dependencies.minimumVectorScore?.() : undefined;
     const hits = await dependencies.repository.searchNodes({
       access,
       query: normalizedQuery,
-      ...(queryEmbedding ? { queryEmbedding } : {}),
+      ...(queryEmbedding ? { queryEmbedding, minimumVectorScore } : {}),
       limit
     });
     return hits.filter((hit) =>

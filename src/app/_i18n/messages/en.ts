@@ -238,6 +238,7 @@ export const en = {
   "settings.field.EMBEDDING_API_KEY": "Embedding API key",
   "settings.field.EMBEDDING_MODEL": "Embedding model",
   "settings.field.EMBEDDING_DIM": "Embedding dimensions",
+  "settings.field.EMBEDDING_MIN_SCORE": "Minimum cosine similarity",
   "settings.field.RERANKER_BASE_URL": "Reranker API URL",
   "settings.field.RERANKER_API_KEY": "Reranker API key",
   "settings.field.RERANKER_MODEL": "Reranker model",

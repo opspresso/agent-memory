@@ -10,6 +10,7 @@ import type {
 export interface SearchMemoriesDependencies {
   readonly clock: () => Date;
   readonly embeddingService?: TextEmbeddingService;
+  readonly minimumVectorScore?: () => Promise<number>;
   readonly repository: MemoryRepository;
 }
 
@@ -49,10 +50,11 @@ export function buildSearchMemories(dependencies: SearchMemoriesDependencies) {
           })
         : undefined);
     const now = dependencies.clock();
+    const minimumVectorScore = queryEmbedding ? await dependencies.minimumVectorScore?.() : undefined;
     const hits = await dependencies.repository.search({
       access,
       query: normalizedQuery,
-      ...(queryEmbedding ? { queryEmbedding } : {}),
+      ...(queryEmbedding ? { queryEmbedding, minimumVectorScore } : {}),
       now,
       limit
     });

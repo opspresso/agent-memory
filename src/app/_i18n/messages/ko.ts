@@ -239,6 +239,7 @@ export const ko: Messages = {
   "settings.field.EMBEDDING_API_KEY": "Embedding API 키",
   "settings.field.EMBEDDING_MODEL": "Embedding 모델",
   "settings.field.EMBEDDING_DIM": "Embedding 차원",
+  "settings.field.EMBEDDING_MIN_SCORE": "최소 코사인 유사도",
   "settings.field.RERANKER_BASE_URL": "Reranker API 주소",
   "settings.field.RERANKER_API_KEY": "Reranker API 키",
   "settings.field.RERANKER_MODEL": "Reranker 모델",

@@ -23,6 +23,7 @@ import {
 } from "./container";
 import { readDocumentUploadLimits } from "./document-upload-limits";
 import { ingestionFingerprint } from "./ingestion-fingerprint";
+import { getEffectiveEmbeddingMinimumScore } from "./runtime-settings";
 
 export const uploadDocumentRecord = buildUploadDocument({
   receipts: ingestionReceiptRepository,
@@ -45,6 +46,7 @@ export const archiveDocumentRecord = buildArchiveDocument({
 });
 
 const searchDocumentRecordsBase = buildSearchDocuments({
+  minimumVectorScore: getEffectiveEmbeddingMinimumScore,
   repository: documentRepository,
   ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
 });

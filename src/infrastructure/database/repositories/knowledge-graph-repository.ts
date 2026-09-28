@@ -184,6 +184,7 @@ function scoreExpressions(input: KnowledgeNodeSearchInput, now: Date) {
     embedding: knowledgeNodes.embedding,
     embeddingModel: knowledgeNodes.embeddingModel,
     query: input.query,
+    minimumVectorScore: input.minimumVectorScore,
     ...(input.queryEmbedding ? { queryEmbedding: input.queryEmbedding } : {})
   });
 }

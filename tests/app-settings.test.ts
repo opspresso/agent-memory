@@ -55,6 +55,21 @@ function dependencies(environment: Readonly<Record<string, string | undefined>>)
 }
 
 describe("application settings", () => {
+  it("persists and resets the live embedding floor independently of the dimension setting", async () => {
+    const { useCases, stored } = dependencies({ ADMIN_EMAILS: "admin@example.com", EMBEDDING_MIN_SCORE: "0.3" });
+    await expect(useCases.getView()).resolves.toMatchObject({ fields: {
+      EMBEDDING_DIM: { value: "native", restartRequired: true },
+      EMBEDDING_MIN_SCORE: { value: "0.3", source: "env", restartRequired: false }
+    } });
+    await useCases.update({ values: { EMBEDDING_DIM: "1024", EMBEDDING_MIN_SCORE: "0.7" } }, "admin@example.com");
+    expect((await useCases.getEffectiveEnvironment()).EMBEDDING_MIN_SCORE).toBe("0.7");
+    await expect(useCases.update({ values: { EMBEDDING_MIN_SCORE: "1.5" } }, "admin@example.com")).rejects.toBeInstanceOf(InvalidAppSettingsError);
+    expect(stored()?.overrides.EMBEDDING_MIN_SCORE).toBe("0.7");
+    await useCases.update({ reset: ["EMBEDDING_MIN_SCORE"] }, "admin@example.com");
+    expect((await useCases.getEffectiveEnvironment()).EMBEDDING_MIN_SCORE).toBe("0.3");
+    expect((await useCases.getEffectiveEnvironment()).EMBEDDING_DIM).toBe("1024");
+  });
+
   it("shows environment values and stores overrides with higher precedence", async () => {
     const { stored, useCases } = dependencies({
       ADMIN_EMAILS: "admin@example.com",

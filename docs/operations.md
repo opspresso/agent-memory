@@ -190,6 +190,7 @@ k3s의 Neo4j 서비스·credential 참조·volume 설정은 `../argocd-env-demo/
 | Embedding | `EMBEDDING_API_KEY` | Embedding provider의 Bearer credential. 인증 없는 local endpoint에서는 생략 가능 |
 | Embedding | `EMBEDDING_MODEL` | 설정 시 Memory, document chunk, Knowledge node embedding과 semantic search 활성화 |
 | Embedding | `EMBEDDING_DIM` | 양의 정수 또는 `native`(기본값). 양의 정수는 provider에 `dimensions`로 요청하며 `native`는 파라미터를 생략한다. 모델이나 차원을 변경하면 기존 embedding을 다시 생성해야 한다. |
+| Embedding | `EMBEDDING_MIN_SCORE` | Vector 후보의 코사인 유사도 하한. 기본 `0.25`, 범위 `0–1`. Memory·문서·Knowledge 개별 검색과 통합 검색·MCP 회상에 공통 적용한다. 설정 변경은 재시작 없이 다음 검색에 반영하며 다른 instance는 최대 5초 cache 지연이 있다. 키워드 일치는 이 하한과 독립적이다. |
 | Reranker | `RERANKER_BASE_URL` | `/rerank`를 제공하는 OpenRouter 또는 vLLM-compatible API base URL |
 | Reranker | `RERANKER_API_KEY` | Reranker provider의 선택형 Bearer credential |
 | Reranker | `RERANKER_MODEL` | 설정 시 권한 필터된 통합 Context·Memory 회상 후보의 2차 정렬 활성화 |
@@ -533,6 +534,9 @@ Worker가 비활성화된 상태에서 upload한 문서는 자동으로 `ready`�
 - `EMBEDDING_MODEL`이 없으면 lexical search만 사용하는 것이 정상이다.
 - Model을 설정했다면 `EMBEDDING_BASE_URL`과 선택형 credential을 확인한다.
 - 저장된 resource와 query가 같은 embedding model을 사용하는지 확인한다.
+- `EMBEDDING_DIM`이 양의 정수이면 provider가 차원 선택을 지원해야 한다. 지원하지 않으면 `native`로 설정한다. 검색은 model과 차원이 같은 vector만 비교하며 차원이 다른 자료도 키워드로 찾을 수 있다.
+- 모델 또는 차원을 바꿔도 전체 재색인·기존 데이터 삭제는 자동 실행하지 않는다. Memory는 제목·본문 revision 시 현재 설정으로 vector를 다시 생성한다. 문서와 Knowledge의 기존 vector는 별도 재생성 절차를 마련한 뒤 설정을 전환하라.
+- `EMBEDDING_MIN_SCORE`는 실제 코사인 유사도 기준으로 대표 질의의 관련·무관 자료 점수를 비교해 조정한다. 모델이 달라지면 점수 분포도 달라지므로 다른 모델의 하한을 그대로 옮기지 마라. Reranker의 `RERANKER_MIN_SCORE`와는 별도 단계다.
 - Provider가 OpenAI-compatible embeddings API를 지원하는지 확인한다.
 
 Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node 생성 또는 문서 처리와 semantic query를 실패시킬 수 있다. Provider를 사용하지 않을 계획이면 `EMBEDDING_MODEL`을 비워 lexical-only 모드로 실행하라. Reranker 장애는 통합 검색·Memory 회상을 실패시키지 않고 권한 필터가 적용된 hybrid 순위로 복귀한다. 반복 fallback은 `context reranking unavailable` log와 provider 상태를 확인하라.

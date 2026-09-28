@@ -13,6 +13,7 @@ import { buildSearchKnowledgeNodes } from "@/application/knowledge/search-knowle
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import type { MemoryEmbedding } from "@/domain/memory/memory";
 import { observeRetrieval } from "@/infrastructure/observability/telemetry";
+import { getEffectiveEmbeddingMinimumScore } from "./runtime-settings";
 
 import {
   documentRepository,
@@ -47,6 +48,7 @@ export const createKnowledgeEdgeRecord = buildCreateKnowledgeEdge({
 });
 
 const searchKnowledgeNodeRecordsBase = buildSearchKnowledgeNodes({
+  minimumVectorScore: getEffectiveEmbeddingMinimumScore,
   repository: knowledgeGraphRepository,
   ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
 });

@@ -13,6 +13,7 @@ import { observeRetrieval } from "@/infrastructure/observability/telemetry";
 
 import { memoryRepository, textEmbeddingService, ingestionReceiptRepository } from "./container";
 import { ingestionFingerprint } from "./ingestion-fingerprint";
+import { getEffectiveEmbeddingMinimumScore } from "./runtime-settings";
 
 const clock = () => new Date();
 
@@ -41,6 +42,7 @@ export const archiveMemoryRecord = buildArchiveMemory({
 });
 
 const searchMemoryRecordsBase = buildSearchMemories({
+  minimumVectorScore: getEffectiveEmbeddingMinimumScore,
   clock,
   repository: memoryRepository,
   ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})

@@ -14,6 +14,19 @@ import {
 describe("runtime settings cache", () => {
   beforeEach(() => { Reflect.deleteProperty(globalThis, Symbol.for("agent-memory.runtime-settings.base-environment")); });
   afterEach(() => { vi.unstubAllEnvs(); });
+  it("refreshes the embedding floor across requests without applying dimension changes live", async () => {
+    vi.stubEnv("AUTH_PASSWORD", "true");
+    vi.stubEnv("EMBEDDING_DIM", "native");
+    vi.stubEnv("EMBEDDING_MIN_SCORE", "0.25");
+    vi.resetModules();
+    get.mockResolvedValue({ overrides: { EMBEDDING_MIN_SCORE: "0.2", EMBEDDING_DIM: "1024" } });
+    const runtime = await import("@/lib/runtime-settings");
+    expect(await runtime.getEffectiveEmbeddingMinimumScore()).toBe(0.2);
+    get.mockResolvedValue({ overrides: { EMBEDDING_MIN_SCORE: "0.7", EMBEDDING_DIM: "1024" } });
+    await runtime.applyLiveRuntimeSettingsOverrides();
+    expect(await runtime.getEffectiveEmbeddingMinimumScore()).toBe(0.7);
+    expect(process.env.EMBEDDING_DIM).toBe("native");
+  });
   it("does not reinstall a stale read after an override is saved", async () => {
     invalidateRuntimeSettingsCache();
     let finishRead!: (value: unknown) => void;

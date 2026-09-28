@@ -144,6 +144,7 @@ describe("document access", () => {
       .mockResolvedValue({ model: "embedding-model", values: [1, 0] });
     const searchDocuments = buildSearchDocuments({
       repository: repository({ search }),
+      minimumVectorScore: async () => 0.6,
       embeddingService: { embed, embedMany: vi.fn() }
     });
 
@@ -159,7 +160,8 @@ describe("document access", () => {
         access: memberAccess,
         query: "rollback",
         limit: 5,
-        queryEmbedding: { model: "embedding-model", values: [1, 0] }
+        queryEmbedding: { model: "embedding-model", values: [1, 0] },
+        minimumVectorScore: 0.6
       })
     );
   });
