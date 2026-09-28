@@ -489,6 +489,12 @@ DB dump와 object mirror 전체를 하나의 transaction으로 묶지 않으므�
 
 ## 장애 대응
 
+### Pod는 Running이지만 초기화 오류로 모든 요청이 실패함
+
+Production 초기화 실패는 안전한 `runtime initialization failed` 로그와 exit code `1`로 종료하며 Kubernetes가 process를 다시 시작한다. PostgreSQL·Neo4j 또는 설정 문제를 해결한 뒤 Pod readiness 복구를 확인한다. 초기화 완료 후 의존성 장애는 readiness만 실패시키고 TCP liveness로 재시작하지 않는다.
+
+이 동작을 포함하지 않는 기존 image에서 `An error occurred while loading instrumentation hook`이 반복되면, Next.js가 최초 초기화 실패를 보존하는 상태일 수 있다. 해당 Pod에서 DB 연결이 복구되었더라도 HTTP `500`이 지속되므로 의존성 복구를 먼저 확인하고 명시적으로 승인된 Pod 재시작을 수행한다. Readiness와 liveness를 같은 의존성 검사로 바꾸지 마라.
+
 ### `column ... does not exist` 또는 `relation ... does not exist`
 
 Schema fingerprint 불일치 또는 application과 초기화 CLI가 서로 다른 DB를 사용했는지 확인한다. [CLI 환경 변수 처리](#database-초기화)에 따라 대상 `DATABASE_URL`을 먼저 일치시킨다.
