@@ -11,6 +11,7 @@ interface TextEmbeddingServiceConfiguration {
   readonly apiKey?: string;
   readonly baseUrl: string;
   readonly model: string;
+  readonly dimensions?: number;
   readonly requestLimiter?: AiRequestLimiter;
   readonly request?: typeof fetch;
 }
@@ -43,10 +44,17 @@ export function createTextEmbeddingService(
   const model = requiredSetting(configuration.model, "embedding model");
   const apiKey = configuration.apiKey?.trim();
   const request = configuration.request ?? fetch;
+  const dimensions = configuration.dimensions;
+  if (dimensions !== undefined && (!Number.isSafeInteger(dimensions) || dimensions < 1)) {
+    throw new Error("embedding dimensions must be a positive integer");
+  }
 
   async function requestEmbeddings(texts: readonly string[]) {
     const response = await request(endpoint, {
-      body: JSON.stringify({ input: [...texts], model }),
+      body: JSON.stringify({
+        input: [...texts], model, encoding_format: "float",
+        ...(dimensions !== undefined ? { dimensions } : {})
+      }),
       headers: {
         "Content-Type": "application/json",
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
@@ -78,6 +86,12 @@ export function createTextEmbeddingService(
         "embedding response count does not match inputs",
         { code: "EMBEDDING_RESPONSE_COUNT_MISMATCH" }
       );
+    }
+    const expectedDimensions = dimensions ?? ordered[0]?.embedding.length;
+    if (ordered.some(({ embedding }) => embedding.length !== expectedDimensions)) {
+      throw new SafeOperationalError("embedding response dimensions do not match", {
+        code: "EMBEDDING_RESPONSE_DIMENSION_MISMATCH"
+      });
     }
     return ordered.map(({ embedding }) => ({ model, values: embedding }));
   }

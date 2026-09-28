@@ -30,7 +30,8 @@ describe("text embedding service", () => {
       expect.objectContaining({
         body: JSON.stringify({
           input: ["first", "second"],
-          model: "openai/text-embedding-3-small"
+          model: "openai/text-embedding-3-small",
+          encoding_format: "float"
         }),
         headers: {
           Authorization: "Bearer test-api-key",
@@ -62,6 +63,31 @@ describe("text embedding service", () => {
         headers: { "Content-Type": "application/json" }
       })
     );
+  });
+
+  it("requests explicit dimensions and verifies the returned width", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({ data: [{ embedding: [0.1, 0.2], index: 0 }] })
+    );
+    const service = createTextEmbeddingService({ baseUrl: "http://embedding.test/v1", model: "model", dimensions: 2, request });
+    await expect(service.embed("input")).resolves.toMatchObject({ values: [0.1, 0.2] });
+    expect(JSON.parse(request.mock.calls[0]![1]!.body as string)).toEqual({ input: ["input"], model: "model", encoding_format: "float", dimensions: 2 });
+  });
+
+  it("rejects a provider that ignores the requested dimensions", async () => {
+    const service = createTextEmbeddingService({
+      baseUrl: "http://embedding.test/v1", model: "model", dimensions: 3,
+      request: vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [{ embedding: [0.1, 0.2], index: 0 }] }))
+    });
+    await expect(service.embed("private input")).rejects.toMatchObject({ code: "EMBEDDING_RESPONSE_DIMENSION_MISMATCH" });
+  });
+
+  it("rejects inconsistent native dimensions within a batch", async () => {
+    const service = createTextEmbeddingService({
+      baseUrl: "http://embedding.test/v1", model: "model",
+      request: vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [{ embedding: [0.1], index: 0 }, { embedding: [0.1, 0.2], index: 1 }] }))
+    });
+    await expect(service.embedMany(["first", "second"])).rejects.toMatchObject({ code: "EMBEDDING_RESPONSE_DIMENSION_MISMATCH" });
   });
 
   it("does not expose input or credentials in request errors", async () => {

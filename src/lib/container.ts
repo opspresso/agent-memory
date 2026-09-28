@@ -1,4 +1,5 @@
 import { readS3Configuration } from "./s3-configuration";
+import { readEmbeddingDimensions } from "./embedding-configuration";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createOrganizationAgentTokenRepository } from "@/infrastructure/database/repositories/organization-agent-token-repository";
 import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
@@ -103,6 +104,7 @@ function createConfiguredTextEmbeddingService() {
     apiKey: process.env.EMBEDDING_API_KEY,
     baseUrl: embeddingBaseUrl,
     model: embeddingModel,
+    dimensions: readEmbeddingDimensions(),
     requestLimiter: aiRequestLimiter
   });
 }

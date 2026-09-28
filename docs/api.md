@@ -141,6 +141,8 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 
 저장 시 서버 시작과 동일한 runtime 검증을 수행하며 모든 로그인 수단을 비활성화하는 변경은 거부한다. AI endpoint 변경에는 해당 API key의 명시적 입력·제거 또는 env 쌍으로의 reset이 필요하다. 마스킹된 key를 재전송하는 것은 새 endpoint에 대한 credential 입력으로 인정하지 않는다.
 
+`EMBEDDING_DIM`은 `native`(기본값) 또는 양의 정수 문자열을 받는다. 변경 후 application·worker 재시작이 필요하며 기존 embedding을 자동 재생성하지 않는다. Provider가 명시한 차원과 다른 vector를 반환하면 embedding 작업은 실패한다.
+
 ### HTTP 오류와 요청 크기
 
 JSON body를 읽는 조직 API는 UTF-8 JSON을 요구하며 전체 body를 1 MiB로 제한한다. Multipart 문서 업로드의 별도 제한은 [문서](#문서)를 따른다. MCP transport의 오류와 도구 오류는 [MCP](#mcp)를 따른다.

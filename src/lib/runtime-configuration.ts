@@ -7,6 +7,7 @@ import { readKnowledgeExtractionLanguage } from "./knowledge-extraction-configur
 import { assertProductionConfiguration } from "./production-config";
 import { readNeo4jConfiguration } from "./neo4j-configuration";
 import { readKnowledgeVerificationConfiguration } from "./knowledge-verification-configuration";
+import { readEmbeddingDimensions } from "./embedding-configuration";
 
 function paired(
   environment: Readonly<Record<string, string | undefined>>,
@@ -41,6 +42,7 @@ function booleanSetting(
 export function validateRuntimeEnvironment(
   environment: Readonly<Record<string, string | undefined>>
 ): void {
+  readEmbeddingDimensions(environment);
   readKnowledgeEnrichmentConcurrency(environment);
   readKnowledgeExtractionLanguage(environment);
   readKnowledgeVerificationConfiguration(environment);

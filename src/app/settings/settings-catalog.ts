@@ -5,7 +5,7 @@ export type ApplicationSection = typeof applicationSections[number];
 export type SettingsSection = "general" | "ontology" | ApplicationSection;
 
 export const settingGroups = [
-  { section: "ai", key: "embedding", names: ["EMBEDDING_BASE_URL", "EMBEDDING_MODEL", "EMBEDDING_API_KEY"] },
+  { section: "ai", key: "embedding", names: ["EMBEDDING_BASE_URL", "EMBEDDING_MODEL", "EMBEDDING_DIM", "EMBEDDING_API_KEY"] },
   { section: "ai", key: "reranker", names: ["RERANKER_BASE_URL", "RERANKER_MODEL", "RERANKER_API_KEY", "RERANKER_TIMEOUT_MS", "RERANKER_MIN_SCORE"] },
   { section: "ai", key: "extraction", names: ["KNOWLEDGE_EXTRACTION_BASE_URL", "KNOWLEDGE_EXTRACTION_MODEL", "KNOWLEDGE_EXTRACTION_LANGUAGE", "KNOWLEDGE_EXTRACTION_API_KEY"] },
   { section: "ai", key: "verification", names: ["KNOWLEDGE_VERIFICATION_BASE_URL", "KNOWLEDGE_VERIFICATION_MODEL", "KNOWLEDGE_VERIFICATION_API_KEY"] },

@@ -14,6 +14,7 @@ export const appSettingDefinitions = [
   { name: "EMBEDDING_BASE_URL", restartRequired: true },
   { name: "EMBEDDING_API_KEY", secret: true, restartRequired: true },
   { name: "EMBEDDING_MODEL", restartRequired: true },
+  { name: "EMBEDDING_DIM", defaultValue: "native", restartRequired: true },
   { name: "RERANKER_BASE_URL", restartRequired: true },
   { name: "RERANKER_API_KEY", secret: true, restartRequired: true },
   { name: "RERANKER_MODEL", restartRequired: true },
