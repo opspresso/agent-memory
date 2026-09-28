@@ -333,7 +333,7 @@ export const en = {
   "settings.ux.organizationSaveHint": "Save organization profile and knowledge dictionary changes together.",
   "settings.ux.leave": "You have unsaved settings. Discard them and leave this page?",
   "settings.ux.group.embedding": "Semantic search",
-  "settings.ux.groupBody.embedding": "Add semantic search alongside keyword search. Set dimensions to a positive integer or native for the model's default. Changing the model or dimensions requires regenerating stored embeddings. When changing the API URL, explicitly replace or clear the API key.",
+  "settings.ux.groupBody.embedding": "Add semantic search alongside keyword search. Set dimensions to an integer from 1 to 16,000 or native for the model's default. Changing the model or dimensions requires regenerating stored embeddings. When changing the API URL, explicitly replace or clear the API key.",
   "settings.ux.group.reranker": "Search reranking",
   "settings.ux.groupBody.reranker": "Rerank unified search and Memory recall. Configure the URL and model together; leave minimum relevance empty to adjust ranking only.",
   "settings.ux.group.extraction": "Knowledge extraction and curation",

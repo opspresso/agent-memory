@@ -334,7 +334,7 @@ export const ko: Messages = {
   "settings.ux.organizationSaveHint": "조직 프로필과 지식 사전의 변경을 함께 저장합니다.",
   "settings.ux.leave": "저장하지 않은 설정 변경이 있습니다. 변경을 버리고 이동하시겠습니까?",
   "settings.ux.group.embedding": "의미 검색",
-  "settings.ux.groupBody.embedding": "모델을 설정하면 키워드와 의미 검색을 함께 사용합니다. 차원은 양의 정수 또는 모델 기본값을 사용하는 native로 설정합니다. 모델이나 차원을 변경하면 저장된 embedding을 다시 생성해야 합니다. API 주소를 바꿀 때는 키를 다시 입력하거나 지워야 합니다.",
+  "settings.ux.groupBody.embedding": "모델을 설정하면 키워드와 의미 검색을 함께 사용합니다. 차원은 1부터 16,000까지의 정수 또는 모델 기본값을 사용하는 native로 설정합니다. 모델이나 차원을 변경하면 저장된 embedding을 다시 생성해야 합니다. API 주소를 바꿀 때는 키를 다시 입력하거나 지워야 합니다.",
   "settings.ux.group.reranker": "검색 결과 재정렬",
   "settings.ux.groupBody.reranker": "통합 검색과 Memory 회상 결과를 재정렬합니다. 주소와 모델을 함께 설정하며 최소 관련도를 비우면 순위만 조정합니다.",
   "settings.ux.group.extraction": "지식 추출과 자동 검토",

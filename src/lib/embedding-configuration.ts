@@ -1,4 +1,5 @@
 import { defaultEmbeddingMinimumScore } from "@/domain/shared/semantic-search";
+import { maximumEmbeddingDimensions } from "@/domain/shared/text-embedding-service";
 
 export function readEmbeddingDimensions(
   environment: Readonly<Record<string, string | undefined>> = process.env
@@ -8,8 +9,8 @@ export function readEmbeddingDimensions(
     return undefined;
   }
   const dimensions = Number(raw);
-  if (!Number.isSafeInteger(dimensions) || dimensions < 1) {
-    throw new Error("EMBEDDING_DIM must be native or a positive integer");
+  if (!Number.isSafeInteger(dimensions) || dimensions < 1 || dimensions > maximumEmbeddingDimensions) {
+    throw new Error(`EMBEDDING_DIM must be native or an integer between 1 and ${maximumEmbeddingDimensions}`);
   }
   return dimensions;
 }

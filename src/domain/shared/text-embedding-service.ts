@@ -1,6 +1,8 @@
 import type { MemoryEmbedding } from "@/domain/memory/memory";
 import type { AiRequestQuotaKey } from "./ai-request-limiter";
 
+export const maximumEmbeddingDimensions = 16_000;
+
 export interface TextEmbeddingService {
   embed(text: string, quotaKey?: AiRequestQuotaKey): Promise<MemoryEmbedding>;
   embedMany(

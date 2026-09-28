@@ -90,6 +90,20 @@ describe("text embedding service", () => {
     await expect(service.embedMany(["first", "second"])).rejects.toMatchObject({ code: "EMBEDDING_RESPONSE_DIMENSION_MISMATCH" });
   });
 
+  it.each([[0, 0], [1e-100, 0], [1e100, 0]])("rejects a vector that is invalid in float32 storage: %j", async (...values) => {
+    const service = createTextEmbeddingService({ baseUrl: "http://embedding.test/v1", model: "model",
+      request: vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [{ embedding: values, index: 0 }] })) });
+    await expect(service.embed("input")).rejects.toMatchObject({ code: "EMBEDDING_RESPONSE_INVALID" });
+  });
+
+  it("rejects dimensions and native responses that exceed storage capacity", async () => {
+    expect(() => createTextEmbeddingService({ baseUrl: "http://embedding.test/v1", model: "model", dimensions: 16001 }))
+      .toThrow("embedding dimensions must be an integer between 1 and 16000");
+    const service = createTextEmbeddingService({ baseUrl: "http://embedding.test/v1", model: "model",
+      request: vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [{ embedding: new Array(16001).fill(0.1), index: 0 }] })) });
+    await expect(service.embed("input")).rejects.toMatchObject({ code: "EMBEDDING_RESPONSE_INVALID" });
+  });
+
   it("does not expose input or credentials in request errors", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json(

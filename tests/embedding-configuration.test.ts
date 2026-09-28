@@ -6,11 +6,11 @@ describe("embedding dimensions", () => {
   it.each([undefined, "native", " NATIVE "])("omits the provider dimension for %s", (value) => {
     expect(readEmbeddingDimensions({ EMBEDDING_DIM: value })).toBeUndefined();
   });
-  it.each(["1", "1024", " 1536 "])("reads an explicit positive dimension %s", (value) => {
+  it.each(["1", "1024", " 1536 ", "16000"])("reads an explicit positive dimension %s", (value) => {
     expect(readEmbeddingDimensions({ EMBEDDING_DIM: value })).toBe(Number(value));
   });
-  it.each(["", "0", "-1", "1.5", "NaN", "Infinity", "9007199254740992"])("rejects invalid dimensions %s at the settings boundary", (value) => {
-    expect(() => validateRuntimeEnvironment({ AUTH_PASSWORD: "true", EMBEDDING_DIM: value })).toThrow("EMBEDDING_DIM must be native or a positive integer");
+  it.each(["", "0", "-1", "1.5", "NaN", "Infinity", "16001", "9007199254740992"])("rejects invalid dimensions %s at the settings boundary", (value) => {
+    expect(() => validateRuntimeEnvironment({ AUTH_PASSWORD: "true", EMBEDDING_DIM: value })).toThrow("EMBEDDING_DIM must be native or an integer between 1 and 16000");
   });
 });
 

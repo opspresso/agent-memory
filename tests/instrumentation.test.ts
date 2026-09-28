@@ -35,6 +35,7 @@ vi.mock("@/lib/metrics-auth", () => ({ readMetricsToken: mocks.readMetricsToken 
 vi.mock("@/lib/document-worker", () => ({ startDocumentWorker: mocks.startWorker }));
 
 describe("instrumentation startup", () => {
+  const processExited = new Error("process exited with failure");
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -45,7 +46,7 @@ describe("instrumentation startup", () => {
     vi.stubEnv("NEXT_RUNTIME", "nodejs");
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("DOCUMENT_WORKER_ENABLED", "true");
-    vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    vi.spyOn(process, "exit").mockImplementation(() => { throw processExited; });
   });
 
   it("completes initialization without terminating a healthy process", async () => {
@@ -66,7 +67,7 @@ describe("instrumentation startup", () => {
     const failure = new Error("dependency unavailable");
     operation.mockRejectedValue(failure);
     const { register } = await import("@/instrumentation");
-    await expect(register()).rejects.toBe(failure);
+    await expect(register()).rejects.toBe(processExited);
     expect(mocks.logError).toHaveBeenCalledWith({ err: failure }, "runtime initialization failed");
     expect(mocks.flush).toHaveBeenCalledOnce();
     expect(process.exit).toHaveBeenCalledWith(1);
@@ -76,7 +77,7 @@ describe("instrumentation startup", () => {
   it("does not initialize later dependencies after a database failure", async () => {
     mocks.prepareDatabase.mockRejectedValue(new Error("connection terminated unexpectedly"));
     const { register } = await import("@/instrumentation");
-    await expect(register()).rejects.toThrow("connection terminated unexpectedly");
+    await expect(register()).rejects.toBe(processExited);
     expect(mocks.applySettings).not.toHaveBeenCalled();
     expect(mocks.startWorker).not.toHaveBeenCalled();
     expect(process.exit).toHaveBeenCalledWith(1);
@@ -89,6 +90,16 @@ describe("instrumentation startup", () => {
     const { register } = await import("@/instrumentation");
     await expect(register()).rejects.toBe(failure);
     expect(process.exit).not.toHaveBeenCalled();
+  });
+
+  it.each(["error", "flush"] as const)("still exits if the failure logger's %s operation throws", async (operation) => {
+    const startupFailure = new Error("dependency unavailable");
+    mocks.prepareDatabase.mockRejectedValue(startupFailure);
+    (operation === "error" ? mocks.logError : mocks.flush).mockImplementation(() => { throw new Error("logger unavailable"); });
+    const { register } = await import("@/instrumentation");
+    await expect(register()).rejects.toBe(processExited);
+    expect(process.exit).toHaveBeenCalledWith(1);
+    expect(mocks.logError).toHaveBeenCalledWith({ err: startupFailure }, "runtime initialization failed");
   });
 
   it("does not initialize the Node.js runtime in an edge process", async () => {

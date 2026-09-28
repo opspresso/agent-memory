@@ -1523,6 +1523,13 @@ describe("PostgreSQL schema", () => {
     // The weak vector would outrank the keyword hit if filtering ran after LIMIT.
     const limitedHits = await repository.search({ ...memorySearch, limit: 1, query: "rollback", queryEmbedding: { model: "test-embedding", values: [0, 0, 1] } });
     expect(limitedHits.map((hit) => hit.memory.id)).toEqual([memoryId]);
+    await pool.query("UPDATE memories SET embedding='[0,0,0]'::vector WHERE organization_id=$1 AND id=$2", [organization, memoryId]);
+    const zeroVectorHits = await repository.search({ ...memorySearch, minimumVectorScore: 0, queryEmbedding: { model: "test-embedding", values: [1, 0, 0] } });
+    expect(zeroVectorHits.map((hit) => hit.memory.id)).not.toContain(memoryId);
+    const zeroVectorKeywordHits = await repository.search({ ...memorySearch, query: "rollback", queryEmbedding: { model: "test-embedding", values: [0, 0, 1] } });
+    expect(zeroVectorKeywordHits).toMatchObject([{ memory: { id: memoryId }, vectorScore: 0 }]);
+    expect(await repository.search({ ...memorySearch, minimumVectorScore: 0, queryEmbedding: { model: "test-embedding", values: [0, 0, 0] } })).toEqual([]);
+    await pool.query("UPDATE memories SET embedding='[0.9,0.1,0]'::vector WHERE organization_id=$1 AND id=$2", [organization, memoryId]);
     await expect(repository.findById(organization, memoryId)).resolves.toMatchObject({
       accessGrants: [
         { principalKind: "user", userId: otherUser, permission: "write" }

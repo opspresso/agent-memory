@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
+import { maximumEmbeddingDimensions, type TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 import type {
   AiRequestLimiter,
   AiRequestQuotaKey
@@ -19,7 +19,9 @@ interface TextEmbeddingServiceConfiguration {
 const embeddingResponseSchema = z.object({
   data: z.array(
     z.object({
-      embedding: z.array(z.number()).min(1),
+      embedding: z.array(z.number()).min(1).max(maximumEmbeddingDimensions)
+        .refine((values) => values.every((value) => Number.isFinite(Math.fround(value))) &&
+          values.some((value) => Math.fround(value) !== 0), "embedding must contain finite nonzero float32 values"),
       index: z.number().int().nonnegative()
     })
   )
@@ -45,8 +47,8 @@ export function createTextEmbeddingService(
   const apiKey = configuration.apiKey?.trim();
   const request = configuration.request ?? fetch;
   const dimensions = configuration.dimensions;
-  if (dimensions !== undefined && (!Number.isSafeInteger(dimensions) || dimensions < 1)) {
-    throw new Error("embedding dimensions must be a positive integer");
+  if (dimensions !== undefined && (!Number.isSafeInteger(dimensions) || dimensions < 1 || dimensions > maximumEmbeddingDimensions)) {
+    throw new Error(`embedding dimensions must be an integer between 1 and ${maximumEmbeddingDimensions}`);
   }
 
   async function requestEmbeddings(texts: readonly string[]) {

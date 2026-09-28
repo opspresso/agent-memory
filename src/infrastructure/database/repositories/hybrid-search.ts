@@ -51,7 +51,9 @@ export function hybridSearchExpressions(
   const vectorLiteral = `[${input.queryEmbedding.values.join(",")}]`;
   const compatibleEmbedding = sql`${input.embedding} IS NOT NULL
     AND ${input.embeddingModel} = ${input.queryEmbedding.model}
-    AND vector_dims(${input.embedding}) = ${input.queryEmbedding.values.length}`;
+    AND vector_dims(${input.embedding}) = ${input.queryEmbedding.values.length}
+    AND vector_norm(${input.embedding}) > 0
+    AND vector_norm(${vectorLiteral}::vector) > 0`;
   const vectorScore = sql<number>`CASE
     WHEN ${compatibleEmbedding}
     THEN GREATEST(0, LEAST(1, 1 - (${input.embedding} <=> ${vectorLiteral}::vector)))

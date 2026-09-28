@@ -189,7 +189,7 @@ k3s의 Neo4j 서비스·credential 참조·volume 설정은 `../argocd-env-demo/
 | Embedding | `EMBEDDING_BASE_URL` | OpenAI-compatible API base URL. OpenRouter는 `https://openrouter.ai/api/v1` 사용 |
 | Embedding | `EMBEDDING_API_KEY` | Embedding provider의 Bearer credential. 인증 없는 local endpoint에서는 생략 가능 |
 | Embedding | `EMBEDDING_MODEL` | 설정 시 Memory, document chunk, Knowledge node embedding과 semantic search 활성화 |
-| Embedding | `EMBEDDING_DIM` | 양의 정수 또는 `native`(기본값). 양의 정수는 provider에 `dimensions`로 요청하며 `native`는 파라미터를 생략한다. 모델이나 차원을 변경하면 기존 embedding을 다시 생성해야 한다. |
+| Embedding | `EMBEDDING_DIM` | `1–16,000` 정수 또는 `native`(기본값). 정수는 provider에 `dimensions`로 요청하며 `native`는 파라미터를 생략한다. 모델이나 차원을 변경하면 기존 embedding을 다시 생성해야 한다. |
 | Embedding | `EMBEDDING_MIN_SCORE` | Vector 후보의 코사인 유사도 하한. 기본 `0.25`, 범위 `0–1`. Memory·문서·Knowledge 개별 검색과 통합 검색·MCP 회상에 공통 적용한다. 설정 변경은 재시작 없이 다음 검색에 반영하며 다른 instance는 최대 5초 cache 지연이 있다. 키워드 일치는 이 하한과 독립적이다. |
 | Reranker | `RERANKER_BASE_URL` | `/rerank`를 제공하는 OpenRouter 또는 vLLM-compatible API base URL |
 | Reranker | `RERANKER_API_KEY` | Reranker provider의 선택형 Bearer credential |

@@ -141,7 +141,7 @@ Organization `admin` 또는 `owner`는 `Agent 연결` 화면이나 `POST /api/ag
 
 저장 시 서버 시작과 동일한 runtime 검증을 수행하며 모든 로그인 수단을 비활성화하는 변경은 거부한다. AI endpoint 변경에는 해당 API key의 명시적 입력·제거 또는 env 쌍으로의 reset이 필요하다. 마스킹된 key를 재전송하는 것은 새 endpoint에 대한 credential 입력으로 인정하지 않는다.
 
-`EMBEDDING_DIM`은 `native`(기본값) 또는 양의 정수 문자열을 받는다. 변경 후 application·worker 재시작이 필요하며 기존 embedding을 자동 재생성하지 않는다. Provider가 명시한 차원과 다른 vector를 반환하면 embedding 작업은 실패한다.
+`EMBEDDING_DIM`은 `native`(기본값) 또는 `1–16,000` 정수 문자열을 받는다. 변경 후 application·worker 재시작이 필요하며 기존 embedding을 자동 재생성하지 않는다. Provider가 명시한 차원과 다른 vector, 16,000차원 초과 vector, float32로 표현할 수 없는 값 또는 영벡터를 반환하면 embedding 작업은 실패한다.
 
 `EMBEDDING_MIN_SCORE`는 `0–1` 숫자 문자열이며 기본값은 `0.25`다. DB override가 env보다 우선하고 `reset`으로 env·기본값에 복귀한다. 변경은 다음 검색부터 반영되며 다른 instance의 cache는 최대 5초 유지된다. 재시작·재색인은 필요 없다.
 
@@ -636,7 +636,7 @@ curl \
 | 후보 수집 | Reranker 활성 시 종류별 최대 `min(100, max(12, limit × 4))`개를 조회한다. |
 | 재정렬 입력 | 조회 후보에서 source별 순위를 유지하며 번갈아 선택하고, 전체를 같은 후보 예산 이내로 제한한다. 한 종류만 있으면 해당 종류에서 예산을 채운다. |
 | `counts` | 종류별 조회 후보 수. 선택된 재정렬 입력 수 또는 최종 반환 수와 다를 수 있다. |
-| Vector 후보 하한 | `EMBEDDING_MIN_SCORE`를 후보 수집의 `LIMIT` 전에 적용한다. 같은 model·차원의 vector만 비교하며 `vectorScore`는 코사인 유사도를 `0–1`로 제한한다. 키워드 일치는 vector 하한에 상관없이 후보로 남는다. |
+| Vector 후보 하한 | `EMBEDDING_MIN_SCORE`를 후보 수집의 `LIMIT` 전에 적용한다. 같은 model·차원의 nonzero vector만 비교하며 `vectorScore`는 코사인 유사도를 `0–1`로 제한한다. 키워드 일치는 vector 하한에 상관없이 후보로 남는다. |
 | 재정렬 최소 점수 | `RERANKER_MIN_SCORE`는 재정렬 성공 시에만 적용한다. 후보가 있어도 `hits`가 비어 있을 수 있다. |
 | Fallback | Reranker 장애·timeout·quota 초과 시 선택된 후보의 hybrid 순위로 복귀하며 재정렬 최소 점수 하한은 적용하지 않는다. Vector 후보 하한은 그대로 유지한다. |
 
