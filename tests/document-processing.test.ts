@@ -127,6 +127,48 @@ describe("document processing", () => {
     }
   });
 
+  it("packs consecutive heading-only siblings with their shared parent context", () => {
+    const source = "# Handbook\n\n## References\n\n### First reference\n\n### Second reference\n\n### Third reference";
+    const chunks = chunkDocumentText(source, "text/markdown");
+
+    expect(chunks).toHaveLength(1);
+    const chunk = chunks[0]!;
+    const context = chunk.contextSpans!.map(({ start, end }) => source.slice(start, end)).join("\n");
+    expect(context).toBe("# Handbook\n## References");
+    expect(chunk.content).toBe(`${context}\n\n${source.slice(chunk.start, chunk.end)}`);
+    expect(chunk.content).toContain("### First reference\n\n### Second reference\n\n### Third reference");
+  });
+
+  it("ends a heading-only group before a body or a different parent", () => {
+    const source = "# Handbook\n\n## References\n\n### First\n\n### Second\n\n### Third\n\nThird has its own body.\n\n## Other\n\n### Fourth\n\n### Fifth\n\n# Another owner";
+    const chunks = chunkDocumentText(source, "text/markdown");
+
+    expect(chunks).toHaveLength(4);
+    expect(chunks[0]?.content).toBe("# Handbook\n## References\n\n### First\n\n### Second");
+    expect(chunks[1]?.content).toBe("# Handbook\n## References\n\n### Third\n\nThird has its own body.");
+    expect(chunks[2]?.content).toBe("# Handbook\n## Other\n\n### Fourth\n\n### Fifth");
+    expect(chunks[3]?.content).toBe("# Another owner");
+    expect(chunkDocumentText("# First owner\n\n# Second owner", "text/markdown"))
+      .toHaveLength(2);
+  });
+
+  it("bounds long heading-only groups without promoting a sibling to parent context", () => {
+    const source = `# Handbook\n\n## References\n\n${Array.from({ length: 100 }, (_, index) => `### Reference ${index} ${"detail ".repeat(8)}`).join("\n\n")}`;
+    const chunks = chunkDocumentText(source, "text/markdown");
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.length).toBeLessThan(10);
+    for (const chunk of chunks) {
+      const context = chunk.contextSpans!.map(({ start, end }) => source.slice(start, end)).join("\n");
+      expect(context).toBe("# Handbook\n## References");
+      expect(chunk.content).toBe(`${context}\n\n${source.slice(chunk.start, chunk.end)}`);
+      expect(chunk.content.length).toBeLessThanOrEqual(2_000);
+    }
+    for (let index = 0; index < 100; index += 1) {
+      expect(chunks.some((chunk) => chunk.content.includes(`### Reference ${index} `))).toBe(true);
+    }
+  });
+
   it("resets heading ownership for another profile and ignores headings in fenced examples", () => {
     const source = "# 김하늘\n\n## 기술\n\n```md\n# 다른 사람\n```\n\nTypeScript\n\n# 박서준\n\n## 경력\n\n### 달빛회사\n\n엔지니어";
     const chunks = chunkDocumentText(source, "text/markdown");
@@ -579,6 +621,53 @@ describe("document processing", () => {
       0
     );
     expect(completeProcessing.mock.calls[0]?.[1]).toHaveLength(embeddedCount);
+  });
+
+  it("processes Markdown with more than 512 short headings within the chunk budget", async () => {
+    const source = Array.from({ length: 40 }, (_, index) =>
+      `# Owner ${index}\n\n## References\n\n${Array.from({ length: 16 }, (_, reference) => `### Reference ${index}-${reference}`).join("\n\n")}`
+    ).join("\n\n");
+    const document = createDocument({
+      id: "document-1",
+      scope: { kind: "organization", organizationId: "organization-1" },
+      title: "Heading-dense handbook",
+      objectKey: "objects/document-1",
+      checksum: "a".repeat(64),
+      mimeType: "text/markdown",
+      sizeBytes: new TextEncoder().encode(source).byteLength,
+      createdBy: "user-1",
+      now
+    });
+    const completeProcessing = vi.fn<DocumentRepository["completeProcessing"]>();
+    const failProcessing = vi.fn<DocumentRepository["failProcessing"]>();
+    const embedMany = vi.fn(async (texts: readonly string[]) =>
+      texts.map(() => ({ model: "embedding-model", values: [1, 0] }))
+    );
+    let nextChunkId = 0;
+    const process = buildProcessDocument({
+      clock: () => now,
+      generateId: () => `chunk-${nextChunkId++}`,
+      objectStorage: objectStorage({ get: vi.fn().mockResolvedValue(new TextEncoder().encode(source)) }),
+      repository: repository({
+        claimForProcessing: vi.fn().mockResolvedValue({ document, leaseId: "lease-1" }),
+        completeProcessing,
+        failProcessing
+      }),
+      textExtractor: createPlainTextExtractor(),
+      embeddingService: { embed: vi.fn(), embedMany }
+    });
+
+    await process("organization-1", "document-1");
+
+    const chunks = completeProcessing.mock.calls[0]![1];
+    expect(chunks).toHaveLength(40);
+    expect(embedMany).toHaveBeenCalledOnce();
+    expect(failProcessing).not.toHaveBeenCalled();
+    for (let index = 0; index < 40; index += 1) {
+      expect(chunks[index]?.content).toContain(`# Owner ${index}\n## References`);
+      expect(chunks[index]?.content).toContain(`### Reference ${index}-15`);
+      expect(chunks[index]?.embedding).toEqual({ model: "embedding-model", values: [1, 0] });
+    }
   });
 
   it("records a bounded failure when extraction fails", async () => {

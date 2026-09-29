@@ -103,17 +103,32 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
     chunks.push(...chunkText(normalized.slice(0, firstHeadingOffset)));
   }
   const ancestors: typeof headings = [];
-  headings.forEach((heading, index) => {
+  function isHeadingOnlyLeaf(index: number): boolean {
+    const heading = headings[index]!;
+    const next = headings[index + 1];
+    return (next?.level ?? 0) <= heading.level &&
+      !normalized.slice(heading.end, next?.start ?? normalized.length).trim();
+  }
+  for (let index = 0; index < headings.length; index += 1) {
+    const heading = headings[index]!;
     while (ancestors.length && ancestors.at(-1)!.level >= heading.level) ancestors.pop();
     const parents = [...ancestors];
     ancestors.push(heading);
     const sectionStart = heading.start;
-    const sectionEnd = headings[index + 1]?.start ?? normalized.length;
-    const section = normalized.slice(sectionStart, sectionEnd).trimEnd();
+    let sectionEnd = headings[index + 1]?.start ?? normalized.length;
     // Heading-only sections provide scope to their children, not separate facts.
-    if (!normalized.slice(heading.end, sectionEnd).trim() && (headings[index + 1]?.level ?? 0) > heading.level) return;
+    if (!normalized.slice(heading.end, sectionEnd).trim() && (headings[index + 1]?.level ?? 0) > heading.level) continue;
+    const firstIndex = index;
+    // Pack empty sibling sections without crossing an owner or a body boundary.
+    if (parents.length > 0 && isHeadingOnlyLeaf(index)) {
+      while (headings[index + 1]?.level === heading.level && isHeadingOnlyLeaf(index + 1)) index += 1;
+      sectionEnd = headings[index + 1]?.start ?? normalized.length;
+    }
+    const section = normalized.slice(sectionStart, sectionEnd).trimEnd();
     const sectionOffset = sectionStart + section.length - section.trimStart().length;
-    const path = ancestors.map((item) => item.text).join("\n");
+    // Siblings in a packed group are content, never ancestors of later chunks.
+    const continuationContext = index > firstIndex ? parents : ancestors;
+    const path = continuationContext.map((item) => item.text).join("\n");
     const headingContextBudget = 2_000 - path.length - 2;
     const repeatHeading =
       headingContextBudget >= 100 && path.length <= headingContextBudget;
@@ -130,7 +145,7 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
         : undefined
     );
     sectionChunks.forEach((chunk, chunkIndex) => {
-      const context = repeatHeading ? (chunkIndex === 0 ? parents : ancestors) : [];
+      const context = repeatHeading ? (chunkIndex === 0 ? parents : continuationContext) : [];
       const prefix = context.map((item) => item.text).join("\n");
       chunks.push({
         content: prefix ? `${prefix}\n\n${chunk.content}` : chunk.content,
@@ -139,7 +154,7 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
         ...(context.length ? { contextSpans: context.map(({ start, end }) => ({ start, end })) } : {})
       });
     });
-  });
+  }
   return chunks;
 }
 

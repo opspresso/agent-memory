@@ -409,6 +409,7 @@ AWS S3에서는 `S3_BUCKET`과 `S3_REGION`을 설정하고 `S3_ENDPOINT`, `S3_AC
 - 시작 전에 bucket이 존재하는지 확인하라. Compose에서는 `minio-init`이 `agent-memory` bucket을 만든다.
 - 실패한 문서는 retry API로 다시 처리할 수 있다. 반복 실패는 document의 `processingError`와 application log를 확인하라.
 - 추출 결과가 512 chunks를 넘으면 provider 호출 전에 실패한다. 이 한도는 작업량을 제한하며 S3·DB 지연을 포함한 전체 처리 시간이 15분 lease 안에 끝남을 보장하지는 않는다. 원본을 더 작은 문서로 나눈 뒤 다시 업로드하라.
+- Markdown에서 같은 부모·단계의 본문 없는 소제목이 연속되면 2,000자 예산 안에서 묶어 제목 수만으로 chunk 한도를 소모하지 않게 한다. 각 제목과 원문 범위를 보존하며 본문이 있는 섹션·최상위 제목은 별도로 처리한다.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
 - 지식 추출과 검증의 HTTP timeout은 요청당 3분이다. 로컬 모델의 긴 structured output 생성을 허용하면서 최대 세 요청이 15분 job expiration 안에서 끝나도록 제한한다. Provider 오류·timeout은 job 실패와 재시도로 남는다.
