@@ -6,7 +6,7 @@
 
 | 운영 작업 | 위치 |
 | --- | --- |
-| 로컬 실행·k3s 릴리즈 | [배포 형태](#배포-형태) |
+| 로컬 실행·alpha 릴리즈·prod 승격 | [배포 형태](#배포-형태) |
 | 설정값·필수 조합·override | [환경 변수](#환경-변수) |
 | 초기화 대상 확인 | [Database 초기화](#database-초기화) |
 | Worker·queue·종료 | [문서 worker와 object storage](#문서-worker와-object-storage) |
@@ -40,19 +40,20 @@ k3s의 PostgreSQL과 MinIO는 `agent-studio` namespace의 공유 서비스를 �
 
 ### 릴리즈와 환경별 배포
 
-릴리즈는 tag·GitHub Release·image 게시·alpha version 목록 갱신까지다. `agent-memory-k3s` Application의 `syncPolicy.automated`는 해제되어 있으므로 운영 반영에는 수동 Sync가 필요하다. Agent는 릴리즈 요청만으로 DB 초기화, Argo CD Sync, 운영 서비스 재시작·재생성을 실행하지 않는다.
+릴리즈는 tag·GitHub Release·image 게시·alpha version 목록 갱신까지다. 운영 반영은 대상 Application의 수동 Sync로 진행하며, 배포 전에 GitOps manifest와 실제 Argo CD 설정에서 자동 동기화가 해제되어 있는지 확인한다. 설정이 다르면 별도 승인 범위에서 먼저 조정한다. Agent는 릴리즈 요청만으로 DB 초기화, Argo CD Sync, 운영 서비스 재시작·재생성을 실행하지 않는다.
 
 릴리즈는 다음 순서로 진행한다.
 
 1. Pull request는 `.github/workflows/pr.yml`의 검증 job을 실행한다. `v*` tag push는 `.github/workflows/release.yml`에서 같은 검증을 통과한 뒤 Release job을 이어서 시작한다. 서비스 컨테이너를 포함한 모든 job은 Linux runner에서 실행한다.
 2. 검증 후 GitHub Release 생성과 image build가 독립 job으로 실행된다. Image는 ECR·GHCR에 `<tag>`와 `latest`로 게시한다.
 3. Image 게시 성공 후 `GHP_TOKEN`으로 `argocd-env-demo`에 project `agent-memory`, container `app`, phase `alpha`의 GitOps dispatch를 보낸다. `charts/agent-memory/values-alpha.yaml`과 `versions-alpha.json`에 새 tag가 반영됐는지 확인한다.
-4. `gitops-prod`는 alpha 전달 성공 후 `prod` Environment의 사용자 승인을 기다린다. 승인되면 같은 tag를 phase `prod`로 dispatch한다.
+4. `prod` job은 `alpha` job 성공 후 `prod` Environment의 사용자 승인을 기다린다. 승인되면 같은 tag를 phase `prod`로 dispatch한다.
 
-`prod` Environment의 required reviewer는 `nalbam`이다. Repository Settings → Environments →
-`prod`에서 관리하며, 릴리즈를 시작한 사용자도 직접 승인할 수 있다. Actions run의
-**Review deployments → prod → Approve and deploy**를 선택해야 `gitops-prod`가 실행된다.
-승인을 거절하면 prod dispatch는 실행되지 않는다. 승인 대기 중에도 alpha 배포는 완료된다.
+`prod` Environment의 required reviewer와 self-review 허용 여부는 GitHub Repository Settings →
+Environments → `prod`에서 확인한다. Workflow 파일은 Environment 연결만 선언하므로 사용자
+승인 보호 규칙이 실제로 설정되어 있어야 한다. 승인 권한이 있는 사용자가 Actions run의
+**Review deployments → prod → Approve and deploy**를 선택하면 `prod` job이 실행된다.
+승인을 거절하면 prod dispatch는 실행되지 않는다. Prod 승인 대기는 alpha tag 전달을 막지 않는다.
 
 prod dispatch는 기존 `argocd-env-demo`의 prod PR 절차를 사용한다. PR 반영과 Argo CD Sync는
 별도 단계이며, 이 job은 이미지 재빌드나 클러스터 Sync를 실행하지 않는다.
@@ -65,7 +66,7 @@ prod dispatch는 기존 `argocd-env-demo`의 prod PR 절차를 사용한다. PR 
 3. DB 준비 후 `agent-memory-k3s`만 수동 Sync하고 rollout 완료를 기다린다. 현재 rolling update 설정은 기존 Pod를 유지하므로 스키마 변경 시 구버전과 신버전을 동시에 실행하지 마라.
 4. 실제 container image, `https://memory.opsp.dev/api/health`, 로그인과 공개 화면의 version을 확인한다.
 
-Alpha 릴리즈 완료 조건은 verify·GitHub Release·image 게시·gitops job 성공과 alpha version 목록 갱신이다. Workflow 전체는 prod 승인 대기로 남을 수 있다. k3s rollout은 별도 작업이며 릴리즈 완료 조건에 포함하지 않는다. EKS는 `values-prod.yaml`로 별도 승격하며 `agent-memory-eks-demo`를 수동 Sync한다. EKS readiness 주소는 `https://memory.opspresso.com/api/health`이다. 두 환경의 image는 `linux/amd64` 노드에서 실행한다.
+Alpha 릴리즈 완료 조건은 verify·GitHub Release·image 게시·`alpha` job 성공과 alpha version 목록 갱신이다. Workflow 전체는 prod 승인 대기로 남을 수 있다. k3s rollout은 별도 작업이며 릴리즈 완료 조건에 포함하지 않는다. EKS는 `values-prod.yaml`로 별도 승격하며 `agent-memory-eks-demo`를 수동 Sync한다. EKS readiness 주소는 `https://memory.opspresso.com/api/health`이다. 두 환경의 image는 `linux/amd64` 노드에서 실행한다.
 
 ### 로컬 개발
 
@@ -244,7 +245,6 @@ k3s의 Neo4j 서비스·credential 참조·volume 설정은 `../argocd-env-demo/
 | 정적 credential 쌍. 생략하면 AWS SDK credential chain 사용 | `S3_ACCESS_KEY_ID` + `S3_SECRET_ACCESS_KEY` |
 | Embedding | `EMBEDDING_MODEL`을 설정하면 `EMBEDDING_BASE_URL` 필요 |
 | Reranker | `RERANKER_BASE_URL` + `RERANKER_MODEL` |
-| Knowledge extraction | `KNOWLEDGE_EXTRACTION_LANGUAGE` | 생성하는 설명·사건 이름의 언어. `source`(기본: 원문 언어), `ko`(한국어), `en`(영어). 고유명·별칭·인용은 원문 표기를 보존 |
 | Knowledge extraction | `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 `KNOWLEDGE_EXTRACTION_BASE_URL` 필요 |
 | Langfuse | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` |
 
@@ -265,7 +265,7 @@ k3s의 Neo4j 서비스·credential 참조·volume 설정은 `../argocd-env-demo/
 | 적용 단위 | 변수 | 반영 시점 |
 | --- | --- | --- |
 | Bootstrap env | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `NEO4J_*`, `NODE_ENV` | DB 접근·복호화·시작 방식에 먼저 필요. Override 불가 |
-| 요청 시 다시 읽는 설정 | `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN` | 저장한 instance에서 즉시 적용. 다른 instance는 최대 5초 cache 후 반영 |
+| 요청 시 다시 읽는 설정 | `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN`, `EMBEDDING_MIN_SCORE` | 저장한 instance에서 즉시 적용. 다른 instance는 최대 5초 cache 후 반영 |
 | Process 초기화 설정 | 인증 provider, AI, document worker·quota, S3, logging, telemetry 등 나머지 설정 | 사용하는 모든 instance 재시작 필요 |
 | Framework·검사 환경 | `NEXT_DIST_DIR`, `NEXT_RUNTIME`, `NEXT_PHASE`, `VERCEL`, `CI`, `E2E_*` 등 | 전역 설정 화면에서 관리하지 않음 |
 
@@ -305,7 +305,7 @@ Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 �
 
 #### 기존 데이터와 model 변경
 
-현재 검증은 `evidence-v3`를 사용한다. 미완료 후보의 policy가 오래되면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.
+현재 검증은 `evidence-v5`를 사용한다. 미완료 후보의 policy가 오래되면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.
 
 #### 추출기 평가
 
@@ -414,7 +414,7 @@ AWS S3에서는 `S3_BUCKET`과 `S3_REGION`을 설정하고 `S3_ENDPOINT`, `S3_AC
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
 - 지식 추출과 검증의 HTTP timeout은 요청당 3분이다. 로컬 모델의 긴 structured output 생성을 허용하면서 최대 세 요청이 15분 job expiration 안에서 끝나도록 제한한다. Provider 오류·timeout은 job 실패와 재시도로 남는다.
 - 추출 응답의 구조를 확인한 뒤 원문 인용을 검증한다. 원문 근거가 없는 항목, 없는 개체를 참조하는 관계와 자기 자신을 가리키는 관계는 제외하며 같은 청크의 정상 지식은 보존한다. 중복 키가 동일 kind·정규화 이름을 가리키면 통합하고, 서로 다른 개체를 가리키면 해당 개체들과 그 키를 참조하는 관계를 제외한다. 이 정규화가 끝난 graph에 candidate 불변 조건과 별도 AI 검증을 적용한다.
-- AI 추출 후 같은 모델·endpoint를 사용하는 별도 검증 요청으로 원문 근거·유용성·충돌을 평가한다. 명시적이고 유용하며 인용 검증과 정책을 통과한 항목은 자동 승인한다. 불확실한 항목은 수동 검토로 남기고 근거 없는·사소한 항목은 자동 제외한다. 검증 요청도 AI quota를 소비하며 실패하면 자동 반영하지 않고 enrichment job을 재시도한다. 검증 대상 원문과 제안은 유지하고, 참고할 기존 개체 개요는 개체당 2,000자로 제한해 출처 누적으로 요청이 계속 커지는 것을 막는다.
+- AI 추출 후 별도 검증 요청으로 원문 근거·유용성·충돌을 평가한다. 독립 검증 설정을 사용하며 미설정이면 추출 모델·endpoint를 사용한다. 명시성·유용성·원문 인용·개체 자격·종류·충돌·온톨로지 정책을 통과한 항목은 자동 승인한다. 핵심 관계는 모델의 `incidental` 표기만으로 제외하지 않으며, 불확실한 항목은 수동 검토로 남긴다. 검증 요청도 AI quota를 소비하며 실패하면 자동 반영하지 않고 enrichment job을 재시도한다. 검증 대상 원문과 제안은 유지하고, 참고할 기존 개체 개요는 개체당 2,000자로 제한해 출처 누적으로 요청이 계속 커지는 것을 막는다.
 - 기본 자동 검토는 문서 생성자의 현재 active membership과 source scope `manage` 권한을 요구한다. 검토 화면의 일괄 실행은 인증된 요청자를 job에 기록하며 worker가 그 권한을 다시 확인한다. 저장된 추출과 assessment는 재사용한다. 재추출을 위한 구버전 호환 경로는 없으며 worker 실행이 필요하다.
 
 검증된 별칭은 `knowledge_node_sources.names`에 출처별로 저장한다. 일반 속성에 이름 목록을 넣거나 모델 설정만 바꿔도 기존 node가 자동으로 병합되지는 않는다. 새 후보 승인과 명시적 병합에서 검증된 이름을 보존하며 이후 이름 조회·검색·추출 검증에 사용한다. 공유 별칭이 여러 개체와 일치하면 수동 검토에서 identity를 해결해야 한다. 이 column과 index를 포함한 현재 schema는 `pnpm db:generate`로 생성하며, 기존 설치의 schema 변경은 Database 초기화 절차와 명시적 데이터 보존·초기화 결정을 따른다.
@@ -563,11 +563,12 @@ Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지
 | `403` | 조직 membership, organization/team role, resource action |
 | `404` | ID와 organization 일치 여부, source를 읽을 수 있는지 여부 |
 | `409` | 최신 Memory version, document retry 가능 상태, candidate review 상태 |
+| `412` | 문서 scope 변경의 최신 `ETag`와 `If-Match` 일치 여부 |
 | `413` | JSON body의 1 MiB 제한 또는 문서 upload request·원본 파일 제한 |
 | `422` | strict ontology의 미등록 node kind·edge predicate |
-| `428` | Memory PATCH·DELETE의 `If-Match` header |
+| `428` | Memory PATCH·DELETE의 유효한 `If-Match` 또는 문서 scope PATCH의 필수 `If-Match` header |
 | `429` | AI instance·organization·user quota와 `Retry-After` header, 또는 document storage·backlog·upload quota |
-| `503` | PostgreSQL 연결·schema 초기화 상태 또는 온톨로지 AI 제안 model 설정 |
+| `503` | PostgreSQL·schema·Neo4j readiness, Graph 동기화 또는 온톨로지 AI 제안·자동 검토 model 설정 |
 
 ## 단일 조직 설치
 
@@ -590,12 +591,14 @@ pnpm verify
 | `E2E_AUTHENTICATED=true` | 미설정하면 가입·승인·회원 관리·Memory lifecycle을 skip하고 공개 화면만 검사 |
 | 이름이 `_e2e` 또는 `_test`로 끝나는 별도 DB | Fixture가 `TRUNCATE organizations, users CASCADE`로 데이터를 초기화하므로 개발·운영 DB 사용 금지 |
 | 같은 `DATABASE_URL`로 사전 schema 초기화 | 테스트 서버와 fixture가 동일 schema 사용 |
+| 연결 가능한 Neo4j와 일치하는 `NEO4J_*` 설정 | 테스트 서버의 필수 시작·readiness 검사 |
 | Worker 하나 | 인증 시나리오의 초기화 충돌 방지. Playwright config에서 자동 적용 |
 | Port 3110 확보 | 로컬에서는 기존 서버를 재사용할 수 있으므로 다른 설정의 서버를 먼저 종료 |
 
-다음 예시는 폐기 가능한 E2E 전용 PostgreSQL을 시작한다.
+다음 예시는 로컬 Compose의 Neo4j와 폐기 가능한 E2E 전용 PostgreSQL을 시작한다. Neo4j 연결값을 변경했다면 같은 `NEO4J_*` 값을 테스트 process에도 전달하라.
 
 ```bash
+docker compose up --wait neo4j
 docker run --detach --name agent-memory-e2e \
   --publish 127.0.0.1:5434:5432 \
   --env POSTGRES_DB=agent_memory_e2e \
