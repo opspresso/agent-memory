@@ -12,8 +12,47 @@ import {
 } from "@/lib/runtime-settings";
 
 describe("runtime settings cache", () => {
-  beforeEach(() => { Reflect.deleteProperty(globalThis, Symbol.for("agent-memory.runtime-settings.base-environment")); });
+  beforeEach(() => {
+    Reflect.deleteProperty(globalThis, Symbol.for("agent-memory.runtime-settings.base-environment"));
+    invalidateRuntimeSettingsCache();
+    get.mockReset();
+  });
   afterEach(() => { vi.unstubAllEnvs(); });
+  it("shares one database read across concurrent cache misses", async () => {
+    let finishRead!: (value: unknown) => void;
+    get.mockReturnValue(new Promise((resolve) => { finishRead = resolve; }));
+    const requests = Array.from({ length: 20 }, () => getEffectiveRuntimeEnvironment());
+    finishRead({ overrides: { ADMIN_EMAILS: "admin@example.com" } });
+    const results = await Promise.all(requests);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(results.every((result) => result === results[0])).toBe(true);
+  });
+
+  it("propagates a failed read and allows the next request to refresh", async () => {
+    const failure = new Error("database unavailable");
+    get.mockRejectedValueOnce(failure);
+    await expect(getEffectiveRuntimeEnvironment()).rejects.toBe(failure);
+    get.mockResolvedValue({ overrides: { ADMIN_EMAILS: "admin@example.com" } });
+    expect((await getEffectiveRuntimeEnvironment()).ADMIN_EMAILS).toBe("admin@example.com");
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it("shares the new read when an in-flight cache generation is invalidated", async () => {
+    let finishOldRead!: (value: unknown) => void;
+    let finishNewRead!: (value: unknown) => void;
+    get.mockReturnValueOnce(new Promise((resolve) => { finishOldRead = resolve; }));
+    get.mockReturnValueOnce(new Promise((resolve) => { finishNewRead = resolve; }));
+    const oldRequest = getEffectiveRuntimeEnvironment();
+    invalidateRuntimeSettingsCache();
+    const newRequest = getEffectiveRuntimeEnvironment();
+    finishOldRead({ overrides: { ADMIN_EMAILS: "old@example.com" } });
+    finishNewRead({ overrides: { ADMIN_EMAILS: "new@example.com" } });
+    const results = await Promise.all([oldRequest, newRequest]);
+    expect(results.map((result) => result.ADMIN_EMAILS)).toEqual([
+      "new@example.com", "new@example.com"
+    ]);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
   it("refreshes the embedding floor across requests without applying dimension changes live", async () => {
     vi.stubEnv("AUTH_PASSWORD", "true");
     vi.stubEnv("EMBEDDING_DIM", "native");

@@ -35,28 +35,45 @@ let cache:
   | undefined;
 
 let cacheGeneration = 0;
+let pendingRead: Promise<Readonly<Record<string, string | undefined>>> | undefined;
 
 export function invalidateRuntimeSettingsCache(): void {
   cacheGeneration += 1;
   cache = undefined;
+  pendingRead = undefined;
 }
 
 export async function getEffectiveRuntimeEnvironment(): Promise<
   Readonly<Record<string, string | undefined>>
 > {
-  const now = Date.now();
-  if (!cache || now - cache.fetchedAt > cacheTtlMilliseconds) {
-    const generation = cacheGeneration;
+  if (cache && Date.now() - cache.fetchedAt <= cacheTtlMilliseconds) {
+    return cache.environment;
+  }
+  if (pendingRead) {
+    return pendingRead;
+  }
+
+  const generation = cacheGeneration;
+  const read = (async () => {
     const environment = await appSettingsUseCases.getEffectiveEnvironment();
     if (generation !== cacheGeneration) {
       return getEffectiveRuntimeEnvironment();
     }
     cache = {
       environment,
-      fetchedAt: now
+      fetchedAt: Date.now()
     };
+    return environment;
+  })();
+  pendingRead = read;
+  try {
+    return await read;
+  } finally {
+    // An invalidation may already have started a newer read.
+    if (pendingRead === read) {
+      pendingRead = undefined;
+    }
   }
-  return cache.environment;
 }
 
 async function applyRuntimeSettingsOverridesMatching(
