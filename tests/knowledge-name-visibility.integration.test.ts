@@ -30,7 +30,7 @@ describe("knowledge names follow visible provenance", () => {
   });
 
   afterAll(async () => {
-    await database?.pool.end();
+    await database?.close();
     await container?.stop();
   });
 

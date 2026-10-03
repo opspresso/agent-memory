@@ -29,7 +29,7 @@ describe("knowledge properties retain their provenance", () => {
   });
 
   afterAll(async () => {
-    await database?.pool.end();
+    await database?.close();
     await container?.stop();
   });
 

@@ -430,7 +430,7 @@ AWS S3에서는 `S3_BUCKET`과 `S3_REGION`을 설정하고 `S3_ENDPOINT`, `S3_AC
 
 Knowledge Graph 진행률은 추출·검증 완료 수를 나타내며 실제 queue 실행 여부를 의미하지 않는다. 재시도가 소진되면 청크는 미완료 상태로 남는다. 원인과 provider 연결을 확인한 뒤 Knowledge Graph의 검색어를 비우고 `미완료 지식 처리 재시도`를 실행하거나 `POST /api/knowledge/curation`을 호출하라. 관리 가능한 ready 문서의 미추출 청크와 미완료 자동 검토만 queue에 등록하며 문서·chunk·완료된 지식은 삭제하거나 재추출하지 않는다.
 
-Process가 `SIGTERM` 또는 `SIGINT`를 받으면 새 document job 수신을 중단하고 진행 중인 job을 최대 30초 동안 drain한 뒤 Database pool과 telemetry exporter를 순서대로 종료한다. Cleanup 일부가 실패해도 나머지 단계는 계속 실행하며 process는 실패 exit code를 반환한다.
+Process가 `SIGTERM` 또는 `SIGINT`를 받으면 새 document job 수신을 중단하고 진행 중인 job을 최대 30초 동안 drain한 뒤 Database, Neo4j driver, telemetry exporter를 순서대로 종료한다. Database의 `close()`는 pool 종료와 실제 PostgreSQL 연결의 `end` 이벤트까지 기다린다. Cleanup 일부가 실패해도 나머지 단계는 계속 실행하며 process는 실패 exit code를 반환한다.
 
 Container image는 `NEXT_MANUAL_SIG_HANDLE=true`로 Next.js 기본 signal handler를 끄고 이 종료 절차가 signal 처리를 담당한다. 기본 handler를 두면 Next.js가 drain 도중 process를 종료한다. 대신 진행 중인 HTTP 응답은 기다리지 않으므로 배포 전에 endpoint에서 instance를 먼저 제외하라. Orchestrator의 종료 유예 시간은 drain보다 길어야 하며 구체 값은 배포 저장소가 소유한다.
 

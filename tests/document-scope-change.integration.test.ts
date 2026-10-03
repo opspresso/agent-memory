@@ -26,7 +26,7 @@ describe("document scope transactions", () => {
     database = createDatabase(container.getConnectionUri());
     await initializeSchema(database.pool);
   });
-  afterAll(async () => { await database?.pool.end(); await container?.stop(); });
+  afterAll(async () => { await database?.close(); await container?.stop(); });
 
   async function fixture() {
     const { db } = database;

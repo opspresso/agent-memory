@@ -20,7 +20,7 @@ describe("knowledge source metadata projection", () => {
     await initializeSchema(database.pool);
   });
   afterAll(async () => {
-    await database?.pool.end();
+    await database?.close();
     await container?.stop();
   });
 

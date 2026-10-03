@@ -51,7 +51,7 @@ export async function register() {
               },
               {
                 name: "database pool",
-                execute: () => database.pool.end()
+                execute: () => database.close()
               },
               { name: "Neo4j driver", execute: () => neo4jDriver.close() },
               { name: "telemetry", execute: shutdownTelemetry }

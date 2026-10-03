@@ -10,7 +10,7 @@ import { createIngestionReceiptRepository } from "@/infrastructure/database/repo
 import { ingestionFingerprint } from "@/lib/ingestion-fingerprint";
 import { and, eq, sql } from "drizzle-orm";
 import { initializeSchema } from "@/infrastructure/database/schema-bootstrap.mjs";
-import { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
@@ -80,6 +80,8 @@ describe("PostgreSQL schema", () => {
   let container: StartedPostgreSqlContainer;
   let db: AgentMemoryDatabase;
   let pool: Pool;
+  let database: ReturnType<typeof createDatabase>;
+  const openConnections = new Set<PoolClient>();
 
   beforeAll(async () => {
     container = await new PostgreSqlContainer(
@@ -89,14 +91,19 @@ describe("PostgreSQL schema", () => {
       .withUsername("agent_memory")
       .withPassword("agent_memory")
       .start();
-    const database = createDatabase(container.getConnectionUri());
+    database = createDatabase(container.getConnectionUri());
     db = database.db;
     pool = database.pool;
+    pool.on("connect", (client) => {
+      openConnections.add(client);
+      client.once("end", () => openConnections.delete(client));
+    });
     await Promise.all([initializeSchema(pool), initializeSchema(pool)]);
   });
 
   afterAll(async () => {
-    await pool?.end();
+    await database?.close();
+    expect(openConnections.size).toBe(0);
     await container?.stop();
   });
 

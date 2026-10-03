@@ -21,13 +21,15 @@ import type { OrganizationAccess, ScopedResource } from "@/domain/identity/organ
 
 describe("source-grounded knowledge aliases", () => {
   let container: StartedPostgreSqlContainer, db: AgentMemoryDatabase, pool: Pool;
+  let database: ReturnType<typeof createDatabase>;
   beforeAll(async () => {
     container = await new PostgreSqlContainer("pgvector/pgvector:0.8.6-pg18-trixie")
       .withDatabase("knowledge_alias_test").withUsername("agent_memory").withPassword("agent_memory").start();
-    ({ db, pool } = createDatabase(container.getConnectionUri()));
+    database = createDatabase(container.getConnectionUri());
+    ({ db, pool } = database);
     await initializeSchema(pool);
   });
-  afterAll(async () => { await pool?.end(); await container?.stop(); });
+  afterAll(async () => { await database?.close(); await container?.stop(); });
 
   async function fixture() {
     const organizationId = randomUUID(), userId = randomUUID();
