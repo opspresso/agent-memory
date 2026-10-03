@@ -502,18 +502,12 @@ export const en = {
   "workspace.copyEndpoint": "Copy MCP endpoint",
   "workspace.copy": "Copy",
   "workspace.copied": "Copied",
-  "resource.archiveDocument": "Archive document",
-  "resource.archiveDocumentTitle": "Archive document",
-  "resource.archiveDocumentBody":
-    "Archive {name}? It will disappear from search, retry, and AI candidate review while its source evidence is preserved.",
   "resource.deleteGraphTitle": "Delete Graph resource",
   "resource.deleteGraphBody":
     "Permanently delete {name}? Deleting a node also removes its connected edges. Source memories and documents are preserved.",
-  "resource.documentArchived": "Archived {name}.",
   "resource.graphDeleted": "Deleted {name} from the Graph.",
   "resource.deleteFailed": "The resource could not be removed.",
   "resource.cancel": "Cancel",
-  "resource.confirmArchive": "Confirm archive",
   "resource.confirmDelete": "Confirm delete",
   "resource.mergeDuplicate": "Merge duplicate",
   "resource.mergeNodesTitle": "Merge duplicate nodes",

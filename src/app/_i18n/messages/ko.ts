@@ -501,18 +501,12 @@ export const ko: Messages = {
   "workspace.copyEndpoint": "MCP endpoint 복사",
   "workspace.copy": "복사",
   "workspace.copied": "복사됨",
-  "resource.archiveDocument": "문서 Archive",
-  "resource.archiveDocumentTitle": "문서 Archive",
-  "resource.archiveDocumentBody":
-    "{name}을 Archive할까요? 원본 근거는 보존되지만 검색, retry, AI 후보 검토에서 제외됩니다.",
   "resource.deleteGraphTitle": "Graph resource 삭제",
   "resource.deleteGraphBody":
     "{name}을 영구 삭제할까요? Node를 삭제하면 연결 edge도 삭제되며 원본 Memory와 문서는 유지됩니다.",
-  "resource.documentArchived": "{name}을 Archive했습니다.",
   "resource.graphDeleted": "Graph에서 {name}을 삭제했습니다.",
   "resource.deleteFailed": "Resource를 제거하지 못했습니다.",
   "resource.cancel": "취소",
-  "resource.confirmArchive": "Archive 확인",
   "resource.confirmDelete": "삭제 확인",
   "resource.mergeDuplicate": "중복 병합",
   "resource.mergeNodesTitle": "중복 node 병합",

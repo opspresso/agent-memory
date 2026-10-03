@@ -1,22 +1,3 @@
-.page {
-  min-height: 100vh;
-  background: transparent;
-}
-
-.shell {
-  padding-block: var(--mantine-spacing-xl) calc(var(--mantine-spacing-xl) * 2);
-}
-
-.header {
-  min-height: 48px;
-}
-
-.brandLogo {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-}
-
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -55,55 +36,6 @@
 
 }
 
-.workspace {
-  display: grid;
-  gap: var(--mantine-spacing-xl);
-  padding-top: clamp(3rem, 7vw, 6rem);
-}
-
-.resultCard {
-  --result-accent: var(--mantine-color-brand-5);
-  position: relative;
-  overflow: hidden;
-  border-left: 2px solid var(--result-accent);
-  background: var(--memory-surface);
-  box-shadow: var(--memory-shadow);
-  transition: border-color 160ms ease;
-}
-
-.resultCard[data-source="document"] {
-  --result-accent: var(--mantine-color-teal-5);
-}
-
-.resultCard[data-source="knowledge"] {
-  --result-accent: var(--mantine-color-violet-5);
-}
-
-.resultCard:hover {
-  border-color: var(--mantine-color-brand-4);
-}
-
-.evidenceRail {
-  display: grid;
-  gap: 0.4rem;
-  padding-top: var(--mantine-spacing-xs);
-  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
-}
-
-.relevanceTrack {
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
-}
-
-.relevanceTrack span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--result-accent);
-}
-
 @media (max-width: 62em) {
   .hero {
     grid-template-columns: 1fr;
@@ -112,21 +44,11 @@
 }
 
 @media (max-width: 36em) {
-  .shell {
-    padding-inline: var(--mantine-spacing-md);
-  }
-
   .hero {
     padding-block: 3rem;
   }
 
   .title {
     font-size: 2.5rem;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .resultCard {
-    transition: none;
   }
 }

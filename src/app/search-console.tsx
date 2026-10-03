@@ -15,7 +15,6 @@ import {
   Textarea
 } from "@mantine/core";
 import {
-  IconArchive,
   IconSearch,
   IconTrash
 } from "@tabler/icons-react";
@@ -50,7 +49,6 @@ import { KnowledgeProcessingStatus } from "./knowledge/knowledge-processing-stat
 import classes from "./search-workspace.module.css";
 
 type PendingResourceAction =
-  | Readonly<{ kind: "document"; id: string; name: string }>
   | Readonly<{ kind: "edge"; id: string; name: string }>
   | Readonly<{ kind: "node"; id: string; name: string }>
   | Readonly<{
@@ -298,11 +296,9 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
     setResourceActionMessage(undefined);
     const action = pendingResourceAction;
     const path =
-      action.kind === "document"
-        ? `documents/${action.id}`
-        : action.kind === "merge"
-          ? `knowledge/nodes/${action.targetNodeId}/merge`
-          : `knowledge/${action.kind === "node" ? "nodes" : "edges"}/${action.id}`;
+      action.kind === "merge"
+        ? `knowledge/nodes/${action.targetNodeId}/merge`
+        : `knowledge/${action.kind === "node" ? "nodes" : "edges"}/${action.id}`;
     try {
       const response = await fetch(
         `/api/${path}`,
@@ -329,16 +325,6 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
         setGraphNodes([]);
         setGraphEdges([]);
         setMergeReason("");
-      } else if (action.kind === "document") {
-        setHits((current) =>
-          current.filter(
-            (hit) => hit.document?.id !== action.id
-          )
-        );
-        setGraphCenterNodeId(undefined);
-        setGraphSelection(emptyKnowledgeGraphSelection);
-        setGraphNodes([]);
-        setGraphEdges([]);
       } else if (action.kind === "edge") {
         setGraphEdges((current) =>
           current.filter((edge) => edge.id !== action.id)
@@ -367,10 +353,8 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
       }
       setPendingResourceAction(undefined);
       setResourceActionMessage(
-        action.kind === "document"
-          ? t("resource.documentArchived", { name: action.name })
-          : action.kind === "merge"
-            ? t("resource.nodesMerged", { name: action.name })
+        action.kind === "merge"
+          ? t("resource.nodesMerged", { name: action.name })
           : t("resource.graphDeleted", { name: action.name })
       );
     } catch (caught) {
@@ -487,7 +471,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
         action={<Button component={Link} href="/memories" variant="default">{t("nav.memory")}</Button>}
       /></Paper> : null}
       <Modal
-        attributes={{ content: { "aria-label": pendingResourceAction?.kind === "document" ? t("resource.archiveDocumentTitle") : pendingResourceAction?.kind === "merge" ? t("resource.mergeNodesTitle") : t("resource.deleteGraphTitle") } }}
+        attributes={{ content: { "aria-label": pendingResourceAction?.kind === "merge" ? t("resource.mergeNodesTitle") : t("resource.deleteGraphTitle") } }}
         centered
         closeOnClickOutside={!deletingResource}
         closeOnEscape={!deletingResource}
@@ -499,23 +483,17 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
         }}
         opened={pendingResourceAction !== undefined}
         title={
-          pendingResourceAction?.kind === "document"
-            ? t("resource.archiveDocumentTitle")
-            : pendingResourceAction?.kind === "merge"
-              ? t("resource.mergeNodesTitle")
+          pendingResourceAction?.kind === "merge"
+            ? t("resource.mergeNodesTitle")
             : t("resource.deleteGraphTitle")
         }
       >
         <Stack gap="md">
           <Text size="sm">
-            {pendingResourceAction?.kind === "document"
-              ? t("resource.archiveDocumentBody", {
+            {pendingResourceAction?.kind === "merge"
+              ? t("resource.mergeNodesBody", {
                   name: pendingResourceAction.name
                 })
-              : pendingResourceAction?.kind === "merge"
-                ? t("resource.mergeNodesBody", {
-                    name: pendingResourceAction.name
-                  })
               : t("resource.deleteGraphBody", {
                   name: pendingResourceAction?.name ?? ""
                 })}
@@ -547,13 +525,7 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
             </Button>
             <Button
               color="red"
-              leftSection={
-                pendingResourceAction?.kind === "document" ? (
-                  <IconArchive size={16} />
-                ) : (
-                  <IconTrash size={16} />
-                )
-              }
+              leftSection={<IconTrash size={16} />}
               loading={deletingResource}
               disabled={
                 pendingResourceAction?.kind === "merge" &&
@@ -561,10 +533,8 @@ function SearchConsoleView({ initialKind, initialQuery }: { readonly initialKind
               }
               onClick={() => void confirmResourceAction()}
             >
-              {pendingResourceAction?.kind === "document"
-                ? t("resource.confirmArchive")
-                : pendingResourceAction?.kind === "merge"
-                  ? t("resource.confirmMerge")
+              {pendingResourceAction?.kind === "merge"
+                ? t("resource.confirmMerge")
                 : t("resource.confirmDelete")}
             </Button>
           </Group>
