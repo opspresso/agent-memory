@@ -185,7 +185,7 @@ export async function saveKnowledgeNodeContribution(
     .onConflictDoUpdate({
       target: [knowledgeNodeSources.organizationId, knowledgeNodeSources.nodeId, knowledgeNodeSources.memoryId, knowledgeNodeSources.chunkId],
       set: { description: sql`coalesce(excluded.description, ${knowledgeNodeSources.description})`,
-        embedding: sql`excluded.embedding`, embeddingModel: sql`excluded.embedding_model`,
+        ...(node.embedding ? { embedding: sql`excluded.embedding`, embeddingModel: sql`excluded.embedding_model` } : {}),
         ...(propertyWrite === "replace" ? { properties: sql`excluded.properties`, updatedAt: node.updatedAt } : {}),
         names: sql`${knowledgeNodeSources.names} || excluded.names`,
         primaryNameKeys: sql`ARRAY(SELECT DISTINCT unnest(${knowledgeNodeSources.primaryNameKeys} || excluded.primary_name_keys))` }

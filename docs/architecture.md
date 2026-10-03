@@ -246,7 +246,7 @@ AI candidate는 원본 추출과 검증·처리 이력을 graph와 분리해 보
 
 ### 후보 수집과 재정렬
 
-Knowledge embedding은 `knowledge_node_sources`가 model과 함께 소유한다. 검색은 현재 읽을 수 있고 유효한 출처 중 query와 model·차원이 맞는 vector의 최대 점수를 사용한다. Node 병합은 고유 출처의 vector를 그대로 옮기며, 같은 출처가 양쪽에 있으면 target vector를 유지하고 target에 없을 때만 source vector를 채운다. 공유 node 설명·vector·검색 index는 저장하지 않는다.
+Knowledge embedding은 `knowledge_node_sources`가 model과 함께 소유한다. 같은 출처 재기여나 AI 후보 승인에서 새 embedding을 제공하면 vector·model 쌍을 교체하고, 제공하지 않으면 기존 쌍을 유지하며, embedding 없는 새 출처는 두 값을 모두 NULL로 저장한다. 검색은 현재 읽을 수 있고 유효한 출처 중 query와 model·차원이 맞는 vector의 최대 점수를 사용한다. Node 병합은 고유 출처의 vector를 그대로 옮기며, 같은 출처가 양쪽에 있으면 target vector를 유지하고 target에 없을 때만 source vector를 채운다. 공유 node 설명·vector·검색 index는 저장하지 않는다.
 
 통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node 후보를 각각 검색한다. Semantic search가 활성화되어도 query embedding은 한 번만 생성해 세 저장소 검색에 공유한다. Reranker가 설정되면 종류별로 `min(100, max(12, limit × 4))`개까지 후보를 조회한 뒤 같은 총량 상한 안에서 source별로 균형 있게 구성하고, 권한 필터가 완료된 후보만 외부 reranker에 보낸다. Reranker 입력은 query 4,000자, 후보당 8,000자로 제한한다. 성공하면 relevance score로 최종 순위를 정하고, timeout·provider 오류·잘못된 응답이면 기존 hybrid score 순위로 복귀한다. 모든 AI call은 인증 access 또는 document creator에서 organization·user quota key를 만들고, instance-local limiter와 PostgreSQL minute bucket을 모두 통과해야 한다. 따라서 여러 replica와 worker가 같은 tenant·principal budget을 공유한다. API와 MCP는 동일한 application operation을 사용한다.
 

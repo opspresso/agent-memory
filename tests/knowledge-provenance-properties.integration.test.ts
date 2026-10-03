@@ -3,7 +3,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
-import { createKnowledgeEdge, createKnowledgeNode, type KnowledgeSource } from "@/domain/knowledge/knowledge-graph";
+import { createKnowledgeEdge, createKnowledgeNode, type KnowledgeEmbedding, type KnowledgeSource } from "@/domain/knowledge/knowledge-graph";
 import { createMemory } from "@/domain/memory/memory";
 import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import { buildAcceptKnowledgeCandidate } from "@/application/knowledge/review-knowledge-candidate";
@@ -89,6 +89,61 @@ describe("knowledge properties retain their provenance", () => {
       predicate: "uses", properties, source, now
     }), f.access);
   }
+
+  async function contributeVector(f: Awaited<ReturnType<typeof fixture>>, method: "manual" | "candidate", embedding?: KnowledgeEmbedding) {
+    if (method === "manual") {
+      return f.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: f.scope, kind: "service", canonicalName: "Atlas",
+        source: f.visibleSource, now: f.laterAt, ...(embedding ? { embedding } : {}) }), f.access);
+    }
+    const candidates = createKnowledgeCandidateRepository(database.db);
+    const candidate = await candidates.save(createKnowledgeCandidate({ id: randomUUID(), scope: f.scope, documentId: f.documentId,
+      chunkId: f.visibleSource.chunkId!, model: "extractor", now: f.laterAt,
+      graph: { entities: [{ key: "atlas", kind: "service", canonicalName: "Atlas" }], relationships: [] } }));
+    const accept = buildAcceptKnowledgeCandidate({ repository: candidates, ontologyReader: createKnowledgeOntologyReader(database.db),
+      clock: () => f.laterAt, generateId: randomUUID,
+      ...(embedding ? { embeddingService: { embed: async () => embedding, embedMany: async (texts: readonly string[]) => texts.map(() => embedding) } } : {}) });
+    return (await accept(f.access, candidate.id)).nodes[0]!;
+  }
+
+  it.each(["manual", "candidate"] as const)("preserves existing source vectors for %s contributions without a new embedding", async (method) => {
+    const f = await fixture("memory archive");
+    const embedding = { model: "original-vector", values: [1, 0] };
+    const node = await f.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: f.scope, kind: "service", canonicalName: "Atlas",
+      embedding, source: f.visibleSource, now: f.firstAt }), f.access);
+    const search = { access: f.access, query: "unmatched", limit: 10, minimumVectorScore: 0.9, queryEmbedding: embedding };
+    expect((await f.graph.searchNodes(search)).map((hit) => hit.node.id)).toEqual([node.id]);
+
+    expect((await contributeVector(f, method)).id).toBe(node.id);
+
+    expect((await f.graph.searchNodes(search)).map((hit) => hit.node.id)).toEqual([node.id]);
+    const stored = (await database.pool.query("SELECT embedding::text, embedding_model FROM knowledge_node_sources WHERE node_id=$1 AND chunk_id=$2", [node.id, f.visibleSource.chunkId])).rows;
+    expect(stored).toEqual([{ embedding: "[1,0]", embedding_model: "original-vector" }]);
+  });
+
+  it.each(["manual", "candidate"] as const)("replaces the vector and model together when a %s contribution supplies an embedding", async (method) => {
+    const f = await fixture("memory archive");
+    const original = { model: "original-vector", values: [1, 0] };
+    const replacement = { model: "replacement-vector", values: [0, 1] };
+    const node = await f.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: f.scope, kind: "service", canonicalName: "Atlas",
+      embedding: original, source: f.visibleSource, now: f.firstAt }), f.access);
+
+    expect((await contributeVector(f, method, replacement)).id).toBe(node.id);
+
+    const stored = (await database.pool.query("SELECT embedding::text, embedding_model FROM knowledge_node_sources WHERE node_id=$1 AND chunk_id=$2", [node.id, f.visibleSource.chunkId])).rows;
+    expect(stored).toEqual([{ embedding: "[0,1]", embedding_model: "replacement-vector" }]);
+    expect(await f.graph.searchNodes({ access: f.access, query: "unmatched", limit: 10, queryEmbedding: original })).toEqual([]);
+    expect((await f.graph.searchNodes({ access: f.access, query: "unmatched", limit: 10, queryEmbedding: replacement })).map((hit) => hit.node.id)).toEqual([node.id]);
+  });
+
+  it("initializes a new source without an embedding to a null vector/model pair", async () => {
+    const f = await fixture("memory archive");
+    const node = await f.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: f.scope, kind: "service", canonicalName: "Atlas",
+      embedding: { model: "original-vector", values: [1, 0] }, source: f.visibleSource, now: f.firstAt }), f.access);
+    expect((await f.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: f.scope, kind: "service", canonicalName: "Atlas",
+      source: f.laterSource, now: f.laterAt }), f.access)).id).toBe(node.id);
+    const stored = (await database.pool.query("SELECT embedding::text, embedding_model FROM knowledge_node_sources WHERE node_id=$1 AND memory_id=$2", [node.id, f.laterSource.memoryId])).rows;
+    expect(stored).toEqual([{ embedding: null, embedding_model: null }]);
+  });
 
   it.each(["node", "edge"] as const)("replaces each %s source snapshot and filters unavailable properties from write responses", async (resource) => {
     const f = await fixture("memory archive");
