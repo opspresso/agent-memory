@@ -158,10 +158,14 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
   return chunks;
 }
 
-function csvRecords(input: string): readonly string[] {
-  const records: string[] = [];
+function csvRecords(input: string): readonly TextChunk[] {
+  const records: TextChunk[] = [];
   let start = 0;
   let quoted = false;
+  function append(end: number) {
+    const content = input.slice(start, end);
+    if (content.trim()) records.push({ content, start, end });
+  }
   for (let index = 0; index < input.length; index += 1) {
     const character = input[index];
     if (character === '"') {
@@ -171,47 +175,51 @@ function csvRecords(input: string): readonly string[] {
         quoted = !quoted;
       }
     } else if (character === "\n" && !quoted) {
-      records.push(input.slice(start, index).replace(/\r$/, ""));
+      append(index);
       start = index + 1;
     }
   }
-  records.push(input.slice(start).replace(/\r$/, ""));
-  return records.filter((record) => record.trim().length > 0);
+  append(input.length);
+  return records;
 }
 
 function chunkCsv(input: string): readonly TextChunk[] {
-  const records = csvRecords(input);
+  const normalized = input.replace(/\r\n?/g, "\n").trim();
+  const records = csvRecords(normalized);
   const header = records[0];
   if (!header) {
     return [];
   }
   if (
-    header.length > 2_000 ||
+    header.content.length > 2_000 ||
     records
       .slice(1)
-      .some((record) => header.length + 1 + record.length > 2_000)
+      .some((record) => header.content.length + 1 + record.content.length > 2_000)
   ) {
-    return chunkText(input);
+    return chunkText(normalized);
   }
   const chunks: TextChunk[] = [];
-  let rows: string[] = [];
-  let offset = header.length + 1;
-  let chunkStart = 0;
+  let rows: TextChunk[] = [];
+  function appendChunk() {
+    chunks.push({
+      content: [header!.content, ...rows.map((row) => row.content)].join("\n"),
+      start: chunks.length === 0 ? header!.start : rows[0]!.start,
+      end: rows.at(-1)!.end,
+      ...(chunks.length > 0 ? { contextSpans: [{ start: header!.start, end: header!.end }] } : {})
+    });
+  }
   for (const row of records.slice(1)) {
-    const candidate = [header, ...rows, row].join("\n");
+    const candidate = [header, ...rows, row].map((record) => record.content).join("\n");
     if (candidate.length > 2_000 && rows.length > 0) {
-      const content = [header, ...rows].join("\n");
-      chunks.push({ content, start: chunkStart, end: offset - 1 });
+      appendChunk();
       rows = [];
-      chunkStart = offset;
     }
     rows.push(row);
-    offset += row.length + 1;
   }
   if (rows.length > 0) {
-    chunks.push({ content: [header, ...rows].join("\n"), start: chunkStart, end: input.length });
+    appendChunk();
   }
-  return chunks.length > 0 ? chunks : [{ content: header, start: 0, end: header.length }];
+  return chunks.length > 0 ? chunks : [header];
 }
 
 function jsonPathSegment(key: string): string {
