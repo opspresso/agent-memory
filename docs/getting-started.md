@@ -1,6 +1,16 @@
 # 시작 가이드
 
-이 문서는 새 로컬 설치에서 로그인 → 첫 Memory 검색 → 문서 수집 → 서비스의 MCP 연결까지 진행하는 절차다. 기본 구성은 외부 AI 없이 키워드 검색을 제공한다. 기존 설치의 배포·복원은 [운영 가이드](operations.md)를 따른다.
+새 로컬 설치에서 로그인하고 첫 자료를 검색하려는 사용자를 위한 절차다. 기본 구성은 외부 AI 없이 키워드 검색을 제공한다. 기존 설치를 변경하거나 복원하려면 [운영 가이드](operations.md)를 따른다.
+
+| 순서 | 완료 확인 |
+| --- | --- |
+| [1. 설정 준비](#1-의존성과-환경-설정) | 로그인 수단과 최초 운영자 이메일을 설정했다. |
+| [2. 서버 실행](#2-로컬-인프라-시작과-database-초기화) | `/api/health`가 HTTP `200`과 모든 검사값 `ok`를 반환한다. |
+| [3. 로그인](#3-최초-운영자-준비와-가입-요청) | 최초 owner로 통합 검색 화면을 연다. |
+| [4. Memory 생성](#4-첫-memory와-검색) | 저장한 Memory를 검색하고 본문을 읽는다. |
+| [5. 문서 수집](#5-문서-수집-활성화) | 문서가 `ready`가 되고 검색 결과에 나타난다. |
+| [6. AI 설정](#6-선택-기능-활성화) | 필요한 선택 기능에 모델을 연결했다. |
+| [7. MCP 연결](#7-서비스에서-기억-저장회상잊기) | 기억을 저장·회상하고 보관 처리한다. |
 
 ## 준비 사항
 
@@ -19,9 +29,11 @@ docker compose version
 
 ## 1. 의존성과 환경 설정
 
+저장소 루트에서 실행한다. `.env.local`이 이미 있으면 복사하지 말고 기존 파일을 사용한다.
+
 ```bash
 corepack enable
-pnpm install
+pnpm install --frozen-lockfile
 cp .env.example .env.local
 ```
 
@@ -32,14 +44,14 @@ AUTH_PASSWORD=true
 AUTH_PASSWORD_SIGNUP=true
 ```
 
-최초 owner가 될 실제 운영자 email과 선택형 domain 제한을 지정하라.
+최초 owner가 될 운영자의 실제 이메일을 지정한다. 필요하면 로그인할 수 있는 이메일 도메인도 제한한다.
 
 ```dotenv
 ALLOWED_EMAIL_DOMAINS=
 ADMIN_EMAILS=your-admin@example.com
 ```
 
-- `ALLOWED_EMAIL_DOMAINS`가 비어 있거나 미설정이면 모든 email domain으로 가입할 수 있다. 제한하려면 허용 domain을 comma-separated 목록으로 설정한다.
+- `ALLOWED_EMAIL_DOMAINS`가 비어 있거나 미설정이면 모든 이메일 도메인을 허용한다. 제한하려면 허용할 도메인을 쉼표로 구분한다.
 - 최초 owner가 될 사용자의 email은 `ADMIN_EMAILS`에 있어야 한다.
 - `ADMIN_EMAILS`는 실제 운영자 email로 바꾸고, domain 제한을 설정했다면 해당 email의 domain을 허용 목록에 포함하라.
 - 운영 환경에서는 `.env.example`의 `BETTER_AUTH_SECRET`과 storage credential을 사용하지 마라.
@@ -54,7 +66,15 @@ docker compose run --rm minio-init
 pnpm db:init
 ```
 
-`up --wait`는 PostgreSQL·MinIO·Neo4j가 healthy일 때 완료되고 `run --rm minio-init`은 bucket 초기화가 끝날 때 종료된다. 앞 명령이 실패하면 초기화를 진행하지 마라. PostgreSQL은 `localhost:5433`, Neo4j Bolt는 `127.0.0.1:7687`에서 열린다. MinIO 초기화 서비스는 `agent-memory` bucket을 멱등하게 만든다. 초기화가 완료되면 application을 host에서 시작하라.
+각 명령의 완료 조건은 다음과 같다. 실패하면 다음 명령을 실행하기 전에 원인을 해결한다.
+
+| 명령 | 완료 조건 |
+| --- | --- |
+| `docker compose up --wait …` | PostgreSQL·MinIO·Neo4j가 모두 `healthy`다. |
+| `docker compose run --rm minio-init` | `agent-memory` bucket이 준비됐다. 이미 있으면 그대로 사용한다. |
+| `pnpm db:init` | `Database schema is ready.`를 출력한다. 기존 DB의 스키마가 다르면 변경 없이 실패한다. |
+
+PostgreSQL은 `localhost:5433`, Neo4j Bolt는 `127.0.0.1:7687`에서 열린다. 준비가 끝나면 앱을 host에서 시작한다.
 
 ```bash
 pnpm dev
@@ -76,14 +96,18 @@ curl -i http://localhost:3100/api/health
 
 1. `http://localhost:3100`을 연다.
 2. `가입`을 선택한다.
-3. `ADMIN_EMAILS`에 등록한 email로 계정을 만든다.
-4. 서버가 준비한 기본 조직의 최초 `owner`가 되어 통합 검색 화면으로 이동한다. 조직 이름은 `설정`에서 변경한다.
-5. 이후 사용자는 계정을 만들거나 Google·OIDC로 로그인한 뒤 첫 콘솔 접속 시 가입 요청이 접수된다. 승인 대기 중에는 지식에 접근할 수 없다.
-6. 운영자는 `회원`에서 승인 대기 요청을 확인하고 `승인`을 선택한다. 사용자는 승인 후 콘솔을 새로고침해 이용한다. 차단·제거된 사용자는 다시 로그인해도 자동으로 복구되지 않는다.
+3. `ADMIN_EMAILS`에 등록한 이메일로 계정을 만든다.
+4. 통합 검색 화면이 열리는지 확인한다. 새 설치에서는 이 계정이 최초 `owner`다.
+
+조직 이름은 `설정`에서 바꿀 수 있다. 이후 사용자는 첫 콘솔 접속 시 가입 요청을 등록한다. 운영자는 `회원`에서 요청을 승인한다. 승인받은 사용자는 콘솔을 새로고침한다. 승인 대기 중에는 지식에 접근할 수 없으며, 차단·제거된 사용자는 다시 로그인해도 복구되지 않는다.
 
 최초 owner 준비는 active owner가 없는 설치에만 적용한다. Owner가 이미 있다면 `ADMIN_EMAILS`에 포함된 신규 사용자도 운영자 승인을 받아야 한다. Google·OIDC와 운영 환경의 password 가입 제한은 [운영 가이드](operations.md#환경-변수)를 확인하라.
 
-로그인 provider가 화면에 나타나지 않으면 `.env.local`에서 provider 설정을 확인하고 `pnpm dev`를 다시 시작하라. 기존 설치의 [DB override](operations.md#database-설정-override)는 env보다 우선하므로 전역 설정에서 값의 출처를 확인하고 필요하면 override를 reset하라. Password 가입에는 `AUTH_PASSWORD=true`와 `AUTH_PASSWORD_SIGNUP=true`가 모두 필요하다.
+로그인 수단이 화면에 없으면 다음 순서로 확인한다.
+
+1. `.env.local`에서 해당 로그인 수단의 설정을 확인한다. Password 가입에는 `AUTH_PASSWORD=true`와 `AUTH_PASSWORD_SIGNUP=true`가 모두 필요하다.
+2. 기존 설치라면 전역 설정에서 값의 출처를 확인한다. [DB override](operations.md#database-설정-override)가 환경 변수보다 우선한다.
+3. 설정을 바꿨다면 `pnpm dev`를 다시 시작한다.
 
 ## 4. 첫 Memory와 검색
 
@@ -97,7 +121,7 @@ Memory를 만든 뒤 운영 콘솔에서 다음 순서로 확인한다.
 4. 결과를 선택해 공유 범위, 전체 내용과 출처를 확인한다.
 5. 수정·관리 권한이 있으면 상세의 `수정`과 `Version 이력` 탭을 사용한다.
 
-`EMBEDDING_MODEL`을 설정하지 않은 초기 환경에서는 lexical score만 사용한다.
+`EMBEDDING_MODEL`을 설정하지 않았다면 키워드 일치 점수만 사용한다. 결과가 없으면 먼저 저장한 제목의 단어로 검색한다.
 
 ## 5. 문서 수집 활성화
 
@@ -120,7 +144,13 @@ Memory를 만든 뒤 운영 콘솔에서 다음 순서로 확인한다.
 3. 문서가 `ready`가 되면 상세의 처리된 원문을 확인한다.
 4. 통합 검색의 `Documents`에서 `Release`를 검색해 근거 chunk를 연다.
 
-현재 지원 파일은 UTF-8 text, Markdown, CSV, JSON, XML이다. PDF·Office 변환이나 URL 원격 수집은 이 업로드 경로에서 제공하지 않는다. `pending`에 머물면 worker, `failed`이면 오류와 storage 연결을 확인하라. 재시도는 failed 문서만 가능하다.
+지원 파일은 UTF-8 text, Markdown, CSV, JSON, XML이다. PDF·Office 변환과 URL 원격 수집은 제공하지 않는다.
+
+| 문서 상태 | 다음 행동 |
+| --- | --- |
+| `pending`이 계속됨 | `DOCUMENT_WORKER_ENABLED`와 worker 실행 로그를 확인한다. |
+| `failed` | 상세의 오류와 저장소 연결을 확인한다. 원인을 해결한 뒤 재처리한다. |
+| `ready` | 처리된 본문을 열고 검색한다. AI 추출·검증의 완료 여부는 Graph 화면에서 따로 확인한다. |
 
 ## 6. 선택 기능 활성화
 
@@ -162,7 +192,15 @@ KNOWLEDGE_EXTRACTION_API_KEY=replace-with-provider-key
 KNOWLEDGE_EXTRACTION_MODEL=provider/structured-output-model
 ```
 
-설정 후 수집되는 문서의 chunk에서 후보를 만든다. 기존 ready 문서를 자동으로 탐색해 후보를 채우지는 않는다. 추출 후 별도 AI 검증과 원문 인용·권한 검사를 통과한 항목은 자동 반영하고, 불확실한 항목만 운영 콘솔의 `AI 후보 검토`에 남긴다. `AI 자동 검토 실행`은 관리 가능한 ready 문서의 미추출 청크와 미검증·자동 처리 미완료 추출을 대기열에 등록한다. 저장된 추출은 재사용한다. 미완료 후보의 평가가 현재 policy와 같으면 재사용하고, 평가가 없거나 policy가 오래됐으면 새 평가를 요청한다. 문서가 `ready`여도 Graph 처리는 계속 진행될 수 있으므로 Graph 화면의 진척과 처리 내역을 확인하라.
+설정 후 새로 수집한 문서에서 지식 후보를 만든다. 별도 AI 검증과 원문 인용·권한 검사를 통과한 지식은 Graph에 자동 반영한다. 불확실한 지식은 `AI 후보 검토`에서 확인한다.
+
+기존 `ready` 문서를 처리하려면 `AI 자동 검토 실행`을 선택한다. 이 작업은 관리 가능한 문서의 미추출 청크와 미완료 검토를 대기열에 등록한다.
+
+- 저장된 추출은 다시 추출하지 않고 재사용한다.
+- 미완료 후보의 평가가 현재 검토 정책과 같으면 재사용한다.
+- 평가가 없거나 검토 정책이 오래됐으면 새 평가를 요청한다.
+
+Graph 화면의 처리 진척과 `AI 후보 검토 → 처리 내역`에서 결과를 확인한다.
 
 ## 7. 서비스에서 기억 저장·회상·잊기
 

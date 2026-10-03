@@ -2,7 +2,7 @@
 
 ## 실행 모드
 
-이 문서는 설치 설정, 서버 시작, 문서 처리, 배포, 장애 복구를 다룬다. 최초 가입과 콘솔 사용은 [시작 가이드](getting-started.md), HTTP·MCP 요청 계약은 [API 문서](api.md)를 따른다.
+설치·배포·장애 복구를 담당하는 운영자를 위한 문서다. 작업 전에 대상 환경과 DB·저장소 주소를 확인한다. 최초 로컬 설치는 [시작 가이드](getting-started.md), 요청·응답 형식은 [API 문서](api.md)를 따른다.
 
 | 운영 작업 | 위치 |
 | --- | --- |
@@ -40,41 +40,41 @@ k3s의 PostgreSQL과 MinIO는 `agent-studio` namespace의 공유 서비스를 �
 
 ### 릴리즈와 환경별 배포
 
-릴리즈는 tag·GitHub Release·image 게시·alpha version 목록 갱신까지다. 운영 반영은 대상 Application의 수동 Sync로 진행하며, 배포 전에 GitOps manifest와 실제 Argo CD 설정에서 자동 동기화가 해제되어 있는지 확인한다. 설정이 다르면 별도 승인 범위에서 먼저 조정한다. Agent는 릴리즈 요청만으로 DB 초기화, Argo CD Sync, 운영 서비스 재시작·재생성을 실행하지 않는다.
+Alpha와 prod는 Argo CD 자동 Sync를 사용한다. GitOps의 image tag를 갱신하면 실제 서비스의 rollout이 시작된다. **스키마가 다른 DB에는 새 버전을 배포하기 전에 초기화 절차를 마쳐야 한다.**
 
-릴리즈는 다음 순서로 진행한다.
+| 환경 | GitOps 파일 | Argo CD Application | 완료 확인 |
+| --- | --- | --- | --- |
+| alpha | `charts/agent-memory/values-alpha.yaml`, `versions-alpha.json` | `agent-memory-k3s` | 새 image, `Synced/Healthy`, `https://memory.opsp.dev/api/health`의 HTTP `200` |
+| prod | `charts/agent-memory/values-prod.yaml`, `versions-prod.json` | `agent-memory-eks-demo` | 새 image, `Synced/Healthy`, `https://memory.opspresso.com/api/health`의 HTTP `200` |
 
-1. Pull request는 `.github/workflows/pr.yml`의 검증 job을 실행한다. `v*` tag push는 `.github/workflows/release.yml`에서 같은 검증을 통과한 뒤 Release job을 이어서 시작한다. 서비스 컨테이너를 포함한 모든 job은 Linux runner에서 실행한다.
-2. 검증 후 GitHub Release 생성과 image build가 독립 job으로 실행된다. Image는 ECR·GHCR에 `<tag>`와 `latest`로 게시한다.
-3. Image 게시 성공 후 `GHP_TOKEN`으로 `argocd-env-demo`에 project `agent-memory`, container `app`, phase `alpha`의 GitOps dispatch를 보낸다. `charts/agent-memory/values-alpha.yaml`과 `versions-alpha.json`에 새 tag가 반영됐는지 확인한다.
-4. `prod` job은 `alpha` job 성공 후 `prod` Environment의 사용자 승인을 기다린다. 승인되면 같은 tag를 phase `prod`로 dispatch한다.
+#### 배포 전 준비
 
-`prod` Environment의 required reviewer와 self-review 허용 여부는 GitHub Repository Settings →
-Environments → `prod`에서 확인한다. Workflow 파일은 Environment 연결만 선언하므로 사용자
-승인 보호 규칙이 실제로 설정되어 있어야 한다. 승인 권한이 있는 사용자가 Actions run의
-**Review deployments → prod → Approve and deploy**를 선택하면 `prod` job이 실행된다.
-승인을 거절하면 prod dispatch는 실행되지 않는다. Prod 승인 대기는 alpha tag 전달을 막지 않는다.
+1. 배포할 환경과 사용자가 승인한 범위를 확인한다. Prod 승인·전체 배포를 위임받았다면 해당 절차를 직접 진행한다.
+2. 새 `database/schema.sql`과 대상 DB의 fingerprint를 비교한다.
+3. 스키마가 다르면 [Database 초기화](#database-초기화)를 따른다. DB 쓰기와 구버전 앱의 재기동을 막은 상태에서 새 스키마를 준비한다.
+4. 스키마 준비가 끝나면 자동 배포를 재개할 수 있는지 확인한다. 기존 rolling update는 구버전 Pod를 유지하므로 스키마 변경 중에 구버전과 신버전을 함께 실행하지 않는다.
 
-prod dispatch는 기존 `argocd-env-demo`의 prod PR 절차를 사용한다. PR 반영과 Argo CD Sync는
-별도 단계이며, 이 job은 이미지 재빌드나 클러스터 Sync를 실행하지 않는다.
+#### Workflow 진행 순서
 
+ECR 게시 역할을 처음 준비하거나 권한을 바꾸려면 [GitHub Actions의 ECR 게시 권한 설정](../.github/aws-role/README.md)을 따른다.
 
-릴리즈 완료 후 운영 배포가 필요하면 별도 승인 범위에서 다음 절차를 수행한다.
+1. `v*` tag를 push하면 [release.yml](../.github/workflows/release.yml)의 `verify`가 실행된다. 스키마·lint·typecheck·계층·단위 테스트·build·통합 테스트·인증 E2E를 검사한다.
+2. 검증을 통과하면 GitHub Release 생성과 image build가 각각 실행된다. Image는 ECR·GHCR에 해당 tag와 `latest`로 게시된다. 배포 대상 플랫폼은 `linux/amd64`다.
+3. `alpha` job은 `argocd-env-demo`에 GitOps dispatch를 보낸다. 이 workflow가 alpha 버전 파일을 갱신하면 k3s의 자동 Sync가 새 버전을 반영한다.
+4. `prod` job은 GitHub Environment 승인을 기다린다. 승인되면 같은 image tag를 prod로 전달한다. 이 요청은 `auto_merge=true`를 사용하므로 GitOps가 prod 버전 파일을 `main`에 직접 반영한다. EKS의 자동 Sync가 이어서 실행된다.
+5. 각 환경의 실제 image tag·digest, Argo CD 상태, health·metrics와 worker 실행 상태를 확인한다. GitOps dispatch 성공만으로 rollout 완료를 판단하지 않는다.
 
-1. `agent-memory-k3s`의 자동 동기화가 해제되어 있는지 확인하고 운영 DB와 문서 원본을 백업한다.
-2. 새 image의 `database/schema.sql`과 운영 DB fingerprint를 비교한다. 스키마가 다르면 [Database 초기화](#database-초기화)에 따라 데이터 보존·복원 범위를 결정하고, application·worker를 중단한 뒤 명시적으로 초기화한다. 기존 Pod가 다시 시작되지 않도록 배포 설정과 replica 상태도 함께 관리한다.
-3. DB 준비 후 `agent-memory-k3s`만 수동 Sync하고 rollout 완료를 기다린다. 현재 rolling update 설정은 기존 Pod를 유지하므로 스키마 변경 시 구버전과 신버전을 동시에 실행하지 마라.
-4. 실제 container image, `https://memory.opsp.dev/api/health`, 로그인과 공개 화면의 version을 확인한다.
+Prod 승인 위치는 Actions 실행 화면의 **Review deployments → prod → Approve and deploy**다. Required reviewer와 self-review 설정은 Repository Settings → Environments → `prod`에서 확인한다. 승인 대기는 alpha 배포를 막지 않는다. Environment 연결만 선언한 workflow 파일로는 실제 승인 보호 규칙을 확인할 수 없다.
 
-Alpha 릴리즈 완료 조건은 verify·GitHub Release·image 게시·`alpha` job 성공과 alpha version 목록 갱신이다. Workflow 전체는 prod 승인 대기로 남을 수 있다. k3s rollout은 별도 작업이며 릴리즈 완료 조건에 포함하지 않는다. EKS는 `values-prod.yaml`로 별도 승격하며 `agent-memory-eks-demo`를 수동 Sync한다. EKS readiness 주소는 `https://memory.opspresso.com/api/health`이다. 두 환경의 image는 `linux/amd64` 노드에서 실행한다.
+릴리즈 결과에는 완료한 환경을 구분해 적는다. Alpha만 완료하고 prod 승인을 기다리는 경우에는 전체 배포 완료로 보고하지 않는다. 정확한 요청 payload와 게시 순서는 [release.yml](../.github/workflows/release.yml)을 기준으로 한다.
 
 ### 로컬 개발
 
-Node.js 24, pnpm 11, Docker와 Docker Compose가 필요하다. 다음 명령은 저장소 루트에서 실행한다.
+Node.js 24, pnpm 11, Docker와 Docker Compose가 필요하다. 다음 명령은 새 로컬 설치를 기준으로 저장소 루트에서 실행한다. `.env.local`이 있으면 복사하지 말고 기존 파일을 사용한다.
 
 ```bash
 corepack enable
-pnpm install
+pnpm install --frozen-lockfile
 cp .env.example .env.local
 ```
 
@@ -375,22 +375,36 @@ Semantic search는 query와 같은 model 이름으로 저장된 vector를 사용
 
 ## Database 초기화
 
-Schema source는 `src/infrastructure/database/schema/`, 현재 schema의 생성 SQL은 `database/schema.sql`이다. 누적 migration과 이전 데이터 변환은 제공하지 않는다. 서버는 빈 DB에만 현재 schema를 생성하며, 기존 DB의 fingerprint가 다르면 데이터를 변경하지 않고 시작을 거부한다. 초기화는 transaction과 advisory lock으로 보호하므로 동시 시작에도 한 번만 생성한다.
+`pnpm db:init`은 빈 DB를 준비하거나 기존 스키마가 현재 코드와 같은지 확인한다. **기존 데이터를 삭제하거나 이전 형식을 변환하는 명령이 아니다.** 스키마가 다르면 변경 없이 실패한다.
 
-| 명령 | 용도 |
-| --- | --- |
-| `pnpm db:generate` | 현재 schema 전체 SQL 생성 |
-| `pnpm db:check` | 생성 SQL과 TypeScript schema의 일치 검사 |
-| `pnpm db:init` | 빈 DB 초기화 또는 기존 fingerprint 확인 |
-| `pnpm db:studio` | 지정한 DB를 조회·편집하는 Drizzle Studio 실행 |
+| 명령 | 용도 | DB 연결 |
+| --- | --- | --- |
+| `pnpm db:generate` | TypeScript schema에서 현재 전체 SQL 생성 | 없음 |
+| `pnpm db:check` | 생성 SQL과 TypeScript schema의 일치 확인 | 없음 |
+| `pnpm db:init` | 빈 DB 초기화 또는 fingerprint 확인 | 있음 |
+| `pnpm db:studio` | 지정한 DB 조회·편집 | 있음 |
 
-`db:init`은 `.env.local`을 읽고 이미 설정된 `DATABASE_URL`을 우선한다. 주소가 없으면 실패하며 기본 DB를 선택하지 않는다. `db:generate`와 `db:check`는 DB에 연결하지 않는다. Drizzle Studio는 `.env`와 shell의 `DATABASE_URL`을 사용하므로 실제 대상을 먼저 확인하라.
+Schema 원본은 `src/infrastructure/database/schema/`, 생성 SQL은 `database/schema.sql`이다. 누적 migration과 이전 데이터 변환은 제공하지 않는다.
 
-초기화는 `application_schema`에 생성 SQL의 SHA-256 fingerprint를 기록한다. 내용이 없는 DB에서만 테이블을 생성하고, fingerprint가 일치하는 DB는 유지한다. 표식 없이 기존 테이블이 있거나 fingerprint가 다르면 시작을 거부한다. 스키마 호환성이 없는 릴리즈를 기존 DB에 바로 배포하지 마라.
+### 연결 대상과 완료 기준
 
-배포 이미지에는 `node scripts/init-database.mjs` 명령도 포함한다. Web·worker 시작 전에 schema만 초기화하고 보존 데이터를 복원할 때 사용한다.
+- `db:init`은 `.env.local`을 읽는다. Shell의 `DATABASE_URL`이 있으면 그 값을 우선하며, 주소가 없으면 실패한다.
+- Drizzle Studio는 `.env`와 shell의 `DATABASE_URL`을 사용한다. 실행 전에 실제 대상 DB를 확인한다.
+- 초기화 성공 시 `application_schema`에 SQL의 SHA-256 fingerprint를 저장한다. 명령은 `Database schema is ready.`를 출력한다.
+- 초기화 표식 없이 기존 테이블이 있거나 fingerprint가 다르면 시작을 거부한다. Fingerprint만으로 운영자가 직접 실행한 DDL 변경까지 탐지하지는 않는다.
 
-Schema를 변경하면 배포 전에 application·worker를 중단하고 DB·전용 bucket·queue를 명시적으로 초기화한다. 계정·설정 보존이 필요하면 초기화 전에 별도 보존·복원 범위를 결정한다. 공유 Agent Studio DB·bucket은 초기화 대상에 포함하지 않는다. Application 시작에는 자동 DROP·ALTER·backfill이 없다. 임의 DDL에 의한 schema drift는 fingerprint 검사만으로 탐지하지 않는다.
+배포 image에는 `node scripts/init-database.mjs`도 포함된다. Web·worker를 시작하기 전에 schema만 준비할 때 사용할 수 있다.
+
+### 기존 데이터를 초기화할 때
+
+초기화하면 대상 DB의 계정·설정·Memory·문서·Graph·queue 데이터가 사라진다. 실행 전에 대상과 데이터 삭제 승인을 확인한다. 보존이 필요하면 [백업과 복원](#백업과-복원)을 준비한다. 백업 없이 초기화하도록 승인받았다면 해당 범위에서는 백업을 만들지 않는다.
+
+1. `DATABASE_URL`, Neo4j 주소와 database, 문서 bucket을 확인해 Agent Memory의 대상만 식별한다. 공유 서버의 Agent Studio DB나 공유 bucket 전체를 초기화하지 않는다.
+2. Web·worker의 쓰기를 중단한다. Argo CD·ApplicationSet·HPA가 구버전 앱을 다시 띄우지 않는지도 확인한다. ApplicationSet이 생성한 Application의 임시 설정은 다음 조정 때 덮어쓸 수 있다.
+3. 대상 PostgreSQL DB에 다른 연결이 없는지 확인한다.
+4. 승인한 Memory DB·queue를 비우고 새 image의 현재 schema로 초기화한다. 전용 Neo4j의 Memory projection도 정리한다. 문서 원본을 지울 때는 DB를 비우기 전에 Memory가 소유한 object를 식별한다.
+5. Schema fingerprint가 새 SQL과 같은지 확인한다. 초기화한 데이터의 건수도 확인한다.
+6. 자동 Sync와 앱·worker를 재개한다. 새 image, Ready replica, `/api/health`의 세 검사값 `ok`를 확인한 뒤 임시 초기화 리소스를 제거한다.
 
 ## 문서 worker와 object storage
 
@@ -475,7 +489,7 @@ Worker는 `document-ingestion-v2`와 `document-knowledge-enrichment-v2`를 소�
 
 ### 백업과 복원
 
-백업은 다음 두 저장 영역을 함께 다뤄야 한다.
+데이터 보존이 필요한 환경에서는 다음 두 저장 영역을 함께 백업한다. 백업 없이 초기화하기로 승인한 작업에는 이 절차를 적용하지 않는다.
 
 - PostgreSQL: 조직, 인증, Memory, revision, document metadata·chunk, Graph, candidate, queue 상태, 암호화된 설정 override와 Agent token
 - S3 호환 storage: 업로드한 원본 문서 object

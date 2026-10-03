@@ -1,17 +1,19 @@
 # HTTP API와 MCP
 
-Agent Memory는 MCP로 Memory 저장·회상·잊기를 제공하며, HTTP API로 Memory·RAG 문서·Knowledge Graph와 조직 설정을 관리한다. 이 문서는 현재 route, 입력 schema, 공개 응답의 계약을 설명한다.
+HTTP·MCP client를 구현하는 개발자를 위한 참조 문서다. 인증 방식, 입력값, 권한, 성공 응답과 오류를 설명한다. 최초 로그인과 가입 승인은 [시작 가이드](getting-started.md)를 따른다.
 
 | 찾는 계약 | 위치 |
 | --- | --- |
 | 인증·가입·token·오류 | [인증과 요청 경계](#인증과-요청-경계) |
 | HTTP 경로 전체 목록 | [Endpoint](#endpoint) |
+| 회원·팀·조직 설정 | [조직 관리 입력](#조직-관리-입력) |
 | Memory·문서·Graph CRUD | [Memory](#memory), [문서](#문서), [Knowledge Graph](#knowledge-graph) |
 | 통합 검색·reranker | [통합 Context 검색](#통합-context-검색) |
 | 서비스의 기억 lifecycle | [MCP](#mcp) |
 | 콘솔 목록·원문 페이지 조회 | [Workspace library reads](#workspace-library-reads) |
+| 재전송 시 중복 생성 방지 | [멱등 수집](#멱등-수집) |
 
-모든 예시는 local base URL을 사용한다. `<memoryId>`, `<nodeId>`와 token은 실제 값으로 바꿔라.
+일반 HTTP 예시는 아래 base URL과 **Better Auth session token**을 사용한다. `<memoryId>`·`<nodeId>`는 응답에서 얻은 실제 ID로 바꾼다. 조직 Agent token(`amt_…`)으로 도구를 호출하려면 [MCP](#mcp) 절을 따른다.
 
 ```bash
 export AGENT_MEMORY_URL=http://localhost:3100
@@ -23,7 +25,6 @@ export AGENT_MEMORY_TOKEN='<better-auth-session-token>'
 Better Auth의 `advanced.cookiePrefix`는 `agent-memory`다. 세션 쿠키는
 `agent-memory.session_token`이며 HTTPS 설정에서는 `__Secure-`가 붙는다. Studio의
 `agent-studio` 쿠키와 분리하며 이전 `better-auth` 쿠키를 인증에 사용하지 않는다.
-접두어 변경 배포 후 브라우저 사용자는 다시 로그인해야 한다.
 
 인증 방식과 사용할 수 있는 endpoint는 다음과 같다.
 
@@ -151,19 +152,21 @@ JSON body를 읽는 조직 API는 UTF-8 JSON을 요구하며 전체 body를 1 Mi
 
 오류 응답은 기본적으로 `{ "error": string }`이며 schema validation 오류는 `issues`를 추가할 수 있다.
 
-| Status | 의미 |
-| --- | --- |
-| `400` | JSON, UUID, query 또는 입력 schema가 잘못됨 |
-| `401` | Session 또는 Bearer 인증 실패 |
-| `403` | 조직 멤버십·resource action 권한 부족 또는 브라우저 mutation의 origin 검증 실패 |
-| `404` | Resource가 없거나 호출자에게 존재를 공개할 수 없음 |
-| `409` | Memory version, 문서 retry·candidate review 상태, 중복 membership·팀 slug, owner·자기 관리 제약 또는 Agent token reveal 충돌 |
-| `412` | 문서 scope 변경의 `If-Match`가 현재 `ETag`와 일치하지 않음 |
-| `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
-| `422` | 조직 온톨로지 검증(strict)에서 미등록 kind·predicate를 거부함. 응답에 `violations` 배열 포함 |
-| `428` | Memory mutation에 유효한 `If-Match`가 없거나 문서 scope 변경에 필수 `If-Match`가 없음 |
-| `429` | Instance 또는 PostgreSQL organization·user AI provider 호출 상한, document storage·processing backlog·사용자 upload rate quota를 초과함 |
-| `503` | DB·schema·Neo4j readiness 또는 Graph 동기화 실패, AI 모델 미구성 상태에서 온톨로지 AI 추천·자동 검토를 호출함 |
+| Status | 의미 | 다음 행동 |
+| --- | --- | --- |
+| `400` | JSON·UUID·query·입력 schema 오류 | `error`와 `issues`를 보고 입력을 수정한다. |
+| `401` | Session 또는 Bearer 인증 실패 | Token의 종류·유효성을 확인하고 다시 인증한다. |
+| `403` | 멤버십·작업 권한·브라우저 origin 검증 실패 | 활성 멤버십, scope 권한과 `Origin`을 확인한다. |
+| `404` | Resource가 없거나 존재를 공개할 수 없음 | ID와 현재 접근 권한을 확인한다. |
+| `409` | Version·처리 상태·중복·관리 정책 충돌 | 해당 resource의 최신 상태와 endpoint별 조건을 확인한다. |
+| `412` | 문서 scope 변경의 `If-Match` 불일치 | 문서를 다시 읽고 새 `ETag`로 변경 여부를 판단한다. |
+| `413` | JSON 또는 업로드 크기 초과 | 해당 endpoint의 크기 제한에 맞춰 입력을 줄인다. |
+| `422` | Strict 온톨로지에서 kind·predicate 거부 | `violations`에 따라 입력이나 사전을 수정한다. |
+| `428` | 필수 `If-Match`가 없거나 Memory version 형식이 잘못됨 | 현재 resource의 `ETag`를 전달한다. |
+| `429` | AI 호출·저장 용량·처리 대기·업로드 한도 초과 | 해당 한도를 확인한다. `Retry-After`가 있으면 지정 시간 이후에 재시도한다. |
+| `503` | DB·schema·Neo4j 준비 또는 Graph 동기화 실패. 온톨로지 추천·자동 검토 모델 미설정 | Health와 해당 기능의 서버 설정을 확인한다. |
+
+`409`의 구체적 원인은 endpoint에 따라 다르다. Memory version, 문서 재처리·후보 검토 상태, 중복 회원·팀 slug, 마지막 owner·자기 관리 제약, Agent token 원문 확인 충돌을 포함한다.
 
 AI 호출 quota의 `429`는 초 단위 `Retry-After` header를 포함한다. 문서 storage·backlog·upload quota의 `429`에는 이 header가 없다. Reranker 호출 실패·quota 초과는 hybrid 순위로 복귀한다.
 
@@ -386,7 +389,17 @@ PATCH 성공은 `200`과 갱신된 Memory·`ETag`, DELETE 성공은 `204`와 빈
 
 ### Revision 조회
 
-Revision은 `GET .../versions?limit=<1-100>&before=<version>`으로 역순 조회한다. 기본 limit은 50이며 `manage` 권한이 필요하다. `before`는 2 이상의 정수다. 응답은 `{ versions, nextBefore? }`이며 `nextBefore`가 있으면 다음 요청의 `before`로 사용한다. 최초 version인 1에 도달하거나 페이지가 limit보다 짧으면 `nextBefore`를 생략한다. `before`는 해당 version을 제외한 더 오래된 revision을 선택한다.
+`GET /api/memories/:memoryId/versions`는 최신 version부터 이력을 반환한다. `manage` 권한이 필요하며 응답은 `{ versions, nextBefore? }`다.
+
+| Query | 입력 | 기본값·의미 |
+| --- | --- | --- |
+| `limit` | 정수 1–100 | 기본 50 |
+| `before` | 정수 2 이상 | 해당 version을 제외한 더 오래된 이력. 첫 요청에서는 생략한다. |
+
+1. `before` 없이 첫 페이지를 요청한다.
+2. `versions`를 읽는다.
+3. `nextBefore`가 있으면 다음 요청의 `before`로 전달한다.
+4. `nextBefore`가 없으면 조회를 마친다. Version 1에 도달하거나 반환 개수가 `limit`보다 작으면 생략된다.
 
 Revision 항목은 `memoryId`, `version`, `title`, `content`, `source`, `accessGrants`, `validFrom`, `status`, `changedBy`, `createdAt`과 값이 있는 `embeddingModel`, `expiresAt`, `changeReason`을 포함한다. Archive된 Memory의 revision도 `manage` 권한으로 조회할 수 있다.
 
@@ -582,19 +595,51 @@ curl \
 
 Runtime은 개체를 먼저 식별·검증한 뒤, 살아남은 entity key만 관계의 `sourceKey`·`targetKey`로 허용하는 두 단계 추출을 사용한다. 관계가 없는 결과도 정상이며 0–1개 개체에는 관계 모델을 호출하지 않는다. 이후의 자동 검증은 별도 요청이다.
 
-현재 검증 policy는 `evidence-v5`다. 핵심 관계는 다른 검증을 모두 통과하면 모델의 `incidental` 표기에도 보존될 수 있으며, 판정 이유에 이를 기록한다. 근거 없는 주장·불확실성·종류 불일치·일시적 이동·응답은 이 규칙으로 승격하지 않는다. 새 assessment 항목에는 `support`(explicit/uncertain/unsupported), `usefulness`(useful/incidental), `conflict`(boolean)를 함께 반환한다. 과거 assessment에는 이 선택형 필드가 없을 수 있다. `reason`은 최대 1,000자의 설명이며 긴 응답은 끝의 `…`로 축약을 표시한다. `assessment.items[].representation`은 `entity`, `relationship`, `attribute`, `generic_reference`, `uncertain` 중 하나다. 개체 항목의 `entityKind`는 제안 종류를 보지 않은 검증 모델이 원문에서 추론한 종류이며 제안과 다르면 자동 승격하지 않는다. 관계·속성·호칭을 개체로 판정하거나 끝점의 개체 자격·종류가 확인되지 않은 관계도 자동 승인하지 않는다. 이전 policy의 미완료 후보는 다시 검증하며, 이전 판정은 선택형 `assessmentHistory` 배열에 같은 assessment 형식으로 보존한다. 이미 처리한 항목의 결정과 완료된 Graph를 자동 철회하지 않는다.
+현재 검증 policy는 `evidence-v5`다. 핵심 관계는 다른 검증을 모두 통과하면 모델의 `incidental` 표기에도 보존될 수 있으며, 판정 이유에 이를 기록한다. 근거 없는 주장·불확실성·종류 불일치·일시적 이동·응답은 이 규칙으로 승격하지 않는다.
+
+새 assessment 항목에는 `support`(explicit/uncertain/unsupported), `usefulness`(useful/incidental), `conflict`(boolean)를 함께 반환한다. 과거 assessment에는 이 선택형 필드가 없을 수 있다. `reason`은 최대 1,000자의 설명이며 긴 응답은 끝의 `…`로 축약을 표시한다.
+
+`assessment.items[].representation`은 `entity`, `relationship`, `attribute`, `generic_reference`, `uncertain` 중 하나다. 개체 항목의 `entityKind`는 제안 종류를 보지 않은 검증 모델이 원문에서 추론한 종류이며 제안과 다르면 자동 승격하지 않는다. 관계·속성·호칭을 개체로 판정하거나 끝점의 개체 자격·종류가 확인되지 않은 관계도 자동 승인하지 않는다.
+
+이전 policy의 미완료 후보는 다시 검증하며, 이전 판정은 선택형 `assessmentHistory` 배열에 같은 assessment 형식으로 보존한다. 이미 처리한 항목의 결정과 완료된 Graph를 자동 철회하지 않는다.
 
 `GET /api/knowledge/progress`는 읽기 가능한 ready 문서 청크를 대상으로 `{ totalChunks, extractedChunks, curatedChunks, enabled }`를 반환한다. Curated는 검증과 자동 처리가 끝났거나 사람이 완료한 청크다. 이 숫자는 수동 검토까지 모두 끝났다는 의미가 아니다.
 
 `GET /api/knowledge/curation`은 검토 권한이 있는 ready 문서의 최근 assessment 기록 50개를 `{ sources: [{ candidate, documentTitle, ordinal }] }`로 반환한다. Candidate는 assessment와 항목별 자동·수동 처리 기록을 포함한다.
 
+#### 자동 검토 등록
+
 `POST /api/knowledge/curation?query=관우`는 검토 권한이 있는 후보 중 이름·추출된 별칭에 해당 검색어가 포함된 후보를 우선 처리한다. Query는 선택 사항이며 최대 500자다. 기존 queued job도 우선순위를 올린다. 이미 저장된 추출을 재사용하며 원문 전체 재검색이나 재추출은 수행하지 않는다. Query가 있으면 `queued`는 기존 대기·실행 중 작업을 포함한 우선 처리 요청 대상 수이며, 생략하면 새로 등록된 작업 수다. Query를 생략하면 미검증 추출·미완료 자동 처리 항목과 아직 추출 결과가 없는 ready 청크를 등록한다. 추출 실패로 재시도가 소진된 청크도 포함하며 source의 현재 `manage` 권한을 요구한다. 완료된 추출은 보존하고 queued·active 작업은 중복 등록하지 않는다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐 요청자(기본 ingestion은 문서 생성자)의 현재 권한을 검증한 후 실행한다.
 
-자동 검증은 추출과 별도의 structured-output 요청이다. 기본은 추출 모델이며 `KNOWLEDGE_VERIFICATION_BASE_URL`과 `KNOWLEDGE_VERIFICATION_MODEL`을 함께 지정하면 독립 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다. `evidence-v5`의 `assessment.aliases`에는 `entityKey`, `alias`, `identity`, `verdict`, `evidence`, `reason`을 저장한다. 별칭 identity는 `same_entity`, `generic_reference`, `different_entity`, `uncertain` 중 하나이며 원문 인용과 별칭 자체의 원문 출현이 확인된 `same_entity`만 자동 승격한다. 기존 이름 뒤에 수식어를 붙인 별칭은 선택형 `assessment.aliases[].descriptiveExpansion`으로 설명형 확장 여부를 따로 검증하며, `true`이면 같은 대상을 가리켜도 별칭으로 승격하지 않는다. 직함·호칭과 다른 개체의 이름은 별칭에서 제외하고, 불확실한 별칭은 개체와 연결 관계를 수동 검토로 남긴다. Provider 응답 스키마는 모든 항목 ID를 필수 object key로 지정하고 추가 key를 금지한다. 서버에서도 전체 항목 집합을 다시 검증한다. 모든 항목이 정확히 한 번 평가되어야 하고 명시적·유용한 사실만 자동 승인 대상이다. 불확실성, 충돌, strict 사전 위반, 불명확한 양 끝 개체와 모호한 별칭 identity는 사람에게 남긴다. 검증된 별칭은 승인 시 출처와 함께 node에 보존한다. 후속 후보는 대표 이름과 별칭으로 기존 지식을 조회해 같은 scope·kind의 유일한 ID를 재사용한다. 다른 대표 이름을 가진 개체들이 별칭끼리만 공유하는 경우에는 자동 병합하지 않으며, 후보에 각 기존 대표 이름의 명시적인 동일인 근거가 있어야 통합한다. 명시적으로 동일인으로 검증된 이름들이 각각 별도 node로 존재하면 출처·관계·과거 승인 binding을 보존해 통합한다. 명시적인 동일인 근거로 해소되지 않은 이름이 여러 node와 일치하면 자동 검토는 해당 개체·관계를 수동 검토로 전환한다. 사람이 이 상태에서 승인을 요청하면 `409`를 반환하므로 기존 node identity를 먼저 정리해야 한다. 인용은 원문과 대조하며 실패·불완전 응답은 자동 승인의 근거가 될 수 없다. `itemReviews[].method`는 human 또는 automatic으로 처리 주체를 구분한다. 인증된 공개 승인 body로 method를 지정할 수 없다.
+#### 검증 결과와 별칭
 
-`GET /api/knowledge/review-groups?offset=0&limit=25&query=유비`는 AI가 수동 검토로 분류한 항목과 현재 strict 사전에 막힌 자동 승인 묶음의 pending 항목에서 동일 scope·kind·정규화 이름의 개체와 동일 양 끝 개체·predicate의 관계를 통합한 후 페이지를 반환한다. 응답은 `{ groups, total, sourceCount, offset, limit, automaticAccepted, automaticIgnored, unassessedCount }`이다. 자동 처리 수는 개체·관계 항목 단위이며 검토 권한이 있는 ready source만 집계한다. Limit은 1–100, offset은 0 이상의 정수이며 query는 최대 500자다. 그룹의 `occurrences`는 후보 ID, 문서 제목·ID, chunk ID·ordinal, 근거, 별칭·설명과 해당 항목을 검토할 `selection`을 제공한다. 빈 결과와 이미 검토한 항목은 제외한다. 각 그룹의 `ontology`는 검증 모드와 해당 항목의 위반 목록을 제공한다. 구체적인 관계와 인용 근거가 있는 항목을 우선하며 정렬은 진실성 점수가 아니다. 대칭 관계만 역방향을 통합한다. 원본 인용이 다른 사건·시점을 나타내는지는 검토자가 확인한다.
+자동 검증은 추출과 별도의 structured-output 요청이다. 기본은 추출 모델이며 `KNOWLEDGE_VERIFICATION_BASE_URL`과 `KNOWLEDGE_VERIFICATION_MODEL`을 함께 지정하면 독립 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다.
+
+`evidence-v5`의 `assessment.aliases`에는 `entityKey`, `alias`, `identity`, `verdict`, `evidence`, `reason`을 저장한다. 별칭 identity는 `same_entity`, `generic_reference`, `different_entity`, `uncertain` 중 하나이며 원문 인용과 별칭 자체의 원문 출현이 확인된 `same_entity`만 자동 승격한다. 기존 이름 뒤에 수식어를 붙인 별칭은 선택형 `assessment.aliases[].descriptiveExpansion`으로 설명형 확장 여부를 따로 검증하며, `true`이면 같은 대상을 가리켜도 별칭으로 승격하지 않는다.
+
+직함·호칭과 다른 개체의 이름은 별칭에서 제외하고, 불확실한 별칭은 개체와 연결 관계를 수동 검토로 남긴다. Provider 응답 스키마는 모든 항목 ID를 필수 object key로 지정하고 추가 key를 금지한다. 서버에서도 전체 항목 집합을 다시 검증한다.
+
+모든 항목이 정확히 한 번 평가되어야 하고 명시적·유용한 사실만 자동 승인 대상이다. 불확실성, 충돌, strict 사전 위반, 불명확한 양 끝 개체와 모호한 별칭 identity는 사람에게 남긴다. 검증된 별칭은 승인 시 출처와 함께 node에 보존한다.
+
+후속 후보는 대표 이름과 별칭으로 기존 지식을 조회해 같은 scope·kind의 유일한 ID를 재사용한다. 다른 대표 이름을 가진 개체들이 별칭끼리만 공유하는 경우에는 자동 병합하지 않으며, 후보에 각 기존 대표 이름의 명시적인 동일인 근거가 있어야 통합한다. 명시적으로 동일인으로 검증된 이름들이 각각 별도 node로 존재하면 출처·관계·과거 승인 binding을 보존해 통합한다.
+
+명시적인 동일인 근거로 해소되지 않은 이름이 여러 node와 일치하면 자동 검토는 해당 개체·관계를 수동 검토로 전환한다. 사람이 이 상태에서 승인을 요청하면 `409`를 반환하므로 기존 node identity를 먼저 정리해야 한다. 인용은 원문과 대조하며 실패·불완전 응답은 자동 승인의 근거가 될 수 없다.
+
+`itemReviews[].method`는 human 또는 automatic으로 처리 주체를 구분한다. 인증된 공개 승인 body로 method를 지정할 수 없다.
+
+`GET /api/knowledge/review-groups?offset=0&limit=25&query=유비`는 AI가 수동 검토로 분류한 항목과 현재 strict 사전에 막힌 자동 승인 묶음의 pending 항목에서 동일 scope·kind·정규화 이름의 개체와 동일 양 끝 개체·predicate의 관계를 통합한 후 페이지를 반환한다. 응답은 `{ groups, total, sourceCount, offset, limit, automaticAccepted, automaticIgnored, unassessedCount }`이다. 자동 처리 수는 개체·관계 항목 단위이며 검토 권한이 있는 ready source만 집계한다.
+
+Limit은 1–100, offset은 0 이상의 정수이며 query는 최대 500자다. 그룹의 `occurrences`는 후보 ID, 문서 제목·ID, chunk ID·ordinal, 근거, 별칭·설명과 해당 항목을 검토할 `selection`을 제공한다. 빈 결과와 이미 검토한 항목은 제외한다.
+
+각 그룹의 `ontology`는 검증 모드와 해당 항목의 위반 목록을 제공한다. 구체적인 관계와 인용 근거가 있는 항목을 우선하며 정렬은 진실성 점수가 아니다. 대칭 관계만 역방향을 통합한다.
+
+원본 인용이 다른 사건·시점을 나타내는지는 검토자가 확인한다.
+
+#### 검토할 항목 선택
 
 승인·거절 body의 선택적 `selection: { entityKeys: string[], relationshipIndexes: number[] }`은 원본 graph의 키와 0 기반 관계 index를 참조한다. 생략하면 남은 항목 전체를 처리한다. 관계 승인은 양 끝 개체도 승격하고, 개체 거절은 아직 검토하지 않은 연결 관계도 거절한다. 다른 항목은 pending으로 남는다. `itemReviews`는 항목별 decision·reviewedBy·reviewedAt·reason을 보존하며 원본 graph는 변경하지 않는다. 모든 항목을 검토하면 승인된 항목이 하나라도 있는 후보는 accepted, 전부 거절한 후보는 rejected가 된다. 동일 항목의 같은 결정은 멱등하며 반대 결정은 거부한다. 빈 추출은 조회 이력으로 보존하되 승인할 수 없다.
+
+#### 후보와 원문 근거
 
 Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity와 relationship candidate를 만든다. Candidate는 source document·chunk, 현재 출처 문서 scope, extraction model을 포함하며 chunk 원문 전체를 응답하지 않는다. 새 추출의 entity는 `aliases`와 `evidence` 배열을, relationship은 `evidence` 배열을 포함한다. Evidence는 청크에서 인용한 최대 2,000자의 문구이며 각 배열은 최대 20개다. 근거 필드가 없는 기존 추출 기록도 조회할 수 있다. 서버는 NFKC·공백 정규화 후 원문에 존재하는 인용만 보존하고, 근거가 없는 개체·관계와 막연한 동시 등장 관계를 제외한다. 중복 키가 같은 kind·정규화 이름을 가리키면 통합하고, 서로 다른 개체를 가리키면 모호한 개체들과 연결 관계를 제외한다. 없는 개체를 참조하는 관계와 자기 자신을 가리키는 관계도 제외하며 같은 청크의 정상 지식은 보존한다. 인용 일치는 의미적 사실 검증을 대체하지 않는다.
 

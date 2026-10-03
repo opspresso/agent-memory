@@ -1,8 +1,14 @@
 # 지식 워크스페이스 UI
 
-이 문서는 현재 화면의 책임, 공통 상호작용과 검증 근거를 설명한다. 실제 조작 절차는 [사용자 가이드](user-guide.md), HTTP·MCP 입력과 응답은 [API 문서](api.md)를 기준으로 한다. 실행·채팅·도구 조립은 Agent Studio가 담당한다.
+화면을 구현·변경·검증하는 개발자를 위한 문서다. 조작 절차는 [사용자 가이드](user-guide.md), 입력·응답은 [API 문서](api.md)를 따른다. 구현 선택은 아래 목표·요구사항·제약·완료 기준으로 판단한다.
 
-## 정보 구조
+## Goal — 목표
+
+사용자가 권한에 맞는 지식을 찾고, 원문 근거를 확인하고, 변경 결과를 이해할 수 있게 한다. Agent 실행·채팅·도구 조립은 Agent Studio가 담당한다.
+
+## Requirements — 요구사항
+
+### 정보 구조
 
 | 경로 | 화면 | 주요 작업 |
 | --- | --- | --- |
@@ -19,8 +25,6 @@
 
 지식 화면은 활성 설치 멤버십을 요구한다. 조직 선택기는 없으며 사용자는 개인·팀·조직 scope로 지식을 구분한다. 조직 관리 메뉴는 admin·owner에게, 팀 메뉴는 관리 가능한 팀이 있는 사용자에게 표시한다. 전역 admin은 멤버십 상태와 관계없이 계정 메뉴에서 애플리케이션 설정에 접근할 수 있다.
 
-## 표현과 상호작용
-
 ### 목록과 상세
 
 검색과 라이브러리는 목록에서 대상을 고르고 상세에서 내용·출처를 읽는 구조다. 읽기 권한만 있어도 Memory의 본문과 허용된 근거를 읽을 수 있다. 수정·이력·archive는 서버가 반환한 capability에 따라 제공한다.
@@ -35,7 +39,11 @@ Memory는 내용·출처, 수정, 이력을 탭으로 구분한다. 저장 후 �
 
 Graph의 위치 계산과 선택 상태는 client가, 접근 가능한 node·edge·source 결정은 server가 소유한다. 지도와 키보드로 선택 가능한 노드 목록은 같은 선택을 공유한다. 중심 node가 바뀌면 제한된 depth·limit의 neighborhood를 새로 조회한다.
 
-D3의 힘 기반 배치와 충돌 완화로 관계 지도를 구성한다. 노드를 드래그하면 위치가 고정되며 종류 필터로 잠시 숨겨도 고정 위치를 유지한다. 배경 드래그로 이동하며 휠·핀치 또는 버튼으로 확대·축소한다. `화면에 맞춤`은 현재 노드 범위를 맞추고 `배치 초기화`는 고정을 풀어 다시 배치한다. `전체 화면`에서는 지도와 상세 패널을 넓게 표시하며 종료 버튼·Esc로 돌아온다. 노드 선택·종류 필터·키보드 탐색·원문 근거 조회는 같은 지도를 사용한다. 모션 감소 설정에서는 초기 애니메이션을 생략한다.
+- 노드 드래그로 위치를 고정한다. 종류 필터로 숨겨도 고정 위치를 유지한다.
+- 배경 드래그로 이동하고 휠·핀치·버튼으로 확대·축소한다.
+- `화면에 맞춤`은 현재 노드 범위를 맞춘다. `배치 초기화`는 고정을 풀고 다시 배치한다.
+- 전체 화면에서도 선택·필터·키보드 탐색·근거 조회가 동작한다. 종료 버튼이나 Esc로 원래 화면에 돌아온다.
+- 모션 감소 설정에서는 초기 애니메이션을 생략한다.
 
 ### 지식 자동 처리와 검토
 
@@ -56,7 +64,15 @@ Graph의 진척 배너는 추출·검증·자동 처리 상태를 표시하며 �
 - 가입 대기, 로딩, 초기 상태, 빈 결과, 접근 상실, 실패, version 충돌에 각각 안내와 복구 동작을 제공한다.
 - 중립 배경, indigo 강조색, 작은 radius를 사용한다. 위험 작업의 색상을 전역 스타일로 덮지 않는다.
 
-## 구현 위치
+## Constraints — 제약
+
+- 서버가 현재 권한과 허용된 자료를 결정한다. 버튼을 숨기는 것만으로 접근을 통제하지 않는다.
+- 읽을 수 없는 원문과 이전 선택의 응답을 새 상세 화면에 표시하지 않는다.
+- 보관·삭제·병합의 영향과 충돌 시 복구 방법을 구분해 안내한다.
+- 번역은 UI에 적용한다. 사용자 자료와 API 식별자는 번역하지 않는다.
+- 아래 구현 위치는 현재 코드의 참조다. 컴포넌트 분리나 지도 배치 방법은 요구사항·제약을 만족하는 범위에서 바꿀 수 있다.
+
+### 구현 위치
 
 | 책임 | 구현 |
 | --- | --- |
@@ -67,7 +83,23 @@ Graph의 진척 배너는 추출·검증·자동 처리 상태를 표시하며 �
 | 공개 제품 가이드 | [guide/page.tsx](../src/app/guide/page.tsx) |
 | 번역 key와 기본 언어 | [en.ts](../src/app/_i18n/messages/en.ts), [ko.ts](../src/app/_i18n/messages/ko.ts) |
 
-## 비교 화면
+## Acceptance Criteria — 완료 기준
+
+| 검증할 행동 | 통과 조건 | 검증 근거 |
+| --- | --- | --- |
+| 공개 화면·로그인·언어·테마 사용 | 화면이 로드되고 언어·테마 선택을 유지한다. Hydration 오류가 없다. | [home.spec.ts](../e2e/home.spec.ts) |
+| 가입 요청·승인·멤버 관리 | 승인 전 접근을 막고 역할·상태 변경을 반영한다. 늦은 조회가 변경 결과를 덮지 않는다. | [workspace.spec.ts](../e2e/workspace.spec.ts), [member-refresh.spec.ts](../e2e/member-refresh.spec.ts) |
+| Memory 읽기·수정·이력 조회 | 본문과 이력 오류를 분리한다. 이전 이력을 페이지로 이어 읽고 접근 오류 후 복구할 수 있다. | [memory-history.spec.ts](../e2e/memory-history.spec.ts) |
+| 문서와 근거 탐색 | 상태·본문·출처를 확인하고 권한에 맞게 공유 범위를 바꾼다. 지연 응답이 새 선택을 덮지 않는다. | [knowledge-workspace.spec.ts](../e2e/knowledge-workspace.spec.ts), [document-scope.spec.ts](../e2e/document-scope.spec.ts) |
+| Graph 조작 | 노드 선택·드래그·고정 해제·전체 화면과 모션 감소 설정이 요구대로 동작한다. | [knowledge-graph-motion.spec.ts](../e2e/knowledge-graph-motion.spec.ts) |
+| 좁은 화면에서 작업 | 가로 넘침 없이 목록·상세를 전환하고 작업을 이어갈 수 있다. | [knowledge-workspace.spec.ts](../e2e/knowledge-workspace.spec.ts) |
+| 권한·데이터·계층 유지 | 결정적 정책 테스트, PostgreSQL·Neo4j 통합 테스트, `pnpm architecture`가 통과한다. | [검증 명령](operations.md#배포-전-확인) |
+
+인증 E2E에는 폐기 가능한 `_e2e` 또는 `_test` DB와 `E2E_AUTHENTICATED=true`가 필요하다. 미설정 시 인증 시나리오는 skip된다. 실행 방법은 [운영 가이드](operations.md#배포-전-확인)를 따른다.
+
+E2E는 문서 worker 결과를 합성 DB fixture로 준비하고 일부 지연·오류 응답을 재현한다. Worker·외부 AI의 실제 운영 상태를 검증하는 검사는 아니다. 처리와 저장소 불변 조건은 application·integration 테스트로 따로 검증한다.
+
+### 참고 화면
 
 다음 이미지는 로컬 합성 fixture로 만든 레이아웃 참고 자료다. 현재 계약·문구·데이터는 위 구현과 사용자 가이드를 우선하며, 이미지로 검색 품질이나 성능을 판단하지 않는다.
 
@@ -75,16 +107,3 @@ Graph의 진척 배너는 추출·검증·자동 처리 상태를 표시하며 �
 - [Memory 목록과 상세](ui/after-memory.png)
 - [원문과 AI 후보 비교](ui/after-review.png)
 - [모바일 다크 테마의 문서 읽기](ui/after-document-mobile.png)
-
-## 검증 범위
-
-| 검증 | 근거 |
-| --- | --- |
-| 공개 화면·로그인·언어·테마 | [home.spec.ts](../e2e/home.spec.ts) |
-| 가입 요청·승인·멤버 관리·Memory·MCP 연결 | [workspace.spec.ts](../e2e/workspace.spec.ts) |
-| 근거·문서 상태·지연 응답·선택 유지·모바일 | [knowledge-workspace.spec.ts](../e2e/knowledge-workspace.spec.ts) |
-| 권한·상태·동시성 및 계층 | unit test, PostgreSQL integration test, `pnpm architecture` |
-
-인증 E2E에는 폐기 가능한 `_e2e` 또는 `_test` DB와 `E2E_AUTHENTICATED=true`가 필요하다. 미설정 시 인증 시나리오는 skip된다. 실행 방법은 [운영 가이드](operations.md#배포-전-확인)를 따른다.
-
-E2E는 문서 worker 결과를 합성 DB fixture로 준비하고 일부 지연·오류 응답을 재현한다. Worker·외부 AI의 실제 운영 상태를 검증하는 검사는 아니다. 처리와 저장소 불변 조건은 application·integration 테스트로 따로 검증한다.

@@ -2,13 +2,29 @@
 
 이 저장소에서 coding agent가 지켜야 할 프로젝트별 규칙이다. `CLAUDE.md`는 이 파일을 가리키는 symlink다.
 
-## Development status and compatibility
+## 개발 상태와 호환성
 
-This project is under active development. Backward compatibility is not required unless the
-user explicitly requests it. Prefer the clean current-state design over compatibility shims;
-breaking changes to APIs, configuration, schemas, and stored data formats are allowed. Any
-operation that destroys existing data or git history still requires explicit user approval and
-the applicable safety checks.
+이 프로젝트는 개발 중이다. 사용자가 요구하지 않으면 하위 호환성을 유지하지 않는다. 호환용 우회 코드보다 현재 설계에 맞는 구현을 우선한다. API·설정·스키마·저장 형식은 변경할 수 있지만, 기존 데이터나 Git 이력을 삭제하려면 사용자의 명시적 승인이 필요하다.
+
+## 문서 작성 원칙
+
+ISO 24495-1처럼 **쉽게 찾고 이해하고 사용할 수 있게**, ASD-STE100처럼 **짧고 명확하며 모호하지 않게** 작성합니다.
+
+[ISO 24495-1](https://www.iso.org/standard/78907.html)의 [독자 중심 원칙](https://www.iplfederation.org/iso-standard/)과 [ASD-STE100의 명확한 기술 문장 작성 원칙](https://www.asd-ste100.org/STE_faq.html)을 다음과 같이 적용한다. 한국어 문서에는 영어 통제 어휘를 강제하지 않고, 뜻이 분명한 문장과 일관된 용어를 사용한다.
+
+| 원칙 | 작성·검토 기준 |
+| --- | --- |
+| 필요한 정보 제공(relevant) | 대상 독자와 하려는 작업을 먼저 밝힌다. 작업에 필요한 조건·권한·제약을 포함하고, 관계없는 내용과 중복 설명은 줄인다. |
+| 찾기 쉬운 구성(findable) | 결론과 시작 위치를 앞에 둔다. 작업을 나타내는 제목, 목적별 링크, 실행 순서에 맞춘 절차를 사용한다. |
+| 이해하기 쉬운 표현(understandable) | 익숙하고 구체적인 말로 누가 무엇을 하는지 쓴다. 한 문단에는 한 주제를 담고, 필요한 전문 용어는 처음 나올 때 설명한다. |
+| 활용하기 쉬운 안내(usable) | 실행 위치·선행 조건·입력값·기대 결과를 명시한다. 실패 시 확인할 항목과 다음 행동을 안내한다. |
+
+- `README.md`는 제품 선택과 시작 위치를, 시작 가이드는 최초 성공 절차를, 사용자 가이드는 화면 작업을 설명한다. API·아키텍처·운영 문서는 각 독자에게 필요한 계약과 판단 근거를 제공한다.
+- UI 이름, 파일 경로, 명령어, API 식별자와 상태값은 실제 구현과 같은 표기를 유지한다. 낯선 용어를 지우면서 권한·동시성·데이터 보존 조건을 바꾸지 마라.
+- 한 문장에는 한 가지 핵심 내용을, 절차의 한 단계에는 한 가지 주된 행동을 쓴다. 주체·대상·조건을 명시하고 같은 개념에는 같은 용어를 사용한다. 설명과 실행 지시를 구분한다.
+- 구현 요청·설계 문서는 **Goal → Requirements → Constraints → Acceptance Criteria**를 중심으로 쓴다. 목표, 필요한 동작, 지켜야 할 제약, 관찰 가능한 완료 조건을 명확히 하되 구현 방법은 필요한 만큼만 제한한다. API 참조와 운영 가이드는 독자의 조회·실행 순서에 맞춘 구조를 사용한다.
+- 순서가 있는 작업은 번호 목록으로, 비교·대응 관계는 표로 정리한다. 긴 문서를 단순히 짧게 만드는 것보다 독자가 작업을 완료할 수 있는지를 우선한다.
+- 문서를 바꾼 뒤 링크·앵커·예시를 확인하고, 독자의 작업을 하나 골라 시작 조건부터 완료 확인까지 따라가며 검토하라. 실제 사용자 검증을 하지 않았다면 했다고 보고하지 마라.
 
 ## 프로젝트 역할
 
@@ -38,8 +54,8 @@ Agent Memory는 독립적으로 실행할 수 있으며 Agent Studio와 선택�
 - 서비스의 Memory 저장·회상·잊기는 Agent Memory의 MCP `remember`, `recall`, `forget`이 소유한다. Plugin의 `memory` 연결은 설치의 `/api/mcp` URL과 Bearer credential을 사용한다. RAG 문서와 Knowledge Graph도 Agent Memory에서 관리한다.
 - Studio의 capability catalog 검색과 Agent Memory의 조직 지식 검색을 구분하라. Agent 실행 기능은 Studio에, 공유 Memory·RAG·Graph 기능은 Agent Memory에 둔다.
 - Plugin은 사용 지침과 MCP 선언을, 설치 측은 credential·서비스 URL·model 선택·version binding을 소유한다. Studio용 skill은 shell·filesystem·network를 직접 사용할 수 있다고 가정하지 않는다.
-- `릴리즈` 요청은 tag·GitHub Release·image 게시·`../argocd-env-demo`의 alpha version 목록 갱신까지만 허용한다. prod dispatch는 GitHub Environment의 사용자 승인 후에만 실행한다. 운영 rollout을 릴리즈 완료 조건으로 삼지 마라. DB 초기화, Argo CD Sync, 운영 서비스 재시작·재생성은 별도의 명시적 지시가 필요하다.
-- `../argocd-env-demo`가 Helm과 Argo CD 설정을 소유한다. k3s는 alpha(`https://memory.opsp.dev/`), EKS는 prod(`https://memory.opspresso.com/`)다. `agent-memory-k3s`와 `agent-memory-eks-demo`는 수동 Sync로 반영한다. EKS는 PostgreSQL·Neo4j Helm chart와 S3 Pod Identity를 사용한다. 릴리즈의 alpha 갱신과 prod 승격·rollout을 구분한다.
+- 릴리즈 workflow는 검증 후 tag의 GitHub Release와 image를 게시하고 alpha의 버전 목록·image tag를 갱신한다. Prod dispatch에는 GitHub Environment 승인이 필요하다. 사용자가 prod 승인과 전체 배포를 명시적으로 위임했다면 그 범위에서 직접 진행하고 각 환경의 rollout·health까지 확인하라. 이미 받은 승인을 다시 요청하지 마라.
+- `../argocd-env-demo`가 Helm과 Argo CD 설정을 소유한다. k3s는 alpha(`https://memory.opsp.dev/`), EKS는 prod(`https://memory.opspresso.com/`)다. `agent-memory-k3s`와 `agent-memory-eks-demo`는 자동 Sync를 사용하므로 image tag 갱신이 운영 rollout으로 이어진다. 스키마가 바뀌면 배포 전에 [DB 초기화 절차](docs/operations.md#database-초기화)와 승인 범위를 확인하라. 초기화는 명시적으로 승인된 Memory 데이터에만 적용하고, 백업 없이 초기화하도록 승인받은 범위에서는 백업을 만들지 않는다.
 - k3s에서는 PostgreSQL·MinIO 인프라를 Agent Studio와 공유하되 database(`agent_studio`, `agent_memory`)와 bucket(`agent-studio-static`, `agent-memory`)을 분리한다. Neo4j는 `agent-memory` namespace의 전용 서비스를 사용한다. Application image와 로컬 Compose는 각 앱이 소유하며, 릴리즈의 alpha image tag 전달을 유지한다.
 
 ## Toolchain

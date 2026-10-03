@@ -1,39 +1,59 @@
 # Agent Memory
 
-Agent Memory는 설치당 하나의 조직에서 서비스와 AI Agent가 장기 기억을 공유하는 독립 실행형 Context 플랫폼이다. MCP로 기억을 저장·회상·잊고, RAG 문서와 provenance 기반 Knowledge Graph를 함께 관리한다. 운영 콘솔과 HTTP API도 같은 권한 정책과 application use case를 사용한다. Agent Studio는 선택적으로 연결하는 실행 플랫폼이며, Agent 실행·채팅·도구 조립은 이 저장소의 역할이 아니다.
+Agent Memory는 사람과 AI Agent가 조직의 장기 기억과 문서 지식을 공유하는 설치형 서비스다. 한 설치에서 하나의 조직을 관리한다. 독립적으로 사용하거나 Agent Studio에 연결할 수 있다.
+
+운영 콘솔, HTTP API, MCP는 같은 권한 정책을 사용한다. Agent 실행·채팅·도구 조립은 Agent Studio가 담당한다.
 
 ## 핵심 흐름
 
-| 목적 | 제공 기능 |
+| 하려는 일 | 제공 기능 |
 | --- | --- |
-| 장기 기억 | MCP `remember`로 저장, `recall`로 관련 Memory 회상, `forget`으로 archive |
-| 문서 지식 | 파일 업로드 → 원본 저장 → worker 추출·chunk 생성 → 검색 |
-| Knowledge Graph | Memory·문서 chunk를 근거로 관계를 구성하고, AI 검증 기준을 통과한 지식은 자동 반영하고 불확실한 후보만 사람이 검토 |
-| 통합 검색 | `context_search`로 Memory·문서·Graph를 함께 검색 |
+| 결정·규칙·경험 기억하기 | MCP `remember`로 저장하고 `recall`로 회상한다. `forget`은 기억을 보관 처리한다. |
+| 문서에서 근거 찾기 | 파일을 업로드하면 worker가 본문을 추출하고 검색용 조각을 만든다. |
+| 지식 사이의 관계 확인하기 | Knowledge Graph에서 개체·관계와 그 근거인 Memory·문서를 함께 읽는다. |
+| 모든 지식 검색하기 | `context_search`로 Memory·문서·Graph를 함께 검색한다. |
 
-Memory, 문서, Graph에는 개인·팀·조직 scope를 적용한다. 일반 사용자는 첫 콘솔 접속 시 가입 요청을 등록하고 운영자 승인 후 지식에 접근한다. 조직 Agent token만 사용하는 서비스는 조직 범위로 제한되며, 사용자 위임은 [MCP 인증 계약](docs/api.md#mcp)을 따른다.
+자료의 공유 범위는 개인·팀·조직 중에서 선택한다. 신규 사용자는 운영자 승인을 받아야 조직 지식을 사용할 수 있다.
 
-Embedding을 설정하지 않아도 키워드 검색을 사용할 수 있다. 선택형 embedding은 의미 검색을, reranker는 통합 검색과 Memory 회상의 재정렬을 제공한다. 문서의 `ready` 상태는 검색 준비 완료를 뜻하며 Graph 추출·검증 완료와는 다르다. 문서 원본과 변경 이력을 보존하는 archive는 영구 삭제와 다르다.
+키워드 검색은 외부 AI 없이 동작한다. 의미 검색, 결과 재정렬, 문서의 AI 지식 추출은 모델을 설정하면 사용할 수 있다. 문서의 `ready`는 검색 준비 완료를 뜻한다. AI 추출·검증은 그 이후에도 계속될 수 있다.
+
+## 문서
+
+| 독자와 작업 | 읽을 문서 |
+| --- | --- |
+| 처음 설치하고 첫 자료를 검색하려는 사용자 | [시작 가이드](docs/getting-started.md) |
+| 콘솔에서 Memory·문서·Graph를 관리하는 사용자 | [사용자 가이드](docs/user-guide.md) |
+| HTTP·MCP client를 구현하는 개발자 | [HTTP API와 MCP](docs/api.md) |
+| 설정·배포·장애 복구를 담당하는 운영자 | [운영 가이드](docs/operations.md) |
+| 계층·권한·저장 계약을 변경하는 개발자 | [아키텍처](docs/architecture.md) |
+| 화면을 구현하거나 검증하는 개발자 | [지식 워크스페이스 UI](docs/ui-workspace.md) |
+| 저장소에서 작업하는 coding agent | [프로젝트 지침](AGENTS.md) |
 
 ## 빠른 시작
 
-Neo4j가 노드·관계의 topology를 저장하고 관계 지도와 MCP neighborhood의 탐색을 수행한다. PostgreSQL은 계정·문서·출처·승인 원장을 보존한다. 승인 원장의 변경은 탐색 전에 Neo4j에 원자적으로 동기화하며, 반환할 자료의 현재 권한과 출처 상태는 PostgreSQL에서 다시 확인한다. Neo4j는 필수 실행 구성 요소이며 시작 및 health check에서 연결을 확인한다.
+**새 로컬 설치와 빈 DB를 기준으로 한다.** Node.js 24, pnpm 11, Docker와 Docker Compose가 필요하다. PostgreSQL·MinIO·Neo4j는 Compose에서 실행하고, 앱은 host에서 실행한다. Neo4j는 필수 구성 요소다.
 
-Node.js 24, pnpm 11, Docker와 Docker Compose가 필요하다. 로컬 개발은 루트 `compose.yaml`로 PostgreSQL·MinIO·Neo4j를 실행하고, Next.js는 host의 `pnpm dev`로 실행한다. 새 로컬 설치는 다음 절차를 따른다.
+### 1. 의존성과 설정 준비
+
+저장소 루트에서 실행한다. `.env.local`이 이미 있으면 복사하지 말고 기존 설정을 확인한다.
 
 ```bash
 corepack enable
-pnpm install
+pnpm install --frozen-lockfile
 cp .env.example .env.local
 ```
 
-`.env.local`의 `BETTER_AUTH_SECRET`을 32자 이상의 임의 값으로 바꾸고, 로컬 로그인과 최초 운영자 계정을 설정하라.
+`.env.local`에서 `BETTER_AUTH_SECRET`을 32자 이상의 임의 값으로 바꾼다. 로컬 로그인과 가입을 켜고 최초 운영자의 실제 이메일을 지정한다.
 
 ```dotenv
 AUTH_PASSWORD=true
 AUTH_PASSWORD_SIGNUP=true
 ADMIN_EMAILS=your-admin@example.com
 ```
+
+### 2. 인프라와 앱 실행
+
+각 명령이 성공한 뒤 다음 명령을 실행한다.
 
 ```bash
 docker compose up --wait postgres minio neo4j
@@ -42,53 +62,58 @@ pnpm db:init
 pnpm dev
 ```
 
-`http://localhost:3100`에서 지정한 운영자 email로 가입하라. 설치에 active owner가 없으면 이 사용자가 최초 owner가 된다. 다른 사용자의 요청은 `회원` 화면에서 승인한다.
+`pnpm db:init`은 `.env.local`을 읽는다. Shell에 `DATABASE_URL`이 있으면 그 값을 우선한다. 빈 DB를 초기화하거나 기존 스키마가 현재 코드와 같은지 확인한다. 스키마가 다르면 데이터를 변경하지 않고 실패한다. 이때는 [DB 초기화 절차](docs/operations.md#database-초기화)를 확인한다.
 
-`pnpm db:init`은 `.env.local`을 읽으며 shell의 `DATABASE_URL`이 있으면 우선한다. 빈 DB만 초기화하고 현재 schema와 다른 기존 DB는 변경 없이 거부한다. Google·OIDC 사용, 환경 설정 우선순위, 첫 Memory·문서·MCP 연결은 [시작 가이드](docs/getting-started.md)를 따른다.
+### 3. 실행 확인과 첫 로그인
 
-## 운영 콘솔
+다른 terminal에서 확인한다.
 
-콘솔은 통합 검색, Memory 읽기·수정·이력, 문서 업로드·재처리, Graph 탐색, AI 후보 검토, 회원·팀·조직 설정, Agent 연결을 제공한다. 읽기·쓰기·관리 권한에 따라 사용할 수 있는 작업이 달라진다.
+```bash
+curl -i http://localhost:3100/api/health
+```
 
-화면별 절차는 [사용자 가이드](docs/user-guide.md), 로그인 없이 읽을 수 있는 제품 안내는 `/guide`에서 확인한다.
+HTTP `200`이고 `database`, `schema`, `neo4j`가 모두 `ok`이면 앱을 사용할 수 있다. 실패하면 [장애 대응](docs/operations.md#장애-대응)을 따른다.
+
+`http://localhost:3100`에서 `ADMIN_EMAILS`에 지정한 이메일로 가입한다. 활성 owner가 없는 새 설치에서는 이 계정이 최초 owner가 된다. 이후 사용자의 가입 요청은 `회원` 화면에서 승인한다.
+
+첫 Memory·문서·MCP 연결은 [시작 가이드](docs/getting-started.md#4-첫-memory와-검색)를 따른다. 로그인 없이 제품 흐름을 읽으려면 `/guide`를 연다.
+
+## 용어
+
+| 용어 | 이 프로젝트에서의 의미 |
+| --- | --- |
+| Memory | 결정·규칙·경험처럼 다시 사용할 지식. 본문, 출처, 유효기간과 변경 이력을 보존한다. |
+| MCP | Agent가 서비스의 도구를 호출하는 연결 규약. 이 서비스의 주소는 `/api/mcp`다. |
+| RAG·chunk | RAG는 검색한 자료를 답변의 근거로 활용하는 방식이다. Chunk는 검색과 출처 확인에 쓰는 문서 본문 조각이다. |
+| Knowledge Graph | 개체(node)와 관계(edge)를 연결한 지식 구조. 각 지식은 Memory 또는 문서 조각을 근거로 갖는다. |
+| 출처(provenance) | 지식의 근거가 된 Memory 또는 문서 조각과의 연결. |
+| 공유 범위(scope) | 자료를 개인·팀·조직 중 어디에 공유할지 정하는 값. |
+| Embedding·reranker | Embedding은 의미 검색에 쓰는 수치 표현이다. Reranker는 검색 후보의 관련도를 다시 평가해 순서를 정하는 모델이다. |
+| 보관(archive) | 원본과 이력을 남기면서 일반 검색에서 제외하는 처리. 영구 삭제와 다르다. |
 
 ## 기술 구성
 
-- Next.js App Router, TypeScript strict, React, Mantine
-- Better Auth, Drizzle, PostgreSQL·pgvector, pg-boss, Neo4j
-- S3 호환 object storage, OpenAI-compatible embedding·reranker·extraction adapter
-- HTTP API, Streamable HTTP MCP, Pino, OpenTelemetry·Langfuse
+- 화면·API: Next.js App Router, TypeScript strict, React, Mantine, Better Auth
+- 저장·처리: PostgreSQL·pgvector, Drizzle, pg-boss, S3 호환 저장소, Neo4j
+- 선택형 AI: OpenAI-compatible embedding·reranker·지식 추출 adapter
+- 관측: Pino, OpenTelemetry·Langfuse, Prometheus metrics
 
-정확한 runtime·의존성 버전은 [package.json](package.json)과 [pnpm-lock.yaml](pnpm-lock.yaml), 계층과 불변 조건은 [아키텍처](docs/architecture.md)를 기준으로 한다.
-
-## 문서
-
-| 하려는 작업 | 문서 |
-| --- | --- |
-| 로컬 설치부터 첫 검색·서비스 연결까지 | [시작 가이드](docs/getting-started.md) |
-| 콘솔에서 지식을 관리하고 권한을 이해하기 | [사용자 가이드](docs/user-guide.md) |
-| HTTP 또는 MCP client 구현 | [HTTP API와 MCP](docs/api.md) |
-| 배포·환경 설정·backup·장애 대응 | [운영 가이드](docs/operations.md) |
-| 내부 책임·데이터 흐름·불변 조건 확인 | [Architecture](docs/architecture.md) |
-| 화면 구조·상호작용·UI 검증 확인 | [Workspace UI](docs/ui-workspace.md) |
-| 저장소 변경 규칙 확인 | [AGENTS.md](AGENTS.md) |
+버전은 [package.json](package.json)과 [pnpm-lock.yaml](pnpm-lock.yaml), 구성 요소의 책임은 [아키텍처](docs/architecture.md)를 기준으로 한다.
 
 ## 개발 검증
-
-지식 추출기는 개체와 관계를 두 단계로 추출하고, 개체 자격·종류·원문 근거를 별도로 검증한다. `pnpm eval:knowledge --variants entity-first --verify`로 합성 진단 사례를 현재 모델에서 평가한다. LlamaIndex 비교와 결과 해석은 [추출기 평가 절차](docs/operations.md#추출기-평가)를 따른다.
 
 ```bash
 pnpm verify
 ```
 
-이 명령은 현재 schema SQL과 TypeScript schema의 일치 검사, lint, typecheck, architecture, unit test, production build를 실행한다. DB·repository 변경에는 `pnpm test:integration`, 화면·브라우저 흐름 변경에는 `pnpm test:e2e`를 추가한다. 인증 E2E는 폐기 가능한 별도 DB와 `E2E_AUTHENTICATED=true`가 필요하다. [검증 절차](docs/operations.md#배포-전-확인)를 따른다.
+스키마 SQL 일치, lint, typecheck, 계층 규칙, 단위 테스트, production build를 검사한다. DB 변경에는 통합 테스트를, 화면 변경에는 E2E를 추가한다. 실행 조건은 [배포 전 확인](docs/operations.md#배포-전-확인)을 따른다. PR·release tag CI도 전체 검사와 인증 E2E를 실행한다.
 
-Pull request와 release tag CI는 빈 DB 초기화, 위 전체 검사, PostgreSQL·Neo4j integration test, 인증 E2E를 실행한다.
+추출 모델의 품질을 비교하려면 [추출기 평가](docs/operations.md#추출기-평가)를 따른다.
 
 ## 데이터 보호
 
-누적 migration과 구버전 데이터 변환은 제공하지 않는다. 현재 스키마는 `database/schema.sql`로 관리하며, 스키마가 달라지면 배포 전에 백업·쓰기 중단·명시적 초기화가 필요하다. 계정·설정 보존은 운영자가 별도로 수행하며 서버가 기존 데이터를 자동 삭제하거나 변환하지 않는다. [DB 초기화 절차](docs/operations.md#database-초기화)를 따른다.
+서버는 기존 데이터를 자동 삭제하거나 구버전 형식으로부터 변환하지 않는다. 스키마 변경 시 운영자는 쓰기를 중단하고 승인된 범위에서 DB를 초기화한다. 보존이 필요하면 백업·복원 범위를 정한다. 백업 없이 초기화하도록 승인한 환경에는 해당 결정을 적용한다.
 
-로컬 Compose의 PostgreSQL·MinIO·Neo4j volume은 Agent Memory 전용이다. `docker compose down -v`는 데이터를 삭제한다.
+`docker compose down -v`는 로컬 전용 PostgreSQL·MinIO·Neo4j 데이터를 삭제한다. 일반 종료에는 `docker compose down`을 사용한다.
 
-k3s는 alpha(`https://memory.opsp.dev/`), EKS는 prod(`https://memory.opspresso.com/`) 환경이다. 릴리즈는 tag·GitHub Release·image 게시·`../argocd-env-demo`의 alpha version 목록 갱신까지다. Prod 승격은 GitHub Environment의 사용자 승인이 필요하며, DB 초기화·Argo CD Sync·서비스 재시작은 별도로 승인받아 수행한다. 운영 반영 전 대상 Application의 수동 Sync 설정과 DB 준비 상태를 확인하라. 배포와 backup·복원 절차는 [운영 가이드](docs/operations.md#배포-형태)를 따른다.
+Alpha는 k3s, prod는 EKS에 배포한다. 두 환경은 Argo CD 자동 Sync를 사용하므로 GitOps의 image tag 갱신이 rollout으로 이어진다. Prod는 GitHub Environment 승인 후 갱신한다. 배포 순서와 완료 기준은 [운영 가이드](docs/operations.md#릴리즈와-환경별-배포)를 따른다.
