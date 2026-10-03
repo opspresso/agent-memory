@@ -851,7 +851,8 @@ describe("PostgreSQL schema", () => {
         sizeBytes: 16,
         createdBy: user,
         now: createdAt
-      })
+      }),
+      status: "ready"
     });
     await pool.query(
       `INSERT INTO document_chunks (id, organization_id, document_id, ordinal, content)
@@ -890,7 +891,7 @@ describe("PostgreSQL schema", () => {
         predicate: "stores_in",
         source: { chunkId },
         now: createdAt
-      })
+      }), { organizationId: organization, userId: user, role: "owner", teams: [] }
     );
     const candidateRepository = createKnowledgeCandidateRepository(db);
     await candidateRepository.save(
@@ -2278,7 +2279,7 @@ describe("PostgreSQL schema", () => {
       source: { memoryId: corroboratingMemoryId },
       now: createdAt
     });
-    await repository.saveEdge(edge);
+    await repository.saveEdge(edge, { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] });
 
     const normalizedRecognition = await repository.saveNode(
       createKnowledgeNode({
@@ -2346,7 +2347,7 @@ describe("PostgreSQL schema", () => {
         predicate: "depends_on",
         source: { memoryId: sourceMemoryId },
         now: createdAt
-      })
+      }), { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] }
     );
     const selfCollapsingEdge = await repository.saveEdge(
       createKnowledgeEdge({
@@ -2358,7 +2359,7 @@ describe("PostgreSQL schema", () => {
         predicate: "same_as",
         source: { memoryId: sourceMemoryId },
         now: createdAt
-      })
+      }), { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] }
     );
     await pool.query("UPDATE team_members SET role = 'manager' WHERE organization_id = $1 AND team_id = $2 AND user_id = $3", [organization, team, user]);
     await expect(
@@ -2520,7 +2521,8 @@ describe("PostgreSQL schema", () => {
       source: { memoryId: sourceMemoryId },
       now: createdAt
     });
-    await repository.saveEdge(cascadingEdge);
+    await pool.query("UPDATE memories SET status='active' WHERE id=$1", [sourceMemoryId]);
+    await repository.saveEdge(cascadingEdge, { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] });
     await expect(repository.deleteNode(organization, sourceNodeId, scope)).resolves.toBe(true);
     await expect(
       repository.findNodeById(organization, sourceNodeId)
@@ -2727,14 +2729,14 @@ describe("PostgreSQL schema", () => {
       id, scope, kind: "person", canonicalName: `Person ${index}`, source: { memoryId }, now
     }))));
     const retained = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
-      sourceNodeId: low!.id, targetNodeId: middle!.id, predicate: "sibling_of", source: { memoryId }, now }));
+      sourceNodeId: low!.id, targetNodeId: middle!.id, predicate: "sibling_of", source: { memoryId }, now }), { organizationId: organization, userId: user, role: "owner", teams: [] });
     const moved = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
-      sourceNodeId: middle!.id, targetNodeId: high!.id, predicate: "sibling_of", source: { memoryId: otherMemoryId }, now }));
+      sourceNodeId: middle!.id, targetNodeId: high!.id, predicate: "sibling_of", source: { memoryId: otherMemoryId }, now }), { organizationId: organization, userId: user, role: "owner", teams: [] });
     await repository.mergeNodes({ organizationId: organization, sourceNodeId: high!.id, targetNodeId: low!.id, mergedBy: user, reason: "Same person", now });
     expect(await repository.findEdgeById(organization, moved.id)).toBeNull();
     expect((await repository.findEdgeById(organization, retained.id))?.sources).toEqual(expect.arrayContaining([{ memoryId }, { memoryId: otherMemoryId }]));
     const repeated = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
-      sourceNodeId: middle!.id, targetNodeId: low!.id, predicate: "sibling_of", source: { memoryId: otherMemoryId }, now }));
+      sourceNodeId: middle!.id, targetNodeId: low!.id, predicate: "sibling_of", source: { memoryId: otherMemoryId }, now }), { organizationId: organization, userId: user, role: "owner", teams: [] });
     expect(repeated.id).toBe(retained.id);
   });
 

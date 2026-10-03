@@ -119,7 +119,7 @@ describe("source-grounded knowledge aliases", () => {
     const third = await test.promote("제갈공명이 군사를 지휘했다.", "제갈공명");
     const student = await test.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: test.scope, canonicalName: "장수", kind: "person", source: { chunkId: second.chunkId }, now: new Date() }));
     const edge = await test.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: test.organizationId, scope: test.scope, sourceNodeId: second.node.id, targetNodeId: student.id,
-      predicate: "teaches", source: { chunkId: second.chunkId }, now: new Date() }));
+      predicate: "teaches", source: { chunkId: second.chunkId }, now: new Date() }), test.access);
     const linked = await test.promote("제갈량의 자는 공명이며 제갈공명이라고도 불린다.", "제갈량", ["공명", "제갈공명"]);
     expect(linked.node.id).toBe(first.node.id);
     expect(linked.node.sources).toHaveLength(4);

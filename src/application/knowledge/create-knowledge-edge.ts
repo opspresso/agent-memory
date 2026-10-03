@@ -141,7 +141,8 @@ export function buildCreateKnowledgeEdge(
         ...(input.properties ? { properties: input.properties } : {}),
         source: input.source,
         now: dependencies.clock()
-      })
+      }),
+      input.access
     );
     return { edge, ontologyWarnings };
   };

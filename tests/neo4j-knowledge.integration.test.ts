@@ -66,7 +66,7 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     }
     async function edge(left: KnowledgeNode, right: KnowledgeNode, edgeScope = scope, chunkId = origin.chunkId) {
       return repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId, scope: edgeScope, sourceNodeId: left.id,
-        targetNodeId: right.id, predicate: "uses", source: { chunkId }, now: new Date() }));
+        targetNodeId: right.id, predicate: "uses", source: { chunkId }, now: new Date() }), access);
     }
     return { organizationId, userId, access, scope, repository, projection, source, node, edge };
   }

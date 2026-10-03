@@ -16,10 +16,6 @@ import type {
   ScopedResource
 } from "@/domain/identity/organization-access";
 import type {
-  KnowledgeEdge,
-  KnowledgeSource
-} from "@/domain/knowledge/knowledge-graph";
-import type {
   KnowledgeGraphRepository,
   KnowledgeNodeSearchInput
 } from "@/domain/knowledge/knowledge-graph-repository";
@@ -48,6 +44,7 @@ import { sameScope, scopeCovers } from "@/domain/identity/scope-coverage";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-change";
 import { createOrganizationAccessRepository } from "./organization-access-repository";
+import { edgeFromRow, findOrCreateKnowledgeEdge } from "./knowledge-edge-persistence";
 import {
   memoryReadPredicate,
   scopedReadPredicate
@@ -56,32 +53,13 @@ import {
   knowledgeNodeFromRow,
   knowledgeScopeFromRow,
   knowledgeSourceFromRow,
-  upsertKnowledgeNode
+  upsertKnowledgeNode,
+  type KnowledgeSourceRecord
 } from "./knowledge-node-persistence";
 
 type EdgeRow = typeof knowledgeEdges.$inferSelect;
 type NodeSourceRow = typeof knowledgeNodeSources.$inferSelect;
 type EdgeSourceRow = typeof knowledgeEdgeSources.$inferSelect;
-
-export function edgeFromRow(
-  row: EdgeRow,
-  sources: readonly KnowledgeSource[]
-): KnowledgeEdge {
-  if (sources.length === 0) {
-    throw new Error("knowledge edge has no provenance");
-  }
-  return {
-    id: row.id,
-    organizationId: row.organizationId,
-    scope: knowledgeScopeFromRow(row),
-    sourceNodeId: row.sourceNodeId,
-    targetNodeId: row.targetNodeId,
-    predicate: row.predicate,
-    properties: row.properties,
-    sources,
-    createdAt: row.createdAt
-  };
-}
 
 function nodeAccessPredicate(access: OrganizationAccess): SQL {
   return scopedReadPredicate(access, knowledgeNodes);
@@ -140,26 +118,11 @@ function edgeHasVisibleSource(access: OrganizationAccess, now: Date): SQL {
   )`;
 }
 
-export function edgeValues(edge: KnowledgeEdge) {
-  return {
-    id: edge.id,
-    organizationId: edge.organizationId,
-    scopeKind: edge.scope.kind,
-    teamId: edge.scope.kind === "team" ? edge.scope.teamId : null,
-    userId: edge.scope.kind === "user" ? edge.scope.userId : null,
-    sourceNodeId: edge.sourceNodeId,
-    targetNodeId: edge.targetNodeId,
-    predicate: edge.predicate,
-    properties: edge.properties,
-    createdAt: edge.createdAt
-  };
-}
-
 function sourcesByResourceId<T extends NodeSourceRow | EdgeSourceRow>(
   rows: readonly T[],
   resourceIdFor: (row: T) => string
-): Map<string, KnowledgeSource[]> {
-  const result = new Map<string, KnowledgeSource[]>();
+): Map<string, KnowledgeSourceRecord[]> {
+  const result = new Map<string, KnowledgeSourceRecord[]>();
   for (const row of rows) {
     const resourceId = resourceIdFor(row);
     const sources = result.get(resourceId) ?? [];
@@ -247,7 +210,7 @@ export function createKnowledgeGraphRepository(
           if (identity.status === "resolved") proposed = { ...node, canonicalName: identity.target.canonicalName,
             aliases: knowledgeAliases(identity.target.canonicalName, [node.canonicalName, ...node.aliases]) };
         }
-        const saved = await upsertKnowledgeNode(transaction, proposed);
+        const saved = await upsertKnowledgeNode(transaction, proposed, "replace");
         if (!access) return saved;
         const [row] = await transaction.select().from(knowledgeNodes).where(eq(knowledgeNodes.id, saved.id));
         const sources = await transaction.select().from(knowledgeNodeSources).where(and(
@@ -409,11 +372,15 @@ export function createKnowledgeGraphRepository(
               embedding: sourceReference.embedding,
               embeddingModel: sourceReference.embeddingModel,
               names: { ...knowledgeNameMap([source.canonicalName]), ...sourceReference.names },
-              createdAt: input.now
+              properties: sourceReference.properties,
+              createdAt: sourceReference.createdAt,
+              updatedAt: sourceReference.updatedAt
             })
             .onConflictDoUpdate({
               target: [knowledgeNodeSources.organizationId, knowledgeNodeSources.nodeId, knowledgeNodeSources.memoryId, knowledgeNodeSources.chunkId],
               set: { names: sql`${knowledgeNodeSources.names} || excluded.names`,
+                properties: sql`excluded.properties || ${knowledgeNodeSources.properties}`,
+                updatedAt: input.now,
                 embedding: sql`coalesce(${knowledgeNodeSources.embedding}, excluded.embedding)`,
                 embeddingModel: sql`coalesce(${knowledgeNodeSources.embeddingModel}, excluded.embedding_model)`,
                 description: sql`CASE
@@ -484,11 +451,8 @@ export function createKnowledgeGraphRepository(
                   eq(knowledgeEdgeSources.edgeId, edge.id)
                 )
               );
-            const edgeSources = edgeFromRow(
-              edge,
-              sourceRows.map(knowledgeSourceFromRow)
-            ).sources;
-            for (const sourceReference of edgeSources) {
+            if (sourceRows.length === 0) throw new Error("knowledge edge has no provenance");
+            for (const sourceReference of sourceRows) {
               await transaction
                 .insert(knowledgeEdgeSources)
                 .values({
@@ -496,9 +460,14 @@ export function createKnowledgeGraphRepository(
                   edgeId: existingEdge.id,
                   memoryId: sourceReference.memoryId ?? null,
                   chunkId: sourceReference.chunkId ?? null,
-                  createdAt: input.now
+                  properties: sourceReference.properties,
+                  createdAt: sourceReference.createdAt,
+                  updatedAt: sourceReference.updatedAt
                 })
-                .onConflictDoNothing();
+                .onConflictDoUpdate({
+                  target: [knowledgeEdgeSources.organizationId, knowledgeEdgeSources.edgeId, knowledgeEdgeSources.memoryId, knowledgeEdgeSources.chunkId],
+                  set: { properties: sql`excluded.properties || ${knowledgeEdgeSources.properties}`, updatedAt: input.now }
+                });
             }
             const candidateEdges = await transaction
               .select({ candidateId: knowledgeCandidateEdges.candidateId })
@@ -524,12 +493,6 @@ export function createKnowledgeGraphRepository(
                 .onConflictDoNothing();
             }
             await transaction
-              .update(knowledgeEdges)
-              .set({
-                properties: sql`${JSON.stringify(edge.properties)}::jsonb || ${JSON.stringify(existingEdge.properties)}::jsonb`
-              })
-              .where(eq(knowledgeEdges.id, existingEdge.id));
-            await transaction
               .delete(knowledgeEdges)
               .where(eq(knowledgeEdges.id, edge.id));
           } else {
@@ -546,7 +509,6 @@ export function createKnowledgeGraphRepository(
         const [merged] = await transaction
           .update(knowledgeNodes)
           .set({
-            properties: sql`${JSON.stringify(source.properties)}::jsonb || ${knowledgeNodes.properties}`,
             updatedAt: input.now
           })
           .where(eq(knowledgeNodes.id, target.id))
@@ -610,53 +572,37 @@ export function createKnowledgeGraphRepository(
       });
     },
 
-    async saveEdge(edge) {
-      const values = edgeValues(edge);
+    async saveEdge(edge, access) {
       return db.transaction(async (transaction) => {
         await lockKnowledgeScope(transaction, edge.organizationId);
         await assertKnowledgeSourceScopes(transaction, edge.scope, edge.sources);
         const endpoints = await transaction.select().from(knowledgeNodes).where(and(eq(knowledgeNodes.organizationId, edge.organizationId), inArray(knowledgeNodes.id, [edge.sourceNodeId, edge.targetNodeId]))).orderBy(asc(knowledgeNodes.id)).for("share");
         if (endpoints.length !== 2 || endpoints.some((node) => !scopeCovers(knowledgeScopeFromRow(node), edge.scope))) throw new KnowledgeScopeChangedError();
-        const [row] = await transaction
-          .insert(knowledgeEdges)
-          .values(values)
-          .onConflictDoUpdate({
-          target: [
-            knowledgeEdges.organizationId,
-            knowledgeEdges.scopeKind,
-            knowledgeEdges.teamId,
-            knowledgeEdges.userId,
-            knowledgeEdges.sourceNodeId,
-            knowledgeEdges.predicate,
-            knowledgeEdges.targetNodeId
-          ],
-            set: {
-              properties: sql`${knowledgeEdges.properties} || excluded.properties`
-            }
+        const row = await findOrCreateKnowledgeEdge(transaction, edge);
+        const [source] = edge.sources;
+        await transaction
+          .insert(knowledgeEdgeSources)
+          .values({
+            organizationId: edge.organizationId,
+            edgeId: row.id,
+            memoryId: source.memoryId ?? null,
+            chunkId: source.chunkId ?? null,
+            properties: edge.properties,
+            createdAt: edge.createdAt,
+            updatedAt: edge.createdAt
           })
-          .returning();
-        if (!row) {
-          throw new Error("knowledge edge upsert returned no row");
-        }
-        for (const source of edge.sources) {
-          await transaction
-            .insert(knowledgeEdgeSources)
-            .values({
-              organizationId: edge.organizationId,
-              edgeId: row.id,
-              memoryId: source.memoryId ?? null,
-              chunkId: source.chunkId ?? null,
-              createdAt: edge.createdAt
-            })
-            .onConflictDoNothing();
-        }
+          .onConflictDoUpdate({
+            target: [knowledgeEdgeSources.organizationId, knowledgeEdgeSources.edgeId, knowledgeEdgeSources.memoryId, knowledgeEdgeSources.chunkId],
+            set: { properties: sql`excluded.properties`, updatedAt: edge.createdAt }
+          });
         const sourceRows = await transaction
           .select()
           .from(knowledgeEdgeSources)
           .where(
             and(
               eq(knowledgeEdgeSources.organizationId, edge.organizationId),
-              eq(knowledgeEdgeSources.edgeId, row.id)
+              eq(knowledgeEdgeSources.edgeId, row.id),
+              visibleSourcePredicate(access, knowledgeEdgeSources, clock())
             )
           );
         return edgeFromRow(

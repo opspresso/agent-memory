@@ -2,6 +2,7 @@ import type { OrganizationAccess, ScopedResource } from "@/domain/identity/organ
 
 import type {
   KnowledgeEdge,
+  KnowledgeEdgeContribution,
   KnowledgeEmbedding,
   KnowledgeNode,
   KnowledgeNodeContribution
@@ -47,7 +48,7 @@ export interface KnowledgeGraphRepository {
     readonly reason: string;
     readonly now: Date;
   }): Promise<KnowledgeNode | null>;
-  saveEdge(edge: KnowledgeEdge): Promise<KnowledgeEdge>;
+  saveEdge(edge: KnowledgeEdgeContribution, access: OrganizationAccess): Promise<KnowledgeEdge>;
   findEdgeById(
     organizationId: string,
     edgeId: string

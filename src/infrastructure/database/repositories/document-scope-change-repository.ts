@@ -67,7 +67,7 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
           const grouped = new Map<string, KnowledgeSource[]>();
           for (const row of rows) {
             const key = id(row), group = grouped.get(key) ?? [];
-            group.push(knowledgeSourceFromRow(row));
+            group.push(row.memoryId ? { memoryId: row.memoryId } : { chunkId: row.chunkId! });
             grouped.set(key, group);
           }
           return grouped;
@@ -112,13 +112,6 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
             identityConflict: (edgeIdentities.get(edgeIdentity(edge))?.size ?? 0) > 1
           }))
         });
-        const changedNodes = new Set(plan.nodeIds), changedEdges = new Set(plan.edgeIds);
-        const uncoveredNode = nodes.some((node) => affectedNodes.has(node.id) && !changedNodes.has(node.id) && !scopeCovers(input.scope, knowledgeScopeFromRow(node)));
-        const uncoveredEdge = edges.some((edge) => affectedEdges.has(edge.id) && !changedEdges.has(edge.id) && !scopeCovers(input.scope, knowledgeScopeFromRow(edge)));
-        // Shared properties are not attributed per source. A
-        // skipped, wider graph resource could retain information from this
-        // document even after its provenance is filtered from public reads.
-        if (uncoveredNode || uncoveredEdge) return { status: "related_scope_conflict" };
         const [updated] = await transaction.update(documents).set({ ...scopeValues, updatedAt: now }).where(eq(documents.id, row.id)).returning();
         if (!updated) throw new Error("document scope update returned no row");
         if (plan.nodeIds.length) await transaction.update(knowledgeNodes).set({ ...scopeValues, updatedAt: now }).where(and(eq(knowledgeNodes.organizationId, organizationId), inArrayParameter(knowledgeNodes.id, plan.nodeIds)));

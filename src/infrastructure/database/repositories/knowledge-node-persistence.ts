@@ -3,12 +3,12 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import type {
   KnowledgeNode,
-  KnowledgeNodeContribution,
-  KnowledgeSource
+  KnowledgeNodeContribution
 } from "@/domain/knowledge/knowledge-graph";
 import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
 import { mergeKnowledgeDescriptions } from "@/domain/knowledge/knowledge-description";
 import { knowledgeAliases, knowledgeNameMap } from "@/domain/knowledge/knowledge-alias";
+import { mergeKnowledgeProperties, type KnowledgePropertyContribution } from "@/domain/knowledge/knowledge-properties";
 
 import type { AgentMemoryDatabase } from "../client";
 import { knowledgeNodes, knowledgeNodeSources } from "../schema";
@@ -18,13 +18,21 @@ type AgentMemoryTransaction = Parameters<
 >[0];
 type NodeRow = typeof knowledgeNodes.$inferSelect;
 
+export interface KnowledgeSourceRecord extends KnowledgePropertyContribution {
+  readonly description?: string;
+  readonly names?: Readonly<Record<string, string>>;
+}
+
 export function knowledgeSourceFromRow(row: {
   memoryId: string | null;
   chunkId: string | null;
+  properties: Readonly<Record<string, unknown>>;
+  updatedAt: Date;
   description?: string | null;
   names?: Readonly<Record<string, string>>;
-}): KnowledgeSource & { readonly description?: string; readonly names?: Readonly<Record<string, string>> } {
+}): KnowledgeSourceRecord {
   return { ...(row.memoryId ? { memoryId: row.memoryId } : { chunkId: row.chunkId! }),
+    properties: row.properties, updatedAt: row.updatedAt,
     ...(row.names ? { names: row.names } : {}),
     ...(row.description ? { description: row.description } : {}) };
 }
@@ -54,7 +62,7 @@ export function knowledgeScopeFromRow(row: {
 
 export function knowledgeNodeFromRow(
   row: NodeRow,
-  sources: readonly (KnowledgeSource & { readonly description?: string; readonly names?: Readonly<Record<string, string>> })[]
+  sources: readonly KnowledgeSourceRecord[]
 ): KnowledgeNode {
   if (sources.length === 0) {
     throw new Error("knowledge node has no provenance");
@@ -68,7 +76,7 @@ export function knowledgeNodeFromRow(
     canonicalName: row.canonicalName,
     aliases: knowledgeAliases(row.canonicalName, sources.flatMap((source) => Object.values(source.names ?? {}))),
     ...(summary ? { summary } : {}),
-    properties: row.properties,
+    properties: mergeKnowledgeProperties(sources),
     sources: sources.map((source) => source.memoryId ? { memoryId: source.memoryId } : { chunkId: source.chunkId! }),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
@@ -84,7 +92,6 @@ export function knowledgeNodeValues(node: KnowledgeNode) {
     userId: node.scope.kind === "user" ? node.scope.userId : null,
     kind: node.kind,
     canonicalName: node.canonicalName,
-    properties: node.properties,
     createdAt: node.createdAt,
     updatedAt: node.updatedAt
   };
@@ -110,7 +117,8 @@ function identityPredicate(node: KnowledgeNode) {
 
 export async function upsertKnowledgeNode(
   transaction: AgentMemoryTransaction,
-  node: KnowledgeNodeContribution
+  node: KnowledgeNodeContribution,
+  propertyWrite: "replace" | "preserve"
 ): Promise<KnowledgeNode> {
   const values = knowledgeNodeValues(node);
   const identity = `${node.scope.organizationId}:${node.scope.kind}:${node.scope.kind === "team" ? node.scope.teamId : ""}:${node.scope.kind === "user" ? node.scope.userId : ""}:${node.kind}:${knowledgeCanonicalNameKey(node.canonicalName)}`;
@@ -126,7 +134,6 @@ export async function upsertKnowledgeNode(
     ? await transaction
         .update(knowledgeNodes)
         .set({
-          properties: sql`${knowledgeNodes.properties} || ${JSON.stringify(values.properties)}::jsonb`,
           updatedAt: values.updatedAt
         })
         .where(eq(knowledgeNodes.id, existing.id))
@@ -144,7 +151,6 @@ export async function upsertKnowledgeNode(
             knowledgeNodes.canonicalName
           ],
           set: {
-            properties: sql`${knowledgeNodes.properties} || excluded.properties`,
             updatedAt: values.updatedAt
           }
         })
@@ -164,12 +170,15 @@ export async function upsertKnowledgeNode(
       embedding: node.embedding?.values ?? null,
       embeddingModel: node.embedding?.model ?? null,
       names: knowledgeNameMap([node.canonicalName, ...node.aliases]),
-      createdAt: node.updatedAt
+      properties: node.properties,
+      createdAt: node.updatedAt,
+      updatedAt: node.updatedAt
     })
     .onConflictDoUpdate({
       target: [knowledgeNodeSources.organizationId, knowledgeNodeSources.nodeId, knowledgeNodeSources.memoryId, knowledgeNodeSources.chunkId],
       set: { description: sql`coalesce(excluded.description, ${knowledgeNodeSources.description})`,
         embedding: sql`excluded.embedding`, embeddingModel: sql`excluded.embedding_model`,
+        ...(propertyWrite === "replace" ? { properties: sql`excluded.properties`, updatedAt: node.updatedAt } : {}),
         names: sql`${knowledgeNodeSources.names} || excluded.names` }
     });
   const sourceRows = await transaction

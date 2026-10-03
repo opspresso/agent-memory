@@ -551,7 +551,7 @@ describe("knowledge graph", () => {
       sourceNode.scope
     );
     expect(saveEdge).toHaveBeenCalledWith(
-      expect.objectContaining({ sources: [source] })
+      expect.objectContaining({ sources: [source] }), access
     );
   });
 

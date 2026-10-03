@@ -51,6 +51,11 @@ export interface KnowledgeEdge {
   readonly createdAt: Date;
 }
 
+/** One source's current property snapshot for a relationship. */
+export interface KnowledgeEdgeContribution extends KnowledgeEdge {
+  readonly sources: readonly [KnowledgeSource];
+}
+
 export interface NewKnowledgeNode {
   readonly id: string;
   readonly scope: ScopedResource;
@@ -185,7 +190,7 @@ export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNodeContr
   });
 }
 
-export function createKnowledgeEdge(input: NewKnowledgeEdge): KnowledgeEdge {
+export function createKnowledgeEdge(input: NewKnowledgeEdge): KnowledgeEdgeContribution {
   const source = validatedSource(input.source);
   if (input.scope.organizationId !== input.organizationId) {
     throw new InvalidKnowledgeGraphError(
@@ -224,7 +229,7 @@ export function createKnowledgeEdge(input: NewKnowledgeEdge): KnowledgeEdge {
       100
     ),
     properties: validatedProperties(input.properties),
-    sources: Object.freeze([source]),
+    sources: Object.freeze([source] as const),
     createdAt: new Date(input.now)
   });
 }

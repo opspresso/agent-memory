@@ -61,7 +61,7 @@ describe("document scope transactions", () => {
     const a = await f.node("Liu Bei"), b = await f.node("Guan Yu");
     await f.graph.saveNode(createKnowledgeNode({ ...a, source: { chunkId: f.doc.chunkId }, now: f.now,
       embedding: { model: "scope-vector", values: [1, 0] } }));
-    const edge = await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope: f.scope, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId: f.doc.chunkId }, now: f.now }));
+    const edge = await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope: f.scope, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId: f.doc.chunkId }, now: f.now }), f.access);
     const candidates = createKnowledgeCandidateRepository(f.db);
     const candidate = await candidates.save(createKnowledgeCandidate({ id: randomUUID(), scope: f.scope, documentId: f.doc.id, chunkId: f.doc.chunkId, model: "test", graph: { entities: [], relationships: [] }, now: f.now }));
     const result = await f.change();
@@ -90,7 +90,7 @@ describe("document scope transactions", () => {
     const privateDoc = await f.document();
     const a = await f.node("Liu Bei"), b = await f.node("Guan Yu");
     await f.node("Liu Bei", privateDoc.chunkId);
-    const edge = await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope: f.scope, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId: f.doc.chunkId }, now: f.now }));
+    const edge = await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope: f.scope, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId: f.doc.chunkId }, now: f.now }), f.access);
     const result = await f.change();
     expect(result).toMatchObject({ status: "changed", knowledge: { nodes: { updated: 1, skipped: 1 }, edges: { updated: 0, skipped: 1 } } });
     expect((await f.graph.findNodeById(f.organizationId, a.id))?.scope).toEqual(f.scope);
@@ -124,7 +124,7 @@ describe("document scope transactions", () => {
     const publicDoc = await f.document(f.target);
     const a = await f.node("Liu Bei", publicDoc.chunkId, f.target), b = await f.node("Guan Yu", publicDoc.chunkId, f.target);
     for (const [scope, chunkId] of [[f.scope, f.doc.chunkId], [f.target, publicDoc.chunkId]] as const) {
-      await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId }, now: f.now }));
+      await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId }, now: f.now }), f.access);
     }
     expect(await f.change()).toMatchObject({ status: "changed", knowledge: { nodes: { updated: 0 }, edges: { updated: 0, skipped: 1 }, skipped: [{ resource: "edge", reason: "identity_conflict", count: 1 }] } });
   });
@@ -183,7 +183,7 @@ describe("document scope transactions", () => {
     const f = await fixture();
     const doc = await f.document(f.target);
     const a = await f.node("Liu Bei", doc.chunkId, f.target), b = await f.node("Guan Yu", doc.chunkId, f.target);
-    const edge = await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope: f.target, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId: doc.chunkId }, now: f.now }));
+    const edge = await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope: f.target, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId: doc.chunkId }, now: f.now }), f.access);
     expect(await f.change(doc, f.scope)).toMatchObject({ status: "changed", knowledge: { nodes: { updated: 2 }, edges: { updated: 1 } } });
     await expect(f.graph.saveNode(createKnowledgeNode({ ...a, source: { chunkId: doc.chunkId }, now: f.now }))).rejects.toBeInstanceOf(KnowledgeScopeChangedError);
     await expect(f.graph.deleteNode(f.organizationId, a.id, f.target)).rejects.toBeInstanceOf(KnowledgeScopeChangedError);
@@ -208,7 +208,7 @@ describe("document scope transactions", () => {
     expect(await repository.findById(f.organizationId, doc.id)).toMatchObject({ status: "ready", scope: f.target });
   });
 
-  it("refuses a private transition when retained public knowledge would expose shared properties", async () => {
+  it("allows a private document transition while retained public nodes use only visible properties", async () => {
     const f = await fixture();
     const doc = await f.document(f.target), other = await f.document(f.target);
     const safeNode = await f.node("Zhang Fei", doc.chunkId, f.target);
@@ -217,12 +217,18 @@ describe("document scope transactions", () => {
       properties: { privateDetail: "Details from the document being restricted" } }));
     await f.node("Liu Bei", other.chunkId, f.target);
     const b = await f.node("Guan Yu", other.chunkId, f.target);
-    await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope: f.target, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId: other.chunkId }, now: f.now }));
-    expect(await f.change(doc, f.scope)).toEqual({ status: "related_scope_conflict" });
-    expect(await createDocumentRepository(f.db).findById(f.organizationId, doc.id)).toMatchObject({ scope: f.target, updatedAt: doc.updatedAt });
+    await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope: f.target, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId: other.chunkId }, now: f.now }), f.access);
+    expect(await f.change(doc, f.scope)).toMatchObject({ status: "changed", knowledge: { nodes: { updated: 1, skipped: 1 } } });
+    expect(await createDocumentRepository(f.db).findById(f.organizationId, doc.id)).toMatchObject({ scope: f.scope });
     expect((await f.graph.findNodeById(f.organizationId, a.id))?.properties.privateDetail).toBe("Details from the document being restricted");
-    expect((await f.graph.findNodeById(f.organizationId, safeNode.id))?.scope).toEqual(f.target);
-    expect(await f.db.select().from(documentScopeChanges).where(eq(documentScopeChanges.documentId, doc.id))).toEqual([]);
+    expect((await f.graph.findNodeById(f.organizationId, a.id))?.scope).toEqual(f.target);
+    expect((await f.graph.findNodeById(f.organizationId, safeNode.id))?.scope).toEqual(f.scope);
+    const reader = { ...f.access, userId: f.otherUserId, role: "member" as const };
+    const visible = await f.graph.searchNodes({ access: reader, query: "Liu Bei", limit: 10 });
+    expect(visible[0]?.node.properties).toEqual({});
+    expect(visible[0]?.node.sources).toEqual([{ chunkId: other.chunkId }]);
+    expect((await f.graph.findNeighborhood(reader, a.id, 1, 10)).edges).toHaveLength(1);
+    expect(await f.db.select().from(documentScopeChanges).where(eq(documentScopeChanges.documentId, doc.id))).toHaveLength(1);
   });
 
   it("does not count an ineligible node as an identity collision in the target scope", async () => {
@@ -236,16 +242,22 @@ describe("document scope transactions", () => {
     expect((await f.graph.findNodeById(f.organizationId, privateNode.id))?.scope).toEqual(f.scope);
   });
 
-  it("also rejects an unsafe restriction when only a retained edge references the document", async () => {
+  it("filters properties from a restricted document when an identity conflict retains its public edge", async () => {
     const f = await fixture();
     const doc = await f.document(f.target), other = await f.document(f.target);
     const a = await f.node("Liu Bei", other.chunkId, f.target), b = await f.node("Guan Yu", other.chunkId, f.target);
     for (const [scope, chunkId] of [[f.target, doc.chunkId], [f.target, other.chunkId], [f.scope, other.chunkId]] as const) {
-      await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId }, now: f.now }));
+      await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId, scope, sourceNodeId: a.id, targetNodeId: b.id, predicate: "knows", source: { chunkId }, now: f.now,
+        properties: chunkId === doc.chunkId ? { privateDetail: "Restricted evidence" } : { publicDetail: "Visible evidence" } }), f.access);
     }
-    expect(await f.change(doc, f.scope)).toEqual({ status: "related_scope_conflict" });
-    expect(await createDocumentRepository(f.db).findById(f.organizationId, doc.id)).toMatchObject({ scope: f.target });
-    expect(await f.db.select().from(documentScopeChanges).where(eq(documentScopeChanges.documentId, doc.id))).toEqual([]);
+    expect(await f.change(doc, f.scope)).toMatchObject({ status: "changed", knowledge: { edges: { updated: 0, skipped: 1 } } });
+    expect(await createDocumentRepository(f.db).findById(f.organizationId, doc.id)).toMatchObject({ scope: f.scope });
+    const reader = { ...f.access, userId: f.otherUserId, role: "member" as const };
+    const visible = await f.graph.findNeighborhood(reader, a.id, 1, 10);
+    expect(visible.edges).toHaveLength(1);
+    expect(visible.edges[0]?.properties).toEqual({ publicDetail: "Visible evidence" });
+    expect(visible.edges[0]?.sources).toEqual([{ chunkId: other.chunkId }]);
+    expect(await f.db.select().from(documentScopeChanges).where(eq(documentScopeChanges.documentId, doc.id))).toHaveLength(1);
   });
 
   it("changes large document graphs without exceeding PostgreSQL's parameter limit", async () => {

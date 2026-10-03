@@ -451,7 +451,7 @@ curl \
 
 문서·검증된 Knowledge scope·변경 이력을 한 transaction에서 저장한다. Chunk와 AI 후보는 자체 scope를 저장하지 않고 현재 문서 scope를 따른다. 문서 chunk를 직접 근거로 갖는 node·edge의 모든 출처가 현재 유효하고 대상 scope를 포함할 때만 변경한다. Node 변경은 기존 연결 edge의 범위도 보존해야 하며, edge 변경은 양 끝 node가 대상 scope에서 읽힐 수 있어야 한다. 충돌한 지식은 자동 병합하지 않는다. 제외 항목은 원래 scope를 유지하며 해당 문서 이외의 문서·Memory를 수정하지 않는다. 같은 scope를 다시 지정하면 현재 조건으로 Knowledge를 재검증하므로, 여러 출처의 공유를 완료한 후 다시 적용할 수 있다. 원문·chunk·embedding·후보 검토 이력·provenance는 보존한다. 승인된 후보의 재요청도 현재 읽을 수 있고 유효한 지식과 출처만 반환하므로, 범위 변경에서 제외된 개인 지식을 노출하지 않는다.
 
-공유 범위를 축소하거나 다른 팀으로 변경할 때, 제외된 지식이 새 문서 범위 밖에 남게 되면 `409`와 `code: "related_scope_conflict"`를 반환한다. 공통 properties·embedding은 출처별로 분리되어 있지 않으므로 해당 경우에는 문서·지식·변경 이력 모두 저장하지 않는다. 관련 지식의 충돌을 해결한 뒤 다시 변경하라.
+공유 범위를 축소하거나 다른 팀으로 변경해도 제외된 지식 때문에 문서 변경을 거부하지 않는다. Properties·설명·별칭·embedding은 출처별로 저장하며, 기존 scope에 남은 지식은 호출자가 현재 읽을 수 있는 출처의 값만 반환·검색한다.
 
 ### 재시도와 archive
 
@@ -522,6 +522,8 @@ curl -X POST \
 ```
 
 Node 설명은 현재 읽을 수 있는 출처별 설명을 중복 제거해 합친다(개요 최대 10,000자). Node 검색은 대표 이름 또는 현재 읽을 수 있는 출처의 검증된 별칭이 정확히 일치하는 결과를 먼저 보여주고 나머지는 hybrid 점수순으로 정렬한다.
+
+Node·edge의 `properties`는 현재 읽을 수 있고 유효한 출처의 속성을 key 단위로 합친다. 같은 key는 최근에 저장한 출처가 우선하며, 저장 시각이 같으면 출처 종류·ID 순서로 결정한다. 같은 출처에 HTTP 생성 요청을 다시 보내면 properties snapshot을 교체하며, 생략하거나 `{}`를 보내면 해당 출처의 속성을 비운다. AI 후보 승인은 기존 수동 속성을 보존한다. 출처가 archive·만료되거나 읽기 권한을 잃으면 그 값은 응답에서 제외한다. Node 병합으로 동일 출처가 합쳐질 때는 target 속성을 우선한다.
 
 Node 응답은 `id`, `scope`, `kind`, `canonicalName`, `aliases`, `properties`, `sources`, `createdAt`, `updatedAt`과 값이 있는 `summary`를 포함한다. Embedding은 출처별 검색 자료이며 node 응답에 vector나 단일 `embeddingModel`을 반환하지 않는다. Edge 응답은 `id`, `sourceNodeId`, `targetNodeId`, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
 

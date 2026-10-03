@@ -209,9 +209,12 @@ CREATE TABLE "knowledge_edge_sources" (
 	"edge_id" uuid NOT NULL,
 	"memory_id" uuid,
 	"chunk_id" uuid,
+	"properties" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "knowledge_edge_sources_identity_unique" UNIQUE NULLS NOT DISTINCT("organization_id","edge_id","memory_id","chunk_id"),
-	CONSTRAINT "knowledge_edge_sources_exactly_one_source_check" CHECK (("knowledge_edge_sources"."memory_id" IS NOT NULL) <> ("knowledge_edge_sources"."chunk_id" IS NOT NULL))
+	CONSTRAINT "knowledge_edge_sources_exactly_one_source_check" CHECK (("knowledge_edge_sources"."memory_id" IS NOT NULL) <> ("knowledge_edge_sources"."chunk_id" IS NOT NULL)),
+	CONSTRAINT "knowledge_edge_sources_properties_object_check" CHECK (jsonb_typeof("knowledge_edge_sources"."properties") = 'object')
 );
 CREATE TABLE "knowledge_edges" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
@@ -222,7 +225,6 @@ CREATE TABLE "knowledge_edges" (
 	"source_node_id" uuid NOT NULL,
 	"target_node_id" uuid NOT NULL,
 	"predicate" text NOT NULL,
-	"properties" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "knowledge_edges_identity_unique" UNIQUE NULLS NOT DISTINCT("organization_id","scope_kind","team_id","user_id","source_node_id","predicate","target_node_id"),
 	CONSTRAINT "knowledge_edges_scope_owner_check" CHECK (("knowledge_edges"."scope_kind" = 'organization' AND "knowledge_edges"."team_id" IS NULL AND "knowledge_edges"."user_id" IS NULL)
@@ -251,10 +253,13 @@ CREATE TABLE "knowledge_node_sources" (
 	"embedding" vector,
 	"embedding_model" text,
 	"names" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"properties" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "knowledge_node_sources_identity_unique" UNIQUE NULLS NOT DISTINCT("organization_id","node_id","memory_id","chunk_id"),
 	CONSTRAINT "knowledge_node_sources_exactly_one_source_check" CHECK (("knowledge_node_sources"."memory_id" IS NOT NULL) <> ("knowledge_node_sources"."chunk_id" IS NOT NULL)),
 	CONSTRAINT "knowledge_node_sources_names_object_check" CHECK (jsonb_typeof("knowledge_node_sources"."names") = 'object'),
+	CONSTRAINT "knowledge_node_sources_properties_object_check" CHECK (jsonb_typeof("knowledge_node_sources"."properties") = 'object'),
 	CONSTRAINT "knowledge_node_sources_embedding_pair_check" CHECK (("knowledge_node_sources"."embedding" IS NULL) = ("knowledge_node_sources"."embedding_model" IS NULL))
 );
 CREATE TABLE "knowledge_nodes" (
@@ -266,7 +271,6 @@ CREATE TABLE "knowledge_nodes" (
 	"kind" text NOT NULL,
 	"canonical_name" text NOT NULL,
 	"canonical_name_key" text GENERATED ALWAYS AS (lower(regexp_replace(trim(canonical_name), '[[:space:]]+', ' ', 'g'))) STORED,
-	"properties" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "knowledge_nodes_identity_unique" UNIQUE NULLS NOT DISTINCT("organization_id","scope_kind","team_id","user_id","kind","canonical_name"),

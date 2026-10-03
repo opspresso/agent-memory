@@ -33,7 +33,6 @@ export const knowledgeNodes = pgTable(
       .generatedAlwaysAs(
         sql`lower(regexp_replace(trim(canonical_name), '[[:space:]]+', ' ', 'g'))`
       ),
-    properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
@@ -93,7 +92,6 @@ export const knowledgeEdges = pgTable(
     sourceNodeId: uuid().notNull(),
     targetNodeId: uuid().notNull(),
     predicate: text().notNull(),
-    properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
@@ -164,7 +162,9 @@ export const knowledgeNodeSources = pgTable(
     embedding: unconstrainedVector(),
     embeddingModel: text(),
     names: jsonb().$type<Readonly<Record<string, string>>>().notNull().default({}),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
+    properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
     check(
@@ -172,6 +172,7 @@ export const knowledgeNodeSources = pgTable(
       sql`(${table.memoryId} IS NOT NULL) <> (${table.chunkId} IS NOT NULL)`
     ),
     check("knowledge_node_sources_names_object_check", sql`jsonb_typeof(${table.names}) = 'object'`),
+    check("knowledge_node_sources_properties_object_check", sql`jsonb_typeof(${table.properties}) = 'object'`),
     check(
       "knowledge_node_sources_embedding_pair_check",
       sql`(${table.embedding} IS NULL) = (${table.embeddingModel} IS NULL)`
@@ -214,13 +215,16 @@ export const knowledgeEdgeSources = pgTable(
     edgeId: uuid().notNull(),
     memoryId: uuid(),
     chunkId: uuid(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
+    properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
     check(
       "knowledge_edge_sources_exactly_one_source_check",
       sql`(${table.memoryId} IS NOT NULL) <> (${table.chunkId} IS NOT NULL)`
     ),
+    check("knowledge_edge_sources_properties_object_check", sql`jsonb_typeof(${table.properties}) = 'object'`),
     foreignKey({
       columns: [table.organizationId, table.edgeId],
       foreignColumns: [knowledgeEdges.organizationId, knowledgeEdges.id],
