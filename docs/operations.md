@@ -333,9 +333,9 @@ python3 -m venv .venv-knowledge-eval
 pnpm eval:knowledge --python .venv-knowledge-eval/bin/python --verify
 ```
 
-평가는 process 환경과 `.env.local`의 extraction·verification 설정을 사용하며 DB 설정 override를 읽지 않는다. 운영과 같은 모델을 평가하려면 해당 값을 명시하라. 현재 설정된 모델에 합성 본문을 실제로 전송한다. `single-pass`, `llamaindex`, `entity-first`를 `--variants`의 comma-separated 목록으로 선택하며 `--limit`으로 앞 사례 수를 제한한다. `--verify`는 자동 승인 정책까지 적용한다. `--reuse <이전 결과 디렉터리>`는 모델·corpus hash·사례 순서가 일치하는 저장된 추출을 재사용해 검증만 비교한다.
+평가는 process 환경과 `.env.local`의 extraction·verification 설정을 사용하며 DB 설정 override를 읽지 않는다. `KNOWLEDGE_EXTRACTION_LANGUAGE`는 모든 비교 방식의 설명 언어에 적용하며 runtime과 같은 기본값 `ko`를 사용한다. 운영과 같은 모델·언어를 평가하려면 해당 값을 명시하라. 현재 설정된 모델에 합성 본문을 실제로 전송한다. `single-pass`, `llamaindex`, `entity-first`를 `--variants`의 comma-separated 목록으로 선택하며 `--limit`으로 앞 사례 수를 제한한다. `--verify`는 자동 승인 정책까지 적용한다. `--reuse <이전 결과 디렉터리>`는 모델·언어·corpus hash·사례 순서가 일치하는 저장된 추출을 재사용해 검증만 비교한다. 언어가 기록되지 않은 과거 결과는 다시 추출해야 한다.
 
-기본 결과는 Git에서 제외한 `.eval-results/knowledge/`에 저장한다. `--output`으로 위치를 바꿀 수 있다. 요약은 model·corpus/policy hash, 개체·관계·별칭 precision/recall/F1, 잘못된 병합, 요청 오류와 추출 지연 시간을 포함한다. 오류가 있는 비교는 결과를 보존하고 종료 코드 1을 반환한다. 모델 오류를 빈 추출 성공으로 처리하지 않는다. 모델 응답이 원문과 맞는지와 관계 방향·개체 정체성은 각 사례의 저장 결과로 검토한다. 지연 시간은 공유 모델 endpoint의 관측값이며 독립적인 성능 보장은 아니다.
+기본 결과는 Git에서 제외한 `.eval-results/knowledge/`에 저장한다. `--output`으로 위치를 바꿀 수 있다. 요약은 model·language·corpus/policy hash, 개체·관계·별칭 precision/recall/F1, 잘못된 병합, 요청 오류와 추출 지연 시간을 포함한다. 오류가 있는 비교는 결과를 보존하고 종료 코드 1을 반환한다. 모델 오류를 빈 추출 성공으로 처리하지 않는다. 모델 응답이 원문과 맞는지와 관계 방향·개체 정체성은 각 사례의 저장 결과로 검토한다. 지연 시간은 공유 모델 endpoint의 관측값이며 독립적인 성능 보장은 아니다.
 
 평가 기록은 [comparison.json](../evaluation/knowledge/comparison.json)에 보존한다. 2026-09-13에 `nvidia/Qwen3.6-35B-A3B-NVFP4`와 동일 모델의 독립 검증 요청으로 측정한 결과는 다음과 같다. 모든 방식에 같은 원문 근거·개체 자격 규칙과 `evidence-v3`를 적용했다. 단일 호출 비교기도 새 개체 자격 필터를 포함하므로 수정 전 v0.27.0 전체의 재현 결과는 아니다.
 
