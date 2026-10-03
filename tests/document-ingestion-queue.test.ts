@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createQueue: vi.fn(),
+  start: vi.fn(),
   instances: [] as Array<{
     on: ReturnType<typeof vi.fn>;
     start: ReturnType<typeof vi.fn>;
@@ -13,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("pg-boss", () => ({
   PgBoss: class {
     readonly on = vi.fn();
-    readonly start = vi.fn().mockResolvedValue(undefined);
+    readonly start = mocks.start;
     readonly createQueue = mocks.createQueue;
     readonly send = mocks.send;
     readonly stop = vi.fn().mockResolvedValue(undefined);
@@ -29,13 +30,14 @@ import { createPgBossDocumentIngestionQueue } from "@/infrastructure/queue/docum
 describe("document ingestion queue", () => {
   beforeEach(() => {
     mocks.createQueue.mockReset().mockResolvedValue(undefined);
+    mocks.start.mockReset().mockResolvedValue(undefined);
     mocks.instances.splice(0);
     mocks.send.mockReset();
   });
 
-  it("cleans up partial startup before creating a fresh queue client", async () => {
-    const startupFailure = new Error("queue creation failed");
-    mocks.createQueue.mockRejectedValueOnce(startupFailure);
+  it.each(["start", "createQueue"] as const)("cleans up partial %s failure before creating a fresh queue client", async (stage) => {
+    const startupFailure = new Error(`${stage} failed`);
+    mocks[stage].mockRejectedValueOnce(startupFailure);
     const queue = createPgBossDocumentIngestionQueue("postgresql://database", vi.fn());
 
     await expect(queue.start()).rejects.toBe(startupFailure);

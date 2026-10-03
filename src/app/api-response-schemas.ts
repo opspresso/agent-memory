@@ -162,7 +162,6 @@ export const documentLibraryResponseSchema = z.object({
 });
 
 const scopeChangeCountsSchema = z.object({ updated: z.number().int().nonnegative(), unchanged: z.number().int().nonnegative(), skipped: z.number().int().nonnegative() });
-export const documentScopeRestrictionResponseSchema = z.object({ code: z.literal("related_scope_conflict") });
 export const documentScopeChangeResponseSchema = z.object({
   document: documentDetailResponseSchema,
   knowledge: z.object({
@@ -206,7 +205,8 @@ export const memoryVersionResponseSchema = z.object({
 });
 
 export const memoryVersionsResponseSchema = z.object({
-  versions: z.array(memoryVersionResponseSchema)
+  versions: z.array(memoryVersionResponseSchema),
+  nextBefore: z.number().int().min(2).optional()
 });
 
 const knowledgeSourceResponseSchema = z.union([

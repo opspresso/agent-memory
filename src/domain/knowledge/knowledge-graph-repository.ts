@@ -2,8 +2,10 @@ import type { OrganizationAccess, ScopedResource } from "@/domain/identity/organ
 
 import type {
   KnowledgeEdge,
+  KnowledgeEdgeContribution,
   KnowledgeEmbedding,
-  KnowledgeNode
+  KnowledgeNode,
+  KnowledgeNodeContribution
 } from "./knowledge-graph";
 
 export interface KnowledgeNodeSearchInput {
@@ -26,13 +28,18 @@ export interface KnowledgeNeighborhood {
   readonly edges: readonly KnowledgeEdge[];
 }
 
+/** Readable original representative names used for identity resolution, independent of display labels. */
+export interface KnowledgeNodeIdentity extends KnowledgeNode {
+  readonly primaryNames: readonly string[];
+}
+
 export interface KnowledgeGraphRepository {
-  saveNode(node: KnowledgeNode, access?: OrganizationAccess): Promise<KnowledgeNode>;
+  saveNode(node: KnowledgeNodeContribution, access: OrganizationAccess): Promise<KnowledgeNode>;
   findNodesByNames(
     access: OrganizationAccess,
     scope: KnowledgeNode["scope"],
     names: readonly string[]
-  ): Promise<readonly KnowledgeNode[]>;
+  ): Promise<readonly KnowledgeNodeIdentity[]>;
   findNodeById(
     organizationId: string,
     nodeId: string
@@ -46,7 +53,7 @@ export interface KnowledgeGraphRepository {
     readonly reason: string;
     readonly now: Date;
   }): Promise<KnowledgeNode | null>;
-  saveEdge(edge: KnowledgeEdge): Promise<KnowledgeEdge>;
+  saveEdge(edge: KnowledgeEdgeContribution, access: OrganizationAccess): Promise<KnowledgeEdge>;
   findEdgeById(
     organizationId: string,
     edgeId: string

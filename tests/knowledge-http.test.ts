@@ -107,9 +107,7 @@ describe("knowledge HTTP boundary", () => {
       now: new Date("2026-08-26T00:00:00.000Z")
     });
 
-    expect(publicKnowledgeNode(node)).toMatchObject({
-      embeddingModel: "test-embedding"
-    });
+    expect(publicKnowledgeNode(node)).not.toHaveProperty("embeddingModel");
     expect(publicKnowledgeNode(node)).not.toHaveProperty("embedding");
   });
 

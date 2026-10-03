@@ -197,6 +197,22 @@ describe("document processing", () => {
     expect(chunks[1]?.content).toBe("# 김하늘\n\n## 경력\n\n북극소프트에서 근무했다.");
   });
 
+  it.each(["\n", "\r\n"])("preserves CSV source spans across blank records and %j line endings", (newline) => {
+    const header = "name,notes";
+    const first = `Alice,"${"a".repeat(1000)}\ncontinued"`;
+    const second = `Bob,${"b".repeat(1000)}`;
+    const normalized = `${header}\n\n${first}\n\n${second}`;
+    const chunks = chunkDocumentText(normalized.replaceAll("\n", newline), "text/csv");
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0]).toMatchObject({ content: `${header}\n${first}`, start: 0, end: normalized.indexOf(first) + first.length });
+    expect(chunks[1]).toMatchObject({
+      content: `${header}\n${second}`,
+      start: normalized.indexOf(second), end: normalized.length,
+      contextSpans: [{ start: 0, end: header.length }]
+    });
+    expect(normalized.slice(chunks[1]!.start, chunks[1]!.end)).toBe(second);
+  });
+
   it("preserves CSV headers across record-aligned chunks", () => {
     const chunks = chunkDocumentText(
       ["name,url,description", ...Array.from({ length: 100 }, (_, index) =>

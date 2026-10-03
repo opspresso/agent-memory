@@ -5,14 +5,13 @@ import type {
 } from "./knowledge-candidate";
 import {
   knowledgeCanonicalNameKey,
+  isSymmetricKnowledgePredicate,
+  isVagueKnowledgePredicate,
   normalizeKnowledgeKind,
   normalizeKnowledgeName,
   normalizeKnowledgePredicate
 } from "./knowledge-identity";
 import { knowledgeEntityEligibilityIssue } from "./knowledge-entity-eligibility";
-
-const vaguePredicates = new Set(["associated_with", "related_to", "related_with", "co_occurs_with"]);
-const symmetricPredicates = new Set(["spouse_of", "sibling_of", "sworn_sibling_of"]);
 
 function evidenceText(value: string) {
   return value.normalize("NFKC").replace(/\s+/g, " ").trim();
@@ -36,7 +35,7 @@ export function groundKnowledgeGraph(content: string, graph: ProposedKnowledgeGr
   const relationships = graph.relationships.flatMap((relationship) => {
     const evidence = evidenceFor(relationship.evidence);
     return evidence.length && keys.has(relationship.sourceKey) && keys.has(relationship.targetKey)
-      && !vaguePredicates.has(normalizeKnowledgePredicate(relationship.predicate))
+      && !isVagueKnowledgePredicate(relationship.predicate)
       ? [{ ...relationship, evidence }]
       : [];
   });
@@ -82,7 +81,7 @@ export function consolidateKnowledgeGraph(graph: ProposedKnowledgeGraph): Propos
     if (!sourceKey || !targetKey || sourceKey === targetKey) {
       continue;
     }
-    if (symmetricPredicates.has(predicate) && sourceKey > targetKey) {
+    if (isSymmetricKnowledgePredicate(predicate) && sourceKey > targetKey) {
       [sourceKey, targetKey] = [targetKey, sourceKey];
     }
     const identity = JSON.stringify([sourceKey, predicate, targetKey]);

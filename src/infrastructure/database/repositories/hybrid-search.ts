@@ -23,6 +23,12 @@ export interface HybridSearchExpressions {
   readonly matches: SQL;
 }
 
+export interface VectorSearchExpressions {
+  readonly compatible: SQL;
+  readonly score: SQL<number>;
+  readonly matches: SQL;
+}
+
 export function combinedHybridScore(
   lexicalScore: number,
   vectorScore: number
@@ -33,13 +39,22 @@ export function combinedHybridScore(
 export function hybridSearchExpressions(
   input: HybridSearchInput
 ): HybridSearchExpressions {
+  return combineHybridSearchExpressions(input, input.queryEmbedding
+    ? vectorSearchExpressions({ ...input, queryEmbedding: input.queryEmbedding })
+    : undefined);
+}
+
+export function combineHybridSearchExpressions(
+  input: Pick<HybridSearchInput, "search" | "query">,
+  vector?: Pick<VectorSearchExpressions, "score" | "matches">
+): HybridSearchExpressions {
   const rawLexicalScore = sql<number>`ts_rank_cd(
     ${input.search},
     websearch_to_tsquery('simple', ${input.query})
   )`;
   const lexicalScore = sql<number>`${rawLexicalScore} / (1 + ${rawLexicalScore})`;
   const lexicalMatches = sql`${input.search} @@ websearch_to_tsquery('simple', ${input.query})`;
-  if (!input.queryEmbedding) {
+  if (!vector) {
     return {
       lexicalScore,
       vectorScore: sql<number>`0::double precision`,
@@ -48,6 +63,19 @@ export function hybridSearchExpressions(
     };
   }
 
+  return {
+    lexicalScore,
+    vectorScore: vector.score,
+    score: sql<number>`(${lexicalWeight} * ${lexicalScore}) + (${vectorWeight} * ${vector.score})`,
+    matches: sql`(${lexicalMatches}) OR (${vector.matches})`
+  };
+}
+
+export function vectorSearchExpressions(
+  input: Pick<HybridSearchInput, "embedding" | "embeddingModel" | "minimumVectorScore"> & {
+    readonly queryEmbedding: NonNullable<HybridSearchInput["queryEmbedding"]>;
+  }
+): VectorSearchExpressions {
   const vectorLiteral = `[${input.queryEmbedding.values.join(",")}]`;
   const compatibleEmbedding = sql`${input.embedding} IS NOT NULL
     AND ${input.embeddingModel} = ${input.queryEmbedding.model}
@@ -60,12 +88,9 @@ export function hybridSearchExpressions(
     ELSE 0
   END`;
   return {
-    lexicalScore,
-    vectorScore,
-    score: sql<number>`(${lexicalWeight} * ${lexicalScore}) + (${vectorWeight} * ${vectorScore})`,
-    matches: sql`(${lexicalMatches}) OR (
-      ${compatibleEmbedding}
-      AND ${vectorScore} >= ${input.minimumVectorScore ?? defaultEmbeddingMinimumScore}
-    )`
+    compatible: compatibleEmbedding,
+    score: vectorScore,
+    matches: sql`${compatibleEmbedding}
+      AND ${vectorScore} >= ${input.minimumVectorScore ?? defaultEmbeddingMinimumScore}`
   };
 }

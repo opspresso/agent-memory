@@ -26,7 +26,7 @@ import {
   IconUserPlus,
   IconX
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 import type {
   ManageableOrganizationMemberStatus,
@@ -86,24 +86,29 @@ function MemberManagementView() {
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
   const [removeTarget, setRemoveTarget] = useState<MemberView>();
+  const membersRequest = useRef<AbortController | undefined>(undefined);
+  const mounted = useRef(false);
 
   const canManage = access?.role === "admin" || access?.role === "owner";
   const isOwner = access?.role === "owner";
 
   const load = useCallback(async () => {
-    if (!organizationSlug) {
+    if (!organizationSlug || !mounted.current) {
       return;
     }
+    membersRequest.current?.abort();
+    const controller = new AbortController();
+    membersRequest.current = controller;
     try {
       const [membersBody, teamsBody] = await Promise.all([
-        fetch(`/api/members`).then((response) =>
+        fetch(`/api/members`, { signal: controller.signal }).then((response) =>
           responseJson(
             response,
             t("organization.requestFailed"),
             organizationMembersResponseSchema
           )
         ),
-        fetch(`/api/teams`).then((response) =>
+        fetch(`/api/teams`, { signal: controller.signal }).then((response) =>
           responseJson(
             response,
             t("organization.requestFailed"),
@@ -111,10 +116,14 @@ function MemberManagementView() {
           )
         )
       ]);
+      if (controller.signal.aborted) {
+        return;
+      }
       const teamMemberships = await Promise.all(
         teamsBody.teams.map(async (team) => {
           const body = await fetch(
-            `/api/teams/${team.id}/members`
+            `/api/teams/${team.id}/members`,
+            { signal: controller.signal }
           ).then((response) =>
             responseJson(
               response,
@@ -125,22 +134,44 @@ function MemberManagementView() {
           return body.members.map((member) => ({ ...member, teamId: team.id }));
         })
       );
+      if (controller.signal.aborted) {
+        return;
+      }
       setMembers(membersBody.members);
       setTeams(teamsBody.teams);
       setTeamMembers(teamMemberships.flat());
+      setError(undefined);
     } catch (caught) {
+      if (controller.signal.aborted) {
+        return;
+      }
+      // A failed member/team request must also cancel its unfinished sibling reads.
+      controller.abort();
       setError(
         caught instanceof Error ? caught.message : t("organization.loadFailed")
       );
     } finally {
-      setLoading(false);
+      if (membersRequest.current === controller) {
+        membersRequest.current = undefined;
+        setLoading(false);
+      }
     }
   }, [organizationSlug, t]);
 
   useEffect(() => {
+    mounted.current = true;
+    let active = true;
     if (canManage) {
-      void Promise.resolve().then(load);
+      void Promise.resolve().then(() => {
+        if (active) void load();
+      });
     }
+    return () => {
+      mounted.current = false;
+      active = false;
+      membersRequest.current?.abort();
+      membersRequest.current = undefined;
+    };
   }, [canManage, load]);
 
   function refresh() {

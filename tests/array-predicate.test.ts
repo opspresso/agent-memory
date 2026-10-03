@@ -13,7 +13,7 @@ describe("array predicates", () => {
 
   it("keeps canonical names in parameter data, including SQL metacharacters", () => {
     const names = ["Liu Bei", "'); DROP TABLE knowledge_nodes; --", "quoted, name"];
-    const query = new PgDialect().sqlToQuery(inArrayParameter(knowledgeNodes.canonicalNameKey, names, "text"));
+    const query = new PgDialect().sqlToQuery(inArrayParameter(knowledgeNodes.canonicalName, names, "text"));
     expect(query.params).toEqual([names]);
     expect(query.sql).not.toContain("DROP TABLE");
     expect(query.sql).toContain("ANY($1::text[])");

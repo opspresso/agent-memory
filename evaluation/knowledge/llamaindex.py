@@ -30,6 +30,11 @@ async def main():
     # receives an error class instead and owns reporting of synthetic results.
     logging.disable(logging.CRITICAL)
     corpus = json.load(sys.stdin)
+    output_language = {
+        "ko": "Korean (한국어)",
+        "en": "English",
+        "source": "the language of the supplied document content",
+    }[corpus["language"]]
     kinds = tuple(kind.upper() for kind in corpus["nodeKinds"])
     predicates = tuple(sorted({item["predicate"].upper() for item in corpus["patterns"]}))
     # Typed property objects are necessary with strict JSON Schema; an open
@@ -61,7 +66,7 @@ async def main():
         possible_entities=Literal[kinds],
         possible_relations=Literal[predicates],
         possible_entity_props=[("evidence", "A short verbatim quote from the input establishing this entity."),
-                               ("summary", "A concise description in the source language.")],
+                               ("summary", f"A concise description in {output_language}.")],
         possible_relation_props=[("evidence", "A short verbatim quote establishing this directed relation.")],
         kg_validation_schema=[(p["sourceKind"].upper(), p["predicate"].upper(), p["targetKind"].upper()) for p in corpus["patterns"]],
         strict=True,
@@ -71,6 +76,8 @@ async def main():
         max_triplets_per_chunk=20,
         extract_prompt=(
             "Extract at most {max_triplets_per_chunk} directed paths according to the schema. "
+            f"Write human-readable summaries in {output_language}. "
+            "Preserve entity names and evidence in their original source language. "
             "Copy entity names in their original spelling from the supplied text. Never turn a relationship, "
             "opinion, or sentence summary into an entity. Include source quotes as evidence properties. "
             "Do not infer established facts from negation, plans, hypotheticals, rumors, or unverified dialogue. "

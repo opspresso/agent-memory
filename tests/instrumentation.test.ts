@@ -13,7 +13,11 @@ const mocks = vi.hoisted(() => ({
   readMetricsToken: vi.fn(),
   startWorker: vi.fn(),
   logError: vi.fn(),
-  flush: vi.fn()
+  flush: vi.fn(),
+  closeDatabase: vi.fn(),
+  stopQueue: vi.fn(),
+  closeGraph: vi.fn(),
+  shutdownTelemetry: vi.fn()
 }));
 
 vi.mock("@/lib/production-config", () => ({
@@ -23,13 +27,16 @@ vi.mock("@/lib/production-config", () => ({
 vi.mock("@/lib/prepare-database", () => ({ prepareDatabase: mocks.prepareDatabase }));
 vi.mock("@/lib/runtime-settings", () => ({ applyRuntimeSettingsOverrides: mocks.applySettings }));
 vi.mock("@/lib/installation", () => ({ installationRepository: { initialize: mocks.initializeInstallation } }));
-vi.mock("@/lib/neo4j", () => ({ initializeKnowledgeGraph: mocks.initializeGraph, neo4jDriver: {} }));
+vi.mock("@/lib/neo4j", () => ({ initializeKnowledgeGraph: mocks.initializeGraph, neo4jDriver: { close: mocks.closeGraph } }));
+vi.mock("@/lib/container", () => ({ database: { close: mocks.closeDatabase }, documentIngestionQueue: { stop: mocks.stopQueue } }));
 vi.mock("@/infrastructure/observability/telemetry", () => ({
   initializeTelemetry: mocks.initializeTelemetry,
-  shutdownTelemetry: vi.fn()
+  shutdownTelemetry: mocks.shutdownTelemetry
 }));
 vi.mock("@/infrastructure/observability/logger", () => ({ logger: { error: mocks.logError, flush: mocks.flush } }));
-vi.mock("@/lib/runtime-lifecycle", () => ({ registerRuntimeShutdown: mocks.registerShutdown, runRuntimeShutdownSteps: vi.fn() }));
+vi.mock("@/lib/runtime-lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/runtime-lifecycle")>(), registerRuntimeShutdown: mocks.registerShutdown
+}));
 vi.mock("@/infrastructure/ai/request-limiter", () => ({ readAiRequestLimits: mocks.readAiLimits }));
 vi.mock("@/lib/metrics-auth", () => ({ readMetricsToken: mocks.readMetricsToken }));
 vi.mock("@/lib/document-worker", () => ({ startDocumentWorker: mocks.startWorker }));
@@ -57,6 +64,16 @@ describe("instrumentation startup", () => {
     expect(mocks.startWorker).toHaveBeenCalledOnce();
     expect(process.exit).not.toHaveBeenCalled();
     expect(mocks.logError).not.toHaveBeenCalled();
+  });
+
+  it("closes physical database connections between queue and remaining dependency shutdown", async () => {
+    const { register } = await import("@/instrumentation");
+    await register();
+    await mocks.registerShutdown.mock.calls[0]![0]();
+    expect(mocks.closeDatabase).toHaveBeenCalledOnce();
+    expect(mocks.stopQueue.mock.invocationCallOrder[0]).toBeLessThan(mocks.closeDatabase.mock.invocationCallOrder[0]!);
+    expect(mocks.closeDatabase.mock.invocationCallOrder[0]).toBeLessThan(mocks.closeGraph.mock.invocationCallOrder[0]!);
+    expect(mocks.closeGraph.mock.invocationCallOrder[0]).toBeLessThan(mocks.shutdownTelemetry.mock.invocationCallOrder[0]!);
   });
 
   it.each([

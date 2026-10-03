@@ -80,8 +80,7 @@ export function publicKnowledgeNode(node: KnowledgeNode) {
     properties: node.properties,
     sources: node.sources,
     createdAt: node.createdAt,
-    updatedAt: node.updatedAt,
-    ...(node.embedding ? { embeddingModel: node.embedding.model } : {})
+    updatedAt: node.updatedAt
   };
 }
 

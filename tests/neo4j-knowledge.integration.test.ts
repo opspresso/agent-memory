@@ -25,13 +25,15 @@ import { buildProcessDocument } from "@/application/document/process-document";
 
 describe("Neo4j topology with PostgreSQL approval and provenance", () => {
   let postgres: StartedPostgreSqlContainer, graph: StartedNeo4jContainer, driver: Driver, pool: Pool, db: AgentMemoryDatabase;
+  let database: ReturnType<typeof createDatabase>;
   let store: ReturnType<typeof createNeo4jKnowledgeTopologyStore>;
   beforeAll(async () => {
     [postgres, graph] = await Promise.all([
       new PostgreSqlContainer("pgvector/pgvector:0.8.6-pg18-trixie").withDatabase("neo4j_integration").withUsername("agent_memory").withPassword("agent_memory").start(),
       new Neo4jContainer("neo4j:2026.08.1").withPassword("agent_memory_test").start()
     ]);
-    ({ db, pool } = createDatabase(postgres.getConnectionUri()));
+    database = createDatabase(postgres.getConnectionUri());
+    ({ db, pool } = database);
     await initializeSchema(pool);
     driver = neo4j.driver(graph.getBoltUri(), neo4j.auth.basic(graph.getUsername(), graph.getPassword()));
     store = createNeo4jKnowledgeTopologyStore(driver, "neo4j");
@@ -39,7 +41,7 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
   });
   afterAll(async () => {
     await driver?.close();
-    await pool?.end();
+    await database?.close();
     await Promise.all([postgres?.stop(), graph?.stop()]);
   });
 
@@ -66,7 +68,7 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     }
     async function edge(left: KnowledgeNode, right: KnowledgeNode, edgeScope = scope, chunkId = origin.chunkId) {
       return repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId, scope: edgeScope, sourceNodeId: left.id,
-        targetNodeId: right.id, predicate: "uses", source: { chunkId }, now: new Date() }));
+        targetNodeId: right.id, predicate: "uses", source: { chunkId }, now: new Date() }), access);
     }
     return { organizationId, userId, access, scope, repository, projection, source, node, edge };
   }

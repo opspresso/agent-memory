@@ -1,8 +1,8 @@
 import {
   canAccessScopedResource,
-  type OrganizationAccess,
-  type ScopedResource
+  type OrganizationAccess
 } from "@/domain/identity/organization-access";
+import { sameScope } from "@/domain/identity/scope-coverage";
 import type { KnowledgeNode } from "@/domain/knowledge/knowledge-graph";
 import type { KnowledgeGraphRepository } from "@/domain/knowledge/knowledge-graph-repository";
 
@@ -14,17 +14,6 @@ export class InvalidKnowledgeNodeMergeError extends Error {
     super(message);
     this.name = "InvalidKnowledgeNodeMergeError";
   }
-}
-
-function sameScope(left: ScopedResource, right: ScopedResource): boolean {
-  return (
-    left.kind === right.kind &&
-    left.organizationId === right.organizationId &&
-    (left.kind !== "team" ||
-      (right.kind === "team" && left.teamId === right.teamId)) &&
-    (left.kind !== "user" ||
-      (right.kind === "user" && left.userId === right.userId))
-  );
 }
 
 export function buildMergeKnowledgeNodes(dependencies: {

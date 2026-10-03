@@ -11,11 +11,13 @@ export interface KnowledgeExtractionExpected {
 export interface ExtractionCounts { readonly truePositive: number; readonly falsePositive: number; readonly falseNegative: number }
 
 export function scoreKnowledgeExtraction(graph: ProposedKnowledgeGraph, expected: KnowledgeExtractionExpected, matchSourceSurfaces = false) {
+  const aliasesByName = new Map(Object.entries(expected.aliases ?? {}));
+  const surfacesByName = new Map(Object.entries(expected.surfaceForms ?? {}));
   const entityKey = (kind: string, name: string) => JSON.stringify([normalizeKnowledgeKind(kind), knowledgeCanonicalNameKey(name)]);
   const expectedEntities = new Set(expected.entities.map((entity) => entityKey(entity.kind, entity.name)));
   const aliasTargets = new Map<string, Set<string>>();
   for (const entity of expected.entities) {
-    for (const alias of [...(expected.aliases?.[entity.name] ?? []), ...(matchSourceSurfaces ? expected.surfaceForms?.[entity.name] ?? [] : [])]) {
+    for (const alias of [...(aliasesByName.get(entity.name) ?? []), ...(matchSourceSurfaces ? surfacesByName.get(entity.name) ?? [] : [])]) {
       const key = entityKey(entity.kind, alias);
       const targets = aliasTargets.get(key) ?? new Set<string>();
       targets.add(entityKey(entity.kind, entity.name));
@@ -48,7 +50,7 @@ export function scoreKnowledgeExtraction(graph: ProposedKnowledgeGraph, expected
     const aliasKey = entityKey(entity.kind, alias);
     return expectedEntities.has(aliasKey) && aliasKey !== identity(entity.kind, entity.canonicalName);
   })).length;
-  const expectedAliases = new Set(expected.entities.flatMap((entity) => (expected.aliases?.[entity.name] ?? [])
+  const expectedAliases = new Set(expected.entities.flatMap((entity) => (aliasesByName.get(entity.name) ?? [])
     .map((alias) => JSON.stringify([entityKey(entity.kind, entity.name), knowledgeCanonicalNameKey(alias)]))));
   const actualAliases = graph.entities.flatMap((entity) => (entity.aliases ?? [])
     .map((alias) => JSON.stringify([identity(entity.kind, entity.canonicalName), knowledgeCanonicalNameKey(alias)])));

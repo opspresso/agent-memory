@@ -8,6 +8,7 @@ import { createKnowledgeExtractionService } from "../../src/infrastructure/ai/kn
 import { createEntityFirstKnowledgeExtractionService } from "../../src/infrastructure/ai/knowledge-entity-first-extraction-service";
 import { createKnowledgeVerificationService } from "../../src/infrastructure/ai/knowledge-verification-service";
 import { readKnowledgeVerificationConfiguration } from "../../src/lib/knowledge-verification-configuration";
+import { readKnowledgeExtractionLanguage } from "../../src/lib/knowledge-extraction-configuration";
 import { groundKnowledgeGraph } from "../../src/domain/knowledge/knowledge-extraction-quality";
 import { createKnowledgeCandidate } from "../../src/domain/knowledge/knowledge-candidate";
 import { assessKnowledgeCandidate } from "../../src/domain/knowledge/knowledge-curation-policy";
@@ -44,7 +45,8 @@ if (variants.some((variant) => !["single-pass","llamaindex","entity-first"].incl
 const model = process.env.KNOWLEDGE_EXTRACTION_MODEL?.trim();
 const baseUrl = process.env.KNOWLEDGE_EXTRACTION_BASE_URL?.trim();
 if (!model || !baseUrl) throw new Error("knowledge extraction model and base URL are required");
-const configuration = { model,baseUrl,apiKey:process.env.KNOWLEDGE_EXTRACTION_API_KEY,language:"ko" as const };
+const language = readKnowledgeExtractionLanguage();
+const configuration = { model,baseUrl,apiKey:process.env.KNOWLEDGE_EXTRACTION_API_KEY,language };
 const verificationConfiguration = values.verify ? readKnowledgeVerificationConfiguration() : undefined;
 const ontology = { nodeKinds:corpus.nodeKinds,edgePredicates:[...new Set(corpus.patterns.map((pattern) => pattern.predicate))] };
 const directory = resolve(values.output);
@@ -70,7 +72,7 @@ async function pythonRows(): Promise<ExtractionRow[]> {
     child.once("error",reject);
     child.once("close",(code) => code === 0 ? accept() : reject(new Error(`Python comparison exited with status ${code}`)));
   });
-  child.stdin.end(JSON.stringify({ ...corpus,cases }));
+  child.stdin.end(JSON.stringify({ ...corpus,cases,language }));
   for await (const chunk of child.stdout) {
     buffer += String(chunk);
     let end: number;
@@ -117,9 +119,9 @@ const summaries = [];
 for (const variant of variants) {
   let rows: ExtractionRow[];
   if (values.reuse) {
-    const original = JSON.parse(await readFile(resolve(values.reuse,"summary.json"),"utf8")) as { corpusSha256:string;model:string };
-    if (original.model !== model || original.corpusSha256 !== createHash("sha256").update(corpusText).digest("hex")) {
-      throw new Error("reused extraction must match the model and corpus");
+    const original = JSON.parse(await readFile(resolve(values.reuse,"summary.json"),"utf8")) as { corpusSha256:string;model:string;language?:string };
+    if (original.model !== model || original.language !== language || original.corpusSha256 !== createHash("sha256").update(corpusText).digest("hex")) {
+      throw new Error("reused extraction must match the model, language and corpus");
     }
     rows = z.array(rowSchema).parse(JSON.parse(await readFile(resolve(values.reuse,`${variant}.json`),"utf8"))).slice(0,limit);
     if (rows.length !== cases.length || rows.some((row,index) => row.id !== cases[index]!.id)) throw new Error("reused extraction must cover selected cases in order");
@@ -162,7 +164,7 @@ for (const variant of variants) {
     extractionLatencyMilliseconds:{ median:latency[Math.floor(latency.length/2)],p95:latency[Math.ceil(latency.length*.95)-1] },
     casesWithErrors:scored.filter((row) => row.status==="error" || row.verificationError).map((row) => ({ id:row.id,error:row.error??row.verificationError })) });
 }
-const report = { evaluatedAt:new Date().toISOString(),model,verified:values.verify,reusedExtractions:values.reuse!==undefined,
+const report = { evaluatedAt:new Date().toISOString(),model,language,verified:values.verify,reusedExtractions:values.reuse!==undefined,
   verificationModel:verificationConfiguration?.model,
   matching:"Explicitly annotated source surface forms; canonical kind/name/edge matches are reported separately.",
   corpusSha256:createHash("sha256").update(corpusText).digest("hex"),policySha256:policyHash.digest("hex"),summaries };

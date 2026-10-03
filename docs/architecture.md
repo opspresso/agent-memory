@@ -23,6 +23,8 @@ AI Agent ──▶ HTTP API / MCP ──▶ Next.js application
 
 ## 계층과 의존성
 
+Clean Architecture를 적용해 정책과 use case를 외부 기술에서 분리하고, domain port를 통해 저장소와 서비스를 주입한다.
+
 ```text
 src/app  ──▶ src/lib ──▶ src/application ──▶ src/domain
    │               └──▶ src/infrastructure ──▶ src/domain
@@ -58,6 +60,8 @@ Memory 생성은 `src/app/api/memories/route.ts` → `src/lib/memory-service.ts`
 | MCP 도구 등록·공개 응답 | [mcp-server.ts](../src/lib/mcp-server.ts) |
 
 Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 의미, 충돌 결과를 함께 확인하라. 예를 들어 candidate 승인은 최초 승격과 재실행을 구분한다. 최초 승격은 ready source를 요구하지만, 이미 승인한 candidate의 재실행은 source가 이후 archive되었더라도 기존 승인 결과를 반환하며 새 graph resource를 생성하지 않는다.
+
+Knowledge 쓰기 port는 단일 출처의 `KnowledgeNodeContribution` 또는 `KnowledgeEdgeContribution`을 받는다. Properties와 node 설명·embedding은 해당 provenance에 저장하고, 조회용 node·edge는 현재 읽을 수 있는 출처에서 값을 구성한다. 조회 객체에는 공유 embedding을 두지 않는다.
 
 ## 설치 경계
 
@@ -169,7 +173,7 @@ Application의 scope 변경 use case가 repository의 원자적 변경 port를 �
 
 Graph 쓰기는 같은 조직별 Knowledge scope 잠금을 사용한다. 공개 node 생성, 후보 승인과 node 병합은 이름 해석·병합·승격을 원자적으로 수행하기 위해 배타 모드를 사용하며, 나머지 Graph 저장·삭제는 공유 모드를 사용한다. Scope 변경 중에는 이 쓰기들을 대기시키며 일반 조회는 계속 허용한다. 검증한 출처 row는 공유 잠금으로 commit까지 보존한다. 지식 생성은 저장 transaction에서 source scope를 다시 확인하고, 관계 생성은 끝점 scope도 확인한다. 후보 검토는 현재 문서 scope와 검토자의 활성 멤버십·관리 권한을 다시 확인한다. 삭제는 application이 확인한 scope를 repository에서 재검사한다. Scope 변경과 겹친 오래된 mutation으로 이전 권한을 적용하지 않는다.
 
-문서 범위 축소·이동 시 제외된 지식이 새 source scope 밖에 남는 변경은 전체를 거부한다. 출처별로 분리하지 않은 공통 properties·embedding의 노출을 방지하기 위해 문서 저장 전에 최종 graph 범위를 검증한다. 충돌 검사는 출처·권한 검증을 통과해 실제 이동할 수 있는 후보와 대상 범위의 기존 지식 사이에 수행한다. 보관 요청도 권한 검사 시 읽은 document scope를 저장 조건으로 사용해 동시 scope 변경에 이전 권한을 적용하지 않는다.
+문서 범위 축소·이동에서 제외된 지식은 기존 scope를 유지한다. Properties·설명·별칭·embedding은 현재 읽을 수 있는 출처만 사용하므로 숨겨진 출처의 값이 남은 지식에 섞이지 않는다. 충돌 검사는 출처·권한 검증을 통과해 실제 이동할 수 있는 후보와 대상 범위의 기존 지식 사이에 수행한다. 보관 요청도 권한 검사 시 읽은 document scope를 저장 조건으로 사용해 동시 scope 변경에 이전 권한을 적용하지 않는다.
 
 ### 후속 Knowledge enrichment
 
@@ -209,6 +213,8 @@ Knowledge node와 edge는 scope와 여러 provenance를 가진다. 각 provenanc
 
 Graph의 검색·중복 후보 조회·Neighborhood repository port는 읽을 수 있고 현재 유효한 provenance만 반환한다. Resource 선택과 개별 source 필터는 같은 SQL predicate를 사용하며, source를 다시 조회하는 사이 유효한 근거가 사라진 resource는 결과에서 제외한다. 내부 mutation을 위한 `findNodeById`와 `findEdgeById`는 전체 provenance를 보존하므로 공개 검색 결과로 직접 사용하지 않는다.
 
+Node·edge properties와 속성 갱신 시각은 각 source row가 소유한다. 수동 생성의 같은 출처 재기여는 속성 snapshot을 교체하며, AI 후보 승인은 기존 속성과 그 시각을 유지한다. 이미 승인된 entity의 관계를 추가 승인할 때는 현재 candidate binding을 재사용해 endpoint의 설명·vector도 덮어쓰지 않는다. 조회는 유효한 출처를 속성 갱신 시각·출처 종류·ID 순으로 합쳐 최근 값이 같은 key를 덮도록 한다. 병합은 고유 출처의 속성과 시각을 유지하며, 중복 출처는 target 속성을 우선해 합치고 병합 시각을 기록한다. 쓰기 응답에도 호출자의 현재 출처 권한을 적용한다.
+
 ### 개체와 관계의 표현
 
 개체의 정체성과 그 개체에 대한 주장을 구분한다. `relationship`, `relation`, `employment`, `statement`, `claim`, `fact`, `attribute`는 node 종류와 온톨로지 node kind로 등록할 수 없다. 이 불변 조건은 사전 검증 모드와 무관하며 HTTP·후보 승인·domain 생성에서 적용한다. 추출 프롬프트와 사전 추천도 이 종류를 제외한다.
@@ -217,7 +223,18 @@ AI가 제안한 대표 이름은 NFKC·공백 정규화 후 원문에 있어야 
 
 ### Identity·온톨로지·변경
 
-Node의 대표 이름 key와 kind는 NFKC·공백·대소문자 및 온톨로지 규칙으로 정규화한다. 승인된 대표 이름·별칭은 `knowledge_node_sources.names`에 정규화 key→표기 map으로 출처별 보존한다. 별칭은 개체와 별칭 identity가 각각 AI 검증을 통과한 경우 또는 사람이 후보를 승인한 경우에만 승격한다. 후보 승인에서는 같은 scope·kind의 현재 보이는 대표 이름·별칭을 조회한다. 후보 대표 이름은 기존 대표 이름·별칭과 비교하고, 후보의 검증된 별칭은 기존 대표 이름과 비교한다. 서로 다른 대표 이름 사이에서 별칭끼리만 겹치는 경우에는 동일인 근거로 삼지 않는다. 여러 node와 일치할 때에는 후보가 각 node의 대표 이름 사이의 동일성을 명시적으로 검증한 경우에만 통합한다. 그 외의 모호한 이름은 자동 연결하지 않는다. 검증된 별칭이 각각 별도 node를 가리키면 대표 이름이 일치하는 node를 우선해 통합하며, 해당 node가 없으면 생성 시각·ID 순으로 기존 node를 선택한다. 출처·관계·과거 후보의 resource binding과 병합 audit을 함께 보존한다. 명시적인 동일인 근거로 해소되지 않은 이름이 여러 node와 일치하면 임의로 선택하거나 추가 node를 만들지 않고 해당 개체와 연결 관계를 수동 검토로 전환하며 독립적인 항목은 계속 처리한다. 후보 승인과 병합은 조직별 배타 잠금으로 직렬화해 동시 별칭 제안도 하나의 ID로 수렴한다. 설명은 node source별로 보존하며 조회 시 현재 읽을 수 있는 출처의 설명만 모아 최대 10,000자의 중복 제거된 개요를 만든다. 별칭 응답·이름 해석·lexical 검색도 같은 visible source 이름과 설명을 사용하므로 보관했거나 읽을 수 없는 출처의 별칭을 검색하거나 노출하지 않는다. 수동 병합은 이전 대표 이름도 해당 provenance의 이름으로 보존한다. 이름은 같지만 kind가 다른 node는 자동 병합하지 않고 검토 대상으로 남긴다.
+Node identity는 ID로 유지하며 저장된 대표 이름은 내부 label이다. 공개 `canonicalName`은 읽을 수 있는 출처 이름 중 내부 label과 정규화 key가 같은 값을 사용하고, 없으면 정규화 key 순서로 첫 이름을 선택한다. 같은 key의 표기가 여러 개면 문자열 정렬상 마지막 표기를 사용해 조회 순서에 의존하지 않는다. `aliases`에는 나머지 읽을 수 있는 이름만 포함한다. 정확한 이름 조회와 lexical 검색에도 숨겨진 내부 label을 넣지 않는다. Node source는 비어 있지 않은 이름 map을 필수로 저장한다.
+
+Node 생성과 후보 승인은 조직별 배타 잠금 안에서 호출자가 읽을 수 있는 출처 이름으로 신규·기존 ID를 결정한다. Persistence에는 이 결정과 원래 기여 이름을 따로 전달하며 저장 label로 다시 연결하지 않는다. 저장 label에는 전역 이름 unique 제약을 두지 않고, scope 조회에는 별도의 nonunique index를 사용한다. 같은 호출자의 동시 재기여는 같은 ID로 수렴한다. Node 생성·후보 승인·병합은 각 출처가 제공한 이름만 보존하며 대상이나 이전 node의 저장 대표 이름을 다른 출처에 복사하지 않는다.
+
+출처의 `primary_name_keys`는 원래 대표 이름의 역할을 `names`의 별칭과 구분하며, 비어 있지 않고 모두 해당 이름 map에 존재해야 한다. 병합은 이 역할도 출처별로 합친다. Identity resolver와 scope 충돌 검사는 현재 읽을 수 있는 원래 대표 이름을 사용하고 표시명을 대표 이름의 근거로 재해석하지 않는다. 따라서 같은 별칭이 표시명으로 선택된 서로 다른 개체도 별칭 공유만으로 병합하지 않는다.
+
+Node kind와 출처 이름 key는 NFKC·공백·대소문자 및 온톨로지 규칙으로 정규화한다. `names`는 정규화 key→표기 map이다. 별칭은 개체와 별칭 identity가 AI 검증을 통과하거나 사람이 승인한 경우에만 승격한다.
+
+- 후보의 대표 이름은 기존 대표 이름·별칭과 비교하고, 후보의 검증된 별칭은 기존 대표 이름과 비교한다. 서로 다른 개체가 별칭만 공유하면 동일인으로 판단하지 않는다.
+- 여러 node와 일치하면 각 node의 원래 대표 이름 사이의 동일성이 명시적으로 확인돼야 통합한다. 해소되지 않은 모호성은 해당 개체와 연결 관계를 수동 검토로 보내고 독립 항목은 계속 처리한다.
+- 검증된 이름이 여러 node를 연결하면 후보 대표 이름과 일치하는 node를 우선하고, 없으면 생성 시각·ID 순으로 target을 정한다. 이름이 같아도 kind가 다르면 자동 병합하지 않는다.
+- 병합은 출처·관계·과거 candidate binding과 audit을 함께 보존한다. 출처 이름과 원래 대표 이름의 역할을 다른 출처로 복사하지 않는다.
 
 조직은 통제 어휘 사전(`ontology`: node kind·edge predicate 목록)과 검증 모드(`ontologyMode`: `off`·`warn`·`strict`)를 가진다. 신규 조직은 추출 프롬프트의 기본 kind 목록과 범용 edge predicate 목록으로 구성된 domain의 `defaultKnowledgeOntology` + `warn` 모드로 생성된다. 사전 확장은 두 경로로 지원한다 — 조직의 graph·pending 후보에서 관찰된 용어의 결정적 빈도 집계(`KnowledgeTermUsageRepository`), 그리고 관찰 용어를 extraction 모델에 보내 정제·통합을 제안받는 AI 경로(`KnowledgeOntologySuggestionService`, 용어 문자열만 전송). 두 경로 모두 admin·owner 전용이며 저장은 항상 설정 PATCH를 거친다. 검증은 application 계층에서 node 생성, edge 생성, AI 후보 승인의 세 쓰기 경로에 일괄 적용된다 — `warn`은 응답에 경고를 싣고, `strict`는 embedding 호출과 영속화 전에 `422`로 거부한다. 검증 모드가 켜져 있고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전을 힌트로 주입하고, `strict`에서는 entity kind를 structured output schema의 enum으로 제약한다. 사전 조회는 `KnowledgeOntologyReader` port를 통해 organizations 행에서 읽는다.
 
@@ -228,6 +245,8 @@ Node merge는 같은 scope에서만 허용한다. 하나의 transaction에서 so
 AI candidate는 원본 추출과 검증·처리 이력을 graph와 분리해 보존한다. 항목별 승인은 graph에 근거를 반영하고 거절은 이미 승인한 graph를 변경하지 않는다. 자동·수동 처리 구분, 실행 principal, 시각과 사유를 기록한다.
 
 ### 후보 수집과 재정렬
+
+Knowledge embedding은 `knowledge_node_sources`가 model과 함께 소유한다. 같은 출처 재기여나 AI 후보 승인에서 새 embedding을 제공하면 vector·model 쌍을 교체하고, 제공하지 않으면 기존 쌍을 유지하며, embedding 없는 새 출처는 두 값을 모두 NULL로 저장한다. 검색은 현재 읽을 수 있고 유효한 출처 중 query와 model·차원이 맞는 vector의 최대 점수를 사용한다. Node 병합은 고유 출처의 vector를 그대로 옮기며, 같은 출처가 양쪽에 있으면 target vector를 유지하고 target에 없을 때만 source vector를 채운다. 공유 node 설명·vector·검색 index는 저장하지 않는다.
 
 통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node 후보를 각각 검색한다. Semantic search가 활성화되어도 query embedding은 한 번만 생성해 세 저장소 검색에 공유한다. Reranker가 설정되면 종류별로 `min(100, max(12, limit × 4))`개까지 후보를 조회한 뒤 같은 총량 상한 안에서 source별로 균형 있게 구성하고, 권한 필터가 완료된 후보만 외부 reranker에 보낸다. Reranker 입력은 query 4,000자, 후보당 8,000자로 제한한다. 성공하면 relevance score로 최종 순위를 정하고, timeout·provider 오류·잘못된 응답이면 기존 hybrid score 순위로 복귀한다. 모든 AI call은 인증 access 또는 document creator에서 organization·user quota key를 만들고, instance-local limiter와 PostgreSQL minute bucket을 모두 통과해야 한다. 따라서 여러 replica와 worker가 같은 tenant·principal budget을 공유한다. API와 MCP는 동일한 application operation을 사용한다.
 

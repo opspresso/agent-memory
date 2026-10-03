@@ -1,6 +1,6 @@
 import type { KnowledgeCandidate, KnowledgeCandidateSelection } from "./knowledge-candidate";
 import { entityReviewKey, relationshipReviewKey } from "./knowledge-candidate-selection";
-import { knowledgeCanonicalNameKey, normalizeKnowledgeKind, normalizeKnowledgePredicate } from "./knowledge-identity";
+import { isSymmetricKnowledgePredicate, isVagueKnowledgePredicate, knowledgeCanonicalNameKey, normalizeKnowledgeKind, normalizeKnowledgePredicate } from "./knowledge-identity";
 
 export interface KnowledgeReviewSource {
   readonly candidate: KnowledgeCandidate;
@@ -33,9 +33,6 @@ export interface KnowledgeReviewGroup {
   readonly documentCount: number;
   readonly weak: boolean;
 }
-
-const symmetric = new Set(["spouse_of", "sibling_of", "sworn_sibling_of"]);
-const vague = new Set(["associated_with", "related_to", "related_with", "co_occurs_with"]);
 
 export function groupKnowledgeReviewSources(sources: readonly KnowledgeReviewSource[], onlyNeedsReview = false): readonly KnowledgeReviewGroup[] {
   const groups = new Map<string, KnowledgeReviewGroup>();
@@ -77,10 +74,10 @@ export function groupKnowledgeReviewSources(sources: readonly KnowledgeReviewSou
       if (!source || !target) { return; }
       const predicate = normalizeKnowledgePredicate(relationship.predicate);
       const endpoints = [identity(source.key), identity(target.key)];
-      if (symmetric.has(predicate)) { endpoints.sort(); }
+      if (isSymmetricKnowledgePredicate(predicate)) { endpoints.sort(); }
       add({ key: JSON.stringify([...scopeKey, "relationship", ...endpoints, predicate]), kind: "relationship",
         title: `${source.canonicalName} → ${predicate} → ${target.canonicalName}`, predicate,
-        weak: vague.has(predicate) },
+        weak: isVagueKnowledgePredicate(predicate) },
       { entityKeys: [], relationshipIndexes: [index] }, relationship.evidence);
     });
   }

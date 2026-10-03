@@ -15,7 +15,7 @@ import {
 import { organizationMembers, organizations, teams, users } from "./identity";
 import { documentChunks } from "./documents";
 import { memories, memoryScopeKind } from "./memories";
-import { tsvector, unconstrainedVector } from "./custom-types";
+import { unconstrainedVector } from "./custom-types";
 
 export const knowledgeNodes = pgTable(
   "knowledge_nodes",
@@ -29,19 +29,6 @@ export const knowledgeNodes = pgTable(
     userId: uuid(),
     kind: text().notNull(),
     canonicalName: text().notNull(),
-    canonicalNameKey: text()
-      .generatedAlwaysAs(
-        sql`lower(regexp_replace(trim(canonical_name), '[[:space:]]+', ' ', 'g'))`
-      ),
-    summary: text(),
-    search: tsvector()
-      .generatedAlwaysAs(
-        sql`to_tsvector('simple', coalesce(canonical_name, '') || ' ' || coalesce(summary, ''))`
-      )
-      .notNull(),
-    embedding: unconstrainedVector(),
-    embeddingModel: text(),
-    properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
@@ -51,10 +38,6 @@ export const knowledgeNodes = pgTable(
       sql`(${table.scopeKind} = 'organization' AND ${table.teamId} IS NULL AND ${table.userId} IS NULL)
         OR (${table.scopeKind} = 'team' AND ${table.teamId} IS NOT NULL AND ${table.userId} IS NULL)
         OR (${table.scopeKind} = 'user' AND ${table.teamId} IS NULL AND ${table.userId} IS NOT NULL)`
-    ),
-    check(
-      "knowledge_nodes_embedding_pair_check",
-      sql`(${table.embedding} IS NULL) = (${table.embeddingModel} IS NULL)`
     ),
     foreignKey({
       columns: [table.organizationId, table.teamId],
@@ -69,27 +52,17 @@ export const knowledgeNodes = pgTable(
       ],
       name: "knowledge_nodes_organization_user_fk"
     }).onDelete("cascade"),
-    unique("knowledge_nodes_identity_unique").on(
-      table.organizationId,
-      table.scopeKind,
-      table.teamId,
-      table.userId,
-      table.kind,
-      table.canonicalName
-    ).nullsNotDistinct(),
     uniqueIndex("knowledge_nodes_organization_id_id_unique").on(
       table.organizationId,
       table.id
     ),
-    index("knowledge_nodes_normalized_identity_idx").on(
+    index("knowledge_nodes_scope_idx").on(
       table.organizationId,
       table.scopeKind,
       table.teamId,
       table.userId,
-      table.kind,
-      table.canonicalNameKey
-    ),
-    index("knowledge_nodes_search_idx").using("gin", table.search)
+      table.kind
+    )
   ]
 );
 
@@ -106,7 +79,6 @@ export const knowledgeEdges = pgTable(
     sourceNodeId: uuid().notNull(),
     targetNodeId: uuid().notNull(),
     predicate: text().notNull(),
-    properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
@@ -174,8 +146,13 @@ export const knowledgeNodeSources = pgTable(
     memoryId: uuid(),
     chunkId: uuid(),
     description: text(),
-    names: jsonb().$type<Readonly<Record<string, string>>>().notNull().default({}),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
+    embedding: unconstrainedVector(),
+    embeddingModel: text(),
+    names: jsonb().$type<Readonly<Record<string, string>>>().notNull(),
+    primaryNameKeys: text().array().notNull(),
+    properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
     check(
@@ -183,6 +160,15 @@ export const knowledgeNodeSources = pgTable(
       sql`(${table.memoryId} IS NOT NULL) <> (${table.chunkId} IS NOT NULL)`
     ),
     check("knowledge_node_sources_names_object_check", sql`jsonb_typeof(${table.names}) = 'object'`),
+    check("knowledge_node_sources_names_nonempty_check", sql`${table.names} <> '{}'::jsonb`),
+    check("knowledge_node_sources_primary_names_check", sql`cardinality(${table.primaryNameKeys}) > 0
+      AND array_position(${table.primaryNameKeys}, NULL) IS NULL
+      AND ${table.names} ?& ${table.primaryNameKeys}`),
+    check("knowledge_node_sources_properties_object_check", sql`jsonb_typeof(${table.properties}) = 'object'`),
+    check(
+      "knowledge_node_sources_embedding_pair_check",
+      sql`(${table.embedding} IS NULL) = (${table.embeddingModel} IS NULL)`
+    ),
     foreignKey({
       columns: [table.organizationId, table.nodeId],
       foreignColumns: [knowledgeNodes.organizationId, knowledgeNodes.id],
@@ -221,13 +207,16 @@ export const knowledgeEdgeSources = pgTable(
     edgeId: uuid().notNull(),
     memoryId: uuid(),
     chunkId: uuid(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
+    properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
     check(
       "knowledge_edge_sources_exactly_one_source_check",
       sql`(${table.memoryId} IS NOT NULL) <> (${table.chunkId} IS NOT NULL)`
     ),
+    check("knowledge_edge_sources_properties_object_check", sql`jsonb_typeof(${table.properties}) = 'object'`),
     foreignKey({
       columns: [table.organizationId, table.edgeId],
       foreignColumns: [knowledgeEdges.organizationId, knowledgeEdges.id],

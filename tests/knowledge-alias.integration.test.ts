@@ -21,13 +21,15 @@ import type { OrganizationAccess, ScopedResource } from "@/domain/identity/organ
 
 describe("source-grounded knowledge aliases", () => {
   let container: StartedPostgreSqlContainer, db: AgentMemoryDatabase, pool: Pool;
+  let database: ReturnType<typeof createDatabase>;
   beforeAll(async () => {
     container = await new PostgreSqlContainer("pgvector/pgvector:0.8.6-pg18-trixie")
       .withDatabase("knowledge_alias_test").withUsername("agent_memory").withPassword("agent_memory").start();
-    ({ db, pool } = createDatabase(container.getConnectionUri()));
+    database = createDatabase(container.getConnectionUri());
+    ({ db, pool } = database);
     await initializeSchema(pool);
   });
-  afterAll(async () => { await pool?.end(); await container?.stop(); });
+  afterAll(async () => { await database?.close(); await container?.stop(); });
 
   async function fixture() {
     const organizationId = randomUUID(), userId = randomUUID();
@@ -88,11 +90,12 @@ describe("source-grounded knowledge aliases", () => {
     expect(await test.graph.findNodesByNames(test.access, test.scope, ["제갈공명"])).toEqual([]);
     expect(await test.graph.searchNodes({ access: test.access, query: "제갈공명", limit: 10 })).toEqual([]);
     const remaining = await test.graph.findNodesByNames(test.access, test.scope, ["공명"]);
-    expect(remaining[0]?.aliases).toEqual(["공명"]);
+    expect(remaining[0]).toMatchObject({ canonicalName: "공명", aliases: [] });
+    expect(await test.graph.findNodesByNames(test.access, test.scope, ["제갈량"])).toEqual([]);
     const saved = await test.graph.saveNode(createKnowledgeNode({ id: randomUUID(), canonicalName: "공명", kind: "person", scope: test.scope,
       source: { chunkId: second.chunkId }, now: new Date() }), test.access);
     expect(saved.id).toBe(first.node.id);
-    expect(saved.aliases).toEqual(["공명"]);
+    expect(saved).toMatchObject({ canonicalName: "공명", aliases: [] });
   });
 
   it("reassesses obsolete pending policy while preserving the prior assessment for audit", async () => {
@@ -117,9 +120,9 @@ describe("source-grounded knowledge aliases", () => {
     const first = await test.promote("제갈량이 전략을 세웠다.", "제갈량");
     const second = await test.promote("공명이 장수에게 병법을 가르쳤다.", "공명");
     const third = await test.promote("제갈공명이 군사를 지휘했다.", "제갈공명");
-    const student = await test.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: test.scope, canonicalName: "장수", kind: "person", source: { chunkId: second.chunkId }, now: new Date() }));
+    const student = await test.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: test.scope, canonicalName: "장수", kind: "person", source: { chunkId: second.chunkId }, now: new Date() }), test.access);
     const edge = await test.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: test.organizationId, scope: test.scope, sourceNodeId: second.node.id, targetNodeId: student.id,
-      predicate: "teaches", source: { chunkId: second.chunkId }, now: new Date() }));
+      predicate: "teaches", source: { chunkId: second.chunkId }, now: new Date() }), test.access);
     const linked = await test.promote("제갈량의 자는 공명이며 제갈공명이라고도 불린다.", "제갈량", ["공명", "제갈공명"]);
     expect(linked.node.id).toBe(first.node.id);
     expect(linked.node.sources).toHaveLength(4);
@@ -231,7 +234,7 @@ describe("source-grounded knowledge aliases", () => {
     const test = await fixture(), other = await fixture();
     const privateScope: ScopedResource = { kind: "user", organizationId: test.organizationId, userId: test.userId };
     const origin = await test.source("Private identity statement.", privateScope);
-    const privateNode = await test.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: privateScope, kind: "person", canonicalName: "Private Name", aliases: ["Hidden Alias"], source: { chunkId: origin.chunkId }, now: new Date() }));
+    const privateNode = await test.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: privateScope, kind: "person", canonicalName: "Private Name", aliases: ["Hidden Alias"], source: { chunkId: origin.chunkId }, now: new Date() }), test.access);
     expect((await test.graph.findNodesByNames(test.access, privateScope, ["Hidden Alias"])).map((node) => node.id)).toEqual([privateNode.id]);
     expect(await test.graph.findNodesByNames(test.access, test.scope, ["Hidden Alias"])).toEqual([]);
     expect(await test.graph.findNodesByNames(other.access, privateScope, ["Hidden Alias"])).toEqual([]);
@@ -252,9 +255,9 @@ describe("source-grounded knowledge aliases", () => {
       source: { type: "user" }, createdBy: test.userId, validFrom: new Date(Date.now() - 60_000), now: new Date() });
     await createMemoryRepository(db).save(memory);
     const node = await test.graph.saveNode(createKnowledgeNode({ id: randomUUID(), canonicalName: "Primary", aliases: ["HiddenName"], kind: "person", scope: test.scope,
-      source: { memoryId: memory.id }, now: new Date() }));
+      source: { memoryId: memory.id }, now: new Date() }), test.access);
     const visible = await test.source("Primary has another supported fact.");
-    await test.graph.saveNode(createKnowledgeNode({ id: randomUUID(), canonicalName: "Primary", kind: "person", scope: test.scope, source: { chunkId: visible.chunkId }, now: new Date() }));
+    await test.graph.saveNode(createKnowledgeNode({ id: randomUUID(), canonicalName: "Primary", kind: "person", scope: test.scope, source: { chunkId: visible.chunkId }, now: new Date() }), test.access);
     expect((await test.graph.findNodesByNames(test.access, test.scope, ["HiddenName"])).map((item) => item.id)).toEqual([node.id]);
     await pool.query("UPDATE memories SET expires_at=now() - interval '1 second' WHERE id=$1", [memory.id]);
     expect(await test.graph.findNodesByNames(test.access, test.scope, ["HiddenName"])).toEqual([]);

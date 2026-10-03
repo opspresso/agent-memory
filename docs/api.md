@@ -158,11 +158,12 @@ JSON body를 읽는 조직 API는 UTF-8 JSON을 요구하며 전체 body를 1 Mi
 | `403` | 조직 멤버십·resource action 권한 부족 또는 브라우저 mutation의 origin 검증 실패 |
 | `404` | Resource가 없거나 호출자에게 존재를 공개할 수 없음 |
 | `409` | Memory version, 문서 retry·candidate review 상태, 중복 membership·팀 slug, owner·자기 관리 제약 또는 Agent token reveal 충돌 |
+| `412` | 문서 scope 변경의 `If-Match`가 현재 `ETag`와 일치하지 않음 |
 | `413` | JSON body가 1 MiB를 초과하거나 문서 upload request·파일이 제한을 초과함 |
 | `422` | 조직 온톨로지 검증(strict)에서 미등록 kind·predicate를 거부함. 응답에 `violations` 배열 포함 |
-| `428` | Memory mutation에 유효한 `If-Match`가 없음 |
+| `428` | Memory mutation에 유효한 `If-Match`가 없거나 문서 scope 변경에 필수 `If-Match`가 없음 |
 | `429` | Instance 또는 PostgreSQL organization·user AI provider 호출 상한, document storage·processing backlog·사용자 upload rate quota를 초과함 |
-| `503` | Health check에서 Database를 사용할 수 없거나, AI 모델 미구성 상태에서 온톨로지 AI 추천을 호출함 |
+| `503` | DB·schema·Neo4j readiness 또는 Graph 동기화 실패, AI 모델 미구성 상태에서 온톨로지 AI 추천·자동 검토를 호출함 |
 
 AI 호출 quota의 `429`는 초 단위 `Retry-After` header를 포함한다. 문서 storage·backlog·upload quota의 `429`에는 이 header가 없다. Reranker 호출 실패·quota 초과는 hybrid 순위로 복귀한다.
 
@@ -170,7 +171,7 @@ AI 호출 quota의 `429`는 초 단위 `Retry-After` header를 포함한다. 문
 
 | Method | Path | 역할 |
 | --- | --- | --- |
-| `GET` | `/api/health` | Database readiness 확인 |
+| `GET` | `/api/health` | Database·schema·Neo4j readiness 확인 |
 | `GET` | `/api/metrics` | `METRICS_BEARER_TOKEN`으로 보호된 Prometheus process·build 지표 조회 |
 | `GET`, `POST` | `/api/auth/*` | Better Auth 인증 endpoint |
 | `GET`, `PATCH` | `/api/organization` | 설치 조직 조회, 설정 변경(admin·owner) |
@@ -202,7 +203,10 @@ AI 호출 quota의 `429`는 초 단위 `Retry-After` header를 포함한다. 문
 | `DELETE` | `/api/knowledge/edges/:edgeId` | Knowledge edge 삭제 |
 | `GET` | `/api/knowledge/nodes/:nodeId/neighborhood` | 제한된 graph neighborhood 조회 |
 | `GET` | `/api/knowledge/candidates` | 검토 대기 중인 AI graph 후보 조회 |
-| `GET` | `/api/knowledge/candidates/:candidateId/duplicates` | 후보 entity와 canonical name·scope가 같은 기존 node 일괄 조회 |
+| `GET` | `/api/knowledge/progress` | 읽기 가능한 ready 청크의 추출·검증·처리 진척 조회 |
+| `GET`, `POST` | `/api/knowledge/curation` | 최근 검토 이력 조회, 미추출 청크·미완료 자동 검토 등록 |
+| `GET` | `/api/knowledge/review-groups` | 수동 검토 항목을 출처별로 통합한 페이지 조회 |
+| `GET` | `/api/knowledge/candidates/:candidateId/duplicates` | 후보 이름·별칭과 일치하는 같은 scope의 기존 node 일괄 조회 |
 | `POST` | `/api/knowledge/candidates/:candidateId/accept` | AI 후보를 Knowledge Graph로 승격 |
 | `GET` | `/api/knowledge/ontology/recommendations` | 관찰된 용어 기반 온톨로지 추천(admin·owner) |
 | `POST` | `/api/knowledge/ontology/suggestions` | AI 모델 기반 온톨로지 정제 제안(admin·owner) |
@@ -447,7 +451,7 @@ curl \
 
 문서·검증된 Knowledge scope·변경 이력을 한 transaction에서 저장한다. Chunk와 AI 후보는 자체 scope를 저장하지 않고 현재 문서 scope를 따른다. 문서 chunk를 직접 근거로 갖는 node·edge의 모든 출처가 현재 유효하고 대상 scope를 포함할 때만 변경한다. Node 변경은 기존 연결 edge의 범위도 보존해야 하며, edge 변경은 양 끝 node가 대상 scope에서 읽힐 수 있어야 한다. 충돌한 지식은 자동 병합하지 않는다. 제외 항목은 원래 scope를 유지하며 해당 문서 이외의 문서·Memory를 수정하지 않는다. 같은 scope를 다시 지정하면 현재 조건으로 Knowledge를 재검증하므로, 여러 출처의 공유를 완료한 후 다시 적용할 수 있다. 원문·chunk·embedding·후보 검토 이력·provenance는 보존한다. 승인된 후보의 재요청도 현재 읽을 수 있고 유효한 지식과 출처만 반환하므로, 범위 변경에서 제외된 개인 지식을 노출하지 않는다.
 
-공유 범위를 축소하거나 다른 팀으로 변경할 때, 제외된 지식이 새 문서 범위 밖에 남게 되면 `409`와 `code: "related_scope_conflict"`를 반환한다. 공통 properties·embedding은 출처별로 분리되어 있지 않으므로 해당 경우에는 문서·지식·변경 이력 모두 저장하지 않는다. 관련 지식의 충돌을 해결한 뒤 다시 변경하라.
+공유 범위를 축소하거나 다른 팀으로 변경해도 제외된 지식 때문에 문서 변경을 거부하지 않는다. Properties·설명·별칭·embedding은 출처별로 저장하며, 기존 scope에 남은 지식은 호출자가 현재 읽을 수 있는 출처의 값만 반환·검색한다.
 
 ### 재시도와 archive
 
@@ -460,9 +464,9 @@ curl -i \
   "$AGENT_MEMORY_URL/api/documents/<documentId>/retry"
 ```
 
-Retry는 원래 scope의 `write` 권한을 요구한다. 성공은 재시도 queue 등록을 수락했다는 `202`이며, 응답 Document는 등록 전 snapshot이므로 `status: "failed"`일 수 있다. 처리 완료 여부는 상태 조회 endpoint로 확인한다. `pending`, `processing`, `ready` 문서를 retry하면 `409`, archived 문서는 `404`다.
+Retry는 현재 document scope의 `write` 권한을 요구한다. 성공은 재시도 queue 등록을 수락했다는 `202`이며, 응답 Document는 등록 전 snapshot이므로 `status: "failed"`일 수 있다. 처리 완료 여부는 상태 조회 endpoint로 확인한다. `pending`, `processing`, `ready` 문서를 retry하면 `409`, archived 문서는 `404`다.
 
-`DELETE .../documents/:documentId`는 문서를 영구 제거하지 않고 archive하며 `204`를 반환한다. 원본과 chunk는 provenance 보존을 위해 유지하지만 검색, 상태 조회, retry, AI 후보 조회·승인에서는 제외한다. 삭제에는 원래 document scope의 `manage` 권한이 필요하다. 권한 확인 이후 scope가 달라지면 저장 시점에 보관을 거부하고 `404`를 반환한다.
+`DELETE .../documents/:documentId`는 문서를 영구 제거하지 않고 archive하며 `204`를 반환한다. 원본과 chunk는 provenance 보존을 위해 유지하지만 검색, 상태 조회, retry, AI 후보 조회·승인에서는 제외한다. 삭제에는 현재 document scope의 `manage` 권한이 필요하다. 권한 확인 이후 scope가 달라지면 저장 시점에 보관을 거부하고 `404`를 반환한다.
 
 ### 문서 검색
 
@@ -517,11 +521,13 @@ curl -X POST \
   "$AGENT_MEMORY_URL/api/knowledge/edges"
 ```
 
-Node 설명은 현재 읽을 수 있는 출처별 설명을 중복 제거해 합친다(개요 최대 10,000자). Node 검색은 대표 이름 또는 현재 읽을 수 있는 출처의 검증된 별칭이 정확히 일치하는 결과를 먼저 보여주고 나머지는 hybrid 점수순으로 정렬한다.
+Node 설명은 현재 읽을 수 있는 출처별 설명을 중복 제거해 합친다(개요 최대 10,000자). Node의 공개 `canonicalName`과 `aliases`, 이름 일치와 키워드 검색은 현재 읽을 수 있는 출처의 이름만 사용한다. 저장된 대표 이름이 해당 출처에 없으면 정규화한 이름 key 순서의 첫 이름을 표시명으로 선택한다. 출처 권한이 바뀌어 표시명이 달라져도 node ID와 내부 identity는 유지한다. 이름이 정확히 일치하는 결과를 먼저 보여주고 나머지는 hybrid 점수순으로 정렬한다.
 
-Node 응답은 `id`, `scope`, `kind`, `canonicalName`, `aliases`, `properties`, `sources`, `createdAt`, `updatedAt`과 값이 있는 `summary`, `embeddingModel`을 포함한다. Edge 응답은 `id`, `sourceNodeId`, `targetNodeId`, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
+Node·edge의 `properties`는 현재 읽을 수 있고 유효한 출처의 속성을 key 단위로 합친다. 같은 key는 최근에 저장한 출처가 우선하며, 저장 시각이 같으면 출처 종류·ID 순서로 결정한다. 같은 출처에 HTTP 생성 요청을 다시 보내면 properties snapshot을 교체하며, 생략하거나 `{}`를 보내면 해당 출처의 속성을 비운다. AI 후보 승인은 기존 수동 속성을 보존한다. 출처가 archive·만료되거나 읽기 권한을 잃으면 그 값은 응답에서 제외한다. Node 병합으로 동일 출처가 합쳐질 때는 target 속성을 우선한다.
 
-`aliases`는 현재 읽을 수 있는 유효한 provenance에서 모은 검증된 이름이며 대표 이름은 제외한다. 후보 승인과 명시적 node 병합으로 보존하고, 일반 node 생성 입력의 `properties.aliases`는 identity 근거로 사용하지 않는다. Node 생성의 대표 이름이 검증된 기존 별칭과 유일하게 일치하면 같은 ID를 재사용하고, 여러 node와 일치하면 `409`를 반환한다.
+Node 응답은 `id`, `scope`, `kind`, `canonicalName`, `aliases`, `properties`, `sources`, `createdAt`, `updatedAt`과 값이 있는 `summary`를 포함한다. Embedding은 출처별 검색 자료이며 node 응답에 vector나 단일 `embeddingModel`을 반환하지 않는다. Edge 응답은 `id`, `sourceNodeId`, `targetNodeId`, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
+
+`aliases`는 현재 읽을 수 있는 유효한 provenance에서 모은 검증된 이름이며 공개 `canonicalName`은 제외한다. 후보 승인과 명시적 node 병합으로 보존하고, 일반 node 생성 입력의 `properties.aliases`는 identity 근거로 사용하지 않는다. Node 생성의 대표 이름이 검증된 기존 별칭과 유일하게 일치하면 같은 ID를 재사용하고, 여러 node와 일치하면 `409`를 반환한다. 재기여와 후보 승인은 입력에 있는 이름만 해당 출처에 기록하며 기존 node의 숨겨진 대표 이름을 복사하지 않는다.
 
 Node·edge 생성 성공은 `200`과 공개 resource를 반환한다. Node 응답의 `Location`은 해당 node의 neighborhood URL이다. 온톨로지 경고는 아래 검증 모드에 따라 추가된다.
 
@@ -533,7 +539,7 @@ Node·edge 생성 성공은 `200`과 공개 resource를 반환한다. Node 응�
 
 병합 성공은 `200`과 갱신된 target node를 반환한다. 자기 자신과의 병합이나 서로 다른 scope 병합은 `400`이다.
 
-Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical name과 정규화 kind를 사용한다. `award`, `honor`, `honour`, `achievement`, `designation`은 `recognition`으로 통합한다. 같은 scope에서 정규화 identity가 같으면 신규 생성과 AI 후보 승인 시 기존 node에 자동 병합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
+Node identity는 ID로 유지한다. 생성과 AI 후보 승인은 같은 scope·kind에서 호출자가 읽을 수 있는 출처 이름을 NFKC·공백·대소문자 정규화 후 비교한다. 원래 대표 이름과 별칭의 역할은 출처별로 보존하며 표시명이 같다는 이유만으로 병합하지 않는다. 유일한 동일인 근거가 있으면 기존 ID를 사용하고, 없으면 새 ID를 만든다. 읽을 수 없는 저장 대표 이름이 같다는 이유로 기존 node에 연결하지 않는다. `award`, `honor`, `honour`, `achievement`, `designation`은 `recognition`으로 통합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
 
 ### 조직 온톨로지 검증
 
@@ -590,10 +596,10 @@ Runtime은 개체를 먼저 식별·검증한 뒤, 살아남은 entity key만 �
 
 승인·거절 body의 선택적 `selection: { entityKeys: string[], relationshipIndexes: number[] }`은 원본 graph의 키와 0 기반 관계 index를 참조한다. 생략하면 남은 항목 전체를 처리한다. 관계 승인은 양 끝 개체도 승격하고, 개체 거절은 아직 검토하지 않은 연결 관계도 거절한다. 다른 항목은 pending으로 남는다. `itemReviews`는 항목별 decision·reviewedBy·reviewedAt·reason을 보존하며 원본 graph는 변경하지 않는다. 모든 항목을 검토하면 승인된 항목이 하나라도 있는 후보는 accepted, 전부 거절한 후보는 rejected가 된다. 동일 항목의 같은 결정은 멱등하며 반대 결정은 거부한다. 빈 추출은 조회 이력으로 보존하되 승인할 수 없다.
 
-Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity와 relationship candidate를 만든다. Candidate는 source document·chunk, 원래 scope, extraction model을 포함하며 chunk 원문 전체를 응답하지 않는다. 새 추출의 entity는 `aliases`와 `evidence` 배열을, relationship은 `evidence` 배열을 포함한다. Evidence는 청크에서 인용한 최대 2,000자의 문구이며 각 배열은 최대 20개다. 근거 필드가 없는 기존 추출 기록도 조회할 수 있다. 서버는 NFKC·공백 정규화 후 원문에 존재하는 인용만 보존하고, 근거가 없는 개체·관계와 막연한 동시 등장 관계를 제외한다. 중복 키가 같은 kind·정규화 이름을 가리키면 통합하고, 서로 다른 개체를 가리키면 모호한 개체들과 연결 관계를 제외한다. 없는 개체를 참조하는 관계와 자기 자신을 가리키는 관계도 제외하며 같은 청크의 정상 지식은 보존한다. 인용 일치는 의미적 사실 검증을 대체하지 않는다.
+Knowledge extraction을 활성화하면 ready 문서의 각 chunk에서 entity와 relationship candidate를 만든다. Candidate는 source document·chunk, 현재 출처 문서 scope, extraction model을 포함하며 chunk 원문 전체를 응답하지 않는다. 새 추출의 entity는 `aliases`와 `evidence` 배열을, relationship은 `evidence` 배열을 포함한다. Evidence는 청크에서 인용한 최대 2,000자의 문구이며 각 배열은 최대 20개다. 근거 필드가 없는 기존 추출 기록도 조회할 수 있다. 서버는 NFKC·공백 정규화 후 원문에 존재하는 인용만 보존하고, 근거가 없는 개체·관계와 막연한 동시 등장 관계를 제외한다. 중복 키가 같은 kind·정규화 이름을 가리키면 통합하고, 서로 다른 개체를 가리키면 모호한 개체들과 연결 관계를 제외한다. 없는 개체를 참조하는 관계와 자기 자신을 가리키는 관계도 제외하며 같은 청크의 정상 지식은 보존한다. 인용 일치는 의미적 사실 검증을 대체하지 않는다.
 
 - `GET .../knowledge/candidates?limit=<1-100>`은 빈 추출 결과를 제외한 pending candidate를 오래된 순으로 반환하며 기본 limit은 50이다. 응답은 `{ candidates, count }`다. 각 candidate는 `id`, `scope`, `documentId`, `chunkId`, `model`, 추출된 `graph`, `status`, `createdAt`, `updatedAt`과 값이 있는 `reviewedBy`, `reviewReason`, `reviewedAt`을 포함한다.
-- `GET .../knowledge/candidates/<candidateId>/duplicates`는 후보의 모든 entity를 한 번에 조회하고 entity key별로 같은 canonical name·scope의 읽기 가능한 기존 node를 반환한다. Semantic embedding을 생성하지 않는다.
+- `GET .../knowledge/candidates/<candidateId>/duplicates`는 후보의 모든 entity를 한 번에 조회하고 entity key별로 이름·별칭이 일치하는 같은 scope의 읽기 가능한 기존 node를 반환한다. Semantic embedding을 생성하지 않는다.
 - 후보 조회와 승인은 source scope의 `manage` 권한을 따른다. Organization scope는 `admin`·`owner`, team scope는 해당 팀 `manager` 또는 조직 `admin`·`owner`, user scope는 본인만 검토한다.
 - `POST .../accept`와 `POST .../reject` JSON object body는 필수이며 `reason`과 `selection`은 선택 항목이다. 남은 전체 항목을 사유 없이 처리하려면 `{}`를 보내고, 부분 검토에는 위의 `selection`을 포함한다. 사유는 `{ "reason": string }`으로 추가한다. reason은 앞뒤 공백 제거 후 1–2,000자다.
 - 승인은 node·edge, candidate→resource 관계, reviewer audit을 하나의 transaction으로 저장한다. 전체 거절된 후보의 승인과 `selection`을 생략한 승인 완료 후보의 거절은 `409`를 반환한다. 존재하지 않는 항목·빈 selection·반대 항목 결정을 지정한 selection은 `400`으로 거부한다(전체 거절된 후보의 승인은 `409`가 우선한다). 부분 거절 후 accepted 상태가 된 후보에서도 이미 거절한 항목을 같은 selection으로 다시 거절하는 요청은 멱등하게 처리한다. 최초 승인 시 source 문서가 archive 등으로 `ready`가 아니면 `409` `{ "error": "knowledge candidate source document is not ready" }`를 반환한다. 이미 승인된 후보의 재승인은 멱등하며 현재 surviving resource로 해석한 기존 승인 결과를 반환한다.
@@ -637,6 +643,7 @@ curl \
 | 재정렬 입력 | 조회 후보에서 source별 순위를 유지하며 번갈아 선택하고, 전체를 같은 후보 예산 이내로 제한한다. 한 종류만 있으면 해당 종류에서 예산을 채운다. |
 | `counts` | 종류별 조회 후보 수. 선택된 재정렬 입력 수 또는 최종 반환 수와 다를 수 있다. |
 | Vector 후보 하한 | `EMBEDDING_MIN_SCORE`를 후보 수집의 `LIMIT` 전에 적용한다. 같은 model·차원의 nonzero vector만 비교하며 `vectorScore`는 코사인 유사도를 `0–1`로 제한한다. 키워드 일치는 vector 하한에 상관없이 후보로 남는다. |
+| Knowledge vector | 현재 읽을 수 있고 유효한 출처별 vector 중 가장 높은 점수를 사용한다. Archive·만료·미래 유효·권한 없는 출처는 다른 유효 출처가 남아 있어도 점수에 포함하지 않는다. |
 | 재정렬 최소 점수 | `RERANKER_MIN_SCORE`는 재정렬 성공 시에만 적용한다. 후보가 있어도 `hits`가 비어 있을 수 있다. |
 | Fallback | Reranker 장애·timeout·quota 초과 시 선택된 후보의 hybrid 순위로 복귀하며 재정렬 최소 점수 하한은 적용하지 않는다. Vector 후보 하한은 그대로 유지한다. |
 
@@ -696,6 +703,9 @@ Streamable HTTP endpoint는 `/api/mcp`다. MCP client의 초기화·`tools/list`
 | `document_search` | 처리된 문서 chunk 검색 | `query`, `limit?` | `{ hits }` |
 | `knowledge_search` | Knowledge node 검색 | `query`, `limit?` | `{ hits }` |
 | `knowledge_neighborhood` | Graph neighborhood 조회 | `nodeId`, `depth?`, `limit?` | `{ nodes, edges }` |
+| `document_ingest` | 멱등 문서 수집 | [멱등 수집 입력](#멱등-수집) | `{ document }` |
+| `document_ingest_status` | 문서 처리 상태 조회 | `documentId` | `{ document }` |
+| `document_ingest_retry` | 멱등 처리 재시도 | `documentId`, `idempotencyKey`, `expectedAttempts` | `{ document }` |
 
 검색 `query`는 1–10,000자, `limit`은 정수 1–100이며 기본값은 10이다. `knowledge_neighborhood`는 UUID `nodeId`와 `depth` 1–5(기본 1), `limit` 1–200(기본 100)을 사용한다. 개별 문서·Knowledge hit와 neighborhood payload는 해당 HTTP API의 공개 형식과 같다.
 
@@ -770,6 +780,8 @@ Token은 client의 secret 또는 environment variable 기능으로 주입하고 
 
 Markdown chunk의 `content`에는 문맥을 보존하기 위한 원문의 상위 제목이 포함될 수 있다. `metadata.start/end`는 정규화한 원본의 본문 범위이며, 반복한 제목의 범위는 선택형 `metadata.contextSpans: [{ start, end }]`로 제공한다.
 
+CSV도 정규화한 원문의 record 범위를 `start/end`로 보존한다. 빈 record를 내용에서 제외해도 뒤 record의 좌표는 유지하며, 후속 chunk에 반복한 header 범위는 `contextSpans`에 기록한다. 큰 record를 일반 텍스트로 분할한 경우에는 header를 반복하지 않는다.
+
 ### 문서 본문 페이지
 
 `GET /api/documents/{documentId}/chunks?limit=25&offset=0`는 ready 문서의 처리된 본문을 순서대로 읽는다. 응답은 `{ document, chunks: [{ id, ordinal, content, metadata }], count, nextOffset }`이며 Document는 기존 공개 응답 형식이다. `ordinal` 오름차순(ID로 동률 정렬)으로 조회하며 `limit`·`offset` 범위와 `count`·`nextOffset` 의미는 위 library endpoint와 같다. 마지막 page 이후에는 `chunks: []`, `nextOffset: null`을 반환한다. 문서 조회와 본문 page는 같은 읽기 transaction snapshot을 사용한다. 다른 조직, 읽기 권한 없음, archived·pending·processing·failed source는 모두 `404`로 처리한다. 원본 파일 bytes나 object key, embedding은 반환하지 않는다.
@@ -779,7 +791,7 @@ Markdown chunk의 `content`에는 문맥을 보존하기 위한 원문의 상위
 Memory 생성 HTTP API와 MCP `remember`는 선택적 `idempotencyKey`(trim 후 1–256자)를 받는다.
 같은 설치 조직·인증 사용자·operation·key에 같은 payload를 다시 보내면 기존 Memory를 반환한다.
 다른 payload는 HTTP 409 또는 MCP tool error다. 현재 scope 권한을 다시 확인하며 archived resource를
-새로 만들지 않는다. 인증 방식은 기존 session 또는 조직 Agent Bearer + 검증된 email 위임을 유지한다.
+새로 만들지 않는다. 기존 HTTP/MCP 인증·scope·사용자 위임 정책을 그대로 적용한다.
 
 문서 수집 MCP는 같은 receipt 계약을 제공한다. 저장된 pending 문서의 업로드를 재호출하면 같은
 문서 ID로 queue 등록을 복구한다. 새 원본·문서를 만들지 않는다.

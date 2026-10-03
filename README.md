@@ -91,4 +91,4 @@ Pull request와 release tag CI는 빈 DB 초기화, 위 전체 검사, PostgreSQ
 
 로컬 Compose의 PostgreSQL·MinIO·Neo4j volume은 Agent Memory 전용이다. `docker compose down -v`는 데이터를 삭제한다.
 
-운영 환경은 AWS EC2의 k3s이며 서비스 주소는 `https://memory.opspresso.com/`이다. 이 저장소의 Release workflow는 image를 게시하고 `../argocd-env-demo`의 alpha version 목록에 tag를 전달한다. Argo CD 자동 동기화는 해제되어 있으므로 DB 준비 후 수동 Sync로 운영에 반영한다. 배포와 backup·복원 절차는 [운영 가이드](docs/operations.md#배포-형태)를 따른다. EKS는 현재 배포·검증 대상이 아니다.
+k3s는 alpha(`https://memory.opsp.dev/`), EKS는 prod(`https://memory.opspresso.com/`) 환경이다. 릴리즈는 tag·GitHub Release·image 게시·`../argocd-env-demo`의 alpha version 목록 갱신까지다. Prod 승격은 GitHub Environment의 사용자 승인이 필요하며, DB 초기화·Argo CD Sync·서비스 재시작은 별도로 승인받아 수행한다. 운영 반영 전 대상 Application의 수동 Sync 설정과 DB 준비 상태를 확인하라. 배포와 backup·복원 절차는 [운영 가이드](docs/operations.md#배포-형태)를 따른다.

@@ -17,6 +17,6 @@ it("initializes authentication and resolves an anonymous session with the applic
 
     await expect(auth.api.getSession({ headers: new Headers() })).resolves.toBeNull();
   } finally {
-    await database.pool.end();
+    await database.close();
   }
 });

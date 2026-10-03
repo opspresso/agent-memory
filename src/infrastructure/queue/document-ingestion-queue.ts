@@ -44,8 +44,8 @@ export function createPgBossDocumentIngestionQueue(
         schema: "pgboss"
       });
       boss.on("error", onError);
-      await boss.start();
       try {
+        await boss.start();
         await boss.createQueue(documentIngestionQueueName, {
           policy: "exclusive",
           retryLimit: 3,

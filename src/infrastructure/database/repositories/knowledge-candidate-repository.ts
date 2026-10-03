@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { entityReviewKey, relationshipReviewKey, reviewedCandidateState, selectKnowledgeCandidateItems } from "@/domain/knowledge/knowledge-candidate-selection";
-import { AmbiguousKnowledgeIdentityError, knowledgeAliases, resolveKnowledgeIdentity } from "@/domain/knowledge/knowledge-alias";
+import { AmbiguousKnowledgeIdentityError, resolveKnowledgeIdentity } from "@/domain/knowledge/knowledge-alias";
 import { mergeKnowledgeDescriptions } from "@/domain/knowledge/knowledge-description";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import { currentKnowledgeAssessmentPolicyVersion } from "@/domain/knowledge/knowledge-assessment";
@@ -27,16 +27,16 @@ import {
   knowledgeNodeSources
 } from "../schema";
 import {
-  edgeFromRow,
   createKnowledgeGraphRepository,
-  edgeValues,
   visibleSourcePredicate
 } from "./knowledge-graph-repository";
+import { edgeFromRow, findOrCreateKnowledgeEdge } from "./knowledge-edge-persistence";
 import {
   knowledgeScopeFromRow,
   knowledgeNodeFromRow,
+  knowledgeNodeSourceMetadataColumns,
   knowledgeSourceFromRow,
-  upsertKnowledgeNode
+  saveKnowledgeNodeContribution
 } from "./knowledge-node-persistence";
 import { scopedManagePredicate, scopedReadPredicate } from "./scope-predicates";
 import { loadKnowledgeSourceScopes, lockKnowledgeScope } from "./knowledge-scope-lock";
@@ -49,7 +49,7 @@ type AgentMemoryTransaction = Parameters<
 >[0];
 
 function sourcesByResourceId<
-  T extends { readonly memoryId: string | null; readonly chunkId: string | null }
+  T extends Parameters<typeof knowledgeSourceFromRow>[0]
 >(rows: readonly T[], resourceIdFor: (row: T) => string) {
   const result = new Map<string, ReturnType<typeof knowledgeSourceFromRow>[]>();
   for (const row of rows) {
@@ -109,7 +109,7 @@ async function promotedResourcesForCandidate(
   const [nodeSourceRows, edgeSourceRows] = await Promise.all([
     nodeRows.length > 0
       ? transaction
-          .select()
+          .select(knowledgeNodeSourceMetadataColumns)
           .from(knowledgeNodeSources)
           .where(
             and(
@@ -484,21 +484,33 @@ export function createKnowledgeCandidateRepository(
               descriptions.delete(sourceNodeId);
             }
           }
-          const canonicalName = identity.status === "resolved" ? identity.target.canonicalName : entity.canonicalName;
+          if (priorReview?.decision === "accepted" && identity.status === "resolved") {
+            const [binding] = await transaction.select({ nodeId: knowledgeCandidateNodes.nodeId }).from(knowledgeCandidateNodes).where(and(
+              eq(knowledgeCandidateNodes.organizationId, input.organizationId), eq(knowledgeCandidateNodes.candidateId, candidate.id),
+              eq(knowledgeCandidateNodes.nodeId, identity.target.id)
+            )).limit(1);
+            if (binding) {
+              // Reviewing a relationship reuses its approved endpoint; it is
+              // not a new contribution to that endpoint's source snapshot.
+              nodeIds.set(entity.key, binding.nodeId);
+              continue;
+            }
+          }
           const summary = mergeKnowledgeDescriptions([identity.status === "resolved" ? descriptions.get(identity.target.id) ?? "" : "",
             entity.summary ?? entity.evidence?.join(" ") ?? ""]);
           const proposedNode = createKnowledgeNode({
             id: promotion.id,
             scope: candidate.scope,
             kind: entity.kind,
-            canonicalName,
-            aliases: knowledgeAliases(canonicalName, [entity.canonicalName, ...aliases]),
+            canonicalName: entity.canonicalName,
+            aliases,
             ...(summary ? { summary } : {}),
             ...(promotion.embedding ? { embedding: promotion.embedding } : {}),
             source: { chunkId: candidate.chunkId },
             now: input.reviewedAt
           });
-          const node = await upsertKnowledgeNode(transaction, proposedNode);
+          const node = await saveKnowledgeNodeContribution(transaction, proposedNode, "preserve",
+            identity.status === "resolved" ? identity.target.id : null);
           if (summary) descriptions.set(node.id, summary);
           await transaction
             .insert(knowledgeCandidateNodes)
@@ -534,32 +546,16 @@ export function createKnowledgeCandidateRepository(
             source: { chunkId: candidate.chunkId },
             now: input.reviewedAt
           });
-          const [row] = await transaction
-            .insert(knowledgeEdges)
-            .values(edgeValues(proposedEdge))
-            .onConflictDoUpdate({
-              target: [
-                knowledgeEdges.organizationId,
-                knowledgeEdges.scopeKind,
-                knowledgeEdges.teamId,
-                knowledgeEdges.userId,
-                knowledgeEdges.sourceNodeId,
-                knowledgeEdges.predicate,
-                knowledgeEdges.targetNodeId
-              ],
-              set: { properties: sql`${knowledgeEdges.properties}` }
-            })
-            .returning();
-          if (!row) {
-            throw new Error("promoted knowledge edge upsert returned no row");
-          }
+          const row = await findOrCreateKnowledgeEdge(transaction, proposedEdge);
           await transaction
             .insert(knowledgeEdgeSources)
             .values({
               organizationId: input.organizationId,
               edgeId: row.id,
               chunkId: candidate.chunkId,
-              createdAt: input.reviewedAt
+              properties: proposedEdge.properties,
+              createdAt: input.reviewedAt,
+              updatedAt: input.reviewedAt
             })
             .onConflictDoNothing();
           await transaction
@@ -583,11 +579,7 @@ export function createKnowledgeCandidateRepository(
           edges.push(
             edgeFromRow(
               row,
-              sourceRows.map((source) =>
-                source.memoryId
-                  ? { memoryId: source.memoryId }
-                  : { chunkId: source.chunkId! }
-              )
+              sourceRows.map(knowledgeSourceFromRow)
             )
           );
         }

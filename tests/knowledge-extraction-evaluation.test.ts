@@ -5,6 +5,18 @@ const entities = [{ key:"a",kind:"person",canonicalName:"조운" },{ key:"b",kin
 const expected = { entities:[{ kind:"person",name:"조운" },{ kind:"person",name:"유비" }],
   relationships:[{ source:"조운",predicate:"serves",target:"유비" }] };
 describe("knowledge extraction evaluation", () => {
+  it.each(["constructor", "__proto__"])("scores %s without inheriting gold aliases or surface forms", (name) => {
+    const graph = { entities: [{ key: "a", kind: "concept", canonicalName: name }], relationships: [] };
+    const gold = { entities: [{ kind: "concept", name }], relationships: [], aliases: {}, surfaceForms: {} };
+    expect(scoreKnowledgeExtraction(graph, gold, true)).toMatchObject({
+      entities: { truePositive: 1, falsePositive: 0, falseNegative: 0 },
+      aliases: { truePositive: 0, falsePositive: 0, falseNegative: 0 }
+    });
+    expect(scoreKnowledgeExtraction({ ...graph, entities: [{ ...graph.entities[0]!, aliases: ["Alias"] }] }, {
+      ...gold, aliases: { [name]: ["Alias"] }
+    }).aliases).toEqual({ truePositive: 1, falsePositive: 0, falseNegative: 0 });
+  });
+
   it("reports annotated surface equivalence separately from canonical naming and never guesses equivalents", () => {
     const expected = { entities:[{ kind:"service",name:"Atlas" }],relationships:[],surfaceForms:{ Atlas:["Atlas 서비스"] } };
     const graph = { entities:[{ key:"a",kind:"service",canonicalName:"Atlas 서비스" }],relationships:[] };

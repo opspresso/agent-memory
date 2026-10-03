@@ -10,12 +10,6 @@ export class DocumentScopeConflictError extends Error {
 export class DocumentScopeNotReadyError extends Error {
   constructor() { super("Only ready documents can change scope"); this.name = "DocumentScopeNotReadyError"; }
 }
-export class DocumentRelatedScopeConflictError extends Error {
-  constructor() {
-    super("Related knowledge would remain outside the document scope; resolve its sharing conflicts before restricting this document");
-    this.name = "DocumentRelatedScopeConflictError";
-  }
-}
 
 export function buildChangeDocumentScope(dependencies: { readonly repository: DocumentScopeChangeRepository; readonly clock: () => Date }) {
   return async (input: Omit<ChangeDocumentScopeInput, "now">) => {
@@ -26,7 +20,6 @@ export function buildChangeDocumentScope(dependencies: { readonly repository: Do
     if (result.status === "access_denied") throw new DocumentAccessDeniedError();
     if (result.status === "conflict") throw new DocumentScopeConflictError();
     if (result.status === "not_ready") throw new DocumentScopeNotReadyError();
-    if (result.status === "related_scope_conflict") throw new DocumentRelatedScopeConflictError();
     throw new InvalidDocumentError("Target scope does not exist in this organization");
   };
 }
