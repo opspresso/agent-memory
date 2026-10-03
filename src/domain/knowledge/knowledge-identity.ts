@@ -1,14 +1,14 @@
-const kindAliases: Readonly<Record<string, string>> = Object.freeze({
-  achievement: "recognition",
-  award: "recognition",
-  designation: "recognition",
-  honor: "recognition",
-  honour: "recognition"
-});
+const kindAliases: ReadonlyMap<string, string> = new Map([
+  ["achievement", "recognition"],
+  ["award", "recognition"],
+  ["designation", "recognition"],
+  ["honor", "recognition"],
+  ["honour", "recognition"]
+]);
 
 export function normalizeKnowledgeKind(value: string): string {
   const normalized = value.normalize("NFKC").trim().toLowerCase();
-  return kindAliases[normalized] ?? normalized;
+  return kindAliases.get(normalized) ?? normalized;
 }
 
 export function normalizeKnowledgePredicate(value: string): string {

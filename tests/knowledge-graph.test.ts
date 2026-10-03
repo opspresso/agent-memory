@@ -79,6 +79,17 @@ function repository(
 }
 
 describe("knowledge graph", () => {
+  it.each(["constructor", "__proto__"])("preserves the custom entity kind %s", (kind) => {
+    expect(createKnowledgeNode({
+      id: "node-1",
+      scope: node("scope").scope,
+      kind,
+      canonicalName: "Custom entity",
+      source: evidence,
+      now
+    }).kind).toBe(kind);
+  });
+
   it("merges manageable nodes in the same scope", async () => {
     const source = node("source");
     const target = node("target");

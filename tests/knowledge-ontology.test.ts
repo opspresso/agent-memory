@@ -12,6 +12,12 @@ import {
 } from "@/domain/knowledge/knowledge-ontology";
 
 describe("knowledge ontology", () => {
+  it("preserves prototype property names as custom dictionary terms", () => {
+    expect(createKnowledgeOntology({
+      nodeKinds: ["constructor", "__proto__"], edgePredicates: []
+    }).nodeKinds).toEqual(["constructor", "__proto__"]);
+  });
+
   it("ships an already normalized default dictionary with warn mode", () => {
     expect(defaultKnowledgeOntologyMode).toBe("warn");
     expect(createKnowledgeOntology(defaultKnowledgeOntology)).toEqual(
