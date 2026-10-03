@@ -206,7 +206,8 @@ export const memoryVersionResponseSchema = z.object({
 });
 
 export const memoryVersionsResponseSchema = z.object({
-  versions: z.array(memoryVersionResponseSchema)
+  versions: z.array(memoryVersionResponseSchema),
+  nextBefore: z.number().int().min(2).optional()
 });
 
 const knowledgeSourceResponseSchema = z.union([

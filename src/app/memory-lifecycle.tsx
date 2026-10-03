@@ -25,11 +25,9 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { ScopedResource } from "@/domain/identity/organization-access";
 
 import { useLocale, useT } from "./_i18n/provider";
-import {
-  memoryDetailResponseSchema,
-  memoryVersionsResponseSchema
-} from "./api-response-schemas";
+import { memoryDetailResponseSchema } from "./api-response-schemas";
 import { responseJson, responseOk } from "./http-response";
+import { MemoryVersionHistory } from "./memory-version-history";
 import classes from "./memory-lifecycle.module.css";
 
 interface MemoryCapabilitiesView {
@@ -60,18 +58,6 @@ interface MemoryDetailView {
   readonly capabilities: MemoryCapabilitiesView;
 }
 
-interface MemoryVersionView {
-  readonly memoryId: string;
-  readonly version: number;
-  readonly title: string;
-  readonly content: string;
-  readonly source: MemorySourceView;
-  readonly status: "active" | "archived";
-  readonly changedBy: string;
-  readonly changeReason?: string;
-  readonly createdAt: string;
-}
-
 interface MemoryLifecycleProps {
   readonly embedded?: boolean;
   readonly memoryId: string;
@@ -83,7 +69,6 @@ interface MemoryLifecycleProps {
 interface LoadedMemory {
   readonly etag: string;
   readonly memory: MemoryDetailView;
-  readonly versions: readonly MemoryVersionView[];
 }
 
 class MemoryUnavailableError extends Error {}
@@ -111,19 +96,7 @@ async function requestMemory(
   if (!etag) {
     throw new Error(etagMissing);
   }
-  if (!memory.capabilities.manage) {
-    return { memory, etag, versions: [] };
-  }
-  const versionsResponse = await fetch(
-    `/api/memories/${memoryId}/versions?limit=100`,
-    { signal }
-  );
-  const versionsBody = await responseJson(
-    versionsResponse,
-    fallback,
-    memoryVersionsResponseSchema
-  );
-  return { memory, etag, versions: versionsBody.versions };
+  return { memory, etag };
 }
 
 function formattedDate(value: string, locale: "en" | "ko") {
@@ -524,26 +497,10 @@ export function MemoryLifecycle({
                       {t("memory.updated", { date: formattedDate(loaded.memory.updatedAt, locale) })}
                     </Text>
                   </article>
-                  {loaded.versions.map((version) => (
-                    <article className={classes.version} key={version.version}>
-                      <Group justify="space-between">
-                        <Badge color="gray" variant="light">v{version.version}</Badge>
-                        <Text c="dimmed" size="xs">{version.status}</Text>
-                      </Group>
-                      <Text fw={700}>{version.title}</Text>
-                      <Text c="dimmed" size="sm" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-                        {version.content}
-                      </Text>
-                      {version.changeReason ? (
-                        <Text className={classes.reason} size="sm">
-                          “{version.changeReason}”
-                        </Text>
-                      ) : null}
-                      <Text c="dimmed" ff="monospace" size="xs">
-                        {version.changedBy} · {formattedDate(version.createdAt, locale)}
-                      </Text>
-                    </article>
-                  ))}
+                  <MemoryVersionHistory
+                    key={`${memoryId}:${loaded.memory.version}`}
+                    memoryId={memoryId}
+                  />
                 </div>
               </section>
             ) : null}
