@@ -34,6 +34,7 @@ import { edgeFromRow, findOrCreateKnowledgeEdge } from "./knowledge-edge-persist
 import {
   knowledgeScopeFromRow,
   knowledgeNodeFromRow,
+  knowledgeNodeSourceMetadataColumns,
   knowledgeSourceFromRow,
   saveKnowledgeNodeContribution
 } from "./knowledge-node-persistence";
@@ -108,7 +109,7 @@ async function promotedResourcesForCandidate(
   const [nodeSourceRows, edgeSourceRows] = await Promise.all([
     nodeRows.length > 0
       ? transaction
-          .select()
+          .select(knowledgeNodeSourceMetadataColumns)
           .from(knowledgeNodeSources)
           .where(
             and(

@@ -19,6 +19,21 @@ type AgentMemoryTransaction = Parameters<
 >[0];
 type NodeRow = typeof knowledgeNodes.$inferSelect;
 
+// Public graph views use source metadata; vector scoring remains inside SQL.
+export const knowledgeNodeSourceMetadataColumns = {
+  id: knowledgeNodeSources.id,
+  organizationId: knowledgeNodeSources.organizationId,
+  nodeId: knowledgeNodeSources.nodeId,
+  memoryId: knowledgeNodeSources.memoryId,
+  chunkId: knowledgeNodeSources.chunkId,
+  description: knowledgeNodeSources.description,
+  names: knowledgeNodeSources.names,
+  primaryNameKeys: knowledgeNodeSources.primaryNameKeys,
+  properties: knowledgeNodeSources.properties,
+  createdAt: knowledgeNodeSources.createdAt,
+  updatedAt: knowledgeNodeSources.updatedAt
+};
+
 export interface KnowledgeSourceRecord extends KnowledgePropertyContribution {
   readonly description?: string;
   readonly names?: Readonly<Record<string, string>>;
@@ -176,7 +191,7 @@ export async function saveKnowledgeNodeContribution(
         primaryNameKeys: sql`ARRAY(SELECT DISTINCT unnest(${knowledgeNodeSources.primaryNameKeys} || excluded.primary_name_keys))` }
     });
   const sourceRows = await transaction
-    .select()
+    .select(knowledgeNodeSourceMetadataColumns)
     .from(knowledgeNodeSources)
     .where(
       and(

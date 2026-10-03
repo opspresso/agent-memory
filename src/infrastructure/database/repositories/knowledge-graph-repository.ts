@@ -51,6 +51,7 @@ import {
 } from "./scope-predicates";
 import {
   knowledgeNodeFromRow,
+  knowledgeNodeSourceMetadataColumns,
   knowledgeNodeIdentityFromRow,
   knowledgeScopeFromRow,
   knowledgeSourceFromRow,
@@ -59,8 +60,6 @@ import {
 } from "./knowledge-node-persistence";
 
 type EdgeRow = typeof knowledgeEdges.$inferSelect;
-type NodeSourceRow = typeof knowledgeNodeSources.$inferSelect;
-type EdgeSourceRow = typeof knowledgeEdgeSources.$inferSelect;
 
 function nodeAccessPredicate(access: OrganizationAccess): SQL {
   return scopedReadPredicate(access, knowledgeNodes);
@@ -119,7 +118,7 @@ function edgeHasVisibleSource(access: OrganizationAccess, now: Date): SQL {
   )`;
 }
 
-function sourcesByResourceId<T extends NodeSourceRow | EdgeSourceRow>(
+function sourcesByResourceId<T extends Parameters<typeof knowledgeSourceFromRow>[0]>(
   rows: readonly T[],
   resourceIdFor: (row: T) => string
 ): Map<string, KnowledgeSourceRecord[]> {
@@ -208,7 +207,7 @@ export function createKnowledgeGraphRepository(
         if (identity.status === "ambiguous") throw new AmbiguousKnowledgeIdentityError([]);
         const saved = await saveKnowledgeNodeContribution(transaction, node, "replace", identity.status === "resolved" ? identity.target.id : null);
         const [row] = await transaction.select().from(knowledgeNodes).where(eq(knowledgeNodes.id, saved.id));
-        const sources = await transaction.select().from(knowledgeNodeSources).where(and(
+        const sources = await transaction.select(knowledgeNodeSourceMetadataColumns).from(knowledgeNodeSources).where(and(
           eq(knowledgeNodeSources.organizationId, access.organizationId), eq(knowledgeNodeSources.nodeId, saved.id),
           visibleSourcePredicate(access, knowledgeNodeSources, clock())
         ));
@@ -239,7 +238,7 @@ export function createKnowledgeGraphRepository(
         .orderBy(asc(knowledgeNodes.id));
       const sourceRows = rows.length > 0
         ? await db
-            .select()
+            .select(knowledgeNodeSourceMetadataColumns)
             .from(knowledgeNodeSources)
             .where(
               and(
@@ -276,7 +275,7 @@ export function createKnowledgeGraphRepository(
         return null;
       }
       const sourceRows = await db
-        .select()
+        .select(knowledgeNodeSourceMetadataColumns)
         .from(knowledgeNodeSources)
         .where(
           and(
@@ -553,7 +552,7 @@ export function createKnowledgeGraphRepository(
           .where(eq(knowledgeNodes.id, source.id));
 
         const targetSources = await transaction
-          .select()
+          .select(knowledgeNodeSourceMetadataColumns)
           .from(knowledgeNodeSources)
           .where(
             and(
@@ -683,7 +682,7 @@ export function createKnowledgeGraphRepository(
         .limit(input.limit);
       const sourceRows = rows.length > 0
         ? await db
-            .select()
+            .select(knowledgeNodeSourceMetadataColumns)
             .from(knowledgeNodeSources)
             .where(
               and(
@@ -785,7 +784,7 @@ export function createKnowledgeGraphRepository(
       );
       const [nodeSourceRows, edgeSourceRows] = await Promise.all([
         db
-          .select()
+          .select(knowledgeNodeSourceMetadataColumns)
           .from(knowledgeNodeSources)
           .where(
             and(

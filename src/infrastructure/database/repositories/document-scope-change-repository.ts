@@ -10,7 +10,7 @@ import type { AgentMemoryDatabase } from "../client";
 import { documentChunks, documents, documentScopeChanges, knowledgeNodes, knowledgeEdges, knowledgeNodeSources, knowledgeEdgeSources, teams } from "../schema";
 import { createOrganizationAccessRepository } from "./organization-access-repository";
 import { documentFromRow } from "./document-repository";
-import { knowledgeScopeFromRow, knowledgeSourceFromRow, knowledgeNodeIdentityFromRow, type KnowledgeSourceRecord } from "./knowledge-node-persistence";
+import { knowledgeScopeFromRow, knowledgeSourceFromRow, knowledgeNodeIdentityFromRow, knowledgeNodeSourceMetadataColumns, type KnowledgeSourceRecord } from "./knowledge-node-persistence";
 import { loadKnowledgeSourceScopes, lockKnowledgeScope, sourceKey } from "./knowledge-scope-lock";
 import { inArrayParameter } from "./array-predicate";
 import { createKnowledgeGraphRepository } from "./knowledge-graph-repository";
@@ -49,7 +49,7 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
         ))) : [];
         const allNodeIds = [...new Set([...nodeIds, ...edges.flatMap((edge) => [edge.sourceNodeId, edge.targetNodeId])])];
         const nodes = allNodeIds.length ? await transaction.select().from(knowledgeNodes).where(and(eq(knowledgeNodes.organizationId, organizationId), inArrayParameter(knowledgeNodes.id, allNodeIds))) : [];
-        const nodeSources = allNodeIds.length ? await transaction.select().from(knowledgeNodeSources).where(and(eq(knowledgeNodeSources.organizationId, organizationId), inArrayParameter(knowledgeNodeSources.nodeId, allNodeIds))) : [];
+        const nodeSources = allNodeIds.length ? await transaction.select(knowledgeNodeSourceMetadataColumns).from(knowledgeNodeSources).where(and(eq(knowledgeNodeSources.organizationId, organizationId), inArrayParameter(knowledgeNodeSources.nodeId, allNodeIds))) : [];
         const edgeSources = edgeIds.length ? await transaction.select().from(knowledgeEdgeSources).where(and(eq(knowledgeEdgeSources.organizationId, organizationId), inArrayParameter(knowledgeEdgeSources.edgeId, edgeIds))) : [];
         const sources = await loadKnowledgeSourceScopes(transaction, organizationId, [...nodeSources, ...edgeSources].map(knowledgeSourceFromRow), input.now);
         // Evaluate the proposed source scope before persisting any changes.
