@@ -26,3 +26,7 @@ export function knowledgeCanonicalNameKey(value: string): string {
 export function isSymmetricKnowledgePredicate(predicate: string): boolean {
   return ["spouse_of", "sibling_of", "sworn_sibling_of"].includes(normalizeKnowledgePredicate(predicate));
 }
+
+export function isVagueKnowledgePredicate(predicate: string): boolean {
+  return ["associated_with", "related_to", "related_with", "co_occurs_with"].includes(normalizeKnowledgePredicate(predicate));
+}

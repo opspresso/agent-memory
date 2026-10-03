@@ -6,9 +6,8 @@ import { currentKnowledgeAssessmentPolicyVersion, limitKnowledgeAssessmentReason
 import type { OrganizationKnowledgeOntology } from "./knowledge-ontology-reader";
 import { defaultKnowledgeOntology, evaluateKnowledgeOntology } from "./knowledge-ontology";
 import { knowledgeEntityEligibilityIssue } from "./knowledge-entity-eligibility";
-import { normalizeKnowledgeKind } from "./knowledge-identity";
+import { isVagueKnowledgePredicate, normalizeKnowledgeKind } from "./knowledge-identity";
 
-const vague = new Set(["associated_with", "related_to", "related_with", "co_occurs_with"]);
 const incidentalMovement = new Set(["comes_from", "went_to", "visits", "visited", "responds_to"]);
 // Named, source-verified facts in these relations are useful by contract.
 // A model's salience opinion must not erase a valid dependency or biography.
@@ -102,7 +101,7 @@ export function assessKnowledgeCandidate(input: {
       change(key, !representation || representation === "uncertain" ? "review" : "ignore", "The proposed item is not a verified relationship representation.");
     }
     if (relationship.predicate === "alias_of") { change(key, "review", "Alias identity needs resolution before merging entities."); }
-    if (vague.has(relationship.predicate)) { change(key, "ignore", "The relation does not identify a specific fact."); }
+    if (isVagueKnowledgePredicate(relationship.predicate)) { change(key, "ignore", "The relation does not identify a specific fact."); }
     if (incidentalMovement.has(relationship.predicate)) { change(key, "ignore", "An unqualified movement or response in one scene is not a durable relationship. Model a consequential event with its context instead."); }
     if (items.get(key)?.verdict !== "accept") { return; }
     const endpoints = [relationship.sourceKey, relationship.targetKey].map((key) => graph.entities.find((entity) => entity.key === key)!);
