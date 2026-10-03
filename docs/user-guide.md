@@ -73,7 +73,7 @@ Knowledge·문서 상세의 `검색 진단 정보`를 펼치면 상대 관련도
 
 ### Version 이력
 
-`Version 이력`은 최신 version부터 과거 revision을 보여준다. Revision에는 당시의 content, source, 유효기간, access grant, 변경 사용자와 변경 사유가 보존된다. 이력 조회에는 `manage` 권한이 필요하다.
+`Version 이력` 탭을 열면 최신 version부터 25개씩 조회하며 `이전 version 더 보기`로 이어서 읽는다. 이력 조회가 실패하면 해당 페이지를 다시 시도할 수 있고 현재 본문은 계속 읽을 수 있다. Revision에는 당시의 content, source, 유효기간, access grant, 변경 사용자와 변경 사유가 보존된다. 이력 조회에는 `manage` 권한이 필요하다.
 
 ### Archive
 

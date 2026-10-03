@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { entityReviewKey, relationshipReviewKey, reviewedCandidateState, selectKnowledgeCandidateItems } from "@/domain/knowledge/knowledge-candidate-selection";
-import { AmbiguousKnowledgeIdentityError, knowledgeAliases, resolveKnowledgeIdentity } from "@/domain/knowledge/knowledge-alias";
+import { AmbiguousKnowledgeIdentityError, resolveKnowledgeIdentity } from "@/domain/knowledge/knowledge-alias";
 import { mergeKnowledgeDescriptions } from "@/domain/knowledge/knowledge-description";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import { currentKnowledgeAssessmentPolicyVersion } from "@/domain/knowledge/knowledge-assessment";
@@ -35,7 +35,7 @@ import {
   knowledgeScopeFromRow,
   knowledgeNodeFromRow,
   knowledgeSourceFromRow,
-  upsertKnowledgeNode
+  saveKnowledgeNodeContribution
 } from "./knowledge-node-persistence";
 import { scopedManagePredicate, scopedReadPredicate } from "./scope-predicates";
 import { loadKnowledgeSourceScopes, lockKnowledgeScope } from "./knowledge-scope-lock";
@@ -495,21 +495,21 @@ export function createKnowledgeCandidateRepository(
               continue;
             }
           }
-          const canonicalName = identity.status === "resolved" ? identity.target.canonicalName : entity.canonicalName;
           const summary = mergeKnowledgeDescriptions([identity.status === "resolved" ? descriptions.get(identity.target.id) ?? "" : "",
             entity.summary ?? entity.evidence?.join(" ") ?? ""]);
           const proposedNode = createKnowledgeNode({
             id: promotion.id,
             scope: candidate.scope,
             kind: entity.kind,
-            canonicalName,
-            aliases: knowledgeAliases(canonicalName, [entity.canonicalName, ...aliases]),
+            canonicalName: entity.canonicalName,
+            aliases,
             ...(summary ? { summary } : {}),
             ...(promotion.embedding ? { embedding: promotion.embedding } : {}),
             source: { chunkId: candidate.chunkId },
             now: input.reviewedAt
           });
-          const node = await upsertKnowledgeNode(transaction, proposedNode, "preserve");
+          const node = await saveKnowledgeNodeContribution(transaction, proposedNode, "preserve",
+            identity.status === "resolved" ? identity.target.id : null);
           if (summary) descriptions.set(node.id, summary);
           await transaction
             .insert(knowledgeCandidateNodes)

@@ -521,13 +521,13 @@ curl -X POST \
   "$AGENT_MEMORY_URL/api/knowledge/edges"
 ```
 
-Node 설명은 현재 읽을 수 있는 출처별 설명을 중복 제거해 합친다(개요 최대 10,000자). Node 검색은 대표 이름 또는 현재 읽을 수 있는 출처의 검증된 별칭이 정확히 일치하는 결과를 먼저 보여주고 나머지는 hybrid 점수순으로 정렬한다.
+Node 설명은 현재 읽을 수 있는 출처별 설명을 중복 제거해 합친다(개요 최대 10,000자). Node의 공개 `canonicalName`과 `aliases`, 이름 일치와 키워드 검색은 현재 읽을 수 있는 출처의 이름만 사용한다. 저장된 대표 이름이 해당 출처에 없으면 정규화한 이름 key 순서의 첫 이름을 표시명으로 선택한다. 출처 권한이 바뀌어 표시명이 달라져도 node ID와 내부 identity는 유지한다. 이름이 정확히 일치하는 결과를 먼저 보여주고 나머지는 hybrid 점수순으로 정렬한다.
 
 Node·edge의 `properties`는 현재 읽을 수 있고 유효한 출처의 속성을 key 단위로 합친다. 같은 key는 최근에 저장한 출처가 우선하며, 저장 시각이 같으면 출처 종류·ID 순서로 결정한다. 같은 출처에 HTTP 생성 요청을 다시 보내면 properties snapshot을 교체하며, 생략하거나 `{}`를 보내면 해당 출처의 속성을 비운다. AI 후보 승인은 기존 수동 속성을 보존한다. 출처가 archive·만료되거나 읽기 권한을 잃으면 그 값은 응답에서 제외한다. Node 병합으로 동일 출처가 합쳐질 때는 target 속성을 우선한다.
 
 Node 응답은 `id`, `scope`, `kind`, `canonicalName`, `aliases`, `properties`, `sources`, `createdAt`, `updatedAt`과 값이 있는 `summary`를 포함한다. Embedding은 출처별 검색 자료이며 node 응답에 vector나 단일 `embeddingModel`을 반환하지 않는다. Edge 응답은 `id`, `sourceNodeId`, `targetNodeId`, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
 
-`aliases`는 현재 읽을 수 있는 유효한 provenance에서 모은 검증된 이름이며 대표 이름은 제외한다. 후보 승인과 명시적 node 병합으로 보존하고, 일반 node 생성 입력의 `properties.aliases`는 identity 근거로 사용하지 않는다. Node 생성의 대표 이름이 검증된 기존 별칭과 유일하게 일치하면 같은 ID를 재사용하고, 여러 node와 일치하면 `409`를 반환한다.
+`aliases`는 현재 읽을 수 있는 유효한 provenance에서 모은 검증된 이름이며 공개 `canonicalName`은 제외한다. 후보 승인과 명시적 node 병합으로 보존하고, 일반 node 생성 입력의 `properties.aliases`는 identity 근거로 사용하지 않는다. Node 생성의 대표 이름이 검증된 기존 별칭과 유일하게 일치하면 같은 ID를 재사용하고, 여러 node와 일치하면 `409`를 반환한다. 재기여와 후보 승인은 입력에 있는 이름만 해당 출처에 기록하며 기존 node의 숨겨진 대표 이름을 복사하지 않는다.
 
 Node·edge 생성 성공은 `200`과 공개 resource를 반환한다. Node 응답의 `Location`은 해당 node의 neighborhood URL이다. 온톨로지 경고는 아래 검증 모드에 따라 추가된다.
 
@@ -539,7 +539,7 @@ Node·edge 생성 성공은 `200`과 공개 resource를 반환한다. Node 응�
 
 병합 성공은 `200`과 갱신된 target node를 반환한다. 자기 자신과의 병합이나 서로 다른 scope 병합은 `400`이다.
 
-Node identity는 NFKC, 연속 공백, 대소문자를 정규화한 canonical name과 정규화 kind를 사용한다. `award`, `honor`, `honour`, `achievement`, `designation`은 `recognition`으로 통합한다. 같은 scope에서 정규화 identity가 같으면 신규 생성과 AI 후보 승인 시 기존 node에 자동 병합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
+Node identity는 ID로 유지한다. 생성과 AI 후보 승인은 같은 scope·kind에서 호출자가 읽을 수 있는 출처 이름을 NFKC·공백·대소문자 정규화 후 비교한다. 원래 대표 이름과 별칭의 역할은 출처별로 보존하며 표시명이 같다는 이유만으로 병합하지 않는다. 유일한 동일인 근거가 있으면 기존 ID를 사용하고, 없으면 새 ID를 만든다. 읽을 수 없는 저장 대표 이름이 같다는 이유로 기존 node에 연결하지 않는다. `award`, `honor`, `honour`, `achievement`, `designation`은 `recognition`으로 통합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
 
 ### 조직 온톨로지 검증
 
@@ -779,6 +779,8 @@ Token은 client의 secret 또는 environment variable 기능으로 주입하고 
 `GET /api/document-chunks/{chunkId}`는 후보 검토와 Graph 출처 확인을 위한 원문을 반환한다. 응답은 `{ document, chunk: { id, ordinal, content, metadata } }`이다. Document는 기존 공개 응답을 사용하고 object key나 embedding은 노출하지 않는다. 같은 조직의 ready 문서이며 현재 사용자가 source를 읽을 수 있을 때만 반환한다. 없는 chunk, 권한 없는 source, ready가 아닌 source는 모두 `404`로 처리한다. 원본 파일 download endpoint가 아니라 처리된 chunk 원문 조회다.
 
 Markdown chunk의 `content`에는 문맥을 보존하기 위한 원문의 상위 제목이 포함될 수 있다. `metadata.start/end`는 정규화한 원본의 본문 범위이며, 반복한 제목의 범위는 선택형 `metadata.contextSpans: [{ start, end }]`로 제공한다.
+
+CSV도 정규화한 원문의 record 범위를 `start/end`로 보존한다. 빈 record를 내용에서 제외해도 뒤 record의 좌표는 유지하며, 후속 chunk에 반복한 header 범위는 `contextSpans`에 기록한다. 큰 record를 일반 텍스트로 분할한 경우에는 header를 반복하지 않는다.
 
 ### 문서 본문 페이지
 

@@ -869,7 +869,7 @@ describe("PostgreSQL schema", () => {
         canonicalName: "Usage Pipeline",
         source: { chunkId },
         now: createdAt
-      })
+      }), { organizationId: organization, userId: user, role: "member", teams: [] }
     );
     const warehouse = await graphRepository.saveNode(
       createKnowledgeNode({
@@ -879,7 +879,7 @@ describe("PostgreSQL schema", () => {
         canonicalName: "Usage Warehouse",
         source: { chunkId },
         now: createdAt
-      })
+      }), { organizationId: organization, userId: user, role: "member", teams: [] }
     );
     await graphRepository.saveEdge(
       createKnowledgeEdge({
@@ -1999,7 +1999,7 @@ describe("PostgreSQL schema", () => {
         canonicalName: "Incident Commander",
         source: { memoryId: graphSourceMemoryId },
         now: createdAt
-      })
+      }), { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] }
     );
     await pool.query("UPDATE team_members SET role = 'manager' WHERE organization_id = $1 AND team_id = $2 AND user_id = $3", [organization, team, user]);
     const promotion = await candidateRepository.accept({
@@ -2050,7 +2050,7 @@ describe("PostgreSQL schema", () => {
         canonicalName: "Unrelated role",
         source: { chunkId: chunk.id },
         now: createdAt
-      })
+      }), { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] }
     );
     const replayedPromotion = await candidateRepository.accept({
       candidateId: candidate.id,
@@ -2237,8 +2237,8 @@ describe("PostgreSQL schema", () => {
       source: { memoryId: sourceMemoryId },
       now: createdAt
     });
-    await repository.saveNode(sourceNode);
-    await repository.saveNode(targetNode);
+    await repository.saveNode(sourceNode, { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] });
+    await repository.saveNode(targetNode, { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] });
     const upserted = await repository.saveNode(
       createKnowledgeNode({
         id: "60000000-0000-0000-0000-000000000099",
@@ -2248,7 +2248,7 @@ describe("PostgreSQL schema", () => {
         summary: "Processes purchases and checkout requests",
         source: { memoryId: corroboratingMemoryId },
         now: new Date("2026-08-27T00:00:00.000Z")
-      })
+      }), { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] }
     );
     expect(upserted).toMatchObject({
       id: sourceNodeId,
@@ -2260,8 +2260,8 @@ describe("PostgreSQL schema", () => {
     });
     await expect(
       pool.query(
-        `INSERT INTO knowledge_node_sources (organization_id, node_id)
-         VALUES ($1, $2)`,
+        `INSERT INTO knowledge_node_sources (organization_id, node_id, names, primary_name_keys)
+         VALUES ($1, $2, '{"checkout":"Checkout"}', ARRAY['checkout'])`,
         [organization, sourceNodeId]
       )
     ).rejects.toMatchObject({
@@ -2289,7 +2289,7 @@ describe("PostgreSQL schema", () => {
         canonicalName: "ＡＷＳ  AI Hero",
         source: { memoryId: sourceMemoryId },
         now: createdAt
-      })
+      }), { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] }
     );
     const repeatedRecognition = await repository.saveNode(
       createKnowledgeNode({
@@ -2299,7 +2299,7 @@ describe("PostgreSQL schema", () => {
         canonicalName: "aws ai hero",
         source: { memoryId: corroboratingMemoryId },
         now: createdAt
-      })
+      }), { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] }
     );
     expect(repeatedRecognition).toMatchObject({
       id: normalizedRecognition.id,
@@ -2318,7 +2318,7 @@ describe("PostgreSQL schema", () => {
         canonicalName: "Checkout API",
         source: { memoryId: corroboratingMemoryId },
         now: createdAt
-      })
+      }), { organizationId: organization, userId: user, role: "member", teams: [{ teamId: team, role: "member" }] }
     );
     await expect(
       repository.findNodesByNames(
@@ -2727,7 +2727,7 @@ describe("PostgreSQL schema", () => {
     const ids = [randomUUID(), randomUUID(), randomUUID()].sort();
     const [low, middle, high] = await Promise.all(ids.map((id, index) => repository.saveNode(createKnowledgeNode({
       id, scope, kind: "person", canonicalName: `Person ${index}`, source: { memoryId }, now
-    }))));
+    }), { organizationId: organization, userId: user, role: "owner", teams: [] })));
     const retained = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
       sourceNodeId: low!.id, targetNodeId: middle!.id, predicate: "sibling_of", source: { memoryId }, now }), { organizationId: organization, userId: user, role: "owner", teams: [] });
     const moved = await repository.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: organization, scope,
@@ -2757,11 +2757,11 @@ describe("PostgreSQL schema", () => {
       id: randomUUID(), scope, kind: "person", canonicalName, source: { chunkId }, now,
       ...(values ? { embedding: { model: "merge-vector", values } } : {})
     });
-    const target = await repository.saveNode(contribution("Primary", chunkIds[0]!, [0, 1]));
-    await repository.saveNode(contribution("Primary", chunkIds[1]!));
-    const source = await repository.saveNode(contribution("Alias", chunkIds[0]!, [1, 0]));
-    await repository.saveNode(contribution("Alias", chunkIds[1]!, [1, 0]));
-    await repository.saveNode(contribution("Alias", chunkIds[2]!, [1, 0]));
+    const target = await repository.saveNode(contribution("Primary", chunkIds[0]!, [0, 1]), { organizationId, userId, role: "owner", teams: [] });
+    await repository.saveNode(contribution("Primary", chunkIds[1]!), { organizationId, userId, role: "owner", teams: [] });
+    const source = await repository.saveNode(contribution("Alias", chunkIds[0]!, [1, 0]), { organizationId, userId, role: "owner", teams: [] });
+    await repository.saveNode(contribution("Alias", chunkIds[1]!, [1, 0]), { organizationId, userId, role: "owner", teams: [] });
+    await repository.saveNode(contribution("Alias", chunkIds[2]!, [1, 0]), { organizationId, userId, role: "owner", teams: [] });
 
     const merged = await repository.mergeNodes({ organizationId, sourceNodeId: source.id, targetNodeId: target.id,
       mergedBy: userId, reason: "Same entity", now });
@@ -2795,7 +2795,7 @@ describe("PostgreSQL schema", () => {
         id: randomUUID(), scope, kind: "person", canonicalName: "Shared entity",
         summary: "Public account of an entity.", source: { chunkId },
         embedding: { model: "provenance-vector", values: [0, 1] }, now
-      }));
+      }), access);
       const unavailableId = randomUUID();
       const unavailableChunkId = randomUUID();
       if (unavailableSource === "document archive") {
@@ -2812,7 +2812,7 @@ describe("PostgreSQL schema", () => {
         summary: "Sensitive account of the same entity.",
         source: unavailableSource === "document archive" ? { chunkId: unavailableChunkId } : { memoryId: unavailableId },
         embedding: { model: "provenance-vector", values: [1, 0] }, now
-      }));
+      }), access);
       expect(same.id).toBe(visible.id);
       const search = { access, query: "unrelated-vector-only", minimumVectorScore: 0.9, limit: 10,
         queryEmbedding: { model: "provenance-vector", values: [1, 0] } };
@@ -2853,7 +2853,7 @@ describe("PostgreSQL schema", () => {
     const scope = { kind: "organization" as const, organizationId: organization };
     const nodes = await Promise.all(chunkIds.map((chunkId,index) => repository.saveNode(createKnowledgeNode({
       id: randomUUID(), scope, kind: "person", canonicalName: "Guan Yu", summary: descriptions[index], source: { chunkId }, now: new Date()
-    }))));
+    }), { organizationId: organization, userId: user, role: "owner", teams: [] })));
     expect(nodes[0]?.id).toBe(nodes[1]?.id);
     const access: OrganizationAccess = { organizationId: organization, userId: user, role: "owner", teams: [] };
     const before = await repository.searchNodes({ access, query: "Azure", limit: 10 });
@@ -2861,7 +2861,7 @@ describe("PostgreSQL schema", () => {
     expect(before[0]?.node.summary).toContain("Crimson");
     expect(before[0]?.node.sources).toHaveLength(2);
     await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Related officer",
-      summary: "Guan Yu ".repeat(30), source: { chunkId: chunkIds[1]! }, now: new Date() }));
+      summary: "Guan Yu ".repeat(30), source: { chunkId: chunkIds[1]! }, now: new Date() }), { organizationId: organization, userId: user, role: "owner", teams: [] });
     expect((await repository.searchNodes({ access, query: "Guan Yu", limit: 10 }))[0]?.node.id).toBe(nodes[0]?.id);
 
     await pool.query("UPDATE documents SET status='archived' WHERE id=$1",[documentIds[0]]);
@@ -2870,7 +2870,7 @@ describe("PostgreSQL schema", () => {
     expect(visible[0]?.node.summary).toBe(descriptions[1]);
     expect(visible[0]?.node.sources).toEqual([{ chunkId: chunkIds[1] }]);
     const alias = await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "character", canonicalName: "General Guan",
-      summary: "Commands the Emerald guard.", source: { chunkId: chunkIds[1]! }, now: new Date() }));
+      summary: "Commands the Emerald guard.", source: { chunkId: chunkIds[1]! }, now: new Date() }), { organizationId: organization, userId: user, role: "owner", teams: [] });
     const merged = await repository.mergeNodes({ organizationId: organization, sourceNodeId: alias.id, targetNodeId: nodes[0]!.id, mergedBy: user, reason: "Same person", now: new Date() });
     expect(merged?.summary).toContain("Crimson");
     expect(merged?.summary).toContain("Emerald");
@@ -2880,9 +2880,9 @@ describe("PostgreSQL schema", () => {
     // A visible source without a description must not revive the shared summary
     // left by an archived source. Exercise every public node read path.
     const withoutDescription = await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
-      source: { chunkId: chunkIds[1]! }, now: new Date() }));
+      source: { chunkId: chunkIds[1]! }, now: new Date() }), { organizationId: organization, userId: user, role: "owner", teams: [] });
     await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
-      summary: "Archived secret biography.", source: { chunkId: chunkIds[0]! }, now: new Date() }));
+      summary: "Archived secret biography.", source: { chunkId: chunkIds[0]! }, now: new Date() }), { organizationId: organization, userId: user, role: "owner", teams: [] });
     expect((await repository.searchNodes({ access, query: "Zhang Fei", limit: 10 }))[0]?.node.summary).toBeUndefined();
     expect((await repository.findNodesByNames(access, scope, ["Zhang Fei"]))[0]?.summary).toBeUndefined();
     expect((await repository.findNeighborhood(access, withoutDescription.id, 1, 10)).nodes[0]?.summary).toBeUndefined();

@@ -29,10 +29,6 @@ export const knowledgeNodes = pgTable(
     userId: uuid(),
     kind: text().notNull(),
     canonicalName: text().notNull(),
-    canonicalNameKey: text()
-      .generatedAlwaysAs(
-        sql`lower(regexp_replace(trim(canonical_name), '[[:space:]]+', ' ', 'g'))`
-      ),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
@@ -56,25 +52,16 @@ export const knowledgeNodes = pgTable(
       ],
       name: "knowledge_nodes_organization_user_fk"
     }).onDelete("cascade"),
-    unique("knowledge_nodes_identity_unique").on(
-      table.organizationId,
-      table.scopeKind,
-      table.teamId,
-      table.userId,
-      table.kind,
-      table.canonicalName
-    ).nullsNotDistinct(),
     uniqueIndex("knowledge_nodes_organization_id_id_unique").on(
       table.organizationId,
       table.id
     ),
-    index("knowledge_nodes_normalized_identity_idx").on(
+    index("knowledge_nodes_scope_idx").on(
       table.organizationId,
       table.scopeKind,
       table.teamId,
       table.userId,
-      table.kind,
-      table.canonicalNameKey
+      table.kind
     )
   ]
 );
@@ -161,7 +148,8 @@ export const knowledgeNodeSources = pgTable(
     description: text(),
     embedding: unconstrainedVector(),
     embeddingModel: text(),
-    names: jsonb().$type<Readonly<Record<string, string>>>().notNull().default({}),
+    names: jsonb().$type<Readonly<Record<string, string>>>().notNull(),
+    primaryNameKeys: text().array().notNull(),
     properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
@@ -172,6 +160,10 @@ export const knowledgeNodeSources = pgTable(
       sql`(${table.memoryId} IS NOT NULL) <> (${table.chunkId} IS NOT NULL)`
     ),
     check("knowledge_node_sources_names_object_check", sql`jsonb_typeof(${table.names}) = 'object'`),
+    check("knowledge_node_sources_names_nonempty_check", sql`${table.names} <> '{}'::jsonb`),
+    check("knowledge_node_sources_primary_names_check", sql`cardinality(${table.primaryNameKeys}) > 0
+      AND array_position(${table.primaryNameKeys}, NULL) IS NULL
+      AND ${table.names} ?& ${table.primaryNameKeys}`),
     check("knowledge_node_sources_properties_object_check", sql`jsonb_typeof(${table.properties}) = 'object'`),
     check(
       "knowledge_node_sources_embedding_pair_check",

@@ -28,13 +28,18 @@ export interface KnowledgeNeighborhood {
   readonly edges: readonly KnowledgeEdge[];
 }
 
+/** Readable original representative names used for identity resolution, independent of display labels. */
+export interface KnowledgeNodeIdentity extends KnowledgeNode {
+  readonly primaryNames: readonly string[];
+}
+
 export interface KnowledgeGraphRepository {
-  saveNode(node: KnowledgeNodeContribution, access?: OrganizationAccess): Promise<KnowledgeNode>;
+  saveNode(node: KnowledgeNodeContribution, access: OrganizationAccess): Promise<KnowledgeNode>;
   findNodesByNames(
     access: OrganizationAccess,
     scope: KnowledgeNode["scope"],
     names: readonly string[]
-  ): Promise<readonly KnowledgeNode[]>;
+  ): Promise<readonly KnowledgeNodeIdentity[]>;
   findNodeById(
     organizationId: string,
     nodeId: string

@@ -4,14 +4,16 @@ import { canAccessScopedResource } from "@/domain/identity/organization-access";
 import { sameScope, scopeCovers } from "@/domain/identity/scope-coverage";
 import { planKnowledgeScopeChange } from "@/domain/knowledge/knowledge-scope-change";
 import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
+import { resolveKnowledgeIdentity } from "@/domain/knowledge/knowledge-alias";
 import type { KnowledgeSource } from "@/domain/knowledge/knowledge-graph";
 import type { AgentMemoryDatabase } from "../client";
 import { documentChunks, documents, documentScopeChanges, knowledgeNodes, knowledgeEdges, knowledgeNodeSources, knowledgeEdgeSources, teams } from "../schema";
 import { createOrganizationAccessRepository } from "./organization-access-repository";
 import { documentFromRow } from "./document-repository";
-import { knowledgeScopeFromRow, knowledgeSourceFromRow } from "./knowledge-node-persistence";
+import { knowledgeScopeFromRow, knowledgeSourceFromRow, knowledgeNodeIdentityFromRow, type KnowledgeSourceRecord } from "./knowledge-node-persistence";
 import { loadKnowledgeSourceScopes, lockKnowledgeScope, sourceKey } from "./knowledge-scope-lock";
 import { inArrayParameter } from "./array-predicate";
+import { createKnowledgeGraphRepository } from "./knowledge-graph-repository";
 
 export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): DocumentScopeChangeRepository {
   return {
@@ -60,9 +62,6 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
           if (provenance.some((source) => !scopeCovers(sources.get(sourceKey(source))!.scope, input.scope))) return "source_scope" as const;
           return undefined;
         }
-        const names = [...new Set(nodes.filter((node) => affectedNodes.has(node.id)).map((node) => knowledgeCanonicalNameKey(node.canonicalName)))];
-        const possibleDuplicates = names.length ? await transaction.select({ id: knowledgeNodes.id, kind: knowledgeNodes.kind, canonicalName: knowledgeNodes.canonicalName, organizationId: knowledgeNodes.organizationId, scopeKind: knowledgeNodes.scopeKind, teamId: knowledgeNodes.teamId, userId: knowledgeNodes.userId }).from(knowledgeNodes)
-          .where(and(eq(knowledgeNodes.organizationId, organizationId), eq(knowledgeNodes.scopeKind, input.scope.kind), inArrayParameter(knowledgeNodes.canonicalNameKey, names, "text"))) : [];
         function groupSources<T extends { memoryId: string | null; chunkId: string | null }>(rows: readonly T[], id: (row: T) => string) {
           const grouped = new Map<string, KnowledgeSource[]>();
           for (const row of rows) {
@@ -74,7 +73,6 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
         }
         const nodeProvenance = groupSources(nodeSources, (source) => source.nodeId);
         const edgeProvenance = groupSources(edgeSources, (source) => source.edgeId);
-        const nodeIdentity = (node: { kind: string; canonicalName: string }) => JSON.stringify([node.kind, knowledgeCanonicalNameKey(node.canonicalName)]);
         const edgeIdentity = (edge: { sourceNodeId: string; targetNodeId: string; predicate: string }) => JSON.stringify([edge.sourceNodeId, edge.predicate, edge.targetNodeId]);
         function identities<T extends { id: string }>(rows: readonly T[], key: (row: T) => string) {
           const result = new Map<string, Set<string>>();
@@ -89,7 +87,36 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
           canAccessScopedResource(access, "manage", knowledgeScopeFromRow(node)) && !sourceIssue(nodeProvenance.get(node.id) ?? []));
         const eligibleEdges = edges.filter((edge) => affectedEdges.has(edge.id) &&
           canAccessScopedResource(access, "manage", knowledgeScopeFromRow(edge)) && !sourceIssue(edgeProvenance.get(edge.id) ?? []));
-        const nodeIdentities = identities([...possibleDuplicates.filter((node) => sameScope(knowledgeScopeFromRow(node), input.scope)), ...eligibleNodes], nodeIdentity);
+        const contributionsByNode = new Map<string, KnowledgeSourceRecord[]>();
+        for (const source of nodeSources) {
+          const contributions = contributionsByNode.get(source.nodeId) ?? [];
+          contributions.push(knowledgeSourceFromRow(source));
+          contributionsByNode.set(source.nodeId, contributions);
+        }
+        const displayNodes = eligibleNodes.map((node) => knowledgeNodeIdentityFromRow(node, contributionsByNode.get(node.id) ?? []));
+        const proposedNames = [...new Set(displayNodes.flatMap((node) => [node.canonicalName, ...node.aliases]))];
+        const possibleDuplicates = proposedNames.length
+          ? await createKnowledgeGraphRepository(transaction, () => input.now).findNodesByNames(access, input.scope, proposedNames)
+          : [];
+        const nodeIdentityKeys = (kind: string, names: readonly string[]) => names.map((name) => JSON.stringify([kind, knowledgeCanonicalNameKey(name)]));
+        const nodeIdentities = new Map<string, Map<string, typeof displayNodes[number]>>();
+        for (const node of [...possibleDuplicates, ...displayNodes]) {
+          for (const key of nodeIdentityKeys(node.kind, [node.canonicalName, ...node.aliases])) {
+            const matching = nodeIdentities.get(key) ?? new Map();
+            matching.set(node.id, node);
+            nodeIdentities.set(key, matching);
+          }
+        }
+        const nodeConflicts = new Set<string>();
+        for (const node of displayNodes) {
+          const matching = new Map(nodeIdentityKeys(node.kind, [node.canonicalName, ...node.aliases])
+            .flatMap((key) => [...(nodeIdentities.get(key)?.entries() ?? [])]));
+          matching.delete(node.id);
+          const names = [node.canonicalName, ...node.aliases];
+          if (node.primaryNames.some((canonicalName) => resolveKnowledgeIdentity({ kind: node.kind, canonicalName,
+            aliases: names.filter((name) => knowledgeCanonicalNameKey(name) !== knowledgeCanonicalNameKey(canonicalName)) },
+          [...matching.values()]).status !== "new")) nodeConflicts.add(node.id);
+        }
         const sourceNodeIds = [...new Set(edges.filter((edge) => affectedEdges.has(edge.id)).map((edge) => edge.sourceNodeId))];
         const possibleEdgeDuplicates = sourceNodeIds.length ? await transaction.select().from(knowledgeEdges).where(and(
           eq(knowledgeEdges.organizationId, organizationId), eq(knowledgeEdges.scopeKind, input.scope.kind), inArrayParameter(knowledgeEdges.sourceNodeId, sourceNodeIds)
@@ -104,7 +131,7 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
               const record = sources.get(sourceKey(source));
               return record?.available && scopeCovers(record.scope, input.scope);
             }),
-            identityConflict: (nodeIdentities.get(nodeIdentity(node))?.size ?? 0) > 1
+            identityConflict: nodeConflicts.has(node.id)
           })),
           edges: edges.map((edge) => ({
             id: edge.id, scope: knowledgeScopeFromRow(edge), affected: affectedEdges.has(edge.id), sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId,
