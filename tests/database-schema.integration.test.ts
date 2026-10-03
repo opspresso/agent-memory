@@ -2738,6 +2738,103 @@ describe("PostgreSQL schema", () => {
     expect(repeated.id).toBe(retained.id);
   });
 
+  it("preserves source embeddings across merges and keeps the target vector for shared provenance", async () => {
+    const organizationId = randomUUID(), userId = randomUUID(), documentId = randomUUID();
+    const chunkIds = [randomUUID(), randomUUID(), randomUUID()];
+    const now = new Date();
+    await pool.query("INSERT INTO organizations(id,slug,name) VALUES($1,$2,'Merged vectors')", [organizationId, organizationId]);
+    await pool.query("INSERT INTO users(id,email,name) VALUES($1,$2,'Reviewer')", [userId, `${userId}@example.test`]);
+    await pool.query("INSERT INTO organization_members(organization_id,user_id,role,status) VALUES($1,$2,'owner','active')", [organizationId, userId]);
+    await pool.query("INSERT INTO documents(id,organization_id,scope_kind,title,object_key,checksum,mime_type,status,created_by) VALUES($1,$2,'organization','Merge source','fixture','checksum','text/plain','ready',$3)", [documentId, organizationId, userId]);
+    for (const [ordinal, chunkId] of chunkIds.entries()) {
+      await pool.query("INSERT INTO document_chunks(id,organization_id,document_id,ordinal,content) VALUES($1,$2,$3,$4,'Primary is also called Alias.')", [chunkId, organizationId, documentId, ordinal]);
+    }
+    const repository = createKnowledgeGraphRepository(db);
+    const scope = { kind: "organization" as const, organizationId };
+    const contribution = (canonicalName: string, chunkId: string, values?: readonly number[]) => createKnowledgeNode({
+      id: randomUUID(), scope, kind: "person", canonicalName, source: { chunkId }, now,
+      ...(values ? { embedding: { model: "merge-vector", values } } : {})
+    });
+    const target = await repository.saveNode(contribution("Primary", chunkIds[0]!, [0, 1]));
+    await repository.saveNode(contribution("Primary", chunkIds[1]!));
+    const source = await repository.saveNode(contribution("Alias", chunkIds[0]!, [1, 0]));
+    await repository.saveNode(contribution("Alias", chunkIds[1]!, [1, 0]));
+    await repository.saveNode(contribution("Alias", chunkIds[2]!, [1, 0]));
+
+    const merged = await repository.mergeNodes({ organizationId, sourceNodeId: source.id, targetNodeId: target.id,
+      mergedBy: userId, reason: "Same entity", now });
+
+    expect(merged?.sources).toEqual(expect.arrayContaining(chunkIds.map((chunkId) => ({ chunkId }))));
+    expect(merged).not.toHaveProperty("embedding");
+    const rows = (await pool.query("SELECT chunk_id, embedding::text AS embedding, embedding_model FROM knowledge_node_sources WHERE organization_id=$1 AND node_id=$2", [organizationId, target.id])).rows;
+    expect(rows).toEqual(expect.arrayContaining([
+      { chunk_id: chunkIds[0], embedding: "[0,1]", embedding_model: "merge-vector" },
+      { chunk_id: chunkIds[1], embedding: "[1,0]", embedding_model: "merge-vector" },
+      { chunk_id: chunkIds[2], embedding: "[1,0]", embedding_model: "merge-vector" }
+    ]));
+    expect(rows).toHaveLength(3);
+  });
+
+  it.each(["document archive", "memory archive", "memory expiry", "memory future"] as const)(
+    "searches only embeddings from currently visible provenance after %s",
+    async (unavailableSource) => {
+      const organizationId = randomUUID(), userId = randomUUID();
+      const documentId = randomUUID(), chunkId = randomUUID();
+      const now = new Date();
+      await pool.query("INSERT INTO organizations(id,slug,name) VALUES($1,$2,'Vector provenance')", [organizationId, organizationId]);
+      await pool.query("INSERT INTO users(id,email,name) VALUES($1,$2,'Reviewer')", [userId, `${userId}@example.test`]);
+      await pool.query("INSERT INTO organization_members(organization_id,user_id,role,status) VALUES($1,$2,'owner','active')", [organizationId, userId]);
+      await pool.query("INSERT INTO documents(id,organization_id,scope_kind,title,object_key,checksum,mime_type,status,created_by) VALUES($1,$2,'organization','Visible source','fixture','checksum','text/plain','ready',$3)", [documentId, organizationId, userId]);
+      await pool.query("INSERT INTO document_chunks(id,organization_id,document_id,ordinal,content) VALUES($1,$2,$3,0,'Public account of an entity.')", [chunkId, organizationId, documentId]);
+      const scope = { kind: "organization" as const, organizationId };
+      const access: OrganizationAccess = { organizationId, userId, role: "owner", teams: [] };
+      const repository = createKnowledgeGraphRepository(db, () => now);
+      const visible = await repository.saveNode(createKnowledgeNode({
+        id: randomUUID(), scope, kind: "person", canonicalName: "Shared entity",
+        summary: "Public account of an entity.", source: { chunkId },
+        embedding: { model: "provenance-vector", values: [0, 1] }, now
+      }));
+      const unavailableId = randomUUID();
+      const unavailableChunkId = randomUUID();
+      if (unavailableSource === "document archive") {
+        await pool.query("INSERT INTO documents(id,organization_id,scope_kind,title,object_key,checksum,mime_type,status,created_by) VALUES($1,$2,'organization','Later source','fixture','checksum','text/plain','ready',$3)", [unavailableId, organizationId, userId]);
+        await pool.query("INSERT INTO document_chunks(id,organization_id,document_id,ordinal,content) VALUES($1,$2,$3,0,'Sensitive account of the same entity.')", [unavailableChunkId, organizationId, unavailableId]);
+      } else {
+        await createMemoryRepository(db).save(createMemory({
+          id: unavailableId, kind: "fact", scope, title: "Later source", content: "Sensitive account of the same entity.",
+          source: { type: "user" }, createdBy: userId, validFrom: new Date(now.getTime() - 60_000), now
+        }));
+      }
+      const same = await repository.saveNode(createKnowledgeNode({
+        id: randomUUID(), scope, kind: "person", canonicalName: "Shared entity",
+        summary: "Sensitive account of the same entity.",
+        source: unavailableSource === "document archive" ? { chunkId: unavailableChunkId } : { memoryId: unavailableId },
+        embedding: { model: "provenance-vector", values: [1, 0] }, now
+      }));
+      expect(same.id).toBe(visible.id);
+      const search = { access, query: "unrelated-vector-only", minimumVectorScore: 0.9, limit: 10,
+        queryEmbedding: { model: "provenance-vector", values: [1, 0] } };
+      expect((await repository.searchNodes(search)).map((hit) => hit.node.id)).toEqual([visible.id]);
+
+      if (unavailableSource === "document archive") {
+        await pool.query("UPDATE documents SET status='archived' WHERE id=$1", [unavailableId]);
+      } else if (unavailableSource === "memory archive") {
+        await pool.query("UPDATE memories SET status='archived' WHERE id=$1", [unavailableId]);
+      } else if (unavailableSource === "memory expiry") {
+        await pool.query("UPDATE memories SET expires_at=$2 WHERE id=$1", [unavailableId, new Date(now.getTime() - 1)]);
+      } else {
+        await pool.query("UPDATE memories SET valid_from=$2 WHERE id=$1", [unavailableId, new Date(now.getTime() + 60_000)]);
+      }
+
+      expect(await repository.searchNodes(search)).toEqual([]);
+      const remaining = await repository.searchNodes({ ...search,
+        queryEmbedding: { model: "provenance-vector", values: [0, 1] } });
+      expect(remaining).toMatchObject([{ node: { id: visible.id, sources: [{ chunkId }], summary: "Public account of an entity." }, vectorScore: 1 }]);
+      const lexical = await repository.searchNodes({ ...search, query: "Shared entity" });
+      expect(lexical).toMatchObject([{ node: { id: visible.id }, vectorScore: 0 }]);
+    }
+  );
+
   it("accumulates descriptions from visible sources and never searches archived descriptions", async () => {
     const organization = randomUUID(), user = randomUUID();
     await pool.query("INSERT INTO organizations(id,slug,name) VALUES($1,$2,'Description test')", [organization, organization]);

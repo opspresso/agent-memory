@@ -15,7 +15,7 @@ import {
 import { organizationMembers, organizations, teams, users } from "./identity";
 import { documentChunks } from "./documents";
 import { memories, memoryScopeKind } from "./memories";
-import { tsvector, unconstrainedVector } from "./custom-types";
+import { unconstrainedVector } from "./custom-types";
 
 export const knowledgeNodes = pgTable(
   "knowledge_nodes",
@@ -33,14 +33,6 @@ export const knowledgeNodes = pgTable(
       .generatedAlwaysAs(
         sql`lower(regexp_replace(trim(canonical_name), '[[:space:]]+', ' ', 'g'))`
       ),
-    summary: text(),
-    search: tsvector()
-      .generatedAlwaysAs(
-        sql`to_tsvector('simple', coalesce(canonical_name, '') || ' ' || coalesce(summary, ''))`
-      )
-      .notNull(),
-    embedding: unconstrainedVector(),
-    embeddingModel: text(),
     properties: jsonb().$type<Readonly<Record<string, unknown>>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow()
@@ -51,10 +43,6 @@ export const knowledgeNodes = pgTable(
       sql`(${table.scopeKind} = 'organization' AND ${table.teamId} IS NULL AND ${table.userId} IS NULL)
         OR (${table.scopeKind} = 'team' AND ${table.teamId} IS NOT NULL AND ${table.userId} IS NULL)
         OR (${table.scopeKind} = 'user' AND ${table.teamId} IS NULL AND ${table.userId} IS NOT NULL)`
-    ),
-    check(
-      "knowledge_nodes_embedding_pair_check",
-      sql`(${table.embedding} IS NULL) = (${table.embeddingModel} IS NULL)`
     ),
     foreignKey({
       columns: [table.organizationId, table.teamId],
@@ -88,8 +76,7 @@ export const knowledgeNodes = pgTable(
       table.userId,
       table.kind,
       table.canonicalNameKey
-    ),
-    index("knowledge_nodes_search_idx").using("gin", table.search)
+    )
   ]
 );
 
@@ -174,6 +161,8 @@ export const knowledgeNodeSources = pgTable(
     memoryId: uuid(),
     chunkId: uuid(),
     description: text(),
+    embedding: unconstrainedVector(),
+    embeddingModel: text(),
     names: jsonb().$type<Readonly<Record<string, string>>>().notNull().default({}),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow()
   },
@@ -183,6 +172,10 @@ export const knowledgeNodeSources = pgTable(
       sql`(${table.memoryId} IS NOT NULL) <> (${table.chunkId} IS NOT NULL)`
     ),
     check("knowledge_node_sources_names_object_check", sql`jsonb_typeof(${table.names}) = 'object'`),
+    check(
+      "knowledge_node_sources_embedding_pair_check",
+      sql`(${table.embedding} IS NULL) = (${table.embeddingModel} IS NULL)`
+    ),
     foreignKey({
       columns: [table.organizationId, table.nodeId],
       foreignColumns: [knowledgeNodes.organizationId, knowledgeNodes.id],

@@ -27,11 +27,16 @@ export interface KnowledgeNode {
   readonly canonicalName: string;
   readonly aliases: readonly string[];
   readonly summary?: string;
-  readonly embedding?: KnowledgeEmbedding;
   readonly properties: Readonly<Record<string, unknown>>;
   readonly sources: readonly KnowledgeSource[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
+}
+
+/** One source contribution to a node. Embeddings belong to this write, not the derived node view. */
+export interface KnowledgeNodeContribution extends KnowledgeNode {
+  readonly sources: readonly [KnowledgeSource];
+  readonly embedding?: KnowledgeEmbedding;
 }
 
 export interface KnowledgeEdge {
@@ -142,7 +147,7 @@ function validatedEmbedding(embedding: KnowledgeEmbedding | undefined) {
   });
 }
 
-export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNode {
+export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNodeContribution {
   if (!isKnowledgeEntityKind(input.kind)) {
     throw new InvalidKnowledgeGraphError("knowledge node kind must identify an entity, not an assertion");
   }
@@ -174,7 +179,7 @@ export function createKnowledgeNode(input: NewKnowledgeNode): KnowledgeNode {
     ...(summary ? { summary } : {}),
     ...(embedding ? { embedding } : {}),
     properties: validatedProperties(input.properties),
-    sources: Object.freeze([source]),
+    sources: Object.freeze([source] as const),
     createdAt: new Date(input.now),
     updatedAt: new Date(input.now)
   });

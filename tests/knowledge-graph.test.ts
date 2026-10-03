@@ -273,7 +273,9 @@ describe("knowledge graph", () => {
   });
 
   it("normalizes and embeds a node before persistence", async () => {
-    const saveNode = vi.fn(async (value: KnowledgeNode) => value);
+    const saved: KnowledgeNode = { ...node("node-1"), canonicalName: "Checkout API",
+      summary: "Handles purchases", sources: [evidence] };
+    const saveNode = vi.fn<KnowledgeGraphRepository["saveNode"]>().mockResolvedValue(saved);
     const embed = vi
       .fn()
       .mockResolvedValue({ model: "embedding-model", values: [1, 0] });
@@ -299,12 +301,14 @@ describe("knowledge graph", () => {
       source: evidence
     });
 
-    expect(result.node).toMatchObject({
+    expect(saveNode).toHaveBeenCalledWith(expect.objectContaining({
       kind: "service",
       canonicalName: "Checkout API",
       summary: "Handles purchases",
       embedding: { model: "embedding-model", values: [1, 0] }
-    });
+    }), access);
+    expect(result.node).toBe(saved);
+    expect(result.node).not.toHaveProperty("embedding");
     expect(result.ontologyWarnings).toEqual([]);
     expect(embed).toHaveBeenCalledWith("Checkout API\nHandles purchases", {
       organizationId: access.organizationId,

@@ -523,7 +523,7 @@ curl -X POST \
 
 Node 설명은 현재 읽을 수 있는 출처별 설명을 중복 제거해 합친다(개요 최대 10,000자). Node 검색은 대표 이름 또는 현재 읽을 수 있는 출처의 검증된 별칭이 정확히 일치하는 결과를 먼저 보여주고 나머지는 hybrid 점수순으로 정렬한다.
 
-Node 응답은 `id`, `scope`, `kind`, `canonicalName`, `aliases`, `properties`, `sources`, `createdAt`, `updatedAt`과 값이 있는 `summary`, `embeddingModel`을 포함한다. Edge 응답은 `id`, `sourceNodeId`, `targetNodeId`, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
+Node 응답은 `id`, `scope`, `kind`, `canonicalName`, `aliases`, `properties`, `sources`, `createdAt`, `updatedAt`과 값이 있는 `summary`를 포함한다. Embedding은 출처별 검색 자료이며 node 응답에 vector나 단일 `embeddingModel`을 반환하지 않는다. Edge 응답은 `id`, `sourceNodeId`, `targetNodeId`, `predicate`, `scope`, `properties`, `sources`, `createdAt`을 포함한다.
 
 `aliases`는 현재 읽을 수 있는 유효한 provenance에서 모은 검증된 이름이며 대표 이름은 제외한다. 후보 승인과 명시적 node 병합으로 보존하고, 일반 node 생성 입력의 `properties.aliases`는 identity 근거로 사용하지 않는다. Node 생성의 대표 이름이 검증된 기존 별칭과 유일하게 일치하면 같은 ID를 재사용하고, 여러 node와 일치하면 `409`를 반환한다.
 
@@ -641,6 +641,7 @@ curl \
 | 재정렬 입력 | 조회 후보에서 source별 순위를 유지하며 번갈아 선택하고, 전체를 같은 후보 예산 이내로 제한한다. 한 종류만 있으면 해당 종류에서 예산을 채운다. |
 | `counts` | 종류별 조회 후보 수. 선택된 재정렬 입력 수 또는 최종 반환 수와 다를 수 있다. |
 | Vector 후보 하한 | `EMBEDDING_MIN_SCORE`를 후보 수집의 `LIMIT` 전에 적용한다. 같은 model·차원의 nonzero vector만 비교하며 `vectorScore`는 코사인 유사도를 `0–1`로 제한한다. 키워드 일치는 vector 하한에 상관없이 후보로 남는다. |
+| Knowledge vector | 현재 읽을 수 있고 유효한 출처별 vector 중 가장 높은 점수를 사용한다. Archive·만료·미래 유효·권한 없는 출처는 다른 유효 출처가 남아 있어도 점수에 포함하지 않는다. |
 | 재정렬 최소 점수 | `RERANKER_MIN_SCORE`는 재정렬 성공 시에만 적용한다. 후보가 있어도 `hits`가 비어 있을 수 있다. |
 | Fallback | Reranker 장애·timeout·quota 초과 시 선택된 후보의 hybrid 순위로 복귀하며 재정렬 최소 점수 하한은 적용하지 않는다. Vector 후보 하한은 그대로 유지한다. |
 

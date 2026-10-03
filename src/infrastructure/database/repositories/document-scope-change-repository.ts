@@ -115,7 +115,7 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
         const changedNodes = new Set(plan.nodeIds), changedEdges = new Set(plan.edgeIds);
         const uncoveredNode = nodes.some((node) => affectedNodes.has(node.id) && !changedNodes.has(node.id) && !scopeCovers(input.scope, knowledgeScopeFromRow(node)));
         const uncoveredEdge = edges.some((edge) => affectedEdges.has(edge.id) && !changedEdges.has(edge.id) && !scopeCovers(input.scope, knowledgeScopeFromRow(edge)));
-        // Shared properties and embeddings are not attributed per source. A
+        // Shared properties are not attributed per source. A
         // skipped, wider graph resource could retain information from this
         // document even after its provenance is filtered from public reads.
         if (uncoveredNode || uncoveredEdge) return { status: "related_scope_conflict" };

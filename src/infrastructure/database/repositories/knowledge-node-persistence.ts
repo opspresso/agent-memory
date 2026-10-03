@@ -3,6 +3,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import type { ScopedResource } from "@/domain/identity/organization-access";
 import type {
   KnowledgeNode,
+  KnowledgeNodeContribution,
   KnowledgeSource
 } from "@/domain/knowledge/knowledge-graph";
 import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
@@ -67,9 +68,6 @@ export function knowledgeNodeFromRow(
     canonicalName: row.canonicalName,
     aliases: knowledgeAliases(row.canonicalName, sources.flatMap((source) => Object.values(source.names ?? {}))),
     ...(summary ? { summary } : {}),
-    ...(row.embedding && row.embeddingModel
-      ? { embedding: { model: row.embeddingModel, values: row.embedding } }
-      : {}),
     properties: row.properties,
     sources: sources.map((source) => source.memoryId ? { memoryId: source.memoryId } : { chunkId: source.chunkId! }),
     createdAt: row.createdAt,
@@ -86,17 +84,10 @@ export function knowledgeNodeValues(node: KnowledgeNode) {
     userId: node.scope.kind === "user" ? node.scope.userId : null,
     kind: node.kind,
     canonicalName: node.canonicalName,
-    summary: node.summary ?? null,
-    embedding: node.embedding?.values ?? null,
-    embeddingModel: node.embedding?.model ?? null,
     properties: node.properties,
     createdAt: node.createdAt,
     updatedAt: node.updatedAt
   };
-}
-
-function vectorLiteral(values: readonly number[] | null | undefined) {
-  return values ? `[${values.join(",")}]` : undefined;
 }
 
 function identityPredicate(node: KnowledgeNode) {
@@ -119,7 +110,7 @@ function identityPredicate(node: KnowledgeNode) {
 
 export async function upsertKnowledgeNode(
   transaction: AgentMemoryTransaction,
-  node: KnowledgeNode
+  node: KnowledgeNodeContribution
 ): Promise<KnowledgeNode> {
   const values = knowledgeNodeValues(node);
   const identity = `${node.scope.organizationId}:${node.scope.kind}:${node.scope.kind === "team" ? node.scope.teamId : ""}:${node.scope.kind === "user" ? node.scope.userId : ""}:${node.kind}:${knowledgeCanonicalNameKey(node.canonicalName)}`;
@@ -135,11 +126,6 @@ export async function upsertKnowledgeNode(
     ? await transaction
         .update(knowledgeNodes)
         .set({
-          summary: sql`coalesce(${values.summary}, ${knowledgeNodes.summary})`,
-          embedding: values.embedding
-            ? sql`coalesce(${vectorLiteral(values.embedding)}::vector, ${knowledgeNodes.embedding})`
-            : knowledgeNodes.embedding,
-          embeddingModel: sql`coalesce(${values.embeddingModel}, ${knowledgeNodes.embeddingModel})`,
           properties: sql`${knowledgeNodes.properties} || ${JSON.stringify(values.properties)}::jsonb`,
           updatedAt: values.updatedAt
         })
@@ -158,9 +144,6 @@ export async function upsertKnowledgeNode(
             knowledgeNodes.canonicalName
           ],
           set: {
-            summary: sql`coalesce(excluded.summary, ${knowledgeNodes.summary})`,
-            embedding: sql`coalesce(excluded.embedding, ${knowledgeNodes.embedding})`,
-            embeddingModel: sql`coalesce(excluded.embedding_model, ${knowledgeNodes.embeddingModel})`,
             properties: sql`${knowledgeNodes.properties} || excluded.properties`,
             updatedAt: values.updatedAt
           }
@@ -169,24 +152,26 @@ export async function upsertKnowledgeNode(
   if (!row) {
     throw new Error("knowledge node upsert returned no row");
   }
-  for (const source of node.sources) {
-    await transaction
-      .insert(knowledgeNodeSources)
-      .values({
-        organizationId: node.scope.organizationId,
-        nodeId: row.id,
-        memoryId: source.memoryId ?? null,
-        chunkId: source.chunkId ?? null,
-        description: node.summary ?? null,
-        names: knowledgeNameMap([node.canonicalName, ...node.aliases]),
-        createdAt: node.updatedAt
-      })
-      .onConflictDoUpdate({
-        target: [knowledgeNodeSources.organizationId, knowledgeNodeSources.nodeId, knowledgeNodeSources.memoryId, knowledgeNodeSources.chunkId],
-        set: { description: sql`coalesce(excluded.description, ${knowledgeNodeSources.description})`,
-          names: sql`${knowledgeNodeSources.names} || excluded.names` }
-      });
-  }
+  const [source] = node.sources;
+  await transaction
+    .insert(knowledgeNodeSources)
+    .values({
+      organizationId: node.scope.organizationId,
+      nodeId: row.id,
+      memoryId: source.memoryId ?? null,
+      chunkId: source.chunkId ?? null,
+      description: node.summary ?? null,
+      embedding: node.embedding?.values ?? null,
+      embeddingModel: node.embedding?.model ?? null,
+      names: knowledgeNameMap([node.canonicalName, ...node.aliases]),
+      createdAt: node.updatedAt
+    })
+    .onConflictDoUpdate({
+      target: [knowledgeNodeSources.organizationId, knowledgeNodeSources.nodeId, knowledgeNodeSources.memoryId, knowledgeNodeSources.chunkId],
+      set: { description: sql`coalesce(excluded.description, ${knowledgeNodeSources.description})`,
+        embedding: sql`excluded.embedding`, embeddingModel: sql`excluded.embedding_model`,
+        names: sql`${knowledgeNodeSources.names} || excluded.names` }
+    });
   const sourceRows = await transaction
     .select()
     .from(knowledgeNodeSources)

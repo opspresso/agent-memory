@@ -23,6 +23,8 @@ AI Agent ──▶ HTTP API / MCP ──▶ Next.js application
 
 ## 계층과 의존성
 
+Clean Architecture를 적용해 정책과 use case를 외부 기술에서 분리하고, domain port를 통해 저장소와 서비스를 주입한다.
+
 ```text
 src/app  ──▶ src/lib ──▶ src/application ──▶ src/domain
    │               └──▶ src/infrastructure ──▶ src/domain
@@ -58,6 +60,8 @@ Memory 생성은 `src/app/api/memories/route.ts` → `src/lib/memory-service.ts`
 | MCP 도구 등록·공개 응답 | [mcp-server.ts](../src/lib/mcp-server.ts) |
 
 Port를 수정할 때 반환 데이터의 권한 범위, 원자성, 재실행 의미, 충돌 결과를 함께 확인하라. 예를 들어 candidate 승인은 최초 승격과 재실행을 구분한다. 최초 승격은 ready source를 요구하지만, 이미 승인한 candidate의 재실행은 source가 이후 archive되었더라도 기존 승인 결과를 반환하며 새 graph resource를 생성하지 않는다.
+
+Knowledge node의 쓰기 port는 단일 출처의 `KnowledgeNodeContribution`을 받는다. 이 입력의 설명·embedding은 해당 provenance에 저장하고, 조회용 `KnowledgeNode`는 현재 읽을 수 있는 출처에서 설명을 구성한다. 조회 객체에는 공유 embedding을 두지 않는다.
 
 ## 설치 경계
 
@@ -228,6 +232,8 @@ Node merge는 같은 scope에서만 허용한다. 하나의 transaction에서 so
 AI candidate는 원본 추출과 검증·처리 이력을 graph와 분리해 보존한다. 항목별 승인은 graph에 근거를 반영하고 거절은 이미 승인한 graph를 변경하지 않는다. 자동·수동 처리 구분, 실행 principal, 시각과 사유를 기록한다.
 
 ### 후보 수집과 재정렬
+
+Knowledge embedding은 `knowledge_node_sources`가 model과 함께 소유한다. 검색은 현재 읽을 수 있고 유효한 출처 중 query와 model·차원이 맞는 vector의 최대 점수를 사용한다. Node 병합은 고유 출처의 vector를 그대로 옮기며, 같은 출처가 양쪽에 있으면 target vector를 유지하고 target에 없을 때만 source vector를 채운다. 공유 node 설명·vector·검색 index는 저장하지 않는다.
 
 통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node 후보를 각각 검색한다. Semantic search가 활성화되어도 query embedding은 한 번만 생성해 세 저장소 검색에 공유한다. Reranker가 설정되면 종류별로 `min(100, max(12, limit × 4))`개까지 후보를 조회한 뒤 같은 총량 상한 안에서 source별로 균형 있게 구성하고, 권한 필터가 완료된 후보만 외부 reranker에 보낸다. Reranker 입력은 query 4,000자, 후보당 8,000자로 제한한다. 성공하면 relevance score로 최종 순위를 정하고, timeout·provider 오류·잘못된 응답이면 기존 hybrid score 순위로 복귀한다. 모든 AI call은 인증 access 또는 document creator에서 organization·user quota key를 만들고, instance-local limiter와 PostgreSQL minute bucket을 모두 통과해야 한다. 따라서 여러 replica와 worker가 같은 tenant·principal budget을 공유한다. API와 MCP는 동일한 application operation을 사용한다.
 

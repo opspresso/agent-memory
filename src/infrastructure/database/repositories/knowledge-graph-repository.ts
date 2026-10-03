@@ -41,7 +41,8 @@ import {
   knowledgeNodeSources,
   memories
 } from "../schema";
-import { hybridSearchExpressions } from "./hybrid-search";
+import { combineHybridSearchExpressions, vectorSearchExpressions } from "./hybrid-search";
+import { defaultEmbeddingMinimumScore } from "@/domain/shared/semantic-search";
 import { assertKnowledgeSourceScopes, loadKnowledgeSourceScopes, lockKnowledgeScope } from "./knowledge-scope-lock";
 import { sameScope, scopeCovers } from "@/domain/identity/scope-coverage";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
@@ -179,13 +180,25 @@ function scoreExpressions(input: KnowledgeNodeSearchInput, now: Date) {
     WHERE ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
       AND ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
       AND ${visibleSourcePredicate(input.access, knowledgeNodeSources, now)})`;
-  return hybridSearchExpressions({
+  const lexical = {
     search: sql`to_tsvector('simple', ${knowledgeNodes.canonicalName} || ' ' || coalesce(${visibleNames}, '') || ' ' || coalesce(${visibleDescriptions}, ''))`,
-    embedding: knowledgeNodes.embedding,
-    embeddingModel: knowledgeNodes.embeddingModel,
-    query: input.query,
-    minimumVectorScore: input.minimumVectorScore,
-    ...(input.queryEmbedding ? { queryEmbedding: input.queryEmbedding } : {})
+    query: input.query
+  };
+  if (!input.queryEmbedding) return combineHybridSearchExpressions(lexical);
+  const sourceVector = vectorSearchExpressions({
+    embedding: knowledgeNodeSources.embedding,
+    embeddingModel: knowledgeNodeSources.embeddingModel,
+    queryEmbedding: input.queryEmbedding
+  });
+  const bestVisibleScore = sql<number>`(SELECT max(${sourceVector.score})
+    FROM ${knowledgeNodeSources}
+    WHERE ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
+      AND ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
+      AND ${visibleSourcePredicate(input.access, knowledgeNodeSources, now)}
+      AND ${sourceVector.compatible})`;
+  return combineHybridSearchExpressions(lexical, {
+    score: sql<number>`coalesce(${bestVisibleScore}, 0)`,
+    matches: sql`${bestVisibleScore} >= ${input.minimumVectorScore ?? defaultEmbeddingMinimumScore}`
   });
 }
 
@@ -197,10 +210,6 @@ function nodeNamePredicate(access: OrganizationAccess, names: readonly string[],
       AND ${knowledgeNodeSources.names} ?| ${sql.param([...names])}::text[]
       AND ${visibleSourcePredicate(access, knowledgeNodeSources, now)}
   )`)!;
-}
-
-function vectorLiteral(values: readonly number[] | null | undefined) {
-  return values ? `[${values.join(",")}]` : undefined;
 }
 
 function nodeScopePredicate(scope: ScopedResource) {
@@ -387,9 +396,8 @@ export function createKnowledgeGraphRepository(
               eq(knowledgeNodeSources.nodeId, source.id)
             )
           );
-        const sourcesToMove = sourceNodeSourceRows.map(knowledgeSourceFromRow);
-        if (sourcesToMove.length === 0) { throw new Error("knowledge node has no provenance"); }
-        for (const sourceReference of sourcesToMove) {
+        if (sourceNodeSourceRows.length === 0) { throw new Error("knowledge node has no provenance"); }
+        for (const sourceReference of sourceNodeSourceRows) {
           await transaction
             .insert(knowledgeNodeSources)
             .values({
@@ -398,12 +406,17 @@ export function createKnowledgeGraphRepository(
               memoryId: sourceReference.memoryId ?? null,
               chunkId: sourceReference.chunkId ?? null,
               description: sourceReference.description ?? null,
+              embedding: sourceReference.embedding,
+              embeddingModel: sourceReference.embeddingModel,
               names: { ...knowledgeNameMap([source.canonicalName]), ...sourceReference.names },
               createdAt: input.now
             })
             .onConflictDoUpdate({
               target: [knowledgeNodeSources.organizationId, knowledgeNodeSources.nodeId, knowledgeNodeSources.memoryId, knowledgeNodeSources.chunkId],
-              set: { names: sql`${knowledgeNodeSources.names} || excluded.names`, description: sql`CASE
+              set: { names: sql`${knowledgeNodeSources.names} || excluded.names`,
+                embedding: sql`coalesce(${knowledgeNodeSources.embedding}, excluded.embedding)`,
+                embeddingModel: sql`coalesce(${knowledgeNodeSources.embeddingModel}, excluded.embedding_model)`,
+                description: sql`CASE
                 WHEN ${knowledgeNodeSources.description} IS NULL THEN excluded.description
                 WHEN excluded.description IS NULL OR excluded.description = ${knowledgeNodeSources.description} THEN ${knowledgeNodeSources.description}
                 ELSE ${knowledgeNodeSources.description} || E'\n\n' || excluded.description END` }
@@ -533,11 +546,6 @@ export function createKnowledgeGraphRepository(
         const [merged] = await transaction
           .update(knowledgeNodes)
           .set({
-            summary: sql`coalesce(${knowledgeNodes.summary}, ${source.summary})`,
-            embedding: source.embedding
-              ? sql`coalesce(${knowledgeNodes.embedding}, ${vectorLiteral(source.embedding)}::vector)`
-              : knowledgeNodes.embedding,
-            embeddingModel: sql`coalesce(${knowledgeNodes.embeddingModel}, ${source.embeddingModel})`,
             properties: sql`${JSON.stringify(source.properties)}::jsonb || ${knowledgeNodes.properties}`,
             updatedAt: input.now
           })

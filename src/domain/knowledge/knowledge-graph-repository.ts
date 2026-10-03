@@ -3,7 +3,8 @@ import type { OrganizationAccess, ScopedResource } from "@/domain/identity/organ
 import type {
   KnowledgeEdge,
   KnowledgeEmbedding,
-  KnowledgeNode
+  KnowledgeNode,
+  KnowledgeNodeContribution
 } from "./knowledge-graph";
 
 export interface KnowledgeNodeSearchInput {
@@ -27,7 +28,7 @@ export interface KnowledgeNeighborhood {
 }
 
 export interface KnowledgeGraphRepository {
-  saveNode(node: KnowledgeNode, access?: OrganizationAccess): Promise<KnowledgeNode>;
+  saveNode(node: KnowledgeNodeContribution, access?: OrganizationAccess): Promise<KnowledgeNode>;
   findNodesByNames(
     access: OrganizationAccess,
     scope: KnowledgeNode["scope"],
