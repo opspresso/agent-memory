@@ -45,6 +45,7 @@ test("loads history on demand, isolates failures and reaches versions beyond the
   const firstRequest = Promise.withResolvers<void>();
   const releaseFirstRequest = Promise.withResolvers<void>();
   let failSecondPage = true;
+  let unavailableStatus: 403 | 404 | undefined;
   await page.route(`**/api/memories/${memory.id}/versions?*`, async (route) => {
     const parameters = new URL(route.request().url()).searchParams;
     expect(parameters.get("limit")).toBe("25");
@@ -57,6 +58,10 @@ test("loads history on demand, isolates failures and reaches versions beyond the
     } else if (before === 78 && failSecondPage) {
       failSecondPage = false;
       await route.fulfill({ status: 503, json: { error: "Older history temporarily unavailable" } });
+    } else if (before === 78 && unavailableStatus !== undefined) {
+      const status = unavailableStatus;
+      unavailableStatus = undefined;
+      await route.fulfill({ status, json: { error: "Synthetic history access failure" } });
     } else {
       await route.continue();
     }
@@ -92,5 +97,28 @@ test("loads history on demand, isolates failures and reaches versions beyond the
   await expect(history.getByRole("button", { name: "Load older versions", exact: true })).toHaveCount(0);
   await expect(history.getByText(/^v\d+$/)).toHaveCount(102);
   expect(requestedCursors).toEqual([null, null, 78, 78, 53, 28, 3]);
+
+  for (const status of [403, 404] as const) {
+    const firstRequestIndex = requestedCursors.length;
+    await detail.getByRole("tab", { name: "Content and source", exact: true }).click();
+    await detail.getByRole("tab", { name: "Version history", exact: true }).click();
+    await expect(history.getByText(/^v\d+$/)).toHaveCount(25);
+    unavailableStatus = status;
+    await history.getByRole("button", { name: "Load older versions", exact: true }).click();
+    await expect(history.getByRole("alert")).toContainText("This Memory is unavailable or you no longer have access.");
+    await expect(history.getByText(/^v\d+$/)).toHaveCount(0);
+    await expect(history.getByRole("button", { name: "Load older versions", exact: true })).toHaveCount(0);
+    await history.getByRole("button", { name: "Retry history", exact: true }).click();
+    await expect(history.getByText("v102", { exact: true })).toBeVisible();
+    await expect(history.getByText("v78", { exact: true })).toBeVisible();
+    await expect(history.getByText(/^v\d+$/)).toHaveCount(25);
+    for (const oldest of [53, 28, 3, 1]) {
+      await history.getByRole("button", { name: "Load older versions", exact: true }).click();
+      await expect(history.getByText(`v${oldest}`, { exact: true })).toBeVisible();
+    }
+    await expect(history.getByRole("button", { name: "Load older versions", exact: true })).toHaveCount(0);
+    await expect(history.getByText(/^v\d+$/)).toHaveCount(102);
+    expect(requestedCursors.slice(firstRequestIndex)).toEqual([null, 78, null, 78, 53, 28, 3]);
+  }
   expect(errors).toEqual([]);
 });

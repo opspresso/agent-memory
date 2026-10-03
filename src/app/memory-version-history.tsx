@@ -1,7 +1,7 @@
 "use client";
 
 import { Alert, Badge, Button, Group, Loader, Stack, Text } from "@mantine/core";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import type { z } from "zod";
 
 import { useLocale, useT } from "./_i18n/provider";
@@ -19,10 +19,15 @@ export function MemoryVersionHistory({ memoryId }: { readonly memoryId: string }
   const [nextBefore, setNextBefore] = useState<number>();
   const [request, setRequest] = useState<{ before?: number; attempt: number }>({ attempt: 0 });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<{ message: string; retryBefore?: number }>();
+  const getLoadMessages = useEffectEvent(() => ({
+    failed: t("memory.historyFailed"),
+    unavailable: t("memoryUi.unavailable")
+  }));
 
   useEffect(() => {
     const controller = new AbortController();
+    const messages = getLoadMessages();
     async function load() {
       try {
         const query = new URLSearchParams({ limit: "25" });
@@ -34,11 +39,13 @@ export function MemoryVersionHistory({ memoryId }: { readonly memoryId: string }
         if (response.status === 403 || response.status === 404) {
           setVersions([]);
           setNextBefore(undefined);
+          setError({ message: messages.unavailable });
+          return;
         }
-        const body = await responseJson(response, t("memory.historyFailed"), memoryVersionsResponseSchema);
+        const body = await responseJson(response, messages.failed, memoryVersionsResponseSchema);
         if (controller.signal.aborted) return;
         if (body.versions.some((version) => version.memoryId !== memoryId)) {
-          throw new Error(t("memory.historyFailed"));
+          throw new Error(messages.failed);
         }
         setVersions((current) => request.before === undefined
           ? body.versions
@@ -47,7 +54,10 @@ export function MemoryVersionHistory({ memoryId }: { readonly memoryId: string }
         setError(undefined);
       } catch (caught) {
         if (!controller.signal.aborted) {
-          setError(caught instanceof Error ? caught.message : t("memory.historyFailed"));
+          setError({
+            message: caught instanceof Error ? caught.message : messages.failed,
+            retryBefore: request.before
+          });
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -55,7 +65,7 @@ export function MemoryVersionHistory({ memoryId }: { readonly memoryId: string }
     }
     void load();
     return () => controller.abort();
-  }, [memoryId, request, t]);
+  }, [memoryId, request]);
 
   function loadPage(before?: number) {
     setLoading(true);
@@ -82,8 +92,8 @@ export function MemoryVersionHistory({ memoryId }: { readonly memoryId: string }
     ))}
     {loading ? <Group role="status"><Loader size="sm" /><Text size="sm">{t("memory.historyLoading")}</Text></Group> : null}
     {error ? <Alert color="red" role="alert"><Stack gap="xs">
-      <Text size="sm">{error}</Text>
-      <Button variant="light" onClick={() => loadPage(request.before)}>{t("memory.historyRetry")}</Button>
+      <Text size="sm">{error.message}</Text>
+      <Button variant="light" onClick={() => loadPage(error.retryBefore)}>{t("memory.historyRetry")}</Button>
     </Stack></Alert> : null}
     {!error && nextBefore !== undefined ? <Button variant="default" disabled={loading} onClick={() => loadPage(nextBefore)}>{t("memory.historyMore")}</Button> : null}
   </Stack>;
