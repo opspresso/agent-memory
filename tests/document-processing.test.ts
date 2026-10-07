@@ -89,6 +89,19 @@ describe("document processing", () => {
     );
   });
 
+  it.each([0, 19, 20, 119])("keeps Unicode characters intact with %s characters of overlap", (overlapCharacters) => {
+    const source = "a" + "😀".repeat(200);
+    const chunks = chunkText(source, { maxCharacters: 120, overlapCharacters });
+    const covered = new Set<number>();
+    for (const chunk of chunks) {
+      expect(Buffer.from(chunk.content).toString("utf8")).toBe(chunk.content);
+      expect(chunk.content).toBe(source.slice(chunk.start, chunk.end));
+      expect(chunk.content.length).toBeLessThanOrEqual(120);
+      for (let index = chunk.start; index < chunk.end; index += 1) covered.add(index);
+    }
+    expect(covered.size).toBe(source.length);
+  });
+
   it("preserves Markdown heading context across chunks", () => {
     const chunks = chunkDocumentText(
       `### Agent Studio\n\n${"production AI agent platform ".repeat(100)}`,

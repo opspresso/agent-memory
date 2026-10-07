@@ -21,6 +21,12 @@ function appendChunks(target: TextChunk[], ...chunks: readonly TextChunk[]) {
   target.push(...chunks);
 }
 
+function splitsSurrogatePair(text: string, offset: number): boolean {
+  const previous = text.charCodeAt(offset - 1);
+  const next = text.charCodeAt(offset);
+  return previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
+}
+
 export function chunkText(
   input: string,
   options: ChunkTextOptions = {}
@@ -68,6 +74,7 @@ export function chunkText(
       }
     }
 
+    if (splitsSurrogatePair(text, end)) end -= 1;
     const content = text.slice(start, end).trimEnd();
     const actualEnd = start + content.length;
     if (content.length > 0) {
@@ -77,6 +84,7 @@ export function chunkText(
       break;
     }
     start = Math.max(actualEnd - overlapCharacters, start + 1);
+    if (splitsSurrogatePair(text, start)) start += 1;
   }
 
   return chunks;
