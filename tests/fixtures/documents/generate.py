@@ -10,6 +10,15 @@ import xlwt
 ROOT = Path(__file__).parent
 TEXT = "Orion 팀의 문서 파싱 검증입니다."
 
+for name, content in {
+    "sample.txt": TEXT + "\n",
+    "sample.md": "# Orion handbook\n\n" + TEXT + "\n",
+    "sample.csv": 'Product,Owner,Notes\nOrion,김하늘,"첫째 줄\n둘째 줄"\n',
+    "sample.json": '{"product":{"name":"Orion","owner":"김하늘","notes":"문서 파싱 검증"}}\n',
+    "sample.xml": '<?xml version="1.0" encoding="UTF-8"?>\n<inventory><product><name>Orion</name><owner>김하늘</owner></product></inventory>\n',
+}.items():
+    (ROOT / name).write_text(content, encoding="utf-8")
+
 
 def archive(name, files):
     with zipfile.ZipFile(ROOT / name, "w", zipfile.ZIP_DEFLATED) as target:

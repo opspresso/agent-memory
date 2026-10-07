@@ -15,6 +15,8 @@ import type { Memory } from "@/domain/memory/memory";
 import type { MemoryRepository } from "@/domain/memory/memory-repository";
 import { MemoryAccessDeniedError } from "@/application/memory/create-memory";
 import { createDocument } from "@/domain/document/document";
+import { isDocumentTextMimeType } from "@/domain/document/document-format";
+import { supportedDocumentFixtures } from "./fixtures/documents/cases";
 import {
   createAgentMemoryMcpServer,
   type AgentMemoryMcpOperations
@@ -75,6 +77,26 @@ async function connectedClient(
 }
 
 describe("agent memory MCP server", () => {
+  it.each(supportedDocumentFixtures.flatMap((fixture) =>
+    (isDocumentTextMimeType(fixture.mimeType) || fixture.mimeType === "text/html"
+      ? ["utf8", "base64"] as const : ["base64"] as const
+    ).map((encoding) => ({ ...fixture, encoding }))
+  ))("ingests $mimeType via $encoding without changing source bytes", async ({ mimeType, encoding, read }) => {
+    const bytes = await read();
+    const uploadDocument = vi.fn().mockResolvedValue(createDocument({
+      id: "40000000-0000-4000-8000-000000000001", scope: { kind: "user", organizationId: access.organizationId, userId: access.userId },
+      title: "Format fixture", objectKey: "private/source", checksum: "a".repeat(64), mimeType, sizeBytes: bytes.length,
+      createdBy: access.userId, now: new Date()
+    }));
+    const client = await connectedClient(operations({ uploadDocument, getDocument: vi.fn(), retryDocument: vi.fn() }));
+    const result = await client.callTool({ name: "document_ingest", arguments: {
+      idempotencyKey: "format-fixture", scope: { kind: "user" }, title: "Format fixture", mimeType,
+      content: bytes.toString(encoding), ...(encoding === "base64" ? { contentEncoding: encoding } : {})
+    } });
+    expect(result.isError).not.toBe(true);
+    expect(uploadDocument).toHaveBeenCalledWith(expect.objectContaining({ content: new Uint8Array(bytes), mimeType, access }));
+  });
+
   it("decodes binary ingestion without changing the original bytes", async () => {
     const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0, 255]);
     const uploadDocument = vi.fn().mockResolvedValue(createDocument({

@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocument } from "@/domain/document/document";
+import { documentFormats } from "@/domain/document/document-format";
+import { supportedDocumentFixtures } from "./fixtures/documents/cases";
 const mocks = vi.hoisted(() => ({ authorize: vi.fn(), upload: vi.fn() }));
 vi.mock("@/lib/organization-authorization", () => ({ authorizeOrganizationRoute: mocks.authorize }));
 vi.mock("@/lib/document-service", () => ({ uploadDocumentRecord: mocks.upload, searchDocumentRecords: vi.fn() }));
@@ -24,6 +26,20 @@ describe("multipart document upload", () => {
     vi.resetAllMocks();
     mocks.authorize.mockResolvedValue({ authorized: true, access, user: { id: access.userId } });
     mocks.upload.mockResolvedValue(document);
+  });
+
+  it.each(supportedDocumentFixtures)("preserves uploaded bytes and MIME for $mimeType", async ({ mimeType, filename, read }) => {
+    const bytes = await read();
+    expect((await POST(request(new File([bytes], filename, { type: mimeType })))).status).toBe(202);
+    expect(mocks.upload).toHaveBeenCalledWith(expect.objectContaining({ mimeType, content: new Uint8Array(bytes) }));
+  });
+
+  it.each(supportedDocumentFixtures.flatMap((fixture) =>
+    documentFormats[fixture.mimeType].extensions.map((extension) => ({ ...fixture, filename: `source${extension}` }))
+  ))("infers $mimeType from $filename", async ({ mimeType, filename, read }) => {
+    const bytes = await read();
+    expect((await POST(request(new File([bytes], filename, { type: "application/octet-stream" })))).status).toBe(202);
+    expect(mocks.upload).toHaveBeenCalledWith(expect.objectContaining({ mimeType, content: new Uint8Array(bytes) }));
   });
 
   it("accepts PDF bytes with an inferred MIME and server-authorized scope", async () => {
