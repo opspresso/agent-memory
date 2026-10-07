@@ -82,10 +82,13 @@ export function chunkText(
   return chunks;
 }
 
-function* markdownLines(input: string) {
+function* markdownLines(input: string): Generator<TextChunk & { readonly isCode: boolean }, undefined> {
   let offset = 0;
   let fence: { marker: string; length: number } | undefined;
-  for (const line of input.split("\n")) {
+  while (offset <= input.length) {
+    const newline = input.indexOf("\n", offset);
+    const end = newline === -1 ? input.length : newline;
+    const line = input.slice(offset, end);
     let isCode = Boolean(fence);
     const delimiter = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
     if (delimiter) {
@@ -100,22 +103,27 @@ function* markdownLines(input: string) {
         fence = undefined;
       }
     }
-    yield { content: line, start: offset, end: offset + line.length, isCode };
-    offset += line.length + 1;
+    yield { content: line, start: offset, end, isCode };
+    if (newline === -1) break;
+    offset = end + 1;
+  }
+}
+
+function* unescapedPipes(line: string): Generator<number, undefined> {
+  let escaped = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === "|" && !escaped) yield index;
+    escaped = character === "\\" && !escaped;
   }
 }
 
 function tableCells(line: string): readonly string[] | undefined {
   const cells: string[] = [];
   let start = 0;
-  let escaped = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === "|" && !escaped) {
-      cells.push(line.slice(start, index).trim());
-      start = index + 1;
-    }
-    escaped = character === "\\" && !escaped;
+  for (const index of unescapedPipes(line)) {
+    cells.push(line.slice(start, index).trim());
+    start = index + 1;
   }
   if (cells.length === 0) return undefined;
   cells.push(line.slice(start).trim());
@@ -162,38 +170,66 @@ function chunkRecords(header: TextChunk, rows: Iterable<TextChunk>, maximumChara
 function chunkMarkdownBlocks(input: string, options: ChunkTextOptions = {}, omitHeadingOnlyPrefix = false): readonly TextChunk[] {
   const normalized = input.replace(/\r\n?/g, "\n").trim();
   if (!normalized.includes("|")) return chunkText(normalized, options);
-  const lines = [...markdownLines(normalized)];
+  const lines = markdownLines(normalized);
+  let first = lines.next().value;
+  let separator = lines.next().value;
+  function advance() {
+    first = separator;
+    separator = lines.next().value;
+  }
   const chunks: TextChunk[] = [];
   let proseStart = 0;
   function appendProse(end: number, beforeTable = false) {
     const prose = normalized.slice(proseStart, end);
-    const headingOnly = beforeTable && omitHeadingOnlyPrefix && prose.trim().split("\n")
-      .every((line) => !line.trim() || /^ {0,3}#{1,6}[ \t]+\S/.test(line));
+    let headingOnly = beforeTable && omitHeadingOnlyPrefix;
+    if (headingOnly) {
+      for (const { content } of markdownLines(prose.trim())) {
+        if (content.trim() && !/^ {0,3}#{1,6}[ \t]+\S/.test(content)) {
+          headingOnly = false;
+          break;
+        }
+      }
+    }
     if (headingOnly) return;
     const offset = proseStart + prose.length - prose.trimStart().length;
     for (const chunk of chunkText(prose, options)) {
       appendChunks(chunks, { ...chunk, start: offset + chunk.start, end: offset + chunk.end });
     }
   }
-  for (let index = 0; index < lines.length - 1; index += 1) {
-    const first = lines[index]!;
-    const separator = lines[index + 1]!;
+  while (first && separator) {
+    const maximumCharacters = options.maxCharacters ?? maxDocumentChunkCharacters;
+    // A header must leave room for a useful row fragment within the chunk budget.
+    if (separator.end - first.start + 101 > maximumCharacters) {
+      advance();
+      continue;
+    }
     if (first.isCode || separator.isCode ||
-        [first, separator].some((line) => /^(?: {4}| {0,3}\t)/.test(line.content))) continue;
+        [first, separator].some((line) => /^(?: {4}| {0,3}\t)/.test(line.content))) {
+      advance();
+      continue;
+    }
     const headerCells = tableCells(first.content);
     const separatorCells = tableCells(separator.content);
     if (!headerCells?.length || headerCells.length !== separatorCells?.length ||
-        !separatorCells.every((cell) => /^:?-+:?$/.test(cell))) continue;
+        !separatorCells.every((cell) => /^:?-+:?$/.test(cell))) {
+      advance();
+      continue;
+    }
     const header = { content: normalized.slice(first.start, separator.end), start: first.start, end: separator.end };
-    const maximumCharacters = options.maxCharacters ?? maxDocumentChunkCharacters;
-    // A header must leave room for a useful row fragment within the chunk budget.
-    if (header.content.length + 101 > maximumCharacters) continue;
-    let end = index + 2;
-    while (end < lines.length && !lines[end]!.isCode && tableCells(lines[end]!.content)) end += 1;
     appendProse(first.start, true);
-    appendChunks(chunks, ...chunkRecords(header, lines.slice(index + 2, end), maximumCharacters));
-    proseStart = lines[end - 1]!.end;
-    index = end - 1;
+    advance();
+    advance();
+    let tableEnd = header.end;
+    function* rows() {
+      while (first && !first.isCode && !unescapedPipes(first.content).next().done) {
+        const row = first;
+        tableEnd = row.end;
+        advance();
+        yield row;
+      }
+    }
+    appendChunks(chunks, ...chunkRecords(header, rows(), maximumCharacters));
+    proseStart = tableEnd;
   }
   appendProse(normalized.length);
   return chunks;
@@ -201,45 +237,60 @@ function chunkMarkdownBlocks(input: string, options: ChunkTextOptions = {}, omit
 
 function chunkMarkdown(input: string): readonly TextChunk[] {
   const normalized = input.replace(/\r\n?/g, "\n").trim();
-  const headings: { text: string; level: number; start: number; end: number }[] = [];
-  for (const line of markdownLines(normalized)) {
-    const heading = !line.isCode && /^ {0,3}(#{1,6})[ \t]+\S.*$/.exec(line.content);
-    if (heading) headings.push({ text: line.content, level: heading[1]!.length, start: line.start, end: line.end });
+  type Heading = { text: string; level: number; start: number; end: number };
+  function* readHeadings(): Generator<Heading, undefined> {
+    for (const line of markdownLines(normalized)) {
+      const heading = !line.isCode && /^ {0,3}(#{1,6})[ \t]+\S.*$/.exec(line.content);
+      if (heading) yield { text: line.content, level: heading[1]!.length, start: line.start, end: line.end };
+    }
   }
-  if (headings.length === 0) {
+  const headings = readHeadings();
+  let current = headings.next().value;
+  let next = headings.next().value;
+  let following = headings.next().value;
+  function advance() {
+    current = next;
+    next = following;
+    following = headings.next().value;
+  }
+  if (!current) {
     return chunkMarkdownBlocks(normalized);
   }
   const chunks: TextChunk[] = [];
-  const firstHeadingOffset = headings[0]?.start ?? 0;
+  const firstHeadingOffset = current.start;
   if (firstHeadingOffset > 0) {
     appendChunks(chunks, ...chunkMarkdownBlocks(normalized.slice(0, firstHeadingOffset)));
   }
-  const ancestors: typeof headings = [];
-  function isHeadingOnlyLeaf(index: number): boolean {
-    const heading = headings[index]!;
-    const next = headings[index + 1];
+  const ancestors: Heading[] = [];
+  function isHeadingOnlyLeaf(heading: Heading, next: Heading | undefined): boolean {
     return (next?.level ?? 0) <= heading.level &&
       !normalized.slice(heading.end, next?.start ?? normalized.length).trim();
   }
-  for (let index = 0; index < headings.length; index += 1) {
-    const heading = headings[index]!;
+  while (current) {
+    const heading = current;
     while (ancestors.length && ancestors.at(-1)!.level >= heading.level) ancestors.pop();
     const parents = [...ancestors];
     ancestors.push(heading);
     const sectionStart = heading.start;
-    let sectionEnd = headings[index + 1]?.start ?? normalized.length;
+    let sectionEnd = next?.start ?? normalized.length;
     // Heading-only sections provide scope to their children, not separate facts.
-    if (!normalized.slice(heading.end, sectionEnd).trim() && (headings[index + 1]?.level ?? 0) > heading.level) continue;
-    const firstIndex = index;
+    if (!normalized.slice(heading.end, sectionEnd).trim() && (next?.level ?? 0) > heading.level) {
+      advance();
+      continue;
+    }
+    let packedSiblings = false;
     // Pack empty sibling sections without crossing an owner or a body boundary.
-    if (parents.length > 0 && isHeadingOnlyLeaf(index)) {
-      while (headings[index + 1]?.level === heading.level && isHeadingOnlyLeaf(index + 1)) index += 1;
-      sectionEnd = headings[index + 1]?.start ?? normalized.length;
+    if (parents.length > 0 && isHeadingOnlyLeaf(heading, next)) {
+      while (next?.level === heading.level && isHeadingOnlyLeaf(next, following)) {
+        packedSiblings = true;
+        advance();
+      }
+      sectionEnd = next?.start ?? normalized.length;
     }
     const section = normalized.slice(sectionStart, sectionEnd).trimEnd();
     const sectionOffset = sectionStart + section.length - section.trimStart().length;
     // Siblings in a packed group are content, never ancestors of later chunks.
-    const continuationContext = index > firstIndex ? parents : ancestors;
+    const continuationContext = packedSiblings ? parents : ancestors;
     const path = continuationContext.map((item) => item.text).join("\n");
     const headingContextBudget = maxDocumentChunkCharacters - path.length - 2;
     const repeatHeading =
@@ -271,6 +322,7 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
         ...(contextSpans.length ? { contextSpans } : {})
       });
     });
+    advance();
   }
   return chunks;
 }
