@@ -555,7 +555,7 @@ Worker가 비활성화된 상태에서 upload한 문서는 자동으로 `ready`�
 
 1. 응답의 `processingError`와 같은 시각의 application log를 확인한다.
 2. `S3_ENDPOINT`, bucket, credential과 network 연결을 확인한다.
-3. 파일 MIME type과 UTF-8 text 추출 가능 여부를 확인한다.
+3. 지원 형식과 실제 파일 구조가 맞는지 확인한다. 텍스트 파일은 UTF-8이어야 한다. PDF·Office·HTML·EPUB는 위 [변환 실패 안내](#업로드와-처리)에 따라 parser·암호화·추출 한도를 확인한다.
 4. 원인을 해결한 뒤 retry endpoint를 사용한다.
 
 `pending`, `processing`, `ready` 문서는 retry할 수 없으며 `409`를 반환한다.
