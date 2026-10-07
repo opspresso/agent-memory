@@ -1,4 +1,4 @@
-import { InvalidDocumentError } from "@/domain/document/document";
+import { InvalidDocumentError, maxDocumentChunkCharacters, maxDocumentChunks } from "@/domain/document/document";
 
 export interface TextChunk {
   readonly content: string;
@@ -12,11 +12,20 @@ export interface ChunkTextOptions {
   readonly overlapCharacters?: number;
 }
 
+function chunkLimitError(): InvalidDocumentError {
+  return new InvalidDocumentError(`document exceeds the ${maxDocumentChunks} chunk processing limit`);
+}
+
+function appendChunks(target: TextChunk[], ...chunks: readonly TextChunk[]) {
+  if (target.length + chunks.length > maxDocumentChunks) throw chunkLimitError();
+  target.push(...chunks);
+}
+
 export function chunkText(
   input: string,
   options: ChunkTextOptions = {}
 ): readonly TextChunk[] {
-  const maxCharacters = options.maxCharacters ?? 2_000;
+  const maxCharacters = options.maxCharacters ?? maxDocumentChunkCharacters;
   const overlapCharacters = options.overlapCharacters ?? 200;
   if (
     !Number.isSafeInteger(maxCharacters) ||
@@ -62,7 +71,7 @@ export function chunkText(
     const content = text.slice(start, end).trimEnd();
     const actualEnd = start + content.length;
     if (content.length > 0) {
-      chunks.push({ content, start, end: actualEnd });
+      appendChunks(chunks, { content, start, end: actualEnd });
     }
     if (end >= text.length) {
       break;
@@ -115,13 +124,13 @@ function tableCells(line: string): readonly string[] | undefined {
   return cells;
 }
 
-function chunkRecords(header: TextChunk, rows: readonly TextChunk[], maximumCharacters: number): readonly TextChunk[] {
+function chunkRecords(header: TextChunk, rows: Iterable<TextChunk>, maximumCharacters: number): readonly TextChunk[] {
   const chunks: TextChunk[] = [];
   const rowBudget = maximumCharacters - header.content.length - 1;
   let pending: TextChunk[] = [];
   let length = header.content.length;
   function append(records: readonly TextChunk[], includeHeaderInSpan: boolean) {
-    chunks.push({
+    appendChunks(chunks, {
       content: [header.content, ...records.map((row) => row.content)].join("\n"),
       start: includeHeaderInSpan ? header.start : records[0]!.start,
       end: records.at(-1)!.end,
@@ -163,7 +172,7 @@ function chunkMarkdownBlocks(input: string, options: ChunkTextOptions = {}, omit
     if (headingOnly) return;
     const offset = proseStart + prose.length - prose.trimStart().length;
     for (const chunk of chunkText(prose, options)) {
-      chunks.push({ ...chunk, start: offset + chunk.start, end: offset + chunk.end });
+      appendChunks(chunks, { ...chunk, start: offset + chunk.start, end: offset + chunk.end });
     }
   }
   for (let index = 0; index < lines.length - 1; index += 1) {
@@ -175,13 +184,13 @@ function chunkMarkdownBlocks(input: string, options: ChunkTextOptions = {}, omit
     if (!headerCells?.length || headerCells.length !== separatorCells?.length ||
         !separatorCells.every((cell) => /^:?-+:?$/.test(cell))) continue;
     const header = { content: normalized.slice(first.start, separator.end), start: first.start, end: separator.end };
-    const maximumCharacters = options.maxCharacters ?? 2_000;
+    const maximumCharacters = options.maxCharacters ?? maxDocumentChunkCharacters;
     // A header must leave room for a useful row fragment within the chunk budget.
     if (header.content.length + 101 > maximumCharacters) continue;
     let end = index + 2;
     while (end < lines.length && !lines[end]!.isCode && tableCells(lines[end]!.content)) end += 1;
     appendProse(first.start, true);
-    chunks.push(...chunkRecords(header, lines.slice(index + 2, end), maximumCharacters));
+    appendChunks(chunks, ...chunkRecords(header, lines.slice(index + 2, end), maximumCharacters));
     proseStart = lines[end - 1]!.end;
     index = end - 1;
   }
@@ -202,7 +211,7 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
   const chunks: TextChunk[] = [];
   const firstHeadingOffset = headings[0]?.start ?? 0;
   if (firstHeadingOffset > 0) {
-    chunks.push(...chunkMarkdownBlocks(normalized.slice(0, firstHeadingOffset)));
+    appendChunks(chunks, ...chunkMarkdownBlocks(normalized.slice(0, firstHeadingOffset)));
   }
   const ancestors: typeof headings = [];
   function isHeadingOnlyLeaf(index: number): boolean {
@@ -231,7 +240,7 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
     // Siblings in a packed group are content, never ancestors of later chunks.
     const continuationContext = index > firstIndex ? parents : ancestors;
     const path = continuationContext.map((item) => item.text).join("\n");
-    const headingContextBudget = 2_000 - path.length - 2;
+    const headingContextBudget = maxDocumentChunkCharacters - path.length - 2;
     const repeatHeading =
       headingContextBudget >= 100 && path.length <= headingContextBudget;
     const sectionChunks = chunkMarkdownBlocks(
@@ -254,7 +263,7 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
         ...context.map(({ start, end }) => ({ start, end })),
         ...(chunk.contextSpans ?? []).map(({ start, end }) => ({ start: sectionOffset + start, end: sectionOffset + end }))
       ];
-      chunks.push({
+      appendChunks(chunks, {
         content: prefix ? `${prefix}\n\n${chunk.content}` : chunk.content,
         start: sectionOffset + chunk.start,
         end: sectionOffset + chunk.end,
@@ -265,14 +274,9 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
   return chunks;
 }
 
-function csvRecords(input: string): readonly TextChunk[] {
-  const records: TextChunk[] = [];
+function* csvRecords(input: string): Generator<TextChunk> {
   let start = 0;
   let quoted = false;
-  function append(end: number) {
-    const content = input.slice(start, end);
-    if (content.trim()) records.push({ content, start, end });
-  }
   for (let index = 0; index < input.length; index += 1) {
     const character = input[index];
     if (character === '"') {
@@ -282,25 +286,26 @@ function csvRecords(input: string): readonly TextChunk[] {
         quoted = !quoted;
       }
     } else if (character === "\n" && !quoted) {
-      append(index);
+      const content = input.slice(start, index);
+      if (content.trim()) yield { content, start, end: index };
       start = index + 1;
     }
   }
-  append(input.length);
-  return records;
+  const content = input.slice(start);
+  if (content.trim()) yield { content, start, end: input.length };
 }
 
 function chunkCsv(input: string): readonly TextChunk[] {
   const normalized = input.replace(/\r\n?/g, "\n").trim();
   const records = csvRecords(normalized);
-  const header = records[0];
+  const header = records.next().value;
   if (!header) {
     return [];
   }
-  if (header.content.length + 101 > 2_000) {
+  if (header.content.length + 101 > maxDocumentChunkCharacters) {
     return chunkText(normalized);
   }
-  return chunkRecords(header, records.slice(1), 2_000);
+  return chunkRecords(header, records, maxDocumentChunkCharacters);
 }
 
 function jsonPathSegment(key: string): string {
@@ -309,42 +314,42 @@ function jsonPathSegment(key: string): string {
 
 function flattenJson(value: unknown): string[] {
   const lines: string[] = [];
-  const pending: Array<{ readonly path: string; readonly value: unknown }> = [
+  let length = 0;
+  const maximumCharacters = maxDocumentChunks * maxDocumentChunkCharacters;
+  const pending: Array<{ readonly path: string; readonly value: unknown; index?: number; keys?: readonly string[] }> = [
     { path: "$", value }
   ];
+  function append(line: string) {
+    length += line.length + (lines.length ? 1 : 0);
+    if (length > maximumCharacters) throw chunkLimitError();
+    lines.push(line);
+  }
   while (pending.length > 0) {
-    const current = pending.pop();
-    if (!current) {
-      break;
-    }
+    const current = pending.at(-1)!;
+    if (current.path.length > maximumCharacters) throw chunkLimitError();
     if (Array.isArray(current.value)) {
-      if (current.value.length === 0) {
-        lines.push(`${current.path} = []`);
+      const index = current.index ?? 0;
+      if (index < current.value.length) {
+        current.index = index + 1;
+        pending.push({ path: `${current.path}[${index}]`, value: current.value[index] });
       } else {
-        for (let index = current.value.length - 1; index >= 0; index -= 1) {
-          pending.push({
-            path: `${current.path}[${index}]`,
-            value: current.value[index]
-          });
-        }
+        if (index === 0) append(`${current.path} = []`);
+        pending.pop();
       }
     } else if (current.value !== null && typeof current.value === "object") {
-      const entries = Object.entries(current.value);
-      if (entries.length === 0) {
-        lines.push(`${current.path} = {}`);
+      const keys = current.keys ??= Object.keys(current.value);
+      const index = current.index ?? 0;
+      if (index < keys.length) {
+        current.index = index + 1;
+        const key = keys[index]!;
+        pending.push({ path: `${current.path}${jsonPathSegment(key)}`, value: (current.value as Record<string, unknown>)[key] });
       } else {
-        for (let index = entries.length - 1; index >= 0; index -= 1) {
-          const entry = entries[index];
-          if (entry) {
-            pending.push({
-              path: `${current.path}${jsonPathSegment(entry[0])}`,
-              value: entry[1]
-            });
-          }
-        }
+        if (index === 0) append(`${current.path} = {}`);
+        pending.pop();
       }
     } else {
-      lines.push(`${current.path} = ${JSON.stringify(current.value)}`);
+      append(`${current.path} = ${JSON.stringify(current.value)}`);
+      pending.pop();
     }
   }
   return lines;
@@ -402,7 +407,7 @@ function xmlContexts(
 function chunkXml(input: string): readonly TextChunk[] {
   const normalized = input.replace(/\r\n?/g, "\n").trim();
   const chunks = chunkText(normalized, {
-    maxCharacters: 1_900,
+    maxCharacters: maxDocumentChunkCharacters - 100,
     overlapCharacters: 200
   });
   const contexts = xmlContexts(
@@ -415,7 +420,7 @@ function chunkXml(input: string): readonly TextChunk[] {
       const contextualContent = context
         ? `${context}\n${chunk.content}`
         : chunk.content;
-      return contextualContent.length <= 2_000
+      return contextualContent.length <= maxDocumentChunkCharacters
         ? { ...chunk, content: contextualContent }
         : chunk;
     }

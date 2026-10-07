@@ -10,6 +10,7 @@ export const documentStatuses = [
 ] as const;
 
 export const maxDocumentChunks = 512;
+export const maxDocumentChunkCharacters = 2_000;
 export const maxDocumentBytes = 10 * 1_024 * 1_024;
 
 export type DocumentStatus = (typeof documentStatuses)[number];

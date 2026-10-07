@@ -1,7 +1,6 @@
 import {
   createDocumentChunk,
   InvalidDocumentError,
-  maxDocumentChunks,
   type DocumentChunk
 } from "@/domain/document/document";
 import type { DocumentRepository } from "@/domain/document/document-repository";
@@ -72,11 +71,6 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
       const parts = chunkDocumentText(extracted.text, extracted.mimeType);
       if (parts.length === 0) {
         throw new InvalidDocumentError("document contains no extractable text");
-      }
-      if (parts.length > maxDocumentChunks) {
-        throw new InvalidDocumentError(
-          `document exceeds the ${maxDocumentChunks} chunk processing limit`
-        );
       }
       const embeddings = dependencies.embeddingService
         ? await embedDocumentParts(
