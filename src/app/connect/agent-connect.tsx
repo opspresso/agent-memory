@@ -195,6 +195,7 @@ function AgentTokenPanel({
   const [generatedToken, setGeneratedToken] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [statusRequestVersion, setStatusRequestVersion] = useState(0);
   const mutationVersion = useRef(0);
 
   useEffect(() => {
@@ -225,7 +226,12 @@ function AgentTokenPanel({
         }
       });
     return () => controller.abort();
-  }, [canManageToken, organizationSlug, t]);
+  }, [canManageToken, organizationSlug, statusRequestVersion, t]);
+
+  function reloadTokenStatus() {
+    mutationVersion.current += 1;
+    setStatusRequestVersion(mutationVersion.current);
+  }
 
   async function generateToken() {
     if (!organizationSlug) {
@@ -255,6 +261,7 @@ function AgentTokenPanel({
         revealable: true
       });
     } catch (caught) {
+      reloadTokenStatus();
       setError(
         caught instanceof Error
           ? caught.message
@@ -321,6 +328,7 @@ function AgentTokenPanel({
       mutationVersion.current += 1;
       setTokenStatus({ configured: false });
     } catch (caught) {
+      reloadTokenStatus();
       setError(
         caught instanceof Error
           ? caught.message
