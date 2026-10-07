@@ -121,7 +121,7 @@ export const en = {
   "guide.memory.note":
     "A change reason is optional. Editing preserves the previous version. If another person saves first, reload the current version before retrying. Archive creates a new version and removes the Memory from ordinary search.",
   "guide.documents.title": "Preserve originals and search their chunks.",
-  "guide.documents.body": "Upload UTF-8 text, Markdown, CSV, JSON, or XML from Documents. Choose a sharing scope and inspect processing status and source text. Ready means document search is available; AI knowledge extraction and verification continue separately.",
+  "guide.documents.body": "Upload text, PDF, Office, HTML, or EPUB files from Documents. Choose a sharing scope and inspect processing status and source text. Ready means document search is available; AI knowledge extraction and verification continue separately.",
   "guide.documents.note":
     "Pending and processing documents refresh automatically while the page is visible, for up to two minutes. Use Refresh after polling pauses. For a failed document, inspect the error and choose Retry processing when you have write permission. Archiving requires manage permission.",
   "guide.graph.title": "Follow relationships without losing the evidence.",
@@ -457,7 +457,7 @@ export const en = {
   "workspace.mapTitle": "Explore connected knowledge.",
   "workspace.mapCount": "{nodes} nodes · {edges} edges",
   "workspace.uploadTitle": "Ingest documents",
-  "workspace.uploadFormats": "UTF-8 text, Markdown, JSON, XML, CSV · up to 10 MiB",
+  "workspace.uploadFormats": "TXT, Markdown, CSV, JSON, XML, HTML, PDF, DOCX, PPTX, XLSX, XLS, EPUB · up to 10 MiB",
   "workspace.scope.user": "Personal · only me",
   "workspace.scope.team": "Team · share with the selected team",
   "workspace.scope.organization": "Organization · share with all members",

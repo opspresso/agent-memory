@@ -467,9 +467,9 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByRole("combobox", { name: "공유할 팀" }).click();
   await page.getByRole("option", { name: "E2E Team" }).click();
   await page.getByLabel("문서 파일").setInputFiles({
-    name: "team-guide.md",
-    mimeType: "text/markdown",
-    buffer: Buffer.from("# Team guide")
+    name: "team-guide.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4")
   });
   await page.route(
     `**/api/documents`,
@@ -479,6 +479,8 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
       expect(payload).toContain("team");
       expect(payload).toContain('name="teamId"');
       expect(payload).toContain(team.id);
+      expect(payload).toContain('filename="team-guide.pdf"');
+      expect(payload).toContain("application/pdf");
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({ id: "e2e-document", status: "pending" }),

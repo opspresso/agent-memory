@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-import { documentMimeTypes } from "@/domain/document/document";
+import { documentMimeTypes, isDocumentTextMimeType } from "@/domain/document/document-format";
 import { serializedJsonByteLength } from "@/domain/shared/json-size";
 import { memoryScopeSchema } from "./memory-schemas";
-import { maxDocumentBytes } from "./document-http";
+import { maxDocumentBytes } from "@/domain/document/document";
 
 const metadataSchema = z
   .record(z.string(), z.unknown())
@@ -17,9 +17,27 @@ export const documentIngestSchema = z.object({
   scope: memoryScopeSchema,
   title: z.string().trim().min(1).max(500),
   mimeType: z.enum(documentMimeTypes),
-  content: z.string().min(1).refine((value) => new TextEncoder().encode(value).byteLength <= maxDocumentBytes, "document exceeds 10 MiB"),
+  contentEncoding: z.enum(["utf8", "base64"]).default("utf8"),
+  content: z.string().min(1).max(Math.ceil(maxDocumentBytes / 3) * 4),
   sourceUri: z.string().trim().min(1).max(2048).optional(),
   metadata: metadataSchema.optional()
+}).superRefine((input, context) => {
+  if (input.contentEncoding === "utf8") {
+    if (!isDocumentTextMimeType(input.mimeType) && input.mimeType !== "text/html") {
+      context.addIssue({ code: "custom", path: ["contentEncoding"], message: "binary documents require base64 encoding" });
+    }
+    if (Buffer.byteLength(input.content, "utf8") > maxDocumentBytes) {
+      context.addIssue({ code: "custom", path: ["content"], message: "document exceeds 10 MiB" });
+    }
+  } else {
+    const decoded = Buffer.from(input.content, "base64");
+    if (decoded.toString("base64") !== input.content) {
+      context.addIssue({ code: "custom", path: ["content"], message: "document content must be canonical base64" });
+    }
+    if (decoded.byteLength > maxDocumentBytes) {
+      context.addIssue({ code: "custom", path: ["content"], message: "document exceeds 10 MiB" });
+    }
+  }
 });
 
 export const documentIdSchema = z.uuid();

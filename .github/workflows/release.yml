@@ -62,6 +62,7 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
+      - run: pnpm parser:install
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm db:init
       - run: pnpm verify

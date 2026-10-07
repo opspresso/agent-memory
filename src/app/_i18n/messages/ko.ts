@@ -123,7 +123,7 @@ export const ko: Messages = {
   "guide.memory.note":
     "변경 사유는 선택 사항이며 수정 전 version은 보존됩니다. 다른 사용자가 먼저 저장했다면 최신 version을 다시 불러온 뒤 저장합니다. 보관은 새 version으로 기록되고 일반 검색에서 제외됩니다.",
   "guide.documents.title": "원본은 보존하고, 검색은 chunk로 수행합니다.",
-  "guide.documents.body": "문서 수집에서 UTF-8 text, Markdown, CSV, JSON 또는 XML을 업로드합니다. 공유 범위를 선택하고 처리 상태와 원문을 확인합니다. 사용 가능(ready)은 문서 검색 준비가 끝났다는 뜻이며, AI 지식 추출·검증은 별도로 진행됩니다.",
+  "guide.documents.body": "문서 수집에서 텍스트, PDF, Office, HTML 또는 EPUB 파일을 업로드합니다. 공유 범위를 선택하고 처리 상태와 원문을 확인합니다. 사용 가능(ready)은 문서 검색 준비가 끝났다는 뜻이며, AI 지식 추출·검증은 별도로 진행됩니다.",
   "guide.documents.note":
     "처리 대기·처리 중 문서는 화면이 보이는 동안 최대 2분간 자동 갱신합니다. 중지 후에는 새로고침합니다. 실패한 문서는 오류를 확인한 뒤 쓰기 권한으로 처리 재시도를 선택합니다. 문서 보관에는 관리 권한이 필요합니다.",
   "guide.graph.title": "관계를 따라가되, 근거에서 멀어지지 않습니다.",
@@ -456,7 +456,7 @@ export const ko: Messages = {
   "workspace.mapTitle": "연결된 지식을 탐색합니다.",
   "workspace.mapCount": "{nodes} nodes · {edges} edges",
   "workspace.uploadTitle": "문서 수집",
-  "workspace.uploadFormats": "UTF-8 text, Markdown, JSON, XML, CSV · 최대 10 MiB",
+  "workspace.uploadFormats": "TXT, Markdown, CSV, JSON, XML, HTML, PDF, DOCX, PPTX, XLSX, XLS, EPUB · 최대 10 MiB",
   "workspace.scope.user": "개인 · 나만 사용",
   "workspace.scope.team": "팀 · 선택한 팀과 공유",
   "workspace.scope.organization": "조직 · 모든 조직 멤버와 공유",

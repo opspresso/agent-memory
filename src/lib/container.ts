@@ -28,7 +28,7 @@ import {
   createPostgresAiRequestLimiter,
   readDurableAiRequestLimits
 } from "@/infrastructure/ai/postgres-request-limiter";
-import { createPlainTextExtractor } from "@/infrastructure/document/plain-text-extractor";
+import { createMarkItDownTextExtractor } from "@/infrastructure/document/markitdown-text-extractor";
 import {
   createS3Client,
   createS3DocumentObjectStorage
@@ -198,7 +198,9 @@ export const documentObjectStorage = createS3DocumentObjectStorage({
   bucket: process.env.S3_BUCKET ?? "agent-memory",
   client: s3Client
 });
-export const documentTextExtractor = createPlainTextExtractor();
+export const documentTextExtractor = createMarkItDownTextExtractor({
+  pythonPath: process.env.DOCUMENT_PARSER_PYTHON || ".venv-document-parser/bin/python"
+});
 export const documentIngestionQueue = createPgBossDocumentIngestionQueue(
   process.env.DATABASE_URL ?? defaultDatabaseUrl,
   (error) => logger.error({ err: error }, "pg-boss error")

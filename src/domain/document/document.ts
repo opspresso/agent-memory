@@ -9,16 +9,8 @@ export const documentStatuses = [
   "archived"
 ] as const;
 
-export const documentMimeTypes = [
-  "application/json",
-  "application/xml",
-  "text/csv",
-  "text/markdown",
-  "text/plain",
-  "text/xml"
-] as const;
-
 export const maxDocumentChunks = 512;
+export const maxDocumentBytes = 10 * 1_024 * 1_024;
 
 export type DocumentStatus = (typeof documentStatuses)[number];
 export type DocumentScope = ScopedResource;

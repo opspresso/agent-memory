@@ -10,15 +10,14 @@ import {
   DocumentQuotaExceededError
 } from "@/application/document/upload-document";
 import type { OrganizationAccess } from "@/domain/identity/organization-access";
-import { createDocument } from "@/domain/document/document";
+import { createDocument, InvalidDocumentError } from "@/domain/document/document";
 import type { DocumentRepository } from "@/domain/document/document-repository";
 import type {
   DocumentIngestionQueue,
   DocumentObjectStorage
 } from "@/domain/document/document-services";
 import {
-  createPlainTextExtractor,
-  UnsupportedDocumentTypeError
+  createPlainTextExtractor
 } from "@/infrastructure/document/plain-text-extractor";
 
 const now = new Date("2026-08-26T00:00:00.000Z");
@@ -62,7 +61,7 @@ function objectStorage(
 }
 
 describe("document processing", () => {
-  it("extracts supported UTF-8 text and normalizes JSON", async () => {
+  it("extracts supported UTF-8 text without reparsing JSON", async () => {
     const extractor = createPlainTextExtractor();
 
     await expect(
@@ -70,10 +69,10 @@ describe("document processing", () => {
         new TextEncoder().encode('{"rollback":true}'),
         "application/json; charset=utf-8"
       )
-    ).resolves.toBe('{\n  "rollback": true\n}');
+    ).resolves.toEqual({ text: '{"rollback":true}', mimeType: "application/json" });
     await expect(
       extractor.extract(new Uint8Array([0, 1, 2]), "application/pdf")
-    ).rejects.toBeInstanceOf(UnsupportedDocumentTypeError);
+    ).rejects.toBeInstanceOf(InvalidDocumentError);
   });
 
   it("chunks normalized text deterministically with bounded overlap", () => {
@@ -561,7 +560,7 @@ describe("document processing", () => {
         completeProcessing
       }),
       textExtractor: {
-        extract: vi.fn().mockResolvedValue("Rollback safely")
+        extract: vi.fn().mockResolvedValue({ text: "Rollback safely", mimeType: "text/plain" })
       },
       embeddingService: {
         embed: vi.fn(),
@@ -621,7 +620,7 @@ describe("document processing", () => {
         extract: vi
           .fn()
           .mockResolvedValue(
-            Array.from({ length: 130 }, () => "x".repeat(2_000)).join("\n")
+            { text: Array.from({ length: 130 }, () => "x".repeat(2_000)).join("\n"), mimeType: "text/plain" }
           )
       }
     });
@@ -759,7 +758,7 @@ describe("document processing", () => {
         extract: vi
           .fn()
           .mockResolvedValue(
-            Array.from({ length: 513 }, () => "x".repeat(2_000)).join("\n")
+            { text: Array.from({ length: 513 }, () => "x".repeat(2_000)).join("\n"), mimeType: "text/plain" }
           )
       }
     });

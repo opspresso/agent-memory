@@ -1,4 +1,5 @@
 import type { DocumentRepository } from "@/domain/document/document-repository";
+import { isDocumentTextMimeType } from "@/domain/document/document-format";
 import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
 import type { KnowledgeExtractionService } from "@/domain/knowledge/knowledge-extraction-service";
@@ -54,7 +55,9 @@ export function buildGenerateKnowledgeCandidate(
     const extraction = await dependencies.extractionService.extract({
       content: source.chunk.content,
       documentTitle: source.document.title,
-      mimeType: source.document.mimeType,
+      mimeType: typeof source.chunk.metadata.textMimeType === "string" &&
+        isDocumentTextMimeType(source.chunk.metadata.textMimeType)
+        ? source.chunk.metadata.textMimeType : source.document.mimeType,
       quotaKey: {
         organizationId,
         userId: source.document.createdBy

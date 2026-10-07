@@ -13,6 +13,7 @@ import { IconCloudUpload } from "@tabler/icons-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
+import { documentFileAccept } from "@/domain/document/document-format";
 
 import { useT } from "../_i18n/provider";
 import {
@@ -212,7 +213,7 @@ function DocumentUploadView({ onUploaded, onUploadingChange }: DocumentUploadPro
               placeholder={t("workspace.documentTitlePlaceholder")}
             />
             <input
-              accept=".txt,.md,.json,.xml,.csv,text/plain,text/markdown,application/json"
+              accept={documentFileAccept}
               aria-label={t("workspace.documentFile")}
               name="file"
               required

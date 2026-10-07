@@ -3,6 +3,7 @@
   "version": "0.28.19",
   "private": true,
   "scripts": {
+    "parser:install": "python3 -m venv .venv-document-parser && .venv-document-parser/bin/python -m pip install -r src/infrastructure/document/requirements.txt",
     "dev": "WATCHPACK_POLLING=true next dev --port 3100",
     "build": "next build",
     "start": "next start",

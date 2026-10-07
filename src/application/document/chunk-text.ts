@@ -1,3 +1,5 @@
+import { InvalidDocumentError } from "@/domain/document/document";
+
 export interface TextChunk {
   readonly content: string;
   readonly start: number;
@@ -270,7 +272,14 @@ function flattenJson(value: unknown): string[] {
 }
 
 function chunkJson(input: string): readonly TextChunk[] {
-  const structured = flattenJson(JSON.parse(input)).join("\n");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input);
+  } catch {
+    // JSON.parse messages can include source text, which must not reach worker logs.
+    throw new InvalidDocumentError("document contains invalid JSON");
+  }
+  const structured = flattenJson(parsed).join("\n");
   return chunkText(structured);
 }
 

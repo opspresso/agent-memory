@@ -75,6 +75,22 @@ async function connectedClient(
 }
 
 describe("agent memory MCP server", () => {
+  it("decodes binary ingestion without changing the original bytes", async () => {
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0, 255]);
+    const uploadDocument = vi.fn().mockResolvedValue(createDocument({
+      id: "40000000-0000-4000-8000-000000000001", scope: { kind: "user", organizationId: access.organizationId, userId: access.userId },
+      title: "Report", objectKey: "private", checksum: "a".repeat(64), mimeType: "application/pdf", sizeBytes: bytes.length,
+      createdBy: access.userId, now: new Date()
+    }));
+    const client = await connectedClient(operations({ uploadDocument, getDocument: vi.fn(), retryDocument: vi.fn() }));
+    const result = await client.callTool({ name: "document_ingest", arguments: {
+      idempotencyKey: "binary", scope: { kind: "user" }, title: "Report", mimeType: "application/pdf",
+      contentEncoding: "base64", content: Buffer.from(bytes).toString("base64")
+    } });
+    expect(result.isError).not.toBe(true);
+    expect(uploadDocument).toHaveBeenCalledWith(expect.objectContaining({ content: bytes, mimeType: "application/pdf", access }));
+  });
+
   it("exposes scoped document ingestion, status and attempt-fenced retry", async () => {
     const document = createDocument({ id: "40000000-0000-4000-8000-000000000001",
       scope: { kind: "user", organizationId: access.organizationId, userId: access.userId }, title: "Transcript",

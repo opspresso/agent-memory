@@ -1,3 +1,5 @@
+import type { DocumentTextMimeType } from "./document-format";
+
 export const documentProcessingLeaseMilliseconds = 15 * 60 * 1_000;
 
 export type DocumentQueueEnqueueResult = "queued" | "already_queued";
@@ -17,7 +19,12 @@ export interface DocumentIngestionQueue {
 }
 
 export interface DocumentTextExtractor {
-  extract(content: Uint8Array, mimeType: string): Promise<string>;
+  extract(content: Uint8Array, mimeType: string): Promise<ExtractedDocumentText>;
+}
+
+export interface ExtractedDocumentText {
+  readonly text: string;
+  readonly mimeType: DocumentTextMimeType;
 }
 
 export interface DocumentKnowledgeEnrichmentQueue {

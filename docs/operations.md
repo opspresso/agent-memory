@@ -70,11 +70,12 @@ Prod 승인 위치는 Actions 실행 화면의 **Review deployments → prod →
 
 ### 로컬 개발
 
-Node.js 24, pnpm 11, Docker와 Docker Compose가 필요하다. 다음 명령은 새 로컬 설치를 기준으로 저장소 루트에서 실행한다. `.env.local`이 있으면 복사하지 말고 기존 파일을 사용한다.
+Node.js 24, pnpm 11, Python 3.12–3.14, Docker와 Docker Compose가 필요하다. 다음 명령은 새 로컬 설치를 기준으로 저장소 루트에서 실행한다. `.env.local`이 있으면 복사하지 말고 기존 파일을 사용한다.
 
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
+pnpm parser:install
 cp .env.example .env.local
 ```
 
@@ -151,6 +152,7 @@ k3s의 Neo4j 서비스·credential 참조·volume 설정은 `../argocd-env-demo/
 | Graph | `NEO4J_DATABASE` | Neo4j database 이름. 기본값 `neo4j` |
 | Startup | `NODE_ENV` | `production`이면 운영 필수 변수 검증을 활성화 |
 | Build | `NEXT_DIST_DIR` | Next.js 출력 디렉터리. 기본값 `.next`, Playwright 서버는 `.next-e2e` 사용 |
+| Parser | `DOCUMENT_PARSER_PYTHON` | 문서 변환용 Python 실행 파일. Host 기본값 `.venv-document-parser/bin/python`, Docker는 `/opt/document-parser/bin/python`. Process 환경에서만 설정하며 명령 인자를 포함하지 않는다. |
 
 ### 인증과 접근 정책
 
@@ -265,6 +267,7 @@ k3s의 Neo4j 서비스·credential 참조·volume 설정은 `../argocd-env-demo/
 | 적용 단위 | 변수 | 반영 시점 |
 | --- | --- | --- |
 | Bootstrap env | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `NEO4J_*`, `NODE_ENV` | DB 접근·복호화·시작 방식에 먼저 필요. Override 불가 |
+| Parser env | `DOCUMENT_PARSER_PYTHON` | 문서 converter 실행 파일. Override 불가, 변경 후 process 재시작 |
 | 요청 시 다시 읽는 설정 | `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`, `METRICS_BEARER_TOKEN`, `EMBEDDING_MIN_SCORE` | 저장한 instance에서 즉시 적용. 다른 instance는 최대 5초 cache 후 반영 |
 | Process 초기화 설정 | 인증 provider, AI, document worker·quota, S3, logging, telemetry 등 나머지 설정 | 사용하는 모든 instance 재시작 필요 |
 | Framework·검사 환경 | `NEXT_DIST_DIR`, `NEXT_RUNTIME`, `NEXT_PHASE`, `VERCEL`, `CI`, `E2E_*` 등 | 전역 설정 화면에서 관리하지 않음 |
@@ -325,7 +328,7 @@ pnpm eval:knowledge --variants entity-first --verify --corpus evaluation/knowled
 
 [합성 이력서 평가 기록](../evaluation/knowledge/resume-comparison.json)은 개체 18개 중 17개와 정답 관계 10개 전부를 승인했다. 승인한 오답 개체·관계·별칭과 잘못된 병합은 없었고 요청 오류도 없었다. 누락한 개체는 근무하지 않았다는 부정문에만 등장하는 회사다. 이 6개 진단 사례를 일반 문서의 정확도로 해석하지 마라.
 
-LlamaIndex와 비교하려면 Python 3.12 이상에서 평가 전용 환경을 준비한다. Python은 application runtime 의존성이 아니다.
+LlamaIndex와 비교하려면 Python 3.12 이상에서 평가 전용 환경을 준비한다. 문서 parser의 `.venv-document-parser`와 별도로 설치한다.
 
 ```bash
 python3 -m venv .venv-knowledge-eval
@@ -416,6 +419,19 @@ AWS S3에서는 `S3_BUCKET`과 `S3_REGION`을 설정하고 `S3_ENDPOINT`, `S3_AC
 ### 업로드와 처리
 
 업로드 API는 원본을 S3 호환 storage에 기록한 뒤 pg-boss job을 queue에 넣고 `202`를 반환한다. Worker가 비활성화되어 있으면 문서는 `pending`에 머무른다.
+
+PDF·Office·HTML·EPUB 변환에는 Python 3.12–3.14와 고정된 MarkItDown 의존성이 필요하다. Host에서는 저장소 루트에서 `pnpm parser:install`을 실행한다. Docker image에는 parser가 포함돼 있으므로 별도 sidecar나 실행 중 다운로드가 필요하지 않다. Compose는 PostgreSQL·MinIO·Neo4j만 실행하며 host parser 설치를 대신하지 않는다. 텍스트·Markdown·CSV·JSON·XML은 Python 없이 처리한다.
+
+Converter는 업로드 bytes만 읽고 원격 URL·plugin·LLM을 호출하지 않는다. 원본은 그대로 보관하며 변환된 Markdown을 검색·지식 추출에 사용한다. 변환 process는 최대 60초, 출력 8 MiB다. ZIP 기반 문서의 압축 해제 크기는 64 MiB, 항목 수는 4,096개로 제한한다. Linux에서는 process 주소 공간도 2 GiB로 제한한다. 기본 worker는 변환을 최대 2개 동시에 수행한다.
+
+| 변환 실패 | 다음 행동 |
+| --- | --- |
+| Parser 실행·의존성 오류 | Worker의 `DOCUMENT_PARSER_PYTHON` 경로를 확인하고 host는 `pnpm parser:install`, Docker는 현재 Dockerfile로 image를 빌드한다. 복구 후 같은 문서의 retry를 요청한다. |
+| 손상·암호화·형식 불일치 | 원본을 지원 형식으로 다시 저장하고 암호를 해제한 뒤 새 파일을 업로드한다. |
+| 추출 본문 없음 | 스캔 PDF라면 OCR로 텍스트를 추가한 뒤 새 파일을 업로드한다. |
+| 시간·출력·압축 해제·chunk 한도 초과 | 원본을 작은 문서로 나누고 다시 업로드한다. |
+
+지원 형식은 [문서 업로드 API](api.md#업로드)를 따른다. 원본 내용이나 외부 parser traceback은 공개 오류·worker 로그에 포함하지 않는다.
 
 원본을 저장한 뒤 document row를 만드는 transaction이 organization advisory lock 아래에서 누적 storage, `pending`·`processing` backlog, 사용자별 최근 1시간 업로드 수를 함께 검사한다. 한도를 넘으면 row를 만들지 않고 방금 저장한 object를 제거하며 API는 `429`를 반환한다. 여러 application replica가 같은 PostgreSQL quota를 공유한다.
 

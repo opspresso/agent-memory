@@ -5,7 +5,7 @@ import {
   DocumentAccessDeniedError,
   DocumentQuotaExceededError
 } from "@/application/document/upload-document";
-import { InvalidDocumentError, type Document } from "@/domain/document/document";
+import { InvalidDocumentError, maxDocumentBytes, type Document } from "@/domain/document/document";
 import { IngestionConflictError } from "@/domain/shared/ingestion-receipt";
 import type { DocumentSearchHit } from "@/domain/document/document-repository";
 
@@ -20,7 +20,6 @@ export function parseDocumentScopeEtag(value: string): string | null {
   return new Date(match[1]!).toISOString() === match[1] ? match[1] : null;
 }
 
-export const maxDocumentBytes = 10 * 1_024 * 1_024;
 export const maxDocumentRequestBytes = maxDocumentBytes + 64 * 1_024;
 
 export class DocumentUploadTooLargeError extends Error {

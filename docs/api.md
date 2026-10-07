@@ -419,13 +419,32 @@ Revision 항목은 `memoryId`, `version`, `title`, `content`, `source`, `accessG
 | `sourceUri` | 아니요 | 원본 URI, 최대 2,048자 |
 | `metadata` | 아니요 | JSON object 문자열, 최대 32 KiB |
 
-지원 MIME type은 `text/plain`, `text/markdown`, `text/csv`, `application/json`, `application/xml`, `text/xml`이다. `teamId`는 team scope에서만, `userId`는 user scope에서만 허용한다.
+지원 형식과 원본 MIME은 다음과 같다. `teamId`는 team scope에서만, `userId`는 user scope에서만 허용한다.
+
+| 형식 | MIME |
+| --- | --- |
+| TXT | `text/plain` |
+| Markdown | `text/markdown` |
+| CSV | `text/csv` |
+| JSON | `application/json` |
+| XML | `application/xml`, `text/xml` |
+| HTML | `text/html` |
+| PDF | `application/pdf` |
+| DOCX | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+| PPTX | `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+| XLSX | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| XLS | `application/vnd.ms-excel` |
+| EPUB | `application/epub+zip` |
+
+텍스트 파일은 UTF-8을 사용한다. 파일 MIME이 비어 있거나 `application/octet-stream`·`application/zip`이면 지원 확장자로 결정한다. Markdown·CSV·JSON·XML·HTML 파일의 `text/plain`도 확장자로 보정한다. 명시한 지원 MIME과 지원 확장자가 서로 다른 형식을 가리키면 `400`이다. MIME을 결정해 업로드한 뒤 worker가 실제 원본 구조를 검사하므로 손상·암호화·잘못된 형식의 파일은 `failed`가 된다. `sourceUri`의 원격 파일을 내려받거나 이미지 OCR을 수행하지 않는다.
 
 | 제한 | 동작 |
 | --- | --- |
 | 파일 10 MiB, multipart 전체 10 MiB + 64 KiB | 초과 시 `413`. `Content-Length`와 실제 stream을 모두 검사한다. |
 | 조직 누적 storage·processing backlog·사용자 최근 1시간 upload quota | 초과 시 저장한 원본을 정리하고 `429`를 반환한다. |
 | 문서당 512개 chunk | 처리 중 초과 시 provider 호출 전에 `failed`로 전환한다. |
+| 파일 변환 60초·출력 8 MiB | PDF·Office·HTML·EPUB 변환 중 초과하면 `failed`로 전환한다. |
+| ZIP 기반 문서의 압축 해제 크기 64 MiB·항목 4,096개 | DOCX·PPTX·XLSX·EPUB가 초과하면 변환 전에 `failed`로 전환한다. |
 
 업로드 성공은 `202`, Document JSON과 상태 조회용 `Location`을 반환한다. Queue 등록에 실패해도 저장된 document ID와 `failed` 상태를 반환하므로 같은 ID로 retry할 수 있다.
 
@@ -823,7 +842,7 @@ Token은 client의 secret 또는 environment variable 기능으로 주입하고 
 
 `GET /api/document-chunks/{chunkId}`는 후보 검토와 Graph 출처 확인을 위한 원문을 반환한다. 응답은 `{ document, chunk: { id, ordinal, content, metadata } }`이다. Document는 기존 공개 응답을 사용하고 object key나 embedding은 노출하지 않는다. 같은 조직의 ready 문서이며 현재 사용자가 source를 읽을 수 있을 때만 반환한다. 없는 chunk, 권한 없는 source, ready가 아닌 source는 모두 `404`로 처리한다. 원본 파일 download endpoint가 아니라 처리된 chunk 원문 조회다.
 
-Markdown chunk의 `content`에는 문맥을 보존하기 위한 원문의 상위 제목이 포함될 수 있다. `metadata.start/end`는 정규화한 원본의 본문 범위이며, 반복한 제목의 범위는 선택형 `metadata.contextSpans: [{ start, end }]`로 제공한다.
+Chunk의 `metadata.textMimeType`은 추출 본문의 MIME이다. Document의 `mimeType`은 원본 MIME이다. PDF·Office·HTML·EPUB의 본문은 `text/markdown`이다. Markdown chunk의 `content`에는 문맥을 보존하기 위한 상위 제목이 포함될 수 있다. `metadata.start/end`는 줄바꿈과 앞뒤 공백을 정규화한 추출 본문의 문자 범위이며, 반복한 제목의 범위는 선택형 `metadata.contextSpans: [{ start, end }]`로 제공한다. 원본 bytes나 PDF page 좌표가 아니다. JSON은 경로·값으로 펼친 본문의 범위를 사용한다.
 
 CSV도 정규화한 원문의 record 범위를 `start/end`로 보존한다. 빈 record를 내용에서 제외해도 뒤 record의 좌표는 유지하며, 후속 chunk에 반복한 header 범위는 `contextSpans`에 기록한다. 큰 record를 일반 텍스트로 분할한 경우에는 header를 반복하지 않는다.
 
@@ -843,11 +862,13 @@ Memory 생성 HTTP API와 MCP `remember`는 선택적 `idempotencyKey`(trim 후 
 
 | Tool | 입력 | 응답 |
 | --- | --- | --- |
-| `document_ingest` | `idempotencyKey`, `scope`, `title`, `mimeType`, UTF-8 `content`, 선택적 `sourceUri`·`metadata` | `{ document }` |
+| `document_ingest` | `idempotencyKey`, `scope`, `title`, `mimeType`, `content`, 선택적 `contentEncoding`·`sourceUri`·`metadata` | `{ document }` |
 | `document_ingest_status` | `documentId` | `{ document }`, 처리 상태·processingAttempts 포함 |
 | `document_ingest_retry` | `documentId`, `idempotencyKey`, 관측한 `expectedAttempts` | `{ document }` |
 
-Content는 기존 문서 MIME과 10 MiB 제한을 적용한다. metadata는 32 KiB다. MCP HTTP JSON 본문은
+`contentEncoding`은 `utf8`(기본값) 또는 `base64`다. `utf8`은 TXT·Markdown·CSV·JSON·XML·HTML에 사용한다. PDF·DOCX·PPTX·XLSX·XLS·EPUB는 원본 bytes를 표준 base64로 인코딩하고 `contentEncoding: "base64"`를 지정한다. Base64는 공백 없이 필요한 padding을 포함해야 한다. 잘못된 인코딩은 저장 전에 거부한다. 같은 bytes는 인코딩 방식과 관계없이 같은 idempotency payload로 비교한다.
+
+Content는 위 문서 MIME과 **디코딩 후 원본 10 MiB** 제한을 적용한다. metadata는 32 KiB다. MCP HTTP JSON 본문은
 문자 escape와 envelope를 포함해 `6 × maxDocumentBytes + 512 KiB`로 제한한다. 일반 HTTP JSON
 본문의 1 MiB 제한은 유지한다.
 
