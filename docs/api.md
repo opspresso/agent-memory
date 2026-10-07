@@ -521,6 +521,8 @@ Node 생성 입력은 `scope`, `kind`, `canonicalName`, `source`와 선택형 `s
 
 생성 요청의 `source`는 `{ "memoryId": UUID }` 또는 `{ "chunkId": UUID }` 중 정확히 하나만 포함한다. 호출자는 source를 읽을 수 있어야 하며 graph resource를 source보다 넓은 scope로 만들 수 없다. Canonical node·edge는 여러 근거를 누적하며 응답의 `sources` 배열로 반환한다. 각 배열 항목은 정확히 하나의 Memory 또는 document chunk를 참조한다.
 
+저장 transaction에서 출처의 상태·유효기간·scope를 다시 확인한다. 요청 처리 중 문서가 `ready` 상태를 벗어나거나 Memory가 만료되는 등 출처를 더 이상 사용할 수 없으면 `409`를 반환한다. 같은 node·edge에 다른 유효한 출처가 있어도 사용할 수 없는 새 출처를 연결하지 않는다.
+
 Memory를 근거로 두 node와 edge를 만드는 흐름은 다음과 같다.
 
 ```bash
