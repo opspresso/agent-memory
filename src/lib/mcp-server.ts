@@ -41,6 +41,7 @@ import { publicMemory } from "./memory-http";
 import { createMemorySchema } from "./memory-schemas";
 import { resolveScopedResource } from "./scoped-resource";
 import { logger } from "./observability";
+import { mcpToolNames } from "./mcp-tool-names";
 
 export interface AgentMemoryMcpOperations {
   uploadDocument?(input: UploadDocumentInput): Promise<Document>;
@@ -138,7 +139,7 @@ export function createAgentMemoryMcpServer(
   const server = new McpServer({ name: "agent-memory", version: appVersion });
 
   if (operations.uploadDocument && operations.getDocument && operations.retryDocument) {
-    server.registerTool("document_ingest", {
+    server.registerTool(mcpToolNames.documentIngest, {
       title: "Ingest a document", description: "Store a scoped document for retrieval. Use UTF-8 content for text or contentEncoding=base64 for PDF, Office, and EPUB files. Replays with the same idempotencyKey return the existing document. Check document_ingest_status until ready.",
       inputSchema: documentIngestSchema, annotations: { idempotentHint: true }
     }, async (input) => executeMcpTool(async () => {
@@ -149,11 +150,11 @@ export function createAgentMemoryMcpServer(
         ...(input.sourceUri ? { sourceUri: input.sourceUri } : {}), ...(input.metadata ? { metadata: input.metadata } : {}) });
       return jsonResult({ document: publicDocument(document) });
     }));
-    server.registerTool("document_ingest_status", {
+    server.registerTool(mcpToolNames.documentIngestStatus, {
       title: "Read document ingestion status", description: "Read an accessible document's processing status and attempt count.",
       inputSchema: { documentId: z.uuid() }, annotations: { readOnlyHint: true, idempotentHint: true }
     }, async ({ documentId }) => executeMcpTool(async () => jsonResult({ document: publicDocument(await operations.getDocument!(access, documentId)) })));
-    server.registerTool("document_ingest_retry", {
+    server.registerTool(mcpToolNames.documentIngestRetry, {
       title: "Retry document ingestion", description: "Retry a failed document at its observed processingAttempts. Reuse the same key and expectedAttempts when a response is lost.",
       inputSchema: { documentId: z.uuid(), idempotencyKey: z.string().trim().min(1).max(256), expectedAttempts: z.number().int().min(0) },
       annotations: { idempotentHint: true }
@@ -163,7 +164,7 @@ export function createAgentMemoryMcpServer(
   }
 
   server.registerTool(
-    "context_search",
+    mcpToolNames.contextSearch,
     {
       title: "Search unified agent context",
       description:
@@ -178,7 +179,7 @@ export function createAgentMemoryMcpServer(
   );
 
   server.registerTool(
-    "recall",
+    mcpToolNames.recall,
     {
       title: "Recall long-term memories",
       description:
@@ -197,7 +198,7 @@ export function createAgentMemoryMcpServer(
   );
 
   server.registerTool(
-    "remember",
+    mcpToolNames.remember,
     {
       title: "Create agent memory",
       description: "Create a scoped, durable long-term memory with provenance.",
@@ -228,7 +229,7 @@ export function createAgentMemoryMcpServer(
   );
 
   server.registerTool(
-    "forget",
+    mcpToolNames.forget,
     {
       title: "Forget a long-term memory",
       description:
@@ -247,7 +248,7 @@ export function createAgentMemoryMcpServer(
   );
 
   server.registerTool(
-    "document_search",
+    mcpToolNames.documentSearch,
     {
       title: "Search RAG documents",
       description: "Search accessible processed document chunks.",
@@ -261,7 +262,7 @@ export function createAgentMemoryMcpServer(
   );
 
   server.registerTool(
-    "knowledge_search",
+    mcpToolNames.knowledgeSearch,
     {
       title: "Search knowledge graph",
       description: "Search accessible knowledge graph nodes.",
@@ -275,7 +276,7 @@ export function createAgentMemoryMcpServer(
   );
 
   server.registerTool(
-    "knowledge_neighborhood",
+    mcpToolNames.knowledgeNeighborhood,
     {
       title: "Traverse knowledge graph",
       description:

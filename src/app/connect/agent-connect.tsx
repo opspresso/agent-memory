@@ -16,6 +16,7 @@ import { IconCheck, IconCopy } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 
 import { organizationMemoryServerName } from "@/lib/organization-memory-server-name";
+import { mcpToolNames } from "@/lib/mcp-tool-names";
 
 import { WorkspaceHeader } from "../workspace-components";
 
@@ -175,9 +176,7 @@ function McpEndpointPanel({ mcpEndpoint, origin, organizationSlug }: {
             </CopyButton>
           </Group>
           <Text c="dimmed" size="sm">
-            context_search · recall · remember · forget ·
-            document_ingest · document_ingest_status · document_ingest_retry ·
-            document_search · knowledge_search · knowledge_neighborhood
+            {Object.values(mcpToolNames).join(" · ")}
           </Text>
         </Stack>
       </Paper>

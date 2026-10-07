@@ -23,6 +23,7 @@ import {
   IconSparkles
 } from "@tabler/icons-react";
 import type { Metadata } from "next";
+import { mcpToolNames } from "@/lib/mcp-tool-names";
 
 import type { MessageKey } from "../_i18n/messages/en";
 import { getT } from "../_i18n/server";
@@ -260,15 +261,7 @@ export default async function GuidePage() {
                   <Text size="sm">{t("guide.connect.note")}</Text>
                 </Paper>
                 <div className={classes.toolList}>
-                  {[
-                    "context_search",
-                    "recall",
-                    "remember",
-                    "forget",
-                    "document_search",
-                    "knowledge_search",
-                    "knowledge_neighborhood"
-                  ].map((tool) => <Code key={tool}>{tool}</Code>)}
+                  {Object.values(mcpToolNames).map((tool) => <Code key={tool}>{tool}</Code>)}
                 </div>
               </section>
 
