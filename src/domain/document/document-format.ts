@@ -5,29 +5,28 @@ export const documentTextMimeTypes = [
 export type DocumentTextMimeType = (typeof documentTextMimeTypes)[number];
 
 export const documentFormats = {
-  "application/json": { extensions: [".json"], textMimeType: "application/json", parser: "native" },
-  "application/xml": { extensions: [".xml"], textMimeType: "application/xml", parser: "native" },
-  "text/xml": { extensions: [], textMimeType: "text/xml", parser: "native" },
-  "text/csv": { extensions: [".csv"], textMimeType: "text/csv", parser: "native" },
-  "text/markdown": { extensions: [".md", ".markdown"], textMimeType: "text/markdown", parser: "native" },
-  "text/plain": { extensions: [".txt"], textMimeType: "text/plain", parser: "native" },
-  "text/html": { extensions: [".html", ".htm"], textMimeType: "text/markdown", parser: "markitdown" },
-  "application/pdf": { extensions: [".pdf"], textMimeType: "text/markdown", parser: "markitdown" },
+  "application/json": { extensions: [".json"], textMimeType: "application/json" },
+  "application/xml": { extensions: [".xml"], textMimeType: "application/xml" },
+  "text/xml": { extensions: [], textMimeType: "text/xml" },
+  "text/csv": { extensions: [".csv"], textMimeType: "text/csv" },
+  "text/markdown": { extensions: [".md", ".markdown"], textMimeType: "text/markdown" },
+  "text/plain": { extensions: [".txt"], textMimeType: "text/plain" },
+  "text/html": { extensions: [".html", ".htm"], textMimeType: "text/markdown" },
+  "application/pdf": { extensions: [".pdf"], textMimeType: "text/markdown" },
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
-    extensions: [".docx"], textMimeType: "text/markdown", parser: "markitdown"
+    extensions: [".docx"], textMimeType: "text/markdown"
   },
   "application/vnd.openxmlformats-officedocument.presentationml.presentation": {
-    extensions: [".pptx"], textMimeType: "text/markdown", parser: "markitdown"
+    extensions: [".pptx"], textMimeType: "text/markdown"
   },
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
-    extensions: [".xlsx"], textMimeType: "text/markdown", parser: "markitdown"
+    extensions: [".xlsx"], textMimeType: "text/markdown"
   },
-  "application/vnd.ms-excel": { extensions: [".xls"], textMimeType: "text/markdown", parser: "markitdown" },
-  "application/epub+zip": { extensions: [".epub"], textMimeType: "text/markdown", parser: "markitdown" }
+  "application/vnd.ms-excel": { extensions: [".xls"], textMimeType: "text/markdown" },
+  "application/epub+zip": { extensions: [".epub"], textMimeType: "text/markdown" }
 } as const satisfies Record<string, {
   readonly extensions: readonly string[];
   readonly textMimeType: DocumentTextMimeType;
-  readonly parser: "native" | "markitdown";
 }>;
 
 export type DocumentMimeType = keyof typeof documentFormats;

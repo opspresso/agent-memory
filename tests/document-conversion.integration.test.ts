@@ -54,7 +54,7 @@ describe("binary document ingestion and retrieval", () => {
     await container?.stop();
   });
 
-  it.each(Object.entries(documentFormats).filter(([, format]) => format.parser === "markitdown"))(
+  it.each(Object.entries(documentFormats).filter(([mimeType, format]) => mimeType !== format.textMimeType))(
     "queues, converts and searches %s within the original access scope", async (mimeType, format) => {
       const content = await readFile(resolve("tests/fixtures/documents", `sample${format.extensions[0]}`));
       const upload = buildUploadDocument({ repository, objectStorage, queue, clock: () => new Date(), generateId: randomUUID,

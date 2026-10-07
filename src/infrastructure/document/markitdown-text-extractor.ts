@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 
 import { InvalidDocumentError } from "@/domain/document/document";
-import { documentFormats, isDocumentMimeType } from "@/domain/document/document-format";
+import { documentFormats, isDocumentMimeType, isDocumentTextMimeType } from "@/domain/document/document-format";
 import type { DocumentTextExtractor, ExtractedDocumentText } from "@/domain/document/document-services";
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
 
@@ -32,7 +32,8 @@ export function createMarkItDownTextExtractor(options: MarkItDownOptions): Docum
     async extract(content, mimeType) {
       const normalized = mimeType.split(";", 1)[0]!.trim().toLowerCase();
       if (!isDocumentMimeType(normalized)) throw new InvalidDocumentError("unsupported document MIME type");
-      if (documentFormats[normalized].parser === "native") return plainTextExtractor.extract(content, normalized);
+      if (isDocumentTextMimeType(normalized)) return plainTextExtractor.extract(content, normalized);
+      const outputMimeType = documentFormats[normalized].textMimeType;
       return new Promise<ExtractedDocumentText>((resolveResult, reject) => {
         const child = spawn(options.pythonPath, ["-I", scriptPath, normalized], {
           shell: false,
@@ -75,7 +76,7 @@ export function createMarkItDownTextExtractor(options: MarkItDownOptions): Docum
           }
           if (response && typeof response === "object") {
             if (code === 0 && "text" in response && typeof response.text === "string" &&
-                "mimeType" in response && response.mimeType === "text/markdown") {
+                "mimeType" in response && response.mimeType === outputMimeType) {
               return resolveResult({ text: response.text, mimeType: response.mimeType });
             }
             if (code === 2 && "error" in response && typeof response.error === "string" &&

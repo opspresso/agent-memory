@@ -16,7 +16,7 @@ const parser = createMarkItDownTextExtractor({ pythonPath });
 const fixture = (name: string) => readFile(resolve("tests/fixtures/documents", name));
 
 describe("uploaded document conversion", () => {
-  const convertedFormats = Object.entries(documentFormats).filter(([, format]) => format.parser === "markitdown");
+  const convertedFormats = Object.entries(documentFormats).filter(([mimeType, format]) => mimeType !== format.textMimeType);
   it.each(convertedFormats)("extracts a real %s file as Markdown", async (mimeType, format) => {
     const result = await parser.extract(await fixture(`sample${format.extensions[0]}`), mimeType);
     expect(result.mimeType).toBe("text/markdown");
