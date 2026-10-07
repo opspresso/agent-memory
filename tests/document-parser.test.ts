@@ -85,6 +85,20 @@ describe("uploaded document conversion", () => {
     });
     expect(document.mimeType).toBe(mimeType);
   });
+
+  it("keeps spreadsheet column names and complete rows in every search chunk", async () => {
+    const extracted = await parser.extract(await fixture("table.xlsx"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    const chunks = chunkDocumentText(extracted.text, extracted.mimeType);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.content).toContain("## Inventory");
+      expect(chunk.content).toContain("| Product | Owner |");
+      expect(chunk.content.length).toBeLessThanOrEqual(2_000);
+    }
+    for (let index = 0; index < 180; index += 1) {
+      expect(chunks.filter((chunk) => chunk.content.includes(`| Orion-${index} | Owner-${index} |`))).toHaveLength(1);
+    }
+  });
 });
 
 describe("parser process boundary", () => {

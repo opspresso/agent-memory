@@ -41,6 +41,13 @@ workbook.active.append(["Orion", "김하늘"])
 workbook.create_sheet("Second sheet").append(["Polaris", "박별"])
 workbook.save(ROOT / "sample.xlsx")
 
+long_table = openpyxl.Workbook()
+long_table.active.title = "Inventory"
+long_table.active.append(["Product", "Owner"])
+for index in range(180):
+    long_table.active.append([f"Orion-{index}", f"Owner-{index}"])
+long_table.save(ROOT / "table.xlsx")
+
 legacy = xlwt.Workbook()
 sheet = legacy.add_sheet("Orion inventory")
 for row, values in enumerate([["Product", "Owner"], ["Orion", "김하늘"]]):

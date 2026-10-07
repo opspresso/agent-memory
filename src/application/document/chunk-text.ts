@@ -73,12 +73,11 @@ export function chunkText(
   return chunks;
 }
 
-function chunkMarkdown(input: string): readonly TextChunk[] {
-  const normalized = input.replace(/\r\n?/g, "\n").trim();
-  const headings: { text: string; level: number; start: number; end: number }[] = [];
+function* markdownLines(input: string) {
   let offset = 0;
   let fence: { marker: string; length: number } | undefined;
-  for (const line of normalized.split("\n")) {
+  for (const line of input.split("\n")) {
+    let isCode = Boolean(fence);
     const delimiter = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
     if (delimiter) {
       const marker = delimiter[1]!;
@@ -86,23 +85,124 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
         // Backticks in an info string make this inline text, not a fence opener.
         if (marker[0] !== "`" || !delimiter[2]!.includes("`")) {
           fence = { marker: marker[0]!, length: marker.length };
+          isCode = true;
         }
       } else if (marker[0] === fence.marker && marker.length >= fence.length && !delimiter[2]!.trim()) {
         fence = undefined;
       }
-    } else if (!fence) {
-      const heading = /^ {0,3}(#{1,6})[ \t]+\S.*$/.exec(line);
-      if (heading) headings.push({ text: line, level: heading[1]!.length, start: offset, end: offset + line.length });
     }
+    yield { content: line, start: offset, end: offset + line.length, isCode };
     offset += line.length + 1;
   }
+}
+
+function tableCells(line: string): readonly string[] | undefined {
+  const cells: string[] = [];
+  let start = 0;
+  let escaped = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === "|" && !escaped) {
+      cells.push(line.slice(start, index).trim());
+      start = index + 1;
+    }
+    escaped = character === "\\" && !escaped;
+  }
+  if (cells.length === 0) return undefined;
+  cells.push(line.slice(start).trim());
+  if (cells[0] === "") cells.shift();
+  if (cells.at(-1) === "") cells.pop();
+  return cells;
+}
+
+function chunkRecords(header: TextChunk, rows: readonly TextChunk[], maximumCharacters: number): readonly TextChunk[] {
+  const chunks: TextChunk[] = [];
+  const rowBudget = maximumCharacters - header.content.length - 1;
+  let pending: TextChunk[] = [];
+  let length = header.content.length;
+  function append(records: readonly TextChunk[], includeHeaderInSpan: boolean) {
+    chunks.push({
+      content: [header.content, ...records.map((row) => row.content)].join("\n"),
+      start: includeHeaderInSpan ? header.start : records[0]!.start,
+      end: records.at(-1)!.end,
+      ...(!includeHeaderInSpan ? { contextSpans: [{ start: header.start, end: header.end }] } : {})
+    });
+  }
+  function flush() {
+    if (pending.length) append(pending, chunks.length === 0);
+    pending = [];
+    length = header.content.length;
+  }
+  for (const row of rows) {
+    if (length + row.content.length + 1 > maximumCharacters) flush();
+    if (row.content.length > rowBudget) {
+      const offset = row.start + row.content.length - row.content.trimStart().length;
+      for (const part of chunkText(row.content, {
+        maxCharacters: rowBudget,
+        overlapCharacters: Math.min(200, Math.floor(rowBudget / 10))
+      })) append([{ ...part, start: offset + part.start, end: offset + part.end }], false);
+    } else {
+      pending.push(row);
+      length += row.content.length + 1;
+    }
+  }
+  flush();
+  return chunks.length ? chunks : [header];
+}
+
+function chunkMarkdownBlocks(input: string, options: ChunkTextOptions = {}, omitHeadingOnlyPrefix = false): readonly TextChunk[] {
+  const normalized = input.replace(/\r\n?/g, "\n").trim();
+  if (!normalized.includes("|")) return chunkText(normalized, options);
+  const lines = [...markdownLines(normalized)];
+  const chunks: TextChunk[] = [];
+  let proseStart = 0;
+  function appendProse(end: number, beforeTable = false) {
+    const prose = normalized.slice(proseStart, end);
+    const headingOnly = beforeTable && omitHeadingOnlyPrefix && prose.trim().split("\n")
+      .every((line) => !line.trim() || /^ {0,3}#{1,6}[ \t]+\S/.test(line));
+    if (headingOnly) return;
+    const offset = proseStart + prose.length - prose.trimStart().length;
+    for (const chunk of chunkText(prose, options)) {
+      chunks.push({ ...chunk, start: offset + chunk.start, end: offset + chunk.end });
+    }
+  }
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const first = lines[index]!;
+    const separator = lines[index + 1]!;
+    if (first.isCode || separator.isCode || /^(?: {4}| {0,3}\t)/.test(first.content)) continue;
+    const headerCells = tableCells(first.content);
+    const separatorCells = tableCells(separator.content);
+    if (!headerCells?.length || headerCells.length !== separatorCells?.length ||
+        !separatorCells.every((cell) => /^:?-+:?$/.test(cell))) continue;
+    const header = { content: normalized.slice(first.start, separator.end), start: first.start, end: separator.end };
+    const maximumCharacters = options.maxCharacters ?? 2_000;
+    // A header must leave room for a useful row fragment within the chunk budget.
+    if (header.content.length + 101 > maximumCharacters) continue;
+    let end = index + 2;
+    while (end < lines.length && !lines[end]!.isCode && tableCells(lines[end]!.content)) end += 1;
+    appendProse(first.start, true);
+    chunks.push(...chunkRecords(header, lines.slice(index + 2, end), maximumCharacters));
+    proseStart = lines[end - 1]!.end;
+    index = end - 1;
+  }
+  appendProse(normalized.length);
+  return chunks;
+}
+
+function chunkMarkdown(input: string): readonly TextChunk[] {
+  const normalized = input.replace(/\r\n?/g, "\n").trim();
+  const headings: { text: string; level: number; start: number; end: number }[] = [];
+  for (const line of markdownLines(normalized)) {
+    const heading = !line.isCode && /^ {0,3}(#{1,6})[ \t]+\S.*$/.exec(line.content);
+    if (heading) headings.push({ text: line.content, level: heading[1]!.length, start: line.start, end: line.end });
+  }
   if (headings.length === 0) {
-    return chunkText(normalized);
+    return chunkMarkdownBlocks(normalized);
   }
   const chunks: TextChunk[] = [];
   const firstHeadingOffset = headings[0]?.start ?? 0;
   if (firstHeadingOffset > 0) {
-    chunks.push(...chunkText(normalized.slice(0, firstHeadingOffset)));
+    chunks.push(...chunkMarkdownBlocks(normalized.slice(0, firstHeadingOffset)));
   }
   const ancestors: typeof headings = [];
   function isHeadingOnlyLeaf(index: number): boolean {
@@ -134,7 +234,7 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
     const headingContextBudget = 2_000 - path.length - 2;
     const repeatHeading =
       headingContextBudget >= 100 && path.length <= headingContextBudget;
-    const sectionChunks = chunkText(
+    const sectionChunks = chunkMarkdownBlocks(
       section,
       repeatHeading
         ? {
@@ -144,16 +244,21 @@ function chunkMarkdown(input: string): readonly TextChunk[] {
               Math.floor(headingContextBudget / 10)
             )
           }
-        : undefined
+        : undefined,
+      repeatHeading
     );
-    sectionChunks.forEach((chunk, chunkIndex) => {
-      const context = repeatHeading ? (chunkIndex === 0 ? parents : continuationContext) : [];
+    sectionChunks.forEach((chunk) => {
+      const context = repeatHeading ? (chunk.start === 0 ? parents : continuationContext) : [];
       const prefix = context.map((item) => item.text).join("\n");
+      const contextSpans = [
+        ...context.map(({ start, end }) => ({ start, end })),
+        ...(chunk.contextSpans ?? []).map(({ start, end }) => ({ start: sectionOffset + start, end: sectionOffset + end }))
+      ];
       chunks.push({
         content: prefix ? `${prefix}\n\n${chunk.content}` : chunk.content,
         start: sectionOffset + chunk.start,
         end: sectionOffset + chunk.end,
-        ...(context.length ? { contextSpans: context.map(({ start, end }) => ({ start, end })) } : {})
+        ...(contextSpans.length ? { contextSpans } : {})
       });
     });
   }
@@ -192,36 +297,10 @@ function chunkCsv(input: string): readonly TextChunk[] {
   if (!header) {
     return [];
   }
-  if (
-    header.content.length > 2_000 ||
-    records
-      .slice(1)
-      .some((record) => header.content.length + 1 + record.content.length > 2_000)
-  ) {
+  if (header.content.length + 101 > 2_000) {
     return chunkText(normalized);
   }
-  const chunks: TextChunk[] = [];
-  let rows: TextChunk[] = [];
-  function appendChunk() {
-    chunks.push({
-      content: [header!.content, ...rows.map((row) => row.content)].join("\n"),
-      start: chunks.length === 0 ? header!.start : rows[0]!.start,
-      end: rows.at(-1)!.end,
-      ...(chunks.length > 0 ? { contextSpans: [{ start: header!.start, end: header!.end }] } : {})
-    });
-  }
-  for (const row of records.slice(1)) {
-    const candidate = [header, ...rows, row].map((record) => record.content).join("\n");
-    if (candidate.length > 2_000 && rows.length > 0) {
-      appendChunk();
-      rows = [];
-    }
-    rows.push(row);
-  }
-  if (rows.length > 0) {
-    appendChunk();
-  }
-  return chunks.length > 0 ? chunks : [header];
+  return chunkRecords(header, records.slice(1), 2_000);
 }
 
 function jsonPathSegment(key: string): string {

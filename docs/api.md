@@ -844,7 +844,7 @@ Token은 client의 secret 또는 environment variable 기능으로 주입하고 
 
 Chunk의 `metadata.textMimeType`은 추출 본문의 MIME이다. Document의 `mimeType`은 원본 MIME이다. PDF·Office·HTML·EPUB의 본문은 `text/markdown`이다. Markdown chunk의 `content`에는 문맥을 보존하기 위한 상위 제목이 포함될 수 있다. `metadata.start/end`는 줄바꿈과 앞뒤 공백을 정규화한 추출 본문의 문자 범위이며, 반복한 제목의 범위는 선택형 `metadata.contextSpans: [{ start, end }]`로 제공한다. 원본 bytes나 PDF page 좌표가 아니다. JSON은 경로·값으로 펼친 본문의 범위를 사용한다.
 
-CSV도 정규화한 원문의 record 범위를 `start/end`로 보존한다. 빈 record를 내용에서 제외해도 뒤 record의 좌표는 유지하며, 후속 chunk에 반복한 header 범위는 `contextSpans`에 기록한다. 큰 record를 일반 텍스트로 분할한 경우에는 header를 반복하지 않는다.
+CSV도 정규화한 원문의 record 범위를 `start/end`로 보존한다. 빈 record를 내용에서 제외해도 뒤 record의 좌표는 유지하며, 후속 chunk에 반복한 header 범위는 `contextSpans`에 기록한다. 하나의 긴 record는 header를 제외한 본문 예산으로 분할한다. Header 자체가 너무 길어 본문 공간을 확보할 수 없으면 일반 텍스트로 분할한다. Markdown 표도 같은 방식으로 행과 반복 열 제목의 범위를 보존한다.
 
 ### 문서 본문 페이지
 

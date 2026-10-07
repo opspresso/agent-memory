@@ -178,6 +178,8 @@ multipart upload → S3-compatible storage → document row(pending)
 
 Markdown chunk는 2,000자 문맥 예산에 들어가는 상위 제목 경로를 원문 그대로 함께 보존한다. 제목 경로 자체가 예산을 초과하면 일반 텍스트 분할로 처리한다. 같은 단계의 제목이나 새 최상위 제목을 만나면 이전 경로를 제거하며 fenced code 안의 제목은 문서 구조로 해석하지 않는다. 본문 없는 상위 제목은 자식 chunk의 문맥으로 사용한다. 같은 부모와 단계 아래에 연속된 본문·자식 없는 제목은 예산 안에서 함께 묶고 공통 상위 제목만 반복한다. 본문이 있는 섹션과 새 최상위 제목의 경계는 유지한다. `metadata.start/end`는 줄바꿈과 앞뒤 공백을 정규화한 추출 본문의 문자 범위이고, 반복한 제목의 원본 범위는 `metadata.contextSpans`에 기록한다. 이력서의 주인·경력·기술·프로젝트 구분도 같은 chunk의 근거로 조회할 수 있다. 변환 파일의 범위는 원본 bytes나 PDF page 좌표가 아니다. JSON의 범위는 경로·값으로 펼친 본문을 기준으로 한다.
 
+Markdown 표와 CSV는 열 제목을 반복하면서 들어갈 수 있는 행을 함께 묶는다. Markdown 표는 상위 제목도 함께 보존하며, 반복한 열 제목의 범위는 `metadata.contextSpans`에 기록한다. 하나의 긴 행은 열 제목을 제외한 본문 예산으로 나누고, 표의 열 제목 자체가 너무 길어 유효한 본문 공간을 확보할 수 없으면 일반 텍스트 분할을 적용한다. Fenced code 안의 표 예시는 문서 표로 해석하지 않는다.
+
 ### 문서 공유 범위 변경
 
 Ready 문서의 scope 변경은 현재 문서와 대상 scope의 `manage` 권한을 요구한다. Chunk와 AI 후보의 scope는 문서에서 조회하며 별도 scope column을 두지 않는다. `document_scope_changes`는 이전·새 scope, 변경자, 시각, Knowledge 적용·제외 건수를 기록한다. HTTP `If-Match`는 문서 `updatedAt` 기반 ETag를 검사하며, scope 변경은 timestamp를 최소 1ms 증가시킨다.
