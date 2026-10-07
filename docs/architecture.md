@@ -186,7 +186,7 @@ Ready 문서의 scope 변경은 현재 문서와 대상 scope의 `manage` 권한
 
 Application의 scope 변경 use case가 repository의 원자적 변경 port를 호출한다. Repository는 조직 관리 advisory lock으로 최신 membership·대상 팀을 검증하고, 조직별 Knowledge scope 배타 잠금 아래 문서와 직접 provenance로 연결된 node·edge를 검증한다. 모든 출처의 현재 유효성·대상 scope 포함 여부, graph 관리 권한, 대상 identity 충돌을 검사한다. 관계 양 끝의 최종 scope와 유효 출처를 검사하며, node scope 축소로 기존 edge를 읽을 수 없게 만드는 변경은 제외한다. 통과한 항목만 변경하고 문서·지식·audit을 함께 commit한다. 제외된 지식은 기존 scope를 유지하며 일반 검색의 현재 provenance 권한 필터를 계속 적용한다.
 
-Graph 쓰기는 같은 조직별 Knowledge scope 잠금을 사용한다. 공개 node 생성, 후보 승인과 node 병합은 이름 해석·병합·승격을 원자적으로 수행하기 위해 배타 모드를 사용하며, 나머지 Graph 저장·삭제는 공유 모드를 사용한다. Scope 변경 중에는 이 쓰기들을 대기시키며 일반 조회는 계속 허용한다. 검증한 출처 row는 공유 잠금으로 commit까지 보존한다. 지식 생성은 저장 transaction에서 source scope를 다시 확인하고, 관계 생성은 끝점 scope도 확인한다. 후보 검토는 현재 문서 scope와 검토자의 활성 멤버십·관리 권한을 다시 확인한다. 삭제는 application이 확인한 scope를 repository에서 재검사한다. Scope 변경과 겹친 오래된 mutation으로 이전 권한을 적용하지 않는다.
+Graph 쓰기는 같은 조직별 Knowledge scope 잠금을 사용한다. 공개 node 생성, 후보 승인과 node 병합은 이름 해석·병합·승격을 원자적으로 수행하기 위해 배타 모드를 사용하며, 나머지 Graph 저장·삭제는 공유 모드를 사용한다. Scope 변경 중에는 이 쓰기들을 대기시키며 일반 조회는 계속 허용한다. 검증한 출처 row는 공유 잠금으로 commit까지 보존한다. 지식 생성은 저장 transaction에서 source의 현재 유효성·처리 상태와 scope를 다시 확인하고, 관계 생성은 끝점 scope도 확인한다. 후보 검토는 현재 문서 scope와 검토자의 활성 멤버십·관리 권한을 다시 확인한다. 삭제는 application이 확인한 scope를 repository에서 재검사한다. Scope 변경과 겹친 오래된 mutation으로 이전 권한을 적용하지 않는다.
 
 문서 범위 축소·이동에서 제외된 지식은 기존 scope를 유지한다. Properties·설명·별칭·embedding은 현재 읽을 수 있는 출처만 사용하므로 숨겨진 출처의 값이 남은 지식에 섞이지 않는다. 충돌 검사는 출처·권한 검증을 통과해 실제 이동할 수 있는 후보와 대상 범위의 기존 지식 사이에 수행한다. 보관 요청도 권한 검사 시 읽은 document scope를 저장 조건으로 사용해 동시 scope 변경에 이전 권한을 적용하지 않는다.
 

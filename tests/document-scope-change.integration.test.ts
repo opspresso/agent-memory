@@ -8,7 +8,7 @@ import { createDocumentScopeChangeRepository } from "@/infrastructure/database/r
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
 import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
-import { documents, documentChunks, documentScopeChanges, organizations, organizationMembers, users, teams, teamMembers, knowledgeNodes, knowledgeEdges } from "@/infrastructure/database/schema";
+import { documents, documentChunks, documentScopeChanges, organizations, organizationMembers, users, teams, teamMembers, knowledgeNodes, knowledgeEdges, knowledgeNodeSources, knowledgeEdgeSources } from "@/infrastructure/database/schema";
 import { createKnowledgeNode, createKnowledgeEdge } from "@/domain/knowledge/knowledge-graph";
 import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
 import type { ScopedResource, OrganizationAccess } from "@/domain/identity/organization-access";
@@ -57,6 +57,34 @@ describe("document scope transactions", () => {
     const change = (record = doc, nextScope: ScopedResource = target, actor = access) => scopeRepository.changeScope({ access: actor, documentId: record.id, scope: nextScope, expectedUpdatedAt: record.updatedAt.toISOString(), now });
     return { ...database, organizationId, userId, otherUserId, teamId, now, access, scope, target, doc, document, node, graph, change };
   }
+
+  it.each(["archived", "processing"] as const)("rejects a %s source even when existing knowledge has another readable source", async (status) => {
+    const f = await fixture();
+    const first = await f.node("Alice"), second = await f.node("Bob");
+    const edge = await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId,
+      scope: f.scope, sourceNodeId: first.id, targetNodeId: second.id, predicate: "knows", source: { chunkId: f.doc.chunkId }, now: f.now }), f.access);
+    const stale = await f.document(f.scope, status);
+    await expect(f.node("Alice", stale.chunkId)).rejects.toBeInstanceOf(KnowledgeScopeChangedError);
+    await expect(f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId,
+      scope: f.scope, sourceNodeId: first.id, targetNodeId: second.id, predicate: "knows", source: { chunkId: stale.chunkId }, now: f.now }), f.access))
+      .rejects.toBeInstanceOf(KnowledgeScopeChangedError);
+    expect(await f.db.select().from(knowledgeNodeSources).where(eq(knowledgeNodeSources.chunkId, stale.chunkId))).toEqual([]);
+    expect(await f.db.select().from(knowledgeEdgeSources).where(eq(knowledgeEdgeSources.chunkId, stale.chunkId))).toEqual([]);
+    expect((await f.graph.findEdgeById(f.organizationId, edge.id))?.sources).toEqual([{ chunkId: f.doc.chunkId }]);
+  });
+
+  it.each(["expired", "future"] as const)("rejects a %s Memory contribution to existing knowledge", async (state) => {
+    const f = await fixture();
+    await f.node("Alice");
+    const memory = createMemory({ id: randomUUID(), scope: f.scope, kind: "fact", title: "Source",
+      content: "Alice is a named person.", source: { type: "user" }, createdBy: f.userId, now: f.now,
+      validFrom: new Date(f.now.getTime() + (state === "future" ? 60_000 : -60_000)),
+      ...(state === "expired" ? { expiresAt: new Date(f.now.getTime() - 1) } : {}) });
+    await createMemoryRepository(f.db).save(memory);
+    await expect(f.graph.saveNode(createKnowledgeNode({ id: randomUUID(), scope: f.scope, kind: "person",
+      canonicalName: "Alice", source: { memoryId: memory.id }, now: f.now }), f.access)).rejects.toBeInstanceOf(KnowledgeScopeChangedError);
+    expect(await f.db.select().from(knowledgeNodeSources).where(eq(knowledgeNodeSources.memoryId, memory.id))).toEqual([]);
+  });
 
   it("changes the document, verified graph and candidate scope, preserving chunks and provenance", async () => {
     const f = await fixture();

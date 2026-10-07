@@ -3,7 +3,7 @@ import { sameScope, scopeCovers } from "../identity/scope-coverage";
 import type { KnowledgeScopeChangeSummary, KnowledgeScopeSkipReason } from "../document/document-scope-change";
 
 export class KnowledgeScopeChangedError extends Error {
-  constructor() { super("Knowledge source scope changed; reload before retrying"); this.name = "KnowledgeScopeChangedError"; }
+  constructor() { super("Knowledge source changed or is unavailable; reload before retrying"); this.name = "KnowledgeScopeChangedError"; }
 }
 
 export interface ScopeChangeResource {
