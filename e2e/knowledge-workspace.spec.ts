@@ -72,8 +72,9 @@ test("completes knowledge work with real evidence, scoped access and responsive 
   await expect(page.getByText("Production rollback requires three reviewers.", { exact: true }).last()).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "UI rollback policy", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Memory 검색", exact: true })).not.toHaveAttribute("data-loading");
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-  await page.screenshot({ path: testInfo.outputPath("after-memory-desktop-ko.png"), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath("after-memory-desktop-ko.png"), fullPage: true, animations: "disabled" });
 
   const unavailableFixture = await jsonRequest<{ id: string }>(page, `/api/memories`, "POST", { kind: "fact", scope: { kind: "user" }, title: "Unavailable response fixture", content: "Original synthetic content", source: { type: "user" } });
   let refuseNextRead = false;
@@ -466,9 +467,10 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     await expect(page.getByRole("heading", { name: "Document library", exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "Document contents", exact: true }).getByText("Showing 25 sections", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Refresh", exact: true }).first()).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Refresh", exact: true }).first()).not.toHaveAttribute("data-loading");
     await noOverflow(page);
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-    await page.screenshot({ path: testInfo.outputPath("after-documents-mobile-en-dark.png"), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("after-documents-mobile-en-dark.png"), fullPage: true, animations: "disabled" });
     await page.goto("/?q=Evidence%20API&kind=knowledge%2Fnodes");
     await page.getByRole("button", { name: /Evidence API/ }).click();
     await page.getByRole("button", { name: "View relationships", exact: true }).click();
