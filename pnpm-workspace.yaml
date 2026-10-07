@@ -26,3 +26,5 @@ minimumReleaseAgeExclude:
 overrides:
   '@esbuild-kit/core-utils>esbuild': 0.25.12
   qs: 6.16.0
+  'sharp@<0.35.5': 0.35.5
+  'source-map-js@<1.2.2': 1.2.2
