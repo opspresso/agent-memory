@@ -178,7 +178,8 @@ function chunkMarkdownBlocks(input: string, options: ChunkTextOptions = {}, omit
   for (let index = 0; index < lines.length - 1; index += 1) {
     const first = lines[index]!;
     const separator = lines[index + 1]!;
-    if (first.isCode || separator.isCode || /^(?: {4}| {0,3}\t)/.test(first.content)) continue;
+    if (first.isCode || separator.isCode ||
+        [first, separator].some((line) => /^(?: {4}| {0,3}\t)/.test(line.content))) continue;
     const headerCells = tableCells(first.content);
     const separatorCells = tableCells(separator.content);
     if (!headerCells?.length || headerCells.length !== separatorCells?.length ||

@@ -54,9 +54,9 @@ describe("table chunk context", () => {
     expect(chunks.every((chunk) => chunk.content.startsWith(tableHeader + "\n"))).toBe(true);
   });
 
-  it("does not repeat table-like text inside an indented code block", () => {
+  it.each(["", "Example:\n\n"])("does not repeat an indented code table after %j", (prefix) => {
     const source = [header, ...rows].join("\n").split("\n").map((line) => "    " + line).join("\n");
-    const chunks = chunkDocumentText("Example:\n\n" + source, "text/markdown");
+    const chunks = chunkDocumentText(prefix + source, "text/markdown");
     expect(chunks.slice(1).every((chunk) => !chunk.content.includes("Product"))).toBe(true);
     expect(chunks.every((chunk) => chunk.contextSpans === undefined)).toBe(true);
   });
