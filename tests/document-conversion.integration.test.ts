@@ -13,6 +13,8 @@ import type { OrganizationAccess } from "@/domain/identity/organization-access";
 import { createDatabase } from "@/infrastructure/database/client";
 import { initializeSchema } from "@/infrastructure/database/schema-bootstrap.mjs";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
+import { createIngestionReceiptRepository } from "@/infrastructure/database/repositories/ingestion-receipt-repository";
+import { ingestionFingerprint } from "@/lib/ingestion-fingerprint";
 import { users, organizations, organizationMembers } from "@/infrastructure/database/schema";
 import { createMarkItDownTextExtractor } from "@/infrastructure/document/markitdown-text-extractor";
 import { createPgBossDocumentIngestionQueue, documentIngestionQueueName, type DocumentIngestionJob } from "@/infrastructure/queue/document-ingestion-queue";
@@ -74,4 +76,19 @@ describe("binary document ingestion and retrieval", () => {
       expect(await repository.findById(randomUUID(), document.id)).toBeNull();
       expect(errors).toEqual([]);
     });
+
+  it("persists and replays an upload with deeply nested valid metadata", async () => {
+    const upload = buildUploadDocument({ repository, objectStorage, queue, clock: () => new Date(), generateId: randomUUID,
+      receipts: createIngestionReceiptRepository(database.db), fingerprint: ingestionFingerprint,
+      checksum: (bytes) => createHash("sha256").update(bytes).digest("hex"),
+      limits: { maximumOrganizationStorageBytes: 1_000_000, maximumPendingDocuments: 20, maximumUserUploadsPerHour: 100 } });
+    const metadata: Record<string, unknown> = JSON.parse('{"x":'.repeat(3000) + '0' + '}'.repeat(3000));
+    const input = { access, scope: { organizationId, userId, kind: "user" as const }, title: "Nested metadata",
+      mimeType: "text/plain", content: Buffer.from("Orion document"), metadata, idempotencyKey: "nested-metadata" };
+    const first = await upload(input);
+    const replay = await upload(input);
+    expect(replay.id).toBe(first.id);
+    const stored = await repository.findById(organizationId, first.id);
+    expect(JSON.stringify(stored?.metadata)).toBe(JSON.stringify(metadata));
+  });
 });
