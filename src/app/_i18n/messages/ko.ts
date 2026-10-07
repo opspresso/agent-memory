@@ -140,7 +140,7 @@ export const ko: Messages = {
   "guide.review.manual": "확인 필요한 지식",
   "guide.review.manualNote": "불확실성·충돌·사전 제약이 있는 항목은 이유와 원문을 비교해 반영할 출처를 선택합니다.",
   "guide.review.partial": "선택한 출처의 지식만 승인·거절할 수 있습니다. 관계 승인은 필요한 양 끝 개체를 함께 반영하고, 개체 거절은 아직 검토하지 않은 연결 관계도 거절합니다. 다른 항목은 대기 상태로 남고 이미 승인한 Graph는 거절로 삭제되지 않습니다.",
-  "guide.review.history": "AI 자동 검토 실행은 기존 미검증·자동 처리 미완료 후보를 대기열에 등록합니다. 청크별 검토에서 남은 추출 묶음을, 처리 내역에서 최근 검증 50건과 자동·수동 판단 기록을 확인하세요. 빈 추출은 기본 검토 목록에 표시하지 않습니다.",
+  "guide.review.history": "AI 자동 검토 실행은 관리 가능한 ready 문서의 미추출 청크와 미검증·자동 처리 미완료 후보를 대기열에 등록합니다. 청크별 검토에서 남은 추출 묶음을, 처리 내역에서 최근 검증 50건과 자동·수동 판단 기록을 확인하세요. 빈 추출은 기본 검토 목록에 표시하지 않습니다.",
   "guide.connect.title": "MCP로 Agent와 Context를 연결합니다.",
   "guide.connect.body":
     "서비스는 /api/mcp로 장기 기억을 저장·회상·잊습니다. Agent Memory는 RAG 문서와 Knowledge Graph도 관리하며, context_search로 세 종류를 함께 검색합니다. Agent 연결에서 endpoint와 인증 정보를 확인하고, 필요하면 Agent Studio 등록 템플릿을 사용합니다.",
@@ -430,7 +430,7 @@ export const ko: Messages = {
   "workspace.graphFailed": "관계 지도를 불러오지 못했습니다.",
   "workspace.uploadFailed": "업로드에 실패했습니다.",
   "workspace.uploadQueueFailed":
-    "문서는 저장했지만 처리 대기열 등록에 실패했습니다. API에서 retry하세요: {id}",
+    "문서는 저장했지만 처리 대기열 등록에 실패했습니다. 문서 상세에서 처리 재시도를 선택하세요: {id}",
   "workspace.uploadQueued": "수집 대기열에 등록했습니다: {id}",
   "workspace.signOutFailed": "로그아웃에 실패했습니다.",
   "workspace.eyebrow": "운영 Console",
@@ -475,7 +475,7 @@ export const ko: Messages = {
   "workspace.studioTemplateDescription":
     "{organizationSlug} 조직에 저장된 결정·규칙·경험, 문서 근거, 지식 간 관계를 확인할 때 사용합니다. Memory·RAG·Knowledge Graph를 검색하고 공유할 정보를 조직 범위 Memory로 저장합니다.",
   "workspace.studioTemplateContent":
-    "# {organizationSlug} 조직 Agent Memory 운영 메모\n\n- 접근 범위: X-User-Email 없는 Agent token은 조직 범위만 허용한다. X-User-Email을 보내면 해당 활성 멤버의 권한을 적용한다. 이 header는 사용자 신원을 검증하는 신뢰된 서버만 설정하라. Studio는 로그인 사용자 email을 전달하며 project·대화 header는 접근 범위를 부여하지 않는다.\n- 제공 기능: Memory는 remember·recall·forget으로 저장·회상·잊는다. forget은 manage 권한과 현재 version을 검증해 archive한다. Memory·RAG·Graph 통합 검색은 context_search를 사용한다. 문서 수집과 Graph 관리는 Agent Memory 콘솔에서 수행한다.\n- 연결 확인: Test connection은 도구 목록 조회를 검사한다. 저장 후 사용할 project의 version에 서버를 직접 연결하고 실제 실행도 확인한다.\n- 자동 회상: version의 memoryRecall을 켜고 recall 도구를 허용한다. Memory만 검색하며 설정된 reranker를 적용한다. 자동 검색으로 추가된 서버는 실행 전 회상 대상이 아니다.\n- Token 변경: 재생성하면 Studio의 Authorization header를 갱신한다. Version에 같은 header를 덮어쓴 경우 해당 값도 갱신한다.\n\n이 Content는 모델에 전달되지 않는 운영자 메모다. 정보 저장 조건과 응답 규칙은 version의 system prompt 또는 연결한 Skill에 작성한다.",
+    "# {organizationSlug} 조직 Agent Memory 운영 메모\n\n- 접근 범위: X-User-Email 없는 Agent token은 조직 범위만 허용한다. X-User-Email을 보내면 해당 활성 멤버의 권한을 적용한다. 이 header는 사용자 신원을 검증하는 신뢰된 서버만 설정하라. Studio는 로그인 사용자 email을 전달하며 project·대화 header는 접근 범위를 부여하지 않는다.\n- 제공 기능: Memory는 remember·recall·forget으로 저장·회상·잊는다. forget은 manage 권한과 현재 version을 검증해 archive한다. Memory·RAG·Graph 통합 검색은 context_search를 사용한다. 문서는 document_ingest로 업로드한다(contentEncoding: 텍스트는 utf8, 바이너리 파일은 base64). document_ingest_status로 진행 상태를 확인하고 document_ingest_retry로 실패한 처리를 재시도한다. Graph 관리는 Agent Memory 콘솔에서 수행한다.\n- 연결 확인: Test connection은 도구 목록 조회를 검사한다. 저장 후 사용할 project의 version에 서버를 직접 연결하고 실제 실행도 확인한다.\n- 자동 회상: version의 memoryRecall을 켜고 recall 도구를 허용한다. Memory만 검색하며 설정된 reranker를 적용한다. 자동 검색으로 추가된 서버는 실행 전 회상 대상이 아니다.\n- Token 변경: 재생성하면 Studio의 Authorization header를 갱신한다. Version에 같은 header를 덮어쓴 경우 해당 값도 갱신한다.\n\n이 Content는 모델에 전달되지 않는 운영자 메모다. 정보 저장 조건과 응답 규칙은 version의 system prompt 또는 연결한 Skill에 작성한다.",
   "workspace.studioTemplateCopyField": "등록 템플릿 {field} 복사",
   "workspace.studioTemplateTokenHint":
     "Headers의 Key는 Authorization, Value는 Bearer 뒤에 공백과 실제 Agent token을 입력합니다. <amt_token>을 위에서 생성하거나 확인한 token으로 교체하세요.",

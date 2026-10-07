@@ -276,6 +276,7 @@ Agent token만 전달하면 발급자에게 귀속되는 organization service pr
 | --- | --- |
 | 기억 저장·회상·잊기 | `remember`, `recall`, `forget` |
 | Memory·RAG·Graph 통합 검색 | `context_search` |
+| 문서 수집·상태 확인·실패 재처리 | `document_ingest`, `document_ingest_status`, `document_ingest_retry` |
 | 문서 또는 Graph 검색 | `document_search`, `knowledge_search` |
 | Graph 관계 탐색 | `knowledge_neighborhood` |
 
