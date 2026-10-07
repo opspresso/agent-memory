@@ -67,10 +67,9 @@ test("keeps credential mutations newer than delayed status responses", async ({ 
     await page.unroute(pattern);
   }
 
-  const existing = await page.request.post("/api/agent-token", { headers: { Origin: "http://127.0.0.1:3110" } });
-  expect(existing.status()).toBe(201);
   const existingStarted = Promise.withResolvers<void>();
   const releaseExisting = Promise.withResolvers<void>();
+  const existingDelivered = Promise.withResolvers<void>();
   let delayNextStatus = true;
   await page.route(pattern, async (route) => {
     if (route.request().method() === "POST") {
@@ -79,17 +78,23 @@ test("keeps credential mutations newer than delayed status responses", async ({ 
     if (route.request().method() !== "GET" || !delayNextStatus) return route.continue();
     delayNextStatus = false;
     const response = await route.fetch();
-    expect((await response.json()).configured).toBe(true);
+    expect((await response.json()).configured).toBe(false);
     existingStarted.resolve();
     await releaseExisting.promise;
     await route.fulfill({ response });
+    existingDelivered.resolve();
   });
   try {
     await page.reload();
     await existingStarted.promise;
+    const existing = await page.request.post("/api/agent-token", { headers: { Origin: "http://127.0.0.1:3110" } });
+    expect(existing.status()).toBe(201);
     await page.getByRole("button", { name: "Generate token", exact: true }).click();
     await expect(page.getByText("Token generation temporarily unavailable", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Regenerate token", exact: true })).toBeVisible();
     releaseExisting.resolve();
+    await existingDelivered.promise;
+    await page.waitForLoadState("networkidle");
     await expect(page.getByRole("button", { name: "Regenerate token", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Revoke token", exact: true })).toBeVisible();
     await expect(page.getByText("Token generation temporarily unavailable", { exact: true })).toBeVisible();
