@@ -103,10 +103,10 @@ test("onboards, approves, and manages members through the console", async ({
   await page.getByRole("textbox", { name: "설치 설정 검색 · 이름 또는 환경 변수" }).fill("KNOWLEDGE_ENRICHMENT_CONCURRENCY");
   await expect(enrichment).toBeVisible();
   await page.getByRole("button", { name: "검색 지우기", exact: true }).click();
-  await expect(page.getByLabel(/EMBEDDING_API_KEY/)).toHaveValue("");
-  await page.getByLabel(/EMBEDDING_API_KEY/).fill("draft-secret-only");
+  await expect(page.locator("#setting-EMBEDDING_API_KEY")).toHaveValue("");
+  await page.locator("#setting-EMBEDDING_API_KEY").fill("draft-secret-only");
   await page.getByRole("button", { name: "변경 취소", exact: true }).click();
-  await expect(page.getByLabel(/EMBEDDING_API_KEY/)).toHaveValue("");
+  await expect(page.locator("#setting-EMBEDDING_API_KEY")).toHaveValue("");
   await expect(page.getByRole("button", { name: "설치 설정 저장", exact: true })).toBeDisabled();
 
   await expect(page.getByRole("textbox", { name: /EMBEDDING_DIM/ })).toHaveValue("native");
@@ -467,9 +467,9 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
   await page.getByRole("combobox", { name: "공유할 팀" }).click();
   await page.getByRole("option", { name: "E2E Team" }).click();
   await page.getByLabel("문서 파일").setInputFiles({
-    name: "team-guide.md",
-    mimeType: "text/markdown",
-    buffer: Buffer.from("# Team guide")
+    name: "team-guide.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4")
   });
   await page.route(
     `**/api/documents`,
@@ -479,6 +479,8 @@ test("manages memory lifecycle and explores grounded knowledge", async ({
       expect(payload).toContain("team");
       expect(payload).toContain('name="teamId"');
       expect(payload).toContain(team.id);
+      expect(payload).toContain('filename="team-guide.pdf"');
+      expect(payload).toContain("application/pdf");
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({ id: "e2e-document", status: "pending" }),

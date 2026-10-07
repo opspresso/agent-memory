@@ -156,7 +156,10 @@ describe("knowledge candidate", () => {
     ).toThrow(InvalidKnowledgeCandidateError);
   });
 
-  it("extracts a candidate only from a ready, tenant-scoped chunk", async () => {
+  it.each([
+    ["text/plain", {}, "text/plain"],
+    ["application/pdf", { textMimeType: "text/markdown" }, "text/markdown"]
+  ] as const)("extracts ready %s chunks using their text representation", async (mimeType, metadata, textMimeType) => {
     const document = {
       ...createDocument({
         id: "document-1",
@@ -164,7 +167,7 @@ describe("knowledge candidate", () => {
         title: "Architecture",
         objectKey: "document-1/source",
         checksum: "a".repeat(64),
-        mimeType: "text/plain",
+        mimeType,
         sizeBytes: 10,
         createdBy: "user-1",
         now
@@ -177,6 +180,7 @@ describe("knowledge candidate", () => {
       documentId: "document-1",
       ordinal: 0,
       content: "Memory API stores data in Memory Database.",
+      metadata,
       now
     });
     const candidates = candidateRepository();
@@ -200,7 +204,7 @@ describe("knowledge candidate", () => {
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
       documentTitle: document.title,
-      mimeType: document.mimeType,
+      mimeType: textMimeType,
       quotaKey: {
         organizationId: "organization-1",
         userId: document.createdBy

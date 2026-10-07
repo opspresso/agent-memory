@@ -16,6 +16,7 @@
 
 - Node.js `>=24 <25`
 - pnpm `>=11 <12`
+- Python `>=3.12 <3.15` (venv 지원 포함)
 - Docker와 Docker Compose
 
 설치된 버전을 확인하라.
@@ -23,6 +24,7 @@
 ```bash
 node --version
 pnpm --version
+python3 --version
 docker version
 docker compose version
 ```
@@ -34,6 +36,7 @@ docker compose version
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
+pnpm parser:install
 cp .env.example .env.local
 ```
 
@@ -144,7 +147,7 @@ Memory를 만든 뒤 운영 콘솔에서 다음 순서로 확인한다.
 3. 문서가 `ready`가 되면 상세의 처리된 원문을 확인한다.
 4. 통합 검색의 `Documents`에서 `Release`를 검색해 근거 chunk를 연다.
 
-지원 파일은 UTF-8 text, Markdown, CSV, JSON, XML이다. PDF·Office 변환과 URL 원격 수집은 제공하지 않는다.
+지원 파일은 TXT·Markdown·CSV·JSON·XML·HTML·PDF·DOCX·PPTX·XLSX·XLS·EPUB다. 텍스트 파일은 UTF-8을 사용한다. 스캔 PDF는 업로드 전에 OCR로 텍스트를 추가하라. 세부 제한은 [문서 수집](user-guide.md#문서-수집)을 따른다.
 
 | 문서 상태 | 다음 행동 |
 | --- | --- |

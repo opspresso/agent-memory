@@ -50,6 +50,6 @@ export async function assertKnowledgeSourceScopes(transaction: KnowledgeTransact
   const current = await loadKnowledgeSourceScopes(transaction, scope.organizationId, sources, new Date());
   if (sources.some((source) => {
     const record = current.get(sourceKey(source));
-    return !record || !scopeCovers(record.scope, scope);
+    return !record?.available || !scopeCovers(record.scope, scope);
   })) throw new KnowledgeScopeChangedError();
 }

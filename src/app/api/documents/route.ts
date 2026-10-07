@@ -1,9 +1,10 @@
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
+import { resolveDocumentMimeType } from "@/domain/document/document-format";
+import { maxDocumentBytes } from "@/domain/document/document";
 import {
   boundedFormData,
   DocumentUploadTooLargeError,
   documentErrorResponse,
-  maxDocumentBytes,
   parseMetadata,
   publicDocument,
   publicDocumentHit
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const mimeType = file.type.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  const mimeType = resolveDocumentMimeType(file.name, file.type);
   const parsed = documentUploadFieldsSchema.safeParse({
     scopeKind: formData.get("scopeKind"),
     teamId: textField(formData, "teamId"),

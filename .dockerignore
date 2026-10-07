@@ -1,5 +1,7 @@
 node_modules
+.pnpm-store
 .next
+.next-e2e
 .git
 .env*
 !.env.example
@@ -7,9 +9,14 @@ coverage
 .local-backups
 .eval-results
 .venv-knowledge-eval
+.venv-document-parser
+**/__pycache__
 evaluation
 *.log
 .DS_Store
 docs
 tests
+e2e
+test-results
+playwright-report
 scripts/mock-llm.ts

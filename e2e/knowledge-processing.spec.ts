@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 import { resetInstallationFixture } from "./installation-fixture";
 
 test("requeues unextracted chunks from the graph without a search term", async ({ page }, testInfo) => {
-  test.skip(process.env.E2E_AUTHENTICATED !== "true" || !process.env.KNOWLEDGE_EXTRACTION_MODEL || process.env.DOCUMENT_WORKER_ENABLED !== "false", "requires a disposable database and an extraction model with the worker disabled");
+  test.skip(process.env.E2E_AUTHENTICATED !== "true", "requires a disposable authenticated test database");
   await resetInstallationFixture();
   await page.context().addCookies([{ name: "agent-memory-locale", value: "ko", domain: "127.0.0.1", path: "/" }]);
   const signup = await page.request.post("/api/auth/sign-up/email", {

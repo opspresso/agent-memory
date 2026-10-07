@@ -35,7 +35,7 @@ export interface KnowledgeReviewGroup {
 }
 
 export function groupKnowledgeReviewSources(sources: readonly KnowledgeReviewSource[], onlyNeedsReview = false): readonly KnowledgeReviewGroup[] {
-  const groups = new Map<string, KnowledgeReviewGroup>();
+  const groups = new Map<string, Omit<KnowledgeReviewGroup, "occurrences"> & { occurrences: KnowledgeReviewOccurrence[] }>();
   for (const { candidate, documentTitle, ordinal } of sources) {
     const scope = candidate.scope;
     const scopeKey = [scope.organizationId, scope.kind, scope.kind === "team" ? scope.teamId : scope.kind === "user" ? scope.userId : ""];
@@ -58,8 +58,10 @@ export function groupKnowledgeReviewSources(sources: readonly KnowledgeReviewSou
         ...(summary ? { summary } : {})
       };
       const existing = groups.get(group.key);
+      const occurrences = existing?.occurrences ?? [];
+      occurrences.push(occurrence);
       groups.set(group.key, { ...group, scope, evidenceCount: 0, documentCount: 0,
-        occurrences: [...(existing?.occurrences ?? []), occurrence] });
+        occurrences });
     };
     for (const entity of candidate.graph.entities) {
       if (reviewed.has(entityReviewKey(entity.key))) { continue; }

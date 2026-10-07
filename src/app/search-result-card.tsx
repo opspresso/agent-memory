@@ -5,6 +5,7 @@ import { IconBrain, IconFileText, IconTopologyStar3 } from "@tabler/icons-react"
 import Link from "next/link";
 
 import type { ScopedResource } from "@/domain/identity/organization-access";
+import { sameScope } from "@/domain/identity/scope-coverage";
 import { knowledgeCanonicalNameKey } from "@/domain/knowledge/knowledge-identity";
 
 import { useT } from "./_i18n/provider";
@@ -12,12 +13,6 @@ import type { SearchHitResponse } from "./api-response-schemas";
 import { contextResultPresentation, relativeRelevance } from "./context-result-presentation";
 import { SourceEvidence } from "./source-evidence";
 import classes from "./search-workspace.module.css";
-
-function sameScope(left: ScopedResource, right: ScopedResource): boolean {
-  return left.kind === right.kind && left.organizationId === right.organizationId &&
-    (left.kind !== "team" || (right.kind === "team" && left.teamId === right.teamId)) &&
-    (left.kind !== "user" || (right.kind === "user" && left.userId === right.userId));
-}
 
 export function searchResultKey(hit: SearchHitResponse): string {
   const source = hit.memory ?? hit.document ?? hit.node;

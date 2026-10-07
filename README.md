@@ -31,7 +31,7 @@ Agent Memory는 사람과 AI Agent가 조직의 장기 기억과 문서 지식�
 
 ## 빠른 시작
 
-**새 로컬 설치와 빈 DB를 기준으로 한다.** Node.js 24, pnpm 11, Docker와 Docker Compose가 필요하다. PostgreSQL·MinIO·Neo4j는 Compose에서 실행하고, 앱은 host에서 실행한다. Neo4j는 필수 구성 요소다.
+**새 로컬 설치와 빈 DB를 기준으로 한다.** Node.js 24, pnpm 11, Python 3.12–3.14, Docker와 Docker Compose가 필요하다. PostgreSQL·MinIO·Neo4j는 Compose에서 실행하고, 앱은 host에서 실행한다. Neo4j는 필수 구성 요소다.
 
 ### 1. 의존성과 설정 준비
 
@@ -40,6 +40,7 @@ Agent Memory는 사람과 AI Agent가 조직의 장기 기억과 문서 지식�
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
+pnpm parser:install
 cp .env.example .env.local
 ```
 

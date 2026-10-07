@@ -1,8 +1,9 @@
 {
   "name": "agent-memory",
-  "version": "0.28.19",
+  "version": "0.29.0",
   "private": true,
   "scripts": {
+    "parser:install": "python3 -m venv .venv-document-parser && .venv-document-parser/bin/python -m pip install -r src/infrastructure/document/requirements.txt",
     "dev": "WATCHPACK_POLLING=true next dev --port 3100",
     "build": "next build",
     "start": "next start",
@@ -59,8 +60,8 @@
     "dependency-cruiser": "^18.2.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.3.3",
-    "next": "16.3.3",
+    "eslint-config-next": "16.3.6",
+    "next": "16.3.6",
     "postcss": "^8.5.26",
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",

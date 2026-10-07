@@ -4,9 +4,12 @@ import {
 } from "@/domain/identity/organization-access";
 import {
   createDocument,
+  InvalidDocumentError,
+  maxDocumentBytes,
   type Document,
   type DocumentScope
 } from "@/domain/document/document";
+import { isDocumentMimeType } from "@/domain/document/document-format";
 import type {
   DocumentRepository,
   DocumentUploadLimits,
@@ -60,6 +63,10 @@ export function buildUploadDocument(dependencies: UploadDocumentDependencies) {
   return async function execute(input: UploadDocumentInput): Promise<Document> {
     if (!canAccessScopedResource(input.access, "write", input.scope)) {
       throw new DocumentAccessDeniedError();
+    }
+    if (!isDocumentMimeType(input.mimeType)) throw new InvalidDocumentError("unsupported document MIME type");
+    if (input.content.byteLength === 0 || input.content.byteLength > maxDocumentBytes) {
+      throw new InvalidDocumentError("document must contain between 1 byte and 10 MiB");
     }
 
     const now = dependencies.clock();

@@ -27,7 +27,8 @@ test-results/
 .eval-results/
 .local-backups/
 .venv-knowledge-eval/
-evaluation/**/__pycache__/
+.venv-document-parser/
+**/__pycache__/
 
 # logs
 npm-debug.log*

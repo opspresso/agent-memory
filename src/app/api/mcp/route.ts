@@ -3,7 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { recallMemoryRecords, searchContextRecords } from "@/lib/context-service";
 import { searchDocumentRecords, uploadDocumentRecord, getDocumentRecord, retryDocumentRecord } from "@/lib/document-service";
 import { readJsonBody } from "@/lib/json-body";
-import { maxDocumentBytes } from "@/lib/document-http";
+import { maxDocumentBytes } from "@/domain/document/document";
 import {
   getKnowledgeNeighborhoodRecord,
   searchKnowledgeNodeRecords

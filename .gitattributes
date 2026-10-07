@@ -1,0 +1,2 @@
+# Preserve PDF byte offsets and fixed-width cross-reference records.
+tests/fixtures/documents/*.pdf binary

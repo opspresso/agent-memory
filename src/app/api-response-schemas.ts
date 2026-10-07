@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { documentStatuses } from "@/domain/document/document";
 import { knowledgeScopeSkipReasons } from "@/domain/document/document-scope-change";
 
 import {
@@ -109,7 +110,7 @@ export const ontologyRecommendationResponseSchema = z.object({
 
 export const documentUploadResponseSchema = z.object({
   id: z.string().min(1),
-  status: z.enum(["pending", "processing", "ready", "failed", "archived"])
+  status: z.enum(documentStatuses)
 });
 
 const memorySourceResponseSchema = z.object({
@@ -147,7 +148,7 @@ export const documentDetailResponseSchema = z.object({
   scope: scopeResponseSchema,
   mimeType: z.string(),
   sizeBytes: z.number().nonnegative(),
-  status: z.enum(["pending", "processing", "ready", "failed", "archived"]),
+  status: z.enum(documentStatuses),
   sourceUri: z.string().optional(),
   processingError: z.string().optional(),
   processingAttempts: z.number().int().nonnegative(),

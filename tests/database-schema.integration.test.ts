@@ -2871,6 +2871,12 @@ describe("PostgreSQL schema", () => {
       summary: "Guan Yu ".repeat(30), source: { chunkId: chunkIds[1]! }, now: new Date() }), { organizationId: organization, userId: user, role: "owner", teams: [] });
     expect((await repository.searchNodes({ access, query: "Guan Yu", limit: 10 }))[0]?.node.id).toBe(nodes[0]?.id);
 
+    // Create provenance while both sources are readable; archive one before checking visibility.
+    const withoutDescription = await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
+      source: { chunkId: chunkIds[1]! }, now: new Date() }), { organizationId: organization, userId: user, role: "owner", teams: [] });
+    await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
+      summary: "Archived secret biography.", source: { chunkId: chunkIds[0]! }, now: new Date() }), { organizationId: organization, userId: user, role: "owner", teams: [] });
+
     await pool.query("UPDATE documents SET status='archived' WHERE id=$1",[documentIds[0]]);
     expect(await repository.searchNodes({ access, query: "Azure", limit: 10 })).toEqual([]);
     const visible = await repository.searchNodes({ access, query: "Crimson", limit: 10 });
@@ -2886,10 +2892,6 @@ describe("PostgreSQL schema", () => {
 
     // A visible source without a description must not revive the shared summary
     // left by an archived source. Exercise every public node read path.
-    const withoutDescription = await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
-      source: { chunkId: chunkIds[1]! }, now: new Date() }), { organizationId: organization, userId: user, role: "owner", teams: [] });
-    await repository.saveNode(createKnowledgeNode({ id: randomUUID(), scope, kind: "person", canonicalName: "Zhang Fei",
-      summary: "Archived secret biography.", source: { chunkId: chunkIds[0]! }, now: new Date() }), { organizationId: organization, userId: user, role: "owner", teams: [] });
     expect((await repository.searchNodes({ access, query: "Zhang Fei", limit: 10 }))[0]?.node.summary).toBeUndefined();
     expect((await repository.findNodesByNames(access, scope, ["Zhang Fei"]))[0]?.summary).toBeUndefined();
     expect((await repository.findNeighborhood(access, withoutDescription.id, 1, 10)).nodes[0]?.summary).toBeUndefined();

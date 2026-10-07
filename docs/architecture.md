@@ -170,9 +170,15 @@ multipart upload → S3-compatible storage → document row(pending)
 
 ### 추출·embedding과 실패
 
-지원 MIME type의 text를 정규화하고 문서당 최대 512개 chunk를 생성하며 embedding은 최대 64개 chunk씩 provider에 전달한다. 최대 8개 batch를 순서대로 요청하며 각 embedding HTTP 요청의 timeout은 60초다. 이 값은 S3 조회·추출·DB 저장을 포함한 전체 처리 시간의 보장이 아니다. Lease가 재발급되면 이전 worker의 저장은 거부된다. 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다. Document 삭제는 provenance를 보존하는 archive이며 원본과 chunk를 유지하되 검색, retry, AI 후보 조회·승인에서 제외한다.
+`DocumentTextExtractor` port는 추출 본문과 본문의 MIME을 함께 반환한다. 원본 MIME과 checksum은 Document에 보존하고, chunk의 `metadata.textMimeType`은 실제 추출 형식을 기록한다. 분할과 후속 AI 추출은 이 본문 형식을 사용한다.
 
-Markdown chunk는 2,000자 문맥 예산에 들어가는 상위 제목 경로를 원문 그대로 함께 보존한다. 제목 경로 자체가 예산을 초과하면 일반 텍스트 분할로 처리한다. 같은 단계의 제목이나 새 최상위 제목을 만나면 이전 경로를 제거하며 fenced code 안의 제목은 문서 구조로 해석하지 않는다. 본문 없는 상위 제목은 자식 chunk의 문맥으로 사용한다. 같은 부모와 단계 아래에 연속된 본문·자식 없는 제목은 예산 안에서 함께 묶고 공통 상위 제목만 반복한다. 본문이 있는 섹션과 새 최상위 제목의 경계는 유지한다. `metadata.start/end`는 정규화한 원본의 본문 범위이고, 반복한 제목의 원본 범위는 `metadata.contextSpans`에 기록한다. 이력서의 주인·경력·기술·프로젝트 구분도 같은 chunk의 근거로 조회할 수 있다.
+텍스트·Markdown·CSV·JSON·XML은 Node.js에서 UTF-8로 읽는다. PDF·DOCX·PPTX·XLSX·XLS·HTML·EPUB는 infrastructure adapter가 별도 Python process의 [MarkItDown](https://github.com/microsoft/markitdown) converter로 Markdown으로 변환한다. 파일 bytes만 stdin으로 전달하며 URL 수집, plugin 탐색, OCR, LLM 호출은 사용하지 않는다. 허용된 converter만 직접 호출하며 Python 네트워크 접근을 차단한다. MarkItDown의 간접 의존성인 ONNX Runtime도 import 전에 [telemetry를 비활성화](https://github.com/microsoft/onnxruntime/blob/main/docs/Privacy.md#disabling-telemetry)해 네트워크 전송과 식별자 파일 생성을 막는다. Application credential은 child process에 전달하지 않는다. 변환은 60초, 출력은 8 MiB로 제한하고 ZIP 기반 형식은 압축 해제 전 64 MiB·4,096개 항목 한도를 검사한다. Linux에서는 process 주소 공간을 2 GiB로 제한한다.
+
+문서당 최대 512개 chunk를 허용한다. 분할 중 한도를 넘는 즉시 실패하며, JSON 경로·값 전개도 512 × 2,000자 예산을 넘기기 전에 중단한다. Markdown의 줄·제목·표 행, CSV record와 JSON 자식 항목은 순서대로 읽어 전체 중간 목록을 만들지 않는다. Embedding은 최대 64개 chunk씩 provider에 전달한다. 최대 8개 batch를 순서대로 요청하며 각 embedding HTTP 요청의 timeout은 60초다. 이 값은 S3 조회·추출·DB 저장을 포함한 전체 처리 시간의 보장이 아니다. Lease가 재발급되면 이전 worker의 저장은 거부된다. 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다. Document 삭제는 provenance를 보존하는 archive이며 원본과 chunk를 유지하되 검색, retry, AI 후보 조회·승인에서 제외한다.
+
+Markdown chunk는 2,000자 문맥 예산에 들어가는 상위 제목 경로를 원문 그대로 함께 보존한다. 제목 경로 자체가 예산을 초과하면 일반 텍스트 분할로 처리한다. 같은 단계의 제목이나 새 최상위 제목을 만나면 이전 경로를 제거하며 fenced code 안의 제목은 문서 구조로 해석하지 않는다. 본문 없는 상위 제목은 자식 chunk의 문맥으로 사용한다. 같은 부모와 단계 아래에 연속된 본문·자식 없는 제목은 예산 안에서 함께 묶고 공통 상위 제목만 반복한다. 본문이 있는 섹션과 새 최상위 제목의 경계는 유지한다. `metadata.start/end`는 줄바꿈과 앞뒤 공백을 정규화한 추출 본문의 문자 범위이고, 반복한 제목의 원본 범위는 `metadata.contextSpans`에 기록한다. 이력서의 주인·경력·기술·프로젝트 구분도 같은 chunk의 근거로 조회할 수 있다. 변환 파일의 범위는 원본 bytes나 PDF page 좌표가 아니다. JSON의 범위는 경로·값으로 펼친 본문을 기준으로 한다.
+
+Markdown 표와 CSV는 열 제목을 반복하면서 들어갈 수 있는 행을 함께 묶는다. Markdown 표는 상위 제목도 함께 보존하며, 반복한 열 제목의 범위는 `metadata.contextSpans`에 기록한다. 하나의 긴 행은 열 제목을 제외한 본문 예산으로 나누고, 표의 열 제목 자체가 너무 길어 유효한 본문 공간을 확보할 수 없으면 일반 텍스트 분할을 적용한다. Fenced code 안의 표 예시는 문서 표로 해석하지 않는다.
 
 ### 문서 공유 범위 변경
 
@@ -180,7 +186,7 @@ Ready 문서의 scope 변경은 현재 문서와 대상 scope의 `manage` 권한
 
 Application의 scope 변경 use case가 repository의 원자적 변경 port를 호출한다. Repository는 조직 관리 advisory lock으로 최신 membership·대상 팀을 검증하고, 조직별 Knowledge scope 배타 잠금 아래 문서와 직접 provenance로 연결된 node·edge를 검증한다. 모든 출처의 현재 유효성·대상 scope 포함 여부, graph 관리 권한, 대상 identity 충돌을 검사한다. 관계 양 끝의 최종 scope와 유효 출처를 검사하며, node scope 축소로 기존 edge를 읽을 수 없게 만드는 변경은 제외한다. 통과한 항목만 변경하고 문서·지식·audit을 함께 commit한다. 제외된 지식은 기존 scope를 유지하며 일반 검색의 현재 provenance 권한 필터를 계속 적용한다.
 
-Graph 쓰기는 같은 조직별 Knowledge scope 잠금을 사용한다. 공개 node 생성, 후보 승인과 node 병합은 이름 해석·병합·승격을 원자적으로 수행하기 위해 배타 모드를 사용하며, 나머지 Graph 저장·삭제는 공유 모드를 사용한다. Scope 변경 중에는 이 쓰기들을 대기시키며 일반 조회는 계속 허용한다. 검증한 출처 row는 공유 잠금으로 commit까지 보존한다. 지식 생성은 저장 transaction에서 source scope를 다시 확인하고, 관계 생성은 끝점 scope도 확인한다. 후보 검토는 현재 문서 scope와 검토자의 활성 멤버십·관리 권한을 다시 확인한다. 삭제는 application이 확인한 scope를 repository에서 재검사한다. Scope 변경과 겹친 오래된 mutation으로 이전 권한을 적용하지 않는다.
+Graph 쓰기는 같은 조직별 Knowledge scope 잠금을 사용한다. 공개 node 생성, 후보 승인과 node 병합은 이름 해석·병합·승격을 원자적으로 수행하기 위해 배타 모드를 사용하며, 나머지 Graph 저장·삭제는 공유 모드를 사용한다. Scope 변경 중에는 이 쓰기들을 대기시키며 일반 조회는 계속 허용한다. 검증한 출처 row는 공유 잠금으로 commit까지 보존한다. 지식 생성은 저장 transaction에서 source의 현재 유효성·처리 상태와 scope를 다시 확인하고, 관계 생성은 끝점 scope도 확인한다. 후보 검토는 현재 문서 scope와 검토자의 활성 멤버십·관리 권한을 다시 확인한다. 삭제는 application이 확인한 scope를 repository에서 재검사한다. Scope 변경과 겹친 오래된 mutation으로 이전 권한을 적용하지 않는다.
 
 문서 범위 축소·이동에서 제외된 지식은 기존 scope를 유지한다. Properties·설명·별칭·embedding은 현재 읽을 수 있는 출처만 사용하므로 숨겨진 출처의 값이 남은 지식에 섞이지 않는다. 충돌 검사는 출처·권한 검증을 통과해 실제 이동할 수 있는 후보와 대상 범위의 기존 지식 사이에 수행한다. 보관 요청도 권한 검사 시 읽은 document scope를 저장 조건으로 사용해 동시 scope 변경에 이전 권한을 적용하지 않는다.
 

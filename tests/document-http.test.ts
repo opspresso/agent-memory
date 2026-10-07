@@ -34,7 +34,7 @@ describe("document HTTP boundary", () => {
         scopeKind: "team",
         teamId: "6b16dd4c-c599-46b0-9af7-35db8f4bdc16",
         title: "Runbook",
-        mimeType: "application/pdf"
+        mimeType: "application/octet-stream"
       }).success
     ).toBe(false);
   });

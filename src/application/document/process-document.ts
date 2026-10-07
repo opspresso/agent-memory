@@ -1,7 +1,6 @@
 import {
   createDocumentChunk,
   InvalidDocumentError,
-  maxDocumentChunks,
   type DocumentChunk
 } from "@/domain/document/document";
 import type { DocumentRepository } from "@/domain/document/document-repository";
@@ -21,7 +20,7 @@ export interface ProcessDocumentDependencies {
   readonly embeddingService?: TextEmbeddingService;
   readonly generateId: () => string;
   readonly objectStorage: DocumentObjectStorage;
-  readonly repository: DocumentRepository;
+  readonly repository: Pick<DocumentRepository, "claimForProcessing" | "completeProcessing" | "failProcessing">;
   readonly textExtractor: DocumentTextExtractor;
 }
 
@@ -65,18 +64,13 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
 
     try {
       const content = await dependencies.objectStorage.get(document.objectKey);
-      const text = await dependencies.textExtractor.extract(
+      const extracted = await dependencies.textExtractor.extract(
         content,
         document.mimeType
       );
-      const parts = chunkDocumentText(text, document.mimeType);
+      const parts = chunkDocumentText(extracted.text, extracted.mimeType);
       if (parts.length === 0) {
         throw new InvalidDocumentError("document contains no extractable text");
-      }
-      if (parts.length > maxDocumentChunks) {
-        throw new InvalidDocumentError(
-          `document exceeds the ${maxDocumentChunks} chunk processing limit`
-        );
       }
       const embeddings = dependencies.embeddingService
         ? await embedDocumentParts(
@@ -105,7 +99,7 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
           ...(embeddings[ordinal]
             ? { embedding: embeddings[ordinal] }
             : {}),
-          metadata: { start: part.start, end: part.end, ...(part.contextSpans ? { contextSpans: part.contextSpans } : {}) },
+          metadata: { textMimeType: extracted.mimeType, start: part.start, end: part.end, ...(part.contextSpans ? { contextSpans: part.contextSpans } : {}) },
           now: completedAt
         })
       );

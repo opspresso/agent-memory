@@ -87,12 +87,14 @@ Knowledge·문서 상세의 `검색 진단 정보`를 펼치면 상대 관련도
 - team scope: 해당 팀 멤버와 조직 `admin`·`owner`가 선택할 수 있다. 먼저 공유할 팀을 선택하라.
 - organization scope: 조직 `admin`·`owner`만 선택할 수 있다.
 
-- 지원 형식: UTF-8 text, Markdown, CSV, JSON, XML
+- 지원 형식: TXT·Markdown·CSV·JSON·XML·HTML·PDF·DOCX·PPTX·XLSX·XLS·EPUB (텍스트 파일은 UTF-8)
 - 최대 원본 크기: 10 MiB, 추출 결과 최대 512 chunks
 - 기본 quota: organization 누적 원본 1 GiB, 처리 대기·진행 100건, 사용자별 시간당 업로드 100건(운영 환경변수로 조정)
 - title을 생략하면 파일 이름을 사용한다.
 
-PDF·Office 파일의 변환이나 URL에서 원본을 가져오는 기능은 현재 업로드 경로에 없다. API의 `sourceUri`는 출처 metadata이며 원격 파일을 내려받는 주소로 사용하지 않는다.
+PDF·Office·HTML·EPUB는 본문을 Markdown으로 변환한다. 제목·표·시트·슬라이드 구조는 원본에서 추출할 수 있는 범위에서 보존한다. 스캔 PDF와 이미지 OCR, 암호화 문서, 구형 Word `.doc`·PowerPoint `.ppt`, HWP, 이미지·음성 파일은 지원하지 않는다. 스캔 문서는 OCR을 적용하고 암호화 문서는 암호를 해제한 파일을 업로드하라.
+
+파일 변환은 최대 60초, 출력은 8 MiB다. DOCX·PPTX·XLSX·EPUB는 압축 해제 크기 64 MiB와 항목 수 4,096개를 넘을 수 없다. 한도를 넘으면 문서를 나눠 업로드하라. API의 `sourceUri`는 출처 metadata이며 원격 파일을 내려받는 주소로 사용하지 않는다.
 
 처리 흐름은 다음과 같다.
 
@@ -274,6 +276,7 @@ Agent token만 전달하면 발급자에게 귀속되는 organization service pr
 | --- | --- |
 | 기억 저장·회상·잊기 | `remember`, `recall`, `forget` |
 | Memory·RAG·Graph 통합 검색 | `context_search` |
+| 문서 수집·상태 확인·실패 재처리 | `document_ingest`, `document_ingest_status`, `document_ingest_retry` |
 | 문서 또는 Graph 검색 | `document_search`, `knowledge_search` |
 | Graph 관계 탐색 | `knowledge_neighborhood` |
 
