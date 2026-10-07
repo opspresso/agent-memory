@@ -13,7 +13,7 @@ import {
   Title
 } from "@mantine/core";
 import { IconCheck, IconCopy } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { organizationMemoryServerName } from "@/lib/organization-memory-server-name";
 
@@ -176,6 +176,7 @@ function McpEndpointPanel({ mcpEndpoint, origin, organizationSlug }: {
           </Group>
           <Text c="dimmed" size="sm">
             context_search · recall · remember · forget ·
+            document_ingest · document_ingest_status · document_ingest_retry ·
             document_search · knowledge_search · knowledge_neighborhood
           </Text>
         </Stack>
@@ -195,12 +196,15 @@ function AgentTokenPanel({
   const [generatedToken, setGeneratedToken] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const mutationVersion = useRef(0);
 
   useEffect(() => {
     if (!organizationSlug || !canManageToken) {
       return;
     }
     const controller = new AbortController();
+    const version = mutationVersion.current;
+    const current = () => !controller.signal.aborted && version === mutationVersion.current;
     fetch(`/api/agent-token`, {
       signal: controller.signal
     })
@@ -211,9 +215,9 @@ function AgentTokenPanel({
           agentTokenStatusResponseSchema
         )
       )
-      .then(setTokenStatus)
+      .then((status) => { if (current()) setTokenStatus(status); })
       .catch((caught) => {
-        if (!controller.signal.aborted) {
+        if (current()) {
           setError(
             caught instanceof Error
               ? caught.message
@@ -228,6 +232,7 @@ function AgentTokenPanel({
     if (!organizationSlug) {
       return;
     }
+    mutationVersion.current += 1;
     setBusy(true);
     setError(undefined);
     setGeneratedToken(undefined);
@@ -242,6 +247,7 @@ function AgentTokenPanel({
           generatedAgentTokenResponseSchema
         )
       );
+      mutationVersion.current += 1;
       setGeneratedToken(generated.token);
       setTokenStatus({
         configured: true,
@@ -297,6 +303,7 @@ function AgentTokenPanel({
     ) {
       return;
     }
+    mutationVersion.current += 1;
     setBusy(true);
     setError(undefined);
     setGeneratedToken(undefined);
@@ -312,6 +319,7 @@ function AgentTokenPanel({
           agentTokenStatusResponseSchema
         );
       }
+      mutationVersion.current += 1;
       setTokenStatus({ configured: false });
     } catch (caught) {
       setError(
