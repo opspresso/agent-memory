@@ -13,6 +13,7 @@ const conversionTimeoutMilliseconds = 60_000;
 const conversionErrors: Readonly<Record<string, string>> = {
   unsupported: "unsupported document MIME type",
   invalid: "document is damaged, encrypted, or does not match its file type",
+  encoding: "document must contain valid UTF-8 text",
   no_text: "document contains no extractable text; scanned images require OCR before upload",
   input_limit: "document must contain between 1 byte and 10 MiB",
   archive_limit: "document archive exceeds 64 MiB or 4096 entries",

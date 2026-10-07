@@ -79,7 +79,10 @@ def convert(content, mime_type):
     if extension == ".xls" and not content.startswith(bytes.fromhex("d0cf11e0a1b11ae1")):
         raise RejectedDocument("invalid")
     if extension == ".html":
-        text = content.decode("utf-8")
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            raise RejectedDocument("encoding") from None
         if "\0" in text:
             raise RejectedDocument("invalid")
     # Select the exact converter. General convert()/URL and plugin dispatch are deliberately absent.

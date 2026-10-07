@@ -47,6 +47,14 @@ describe("uploaded document conversion", () => {
     expect(result.text).not.toContain("root:");
   });
 
+  it("reports the UTF-8 requirement without exposing invalid HTML source", async () => {
+    const source = Buffer.from("<p>private-document-sentinel caf\u00e9</p>", "latin1");
+    const error = await parser.extract(source, "text/html").catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(InvalidDocumentError);
+    expect(String(error)).toContain("valid UTF-8");
+    expect(String(error)).not.toContain("private-document-sentinel");
+  });
+
   it("uses the native path for UTF-8 text without starting Python", async () => {
     const native = createMarkItDownTextExtractor({ pythonPath: "/missing-python" });
     await expect(native.extract(Buffer.from("# 한글"), "text/markdown"))
