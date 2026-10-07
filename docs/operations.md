@@ -623,7 +623,7 @@ pnpm verify
 | 같은 `DATABASE_URL`로 사전 schema 초기화 | 테스트 서버와 fixture가 동일 schema 사용 |
 | 연결 가능한 Neo4j와 일치하는 `NEO4J_*` 설정 | 테스트 서버의 필수 시작·readiness 검사 |
 | Worker 하나 | 인증 시나리오의 초기화 충돌 방지. Playwright config에서 자동 적용 |
-| Port 3110 확보 | 로컬에서는 기존 서버를 재사용할 수 있으므로 다른 설정의 서버를 먼저 종료 |
+| Port 3110 확보 | Playwright가 격리된 설정으로 서버를 시작하므로 이 port의 다른 서버를 먼저 종료 |
 
 다음 예시는 로컬 Compose의 Neo4j와 폐기 가능한 E2E 전용 PostgreSQL을 시작한다. Neo4j 연결값을 변경했다면 같은 `NEO4J_*` 값을 테스트 process에도 전달하라.
 
@@ -638,7 +638,7 @@ docker run --detach --name agent-memory-e2e \
 docker exec agent-memory-e2e pg_isready -U agent_memory -d agent_memory_e2e
 ```
 
-`pg_isready`가 성공한 뒤 같은 shell에서 schema 초기화와 인증 E2E를 실행한다. Playwright는 별도 `.next-e2e`에 production build를 만들고 port 3110에서 서버를 실행한다.
+`pg_isready`가 성공한 뒤 같은 shell에서 schema 초기화와 인증 E2E를 실행한다. Playwright는 별도 `.next-e2e`에 production build를 만들고 port 3110에서 서버를 실행한다. 기존 서버를 재사용하지 않으며 worker·embedding·reranker·telemetry를 비활성화한다. 지식 추출 UI에는 테스트 모델과 연결되지 않는 loopback endpoint를 사용하므로 개인 `.env.local`의 AI credential로 요청하지 않는다.
 
 ```bash
 export DATABASE_URL=postgresql://agent_memory:agent_memory@127.0.0.1:5434/agent_memory_e2e
