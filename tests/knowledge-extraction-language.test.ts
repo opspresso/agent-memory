@@ -5,7 +5,7 @@ import { readKnowledgeExtractionLanguage } from "@/lib/knowledge-extraction-conf
 import { validateRuntimeEnvironment } from "@/lib/runtime-configuration";
 
 describe("knowledge extraction output language", () => {
-  it("defaults to source language and validates configured values", () => {
+  it("defaults to Korean and validates configured values", () => {
     expect(readKnowledgeExtractionLanguage({})).toBe("ko");
     for (const language of ["ko", "en", "source"] as const) {
       expect(readKnowledgeExtractionLanguage({ KNOWLEDGE_EXTRACTION_LANGUAGE: language })).toBe(language);
