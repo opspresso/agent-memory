@@ -12,6 +12,20 @@ const metadataSchema = z
     "document metadata must not exceed 32 KiB"
   );
 
+// Validate without allocating decoded buffers; the accepted payload is decoded once by the MCP boundary.
+function base64ByteLength(content: string): number | undefined {
+  if (content.length % 4 !== 0) return undefined;
+  const padding = content.endsWith("==") ? 2 : content.endsWith("=") ? 1 : 0;
+  const payload = content.slice(0, content.length - padding);
+  if (/[^A-Za-z0-9+/]/.test(payload)) return undefined;
+  if (padding) {
+    const last = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".indexOf(payload.at(-1) ?? "=");
+    // Unused low bits must be zero; Buffer.from alone accepts noncanonical tails.
+    if (last < 0 || (last & (padding === 2 ? 15 : 3)) !== 0) return undefined;
+  }
+  return content.length / 4 * 3 - padding;
+}
+
 export const documentIngestSchema = z.object({
   idempotencyKey: z.string().trim().min(1).max(256),
   scope: memoryScopeSchema,
@@ -30,11 +44,10 @@ export const documentIngestSchema = z.object({
       context.addIssue({ code: "custom", path: ["content"], message: "document exceeds 10 MiB" });
     }
   } else {
-    const decoded = Buffer.from(input.content, "base64");
-    if (decoded.toString("base64") !== input.content) {
+    const byteLength = base64ByteLength(input.content);
+    if (byteLength === undefined) {
       context.addIssue({ code: "custom", path: ["content"], message: "document content must be canonical base64" });
-    }
-    if (decoded.byteLength > maxDocumentBytes) {
+    } else if (byteLength > maxDocumentBytes) {
       context.addIssue({ code: "custom", path: ["content"], message: "document exceeds 10 MiB" });
     }
   }

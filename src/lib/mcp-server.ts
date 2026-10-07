@@ -142,10 +142,10 @@ export function createAgentMemoryMcpServer(
       title: "Ingest a document", description: "Store a scoped document for retrieval. Use UTF-8 content for text or contentEncoding=base64 for PDF, Office, and EPUB files. Replays with the same idempotencyKey return the existing document. Check document_ingest_status until ready.",
       inputSchema: documentIngestSchema, annotations: { idempotentHint: true }
     }, async (input) => executeMcpTool(async () => {
+      const bytes = Buffer.from(input.content, input.contentEncoding);
       const document = await operations.uploadDocument!({ access, idempotencyKey: input.idempotencyKey,
         scope: resolveScopedResource(input.scope, access.organizationId, access.userId), title: input.title,
-        mimeType: input.mimeType, content: input.contentEncoding === "utf8"
-          ? new TextEncoder().encode(input.content) : new Uint8Array(Buffer.from(input.content, "base64")),
+        mimeType: input.mimeType, content: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
         ...(input.sourceUri ? { sourceUri: input.sourceUri } : {}), ...(input.metadata ? { metadata: input.metadata } : {}) });
       return jsonResult({ document: publicDocument(document) });
     }));

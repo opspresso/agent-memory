@@ -35,8 +35,15 @@ describe("MCP document bytes", () => {
     expect(documentIngestSchema.parse({ ...input, contentEncoding: "base64", content: "JVBERg==" }).content).toBe("JVBERg==");
   });
 
-  it.each(["!bad", "JVBERg", "JVBE Rg==", "JVBERh==", "=", "JVBERg==\n"])("rejects noncanonical base64 %s", (content) => {
+  it.each(["!bad", "JVBERg", "JVBE Rg==", "JVBERh==", "=", "JVBERg==\n", "JV=ERg==", "JVBERi==", "JVBERv==", "JVBERi9=", "====", "YWJj-_=="])("rejects noncanonical base64 %s", (content) => {
     expect(documentIngestSchema.safeParse({ ...input, contentEncoding: "base64", content }).success).toBe(false);
+  });
+
+  it("accepts every byte value with zero, one and two padding characters", () => {
+    for (let length = 1; length <= 258; length += 1) {
+      const content = Buffer.from(Array.from({ length }, (_, index) => index % 256)).toString("base64");
+      expect(documentIngestSchema.safeParse({ ...input, contentEncoding: "base64", content }).success).toBe(true);
+    }
   });
 
   it("applies the original-byte limit to base64", () => {
