@@ -44,6 +44,17 @@ describe("knowledge extraction authorization", () => {
     expect(test.extract).toHaveBeenLastCalledWith(expect.objectContaining({ quotaKey: { organizationId: "org", userId: "creator" } }));
   });
 
+  it("lets a team writer extract their upload while reserving explicit retries for managers", async () => {
+    const test = fixture();
+    test.findByUser.mockResolvedValue({ ...owner, userId: "creator", role: "member", teams: [{ teamId: "team", role: "member" }] });
+    test.findChunkById.mockResolvedValue({ document: { ...test.document, scope: { organizationId: "org", kind: "team", teamId: "team" } }, chunk: test.chunk });
+    expect(await test.run("org", "chunk")).toMatchObject({ status: "pending" });
+    expect(test.extract).toHaveBeenCalledOnce();
+    test.extract.mockClear();
+    expect(await test.run("org", "chunk", "creator")).toBeNull();
+    expect(test.extract).not.toHaveBeenCalled();
+  });
+
   it("does not persist extraction after the requester's membership is revoked", async () => {
     const test = fixture();
     test.findByUser.mockResolvedValueOnce(owner).mockResolvedValueOnce(null);

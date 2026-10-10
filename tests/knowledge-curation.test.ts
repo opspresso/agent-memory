@@ -64,6 +64,16 @@ describe("automatic curation orchestration", () => {
     expect(test.accept).not.toHaveBeenCalled();
     expect(test.reject).not.toHaveBeenCalled();
   });
+
+  it("leaves a team writer's extracted candidates for a manager to review", async () => {
+    const test = setup();
+    test.findByChunkId.mockResolvedValue({ ...candidate, scope: { organizationId: "org", kind: "team", teamId: "team" } });
+    test.findByUser.mockResolvedValue({ organizationId: "org", userId: "owner", role: "member", teams: [{ teamId: "team", role: "member" }] });
+    await test.run("org", "ch");
+    expect(test.verify).not.toHaveBeenCalled();
+    expect(test.accept).not.toHaveBeenCalled();
+    expect(test.reject).not.toHaveBeenCalled();
+  });
   it("fails closed when verification fails", async () => {
     const test = setup();
     test.verify.mockRejectedValue(new Error("provider unavailable"));
