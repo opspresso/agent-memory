@@ -318,6 +318,25 @@ Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 �
 
 [규범 문서 평가 기록](../evaluation/knowledge/normative-comparison.json)은 `openai/gpt-6-luna`로 추출·독립 검증한 수정 전후 결과를 담는다. 4개 사례에서 승인된 정답 개체는 5/7에서 7/7, 관계는 1/3에서 3/3으로 늘었고 오답은 양쪽 모두 0개였다. 각 사례를 한 번씩 평가한 진단 결과이며 운영 문서 전체의 정확도나 반복 실행의 동일성을 보장하지 않는다.
 
+검증 단계만 비교하려면 [주장 검증 사례](../evaluation/knowledge/verification-corpus.json)를 사용한다. 30개 합성 사례에는 정상 관계, 부정·계획·조건, 잘못된 방향·요약·별칭, 원문 안의 지시가 포함된다. 사례마다 지정한 한 항목의 승인·보류를 평가하며 추출 recall은 측정하지 않는다.
+
+```bash
+pnpm eval:verification --variants chat,jev --repeats 3
+```
+
+`chat`은 현재 추출·검증 모델 설정을 사용한다. `jev`는 별도의 `OPENROUTER_API_KEY`가 필요하며 [OpenRouter Decisions API](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request)를 호출한다. 다른 chat endpoint의 key를 자동으로 전송하지 않는다. 결과는 `.eval-results/knowledge/verification/`에 저장한다. `--split calibration|validation`으로 사례를 선택하고 `--output`으로 경로를 바꿀 수 있다. 응답 오류나 미완료 사례가 있으면 종료 코드는 1이며, 알 수 없는 비용을 0으로 기록하지 않는다.
+
+JEV는 생성 문장 대신 유형이 정해진 판정을 반환하므로 chat 모델을 그대로 대체할 수 없다. 평가 adapter는 기존 지식과의 충돌·사용자 정의 kind를 지원하지 않으며 runtime에 연결하지 않는다. `--threshold`는 선택한 답의 확률이 낮을 때 보류하도록 하는 평가 변수다. 기본값 `0`은 원래 판정을 측정하기 위한 값이며 운영 승인 기준이 아니다.
+
+[2026-10-10 검증 비교](../evaluation/knowledge/verification-comparison.json)는 같은 30개 사례를 3회 반복한 결과다. 아래 비용은 응답의 `usage.cost` 합계다.
+
+| 검증기 | 정상 주장 승인 / 36 | 잘못된 주장 승인 / 54 | 중앙 지연 시간 | 90회 비용(USD) |
+| --- | --- | --- | --- | --- |
+| `openai/gpt-6-luna` chat | 35 | 0 | 3,718 ms | 0.016868 |
+| `typesafe/jev-1.13` Decisions | 36 | 3 | 400 ms | 0.006173 |
+
+JEV는 같은 설명형 별칭을 3회 모두 승인했다. 저장된 판정에 확률 기준 0.9를 적용하면 오승인은 0개가 되지만 정상 승인도 16/36으로 줄었다. 따라서 현재 runtime은 chat 검증을 유지한다. 이 자료는 개발 중 사용한 진단 사례이며, 분리된 `validation` 집합도 미공개 성능 평가로 해석하지 않는다.
+
 현재 runtime만 평가할 때는 다음 명령을 사용한다.
 
 ```bash
