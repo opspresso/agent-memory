@@ -474,7 +474,7 @@ Converter는 업로드 bytes만 읽고 원격 URL·plugin·LLM을 호출하지 �
 - 개체 추출이 끝나면 `knowledge_extraction_checkpoints`에 결과를 저장한다. 관계 추출 전 quota가 소진되거나 worker가 다시 시작돼도 같은 입력의 개체 추출을 반복하지 않는다. 원문·모델·언어·온톨로지 지침 등이 달라지면 checkpoint를 재사용하지 않는다. 내부 checkpoint는 승인 후보나 완료된 Graph가 아니다.
 - 추출 응답의 구조를 확인한 뒤 원문 인용을 검증한다. 원문 근거가 없는 항목, 없는 개체를 참조하는 관계와 자기 자신을 가리키는 관계는 제외하며 같은 청크의 정상 지식은 보존한다. 중복 키가 동일 kind·정규화 이름을 가리키면 통합하고, 서로 다른 개체를 가리키면 해당 개체들과 그 키를 참조하는 관계를 제외한다. 이 정규화가 끝난 graph에 candidate 불변 조건과 별도 AI 검증을 적용한다.
 - AI 추출 후 별도 검증 요청으로 원문 근거·유용성·충돌을 평가한다. 독립 검증 설정을 사용하며 미설정이면 추출 모델·endpoint를 사용한다. 명시성·유용성·원문 인용·개체 자격·종류·충돌·온톨로지 정책을 통과한 항목은 자동 승인한다. 핵심 관계는 모델의 `incidental` 표기만으로 제외하지 않으며, 불확실한 항목은 수동 검토로 남긴다. 검증 요청도 AI quota를 소비하며 실패하면 자동 반영하지 않고 enrichment job을 재시도한다. 검증 대상 원문과 제안은 유지하고, 참고할 기존 개체 개요는 개체당 2,000자로 제한해 출처 누적으로 요청이 계속 커지는 것을 막는다.
-- 기본 자동 검토는 문서 생성자의 현재 active membership과 source scope `manage` 권한을 요구한다. 검토 화면의 일괄 실행은 인증된 요청자를 job에 기록하며 worker가 그 권한을 다시 확인한다. 저장된 추출과 assessment는 재사용한다. 재추출을 위한 구버전 호환 경로는 없으며 worker 실행이 필요하다.
+- 자동 검토는 큐에 기록한 실제 요청자의 현재 active membership과 source scope `manage` 권한을 요구한다. 업로드·문서 retry의 후속 추출에는 요청자의 `write` 권한을 적용한다. Worker는 각 단계에서 현재 권한과 조직 전용 Agent의 scope 제한을 확인한다. 저장된 추출과 현재 정책·출처 조건이 유효한 assessment를 재사용하며 worker 실행이 필요하다.
 
 검증된 별칭은 `knowledge_node_sources.names`에 출처별로 저장한다. 일반 속성에 이름 목록을 넣거나 모델 설정만 바꿔도 기존 node가 자동으로 병합되지는 않는다. 새 후보 승인과 명시적 병합에서 검증된 이름을 보존하며 이후 이름 조회·검색·추출 검증에 사용한다. 공유 별칭이 여러 개체와 일치하면 수동 검토에서 identity를 해결해야 한다. 이 column과 index를 포함한 현재 schema는 `pnpm db:generate`로 생성하며, 기존 설치의 schema 변경은 Database 초기화 절차와 명시적 데이터 보존·초기화 결정을 따른다.
 
@@ -607,7 +607,7 @@ Worker가 비활성화된 상태에서 upload한 문서는 자동으로 `ready`�
 
 Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node 생성 또는 문서 처리와 semantic query를 실패시킬 수 있다. Provider를 사용하지 않을 계획이면 `EMBEDDING_MODEL`을 비워 lexical-only 모드로 실행하라. Reranker 장애는 통합 검색·Memory 회상을 실패시키지 않고 권한 필터가 적용된 hybrid 순위로 복귀한다. 반복 fallback은 `context reranking unavailable` log와 provider 상태를 확인하라.
 
-모든 embedding, reranker, extraction, ontology suggestion 호출은 instance-local concurrency·minute limit를 먼저 거친 뒤 PostgreSQL의 organization·user minute bucket을 소비한다. 여러 replica와 background worker가 같은 durable quota를 공유한다. 일반 요청은 초과 시 `429`, knowledge enrichment는 후속 예약, 문서 ingestion은 queue retry로 처리한다. Reranker의 quota 초과는 hybrid 순위 복귀로 처리한다. Bucket은 입력·본문 없이 organization ID와 내부 principal key, minute, count만 저장하고 하루가 지난 row를 후속 요청에서 정리한다.
+모든 embedding, reranker, extraction, verification, ontology suggestion 호출은 instance-local concurrency·minute limit를 먼저 거친 뒤 PostgreSQL의 organization·user minute bucket을 소비한다. 여러 replica와 background worker가 같은 durable quota를 공유한다. 일반 요청은 초과 시 `429`를 반환하고, 문서 ingestion과 Knowledge enrichment는 오류 재시도를 소모하지 않는 후속 job으로 예약한다. Reranker의 quota 초과는 hybrid 순위 복귀로 처리한다. Bucket은 입력·본문 없이 organization ID와 내부 principal key, minute, count만 저장하고 하루가 지난 row를 후속 요청에서 정리한다.
 
 ### AI 후보가 생성되지 않음
 

@@ -500,7 +500,7 @@ curl -i \
   "$AGENT_MEMORY_URL/api/documents/<documentId>/retry"
 ```
 
-Retry는 현재 document scope의 `write` 권한을 요구한다. 성공은 재시도 queue 등록을 수락했다는 `202`이며, 응답 Document는 등록 전 snapshot이므로 `status: "failed"`일 수 있다. 처리 완료 여부는 상태 조회 endpoint로 확인한다. `pending`, `processing`, `ready` 문서를 retry하면 `409`, archived 문서는 `404`다.
+Retry는 현재 document scope의 `write` 권한을 요구한다. 새 요청은 새 처리 세대와 `pending` 상태를 준비한 뒤 queue에 등록한다. 성공은 `202`와 준비한 Document이며 처리 완료 여부는 상태 조회 endpoint로 확인한다. `pending`, `processing`, `ready` 문서를 retry하면 `409`, archived 문서는 `404`다.
 
 `DELETE .../documents/:documentId`는 문서를 영구 제거하지 않고 archive하며 `204`를 반환한다. 원본과 chunk는 provenance 보존을 위해 유지하지만 검색, 상태 조회, retry, AI 후보 조회·승인에서는 제외한다. 삭제에는 현재 document scope의 `manage` 권한이 필요하다. 권한 확인 이후 scope가 달라지면 저장 시점에 보관을 거부하고 `404`를 반환한다.
 
@@ -577,7 +577,7 @@ Node·edge 생성 성공은 `200`과 공개 resource를 반환한다. Node 응�
 
 병합 성공은 `200`과 갱신된 target node를 반환한다. 자기 자신과의 병합이나 서로 다른 scope 병합은 `400`이다.
 
-Node identity는 ID로 유지한다. 생성과 AI 후보 승인은 같은 scope·kind에서 호출자가 읽을 수 있는 출처 이름을 NFKC·공백·대소문자 정규화 후 비교한다. 원래 대표 이름과 별칭의 역할은 출처별로 보존하며 표시명이 같다는 이유만으로 병합하지 않는다. 유일한 동일인 근거가 있으면 기존 ID를 사용하고, 없으면 새 ID를 만든다. 읽을 수 없는 저장 대표 이름이 같다는 이유로 기존 node에 연결하지 않는다. `award`, `honor`, `honour`, `achievement`, `designation`은 `recognition`으로 통합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
+Node identity는 ID로 유지한다. 생성과 AI 후보 승인은 같은 scope·kind에서 호출자가 읽을 수 있고 대상 scope 전체에 공개된 출처 이름을 NFKC·공백·대소문자 정규화 후 비교한다. 원래 대표 이름과 별칭의 역할은 출처별로 보존하며 표시명이 같다는 이유만으로 병합하지 않는다. 유일한 동일인 근거가 있으면 기존 ID를 사용하고, 없으면 새 ID를 만든다. 읽을 수 없는 저장 대표 이름이 같다는 이유로 기존 node에 연결하지 않는다. `award`, `honor`, `honour`, `achievement`, `designation`은 `recognition`으로 통합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
 
 ### 조직 온톨로지 검증
 
@@ -638,11 +638,11 @@ Assessment의 `sources`는 원문과 비교에 사용한 Memory·chunk 참조이
 
 `GET /api/knowledge/progress`는 읽기 가능한 ready 문서 청크를 대상으로 `{ totalChunks, extractedChunks, curatedChunks, enabled }`를 반환한다. Curated는 검증과 자동 처리가 끝났거나 사람이 완료한 청크다. 이 숫자는 수동 검토까지 모두 끝났다는 의미가 아니다.
 
-`GET /api/knowledge/curation`은 검토 권한이 있는 ready 문서의 최근 assessment 기록 50개를 `{ sources: [{ candidate, documentTitle, ordinal }] }`로 반환한다. Candidate는 assessment와 항목별 자동·수동 처리 기록을 포함한다.
+`GET /api/knowledge/curation`은 검토 권한이 있는 ready 문서에서 조회 가능한 검증 이력이 있는 최근 갱신 후보 50개를 `{ sources: [{ candidate, documentTitle, ordinal }] }`로 반환한다. Candidate는 공개 가능한 현재 assessment·assessmentHistory와 항목별 자동·수동 처리 기록을 포함한다. 현재 assessment가 숨겨져도 유효한 이전 이력이 있으면 반환한다.
 
 #### 자동 검토 등록
 
-`POST /api/knowledge/curation?query=관우`는 검토 권한이 있는 후보 중 이름·추출된 별칭에 해당 검색어가 포함된 후보를 우선 처리한다. Query는 선택 사항이며 최대 500자다. 기존 queued job도 우선순위를 올린다. 이미 저장된 추출을 재사용하며 원문 전체 재검색이나 재추출은 수행하지 않는다. Query가 있으면 `queued`는 기존 대기·실행 중 작업을 포함한 우선 처리 요청 대상 수이며, 생략하면 새로 등록된 작업 수다. Query를 생략하면 미검증 추출·미완료 자동 처리 항목과 아직 추출 결과가 없는 ready 청크를 등록한다. 추출 실패로 재시도가 소진된 청크도 포함하며 source의 현재 `manage` 권한을 요구한다. 완료된 추출은 보존하고 queued·active 작업은 중복 등록하지 않는다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐 요청자(기본 ingestion은 문서 생성자)의 현재 권한을 검증한 후 실행한다.
+`POST /api/knowledge/curation?query=관우`는 검토 권한이 있는 후보 중 이름·추출된 별칭에 해당 검색어가 포함된 후보를 우선 처리한다. Query는 선택 사항이며 최대 500자다. 기존 queued job도 우선순위를 올린다. 이미 저장된 추출을 재사용하며 원문 전체 재검색이나 재추출은 수행하지 않는다. Query가 있으면 `queued`는 기존 대기·실행 중 작업을 포함한 우선 처리 요청 대상 수이며, 생략하면 새로 등록된 작업 수다. Query를 생략하면 미검증 추출·미완료 자동 처리 항목과 아직 추출 결과가 없는 ready 청크를 등록한다. 추출 실패로 재시도가 소진된 청크도 포함하며 source의 현재 `manage` 권한을 요구한다. 완료된 추출은 보존하고 queued·active 작업은 중복 등록하지 않는다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐에 기록한 실제 요청자의 현재 권한을 검증한다. 업로드·문서 retry의 후속 추출은 `write`, 이 endpoint의 추출과 자동 검토는 `manage`를 요구한다. 조직 전용 Agent의 scope 제한도 유지한다.
 
 #### 검증 결과와 별칭
 

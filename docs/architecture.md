@@ -218,6 +218,8 @@ Graph 쓰기는 같은 조직별 Knowledge scope 잠금을 사용한다. 공개 
 
 Runtime은 두 단계의 structured-output 요청을 사용한다. 단일 호출 추출기는 평가 비교용이다. 각 요청은 AI limiter를 개별적으로 통과한다.
 
+추출·검증·온톨로지 추천은 같은 structured client에서 HTTP 요청, quota, JSON 응답 해석을 처리한다. 기능별 timeout과 오류 코드는 유지한다. AI adapter는 본문 byte 상한을 파싱 전에 검사하고 실패 응답을 취소한다. 기능별 상한은 [AI provider 연결](operations.md#ai-provider-연결)을 따른다.
+
 1. 원문에서 이름과 인용이 있는 개체를 식별한다. 이름·종류를 정규화하고 부적격 개체를 제거한다.
 2. 살아남은 개체 key만 관계 끝점의 enum으로 전달해 관계를 추출한다. 개체가 0–1개면 이 요청을 생략한다.
 3. 인용과 연결 구조를 검사해 후보를 만든다. 관계가 없는 결과도 정상으로 보존한다. 관계 요청이 실패하면 부분 Graph를 승인 후보로 반환하지 않는다.
@@ -313,7 +315,7 @@ AI가 제안한 대표 이름은 NFKC·공백 정규화 후 원문에 있어야 
 
 Node identity는 ID로 유지하며 저장된 대표 이름은 내부 label이다. 공개 `canonicalName`은 읽을 수 있는 출처 이름 중 내부 label과 정규화 key가 같은 값을 사용하고, 없으면 정규화 key 순서로 첫 이름을 선택한다. 같은 key의 표기가 여러 개면 문자열 정렬상 마지막 표기를 사용해 조회 순서에 의존하지 않는다. `aliases`에는 나머지 읽을 수 있는 이름만 포함한다. 정확한 이름 조회와 lexical 검색에도 숨겨진 내부 label을 넣지 않는다. Node source는 비어 있지 않은 이름 map을 필수로 저장한다.
 
-Node 생성과 후보 승인은 조직별 배타 잠금 안에서 호출자가 읽을 수 있는 출처 이름으로 신규·기존 ID를 결정한다. Persistence에는 이 결정과 원래 기여 이름을 따로 전달하며 저장 label로 다시 연결하지 않는다. 저장 label에는 전역 이름 unique 제약을 두지 않고, scope 조회에는 별도의 nonunique index를 사용한다. 같은 호출자의 동시 재기여는 같은 ID로 수렴한다. Node 생성·후보 승인·병합은 각 출처가 제공한 이름만 보존하며 대상이나 이전 node의 저장 대표 이름을 다른 출처에 복사하지 않는다.
+Node 생성과 후보 승인은 조직별 배타 잠금 안에서 신규·기존 ID를 결정한다. 이때 호출자가 읽을 수 있고 대상 scope 전체에 공개된 출처 이름을 사용한다. Persistence에는 이 결정과 원래 기여 이름을 따로 전달하며 저장 label로 다시 연결하지 않는다. 저장 label에는 전역 이름 unique 제약을 두지 않고, scope 조회에는 별도의 nonunique index를 사용한다. 같은 호출자의 동시 재기여는 같은 ID로 수렴한다. Node 생성·후보 승인·병합은 각 출처가 제공한 이름만 보존하며 대상이나 이전 node의 저장 대표 이름을 다른 출처에 복사하지 않는다.
 
 출처의 `primary_name_keys`는 원래 대표 이름의 역할을 `names`의 별칭과 구분하며, 비어 있지 않고 모두 해당 이름 map에 존재해야 한다. 병합은 이 역할도 출처별로 합친다. Identity resolver와 scope 충돌 검사는 현재 읽을 수 있는 원래 대표 이름을 사용하고 표시명을 대표 이름의 근거로 재해석하지 않는다. 따라서 같은 별칭이 표시명으로 선택된 서로 다른 개체도 별칭 공유만으로 병합하지 않는다.
 
@@ -375,8 +377,8 @@ Payload fingerprint는 JSON key 순서·생성 시각·인증 role에 의존하�
 요청 내용을 반영한다. Archive 뒤에도 receipt를 유지해 재생성을 막는다. 문서 queue 등록은 resource
 transaction 뒤에 수행하며, pending upload replay가 동일 ID로 queue publication을 복구한다.
 
-멱등 문서 retry는 receipt와 pending 상태를 함께 commit한 뒤 queue에 발행한다. Queue 메시지의
-expectedAttempts와 현재 처리 횟수가 일치할 때만 새 처리를 claim한다. 만료된 processing lease는
-같은 횟수로 회수하므로 worker 재시작과 새 retry 요청을 구분한다. 완료된 처리의 오래된 queue
-메시지는 새 처리를 시작하지 않는다. 멱등 수집 queue의 중복 제거 키는 document ID와
-expectedAttempts를 함께 사용하므로 이전 세대의 queued·active·retry job이 새 세대를 막지 않는다.
+멱등 문서 retry는 `expectedAttempts`로 관측한 처리 횟수를 검사하고, 새 `processingGeneration`과
+pending 상태·receipt를 함께 commit한 뒤 queue에 발행한다. Worker는 메시지와 현재 문서의
+처리 세대가 같을 때만 claim한다. 같은 세대의 오류 재시도·만료 lease 회수도 새 claim마다
+`processingAttempts`를 증가시킨다. 완료되거나 새 세대로 교체된 처리의 오래된 메시지는 새 작업을
+시작하지 않는다. Queue의 중복 제거 키는 document ID와 처리 세대를 함께 사용한다.
