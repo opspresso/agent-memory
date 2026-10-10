@@ -102,6 +102,29 @@ describe("document processing", () => {
     expect(covered.size).toBe(source.length);
   });
 
+  it("prefers paragraph boundaries over spaces inside the next provision", () => {
+    const paragraph = "First complete provision. ".repeat(4).trim();
+    const source = `${paragraph}\n\nSecond provision has conditions and exceptions that belong together.\n\nLast provision.`;
+    const chunks = chunkText(source, { maxCharacters: 150, overlapCharacters: 0 });
+    expect(chunks[0]?.content).toBe(paragraph);
+    expect(chunks[1]?.content).toContain("Second provision has conditions and exceptions that belong together.");
+    expect(chunks.every((chunk) => chunk.content === source.slice(chunk.start, chunk.end))).toBe(true);
+  });
+
+  it("starts overlapping legal text at word boundaries without dropping source characters", () => {
+    const source = Array.from({ length: 20 }, (_, index) =>
+      `제${index + 1}조 대한민국헌법은 권리와 의무를 규정하며 조건과 예외를 함께 읽어야 한다.`).join("\n\n");
+    const chunks = chunkText(source, { maxCharacters: 120, overlapCharacters: 20 });
+    const covered = new Set<number>();
+    for (const chunk of chunks) {
+      expect(chunk.content).toBe(source.slice(chunk.start, chunk.end));
+      expect(chunk.content.length).toBeLessThanOrEqual(120);
+      if (chunk.start > 0) expect(source[chunk.start - 1]).toMatch(/\s/);
+      for (let index = chunk.start; index < chunk.end; index += 1) covered.add(index);
+    }
+    expect([...source].every((character, index) => /\s/.test(character) || covered.has(index))).toBe(true);
+  });
+
   it("preserves Markdown heading context across chunks", () => {
     const chunks = chunkDocumentText(
       `### Agent Studio\n\n${"production AI agent platform ".repeat(100)}`,

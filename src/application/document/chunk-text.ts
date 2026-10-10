@@ -68,7 +68,8 @@ export function chunkText(
         boundaryWindow.lastIndexOf("\n"),
         boundaryWindow.lastIndexOf(" ")
       ];
-      const boundary = Math.max(...candidates);
+      // Prefer a complete paragraph or line over a later space inside a sentence.
+      const boundary = candidates.find((candidate) => candidate >= 0) ?? -1;
       if (boundary >= 0) {
         end = minimumBreak + boundary;
       }
@@ -84,6 +85,12 @@ export function chunkText(
       break;
     }
     start = Math.max(actualEnd - overlapCharacters, start + 1);
+    // Overlap must not introduce a fragment of a word or an article number.
+    // Keep the hard split for an unbroken token so progress and coverage remain bounded.
+    if (start > 0 && !/\s/.test(text[start - 1] ?? "") && !/\s/.test(text[start] ?? "")) {
+      const boundary = text.slice(start, actualEnd).search(/\s/);
+      if (boundary >= 0) start += boundary;
+    }
     if (splitsSurrogatePair(text, start)) start += 1;
   }
 
