@@ -114,7 +114,7 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     }).map(([item,identity]) => [item,{ ...identity,support:"explicit",usefulness:"useful",conflict:false,evidenceId:"s0",reason:"The source states this fact." }])) }));
     await buildCurateKnowledgeCandidate({ candidates,documents,ontology,clock,graph:f.repository,access:createOrganizationAccessRepository(db),
       verification:createKnowledgeVerificationService({ baseUrl:"http://verifier.test/v1",model:"verifier",request:verificationRequest }),
-      accept:buildAcceptKnowledgeCandidate({ repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
+      accept:buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db), repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
       reject:buildRejectKnowledgeCandidate({ repository:candidates,clock,method:"automatic" }) })(f.organizationId,source.chunkId);
     const approved = await candidates.findByChunkId(f.organizationId,source.chunkId);
     expect(approved?.status).toBe("accepted");
@@ -166,7 +166,7 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
         { item:"entity:employer",representation:"entity",entityKind:"organization",support:"explicit",usefulness:"useful",conflict:false,evidence:"### 북극소프트",reason:"Employer in career entry." },
         { item:"relationship:0",representation:"relationship",support:"explicit",usefulness:"useful",conflict:false,evidence:chunk!.content,reason:"Career section identifies employer and period." }
       ] }) },
-      accept:buildAcceptKnowledgeCandidate({ repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
+      accept:buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db), repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
       reject:buildRejectKnowledgeCandidate({ repository:candidates,clock,method:"automatic" })
     })(f.organizationId,chunk!.id);
     const [person] = await f.repository.findNodesByNames(f.access,f.scope,["김하늘"]);

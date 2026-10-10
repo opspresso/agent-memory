@@ -90,6 +90,43 @@ function graphRepository(
 }
 
 describe("knowledge candidate review", () => {
+  it.each([null, "archived", "processing"])("does not embed an unavailable source (%s) before rejecting its pending candidate", async (status) => {
+    const embedMany = vi.fn().mockResolvedValue([{ model: "embedding", values: [1] }, { model: "embedding", values: [1] }]);
+    const review = buildAcceptKnowledgeCandidate({
+      clock: () => now, generateId: vi.fn(), ontologyReader: ontologyReader(),
+      documentRepository: { findById: vi.fn().mockResolvedValue(status ? { status, scope: candidate.scope } : null) },
+      embeddingService: { embed: vi.fn(), embedMany },
+      repository: repository({ findById: vi.fn().mockResolvedValue(candidate), accept: vi.fn().mockResolvedValue({ status: "source_not_ready" }) })
+    });
+    await expect(review(admin, candidate.id)).rejects.toThrow("source document is not ready");
+    expect(embedMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects a source scope change before embedding", async () => {
+    const embedMany = vi.fn();
+    const accept = vi.fn();
+    const review = buildAcceptKnowledgeCandidate({ clock: () => now, generateId: vi.fn(), ontologyReader: ontologyReader(),
+      documentRepository: { findById: vi.fn().mockResolvedValue({ status: "ready", scope: { kind: "user", organizationId: "organization-1", userId: "other-user" } }) },
+      repository: repository({ findById: vi.fn().mockResolvedValue(candidate), accept }),
+      embeddingService: { embed: vi.fn(), embedMany } });
+    await expect(review(admin, candidate.id)).rejects.toThrow("Knowledge source changed");
+    expect(embedMany).not.toHaveBeenCalled();
+    expect(accept).not.toHaveBeenCalled();
+  });
+
+  it("replays completed approval without embedding or requiring its source to remain ready", async () => {
+    const findDocument = vi.fn();
+    const embedMany = vi.fn();
+    const accepted = { ...candidate, status: "accepted" as const };
+    const review = buildAcceptKnowledgeCandidate({ clock: () => now, generateId: vi.fn(), ontologyReader: ontologyReader(),
+      documentRepository: { findById: findDocument }, embeddingService: { embed: vi.fn(), embedMany },
+      repository: repository({ findById: vi.fn().mockResolvedValue(accepted),
+        accept: vi.fn().mockResolvedValue({ status: "promoted", candidate: accepted, nodes: [], edges: [] }) }) });
+    expect(await review(admin, candidate.id)).toMatchObject({ candidate: accepted, nodes: [], edges: [] });
+    expect(findDocument).not.toHaveBeenCalled();
+    expect(embedMany).not.toHaveBeenCalled();
+  });
+
   it("passes reviewer scope to the pending candidate query", async () => {
     const candidates = repository({
       listPending: vi.fn().mockResolvedValue([candidate])
@@ -177,6 +214,7 @@ describe("knowledge candidate review", () => {
       .mockReturnValueOnce("node-2")
       .mockReturnValueOnce("edge-1");
     const review = buildAcceptKnowledgeCandidate({
+      documentRepository: { findById: vi.fn().mockResolvedValue({ status: "ready", scope: candidate.scope }) },
       ontologyReader: ontologyReader(),
       clock: () => now,
       generateId,
@@ -211,6 +249,7 @@ describe("knowledge candidate review", () => {
       { model: "embedding-model", values: [0, 1] }
     ]);
     const review = buildAcceptKnowledgeCandidate({
+      documentRepository: { findById: vi.fn().mockResolvedValue({ status: "ready", scope: candidate.scope }) },
       ontologyReader: ontologyReader(),
       clock: () => now,
       embeddingService: { embed: vi.fn(), embedMany },
@@ -277,6 +316,7 @@ describe("knowledge candidate review", () => {
 
   it("threads ontology warnings through a warn-mode promotion", async () => {
     const review = buildAcceptKnowledgeCandidate({
+      documentRepository: { findById: vi.fn().mockResolvedValue({ status: "ready", scope: candidate.scope }) },
       clock: () => now,
       generateId: vi.fn().mockReturnValue("id"),
       ontologyReader: ontologyReader({
@@ -305,6 +345,7 @@ describe("knowledge candidate review", () => {
       findById: vi.fn().mockResolvedValue(candidate)
     });
     const review = buildAcceptKnowledgeCandidate({
+      documentRepository: { findById: vi.fn().mockResolvedValue({ status: "ready", scope: candidate.scope }) },
       clock: () => now,
       embeddingService: { embed: vi.fn(), embedMany },
       generateId: vi.fn(),
@@ -324,6 +365,7 @@ describe("knowledge candidate review", () => {
 
   it("reports a not-ready source document instead of a generic conflict", async () => {
     const review = buildAcceptKnowledgeCandidate({
+      documentRepository: { findById: vi.fn().mockResolvedValue({ status: "ready", scope: candidate.scope }) },
       clock: () => now,
       generateId: vi.fn().mockReturnValue("id"),
       ontologyReader: ontologyReader(),
@@ -343,6 +385,7 @@ describe("knowledge candidate review", () => {
       findById: vi.fn().mockResolvedValue(candidate)
     });
     const review = buildAcceptKnowledgeCandidate({
+      documentRepository: { findById: vi.fn().mockResolvedValue({ status: "ready", scope: candidate.scope }) },
       ontologyReader: ontologyReader(),
       clock: () => now,
       generateId: vi.fn(),

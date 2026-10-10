@@ -33,6 +33,9 @@ export function buildAuthorizeKnowledgeSource(
   dependencies: AuthorizeKnowledgeSourceDependencies
 ): AuthorizeKnowledgeSource {
   return async function execute(access, source, targetScope) {
+    if (Number(source.memoryId !== undefined) + Number(source.chunkId !== undefined) !== 1 ||
+        (source.memoryId !== undefined && !source.memoryId.trim()) ||
+        (source.chunkId !== undefined && !source.chunkId.trim())) throw new KnowledgeSourceNotFoundError();
     if (source.memoryId) {
       const memory = await dependencies.memoryRepository.findById(
         access.organizationId,

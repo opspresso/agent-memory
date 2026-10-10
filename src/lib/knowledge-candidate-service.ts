@@ -10,6 +10,7 @@ import {
 
 import {
   knowledgeCandidateRepository,
+  documentRepository,
   knowledgeGraphRepository,
   knowledgeOntologyReader,
   textEmbeddingService
@@ -31,6 +32,7 @@ export const findKnowledgeCandidateDuplicateRecords =
   });
 
 export const acceptKnowledgeCandidateRecord = buildAcceptKnowledgeCandidate({
+  documentRepository,
   clock,
   generateId: randomUUID,
   ontologyReader: knowledgeOntologyReader,

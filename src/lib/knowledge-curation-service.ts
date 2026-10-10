@@ -11,6 +11,7 @@ export const knowledgeProcessingEnabled = knowledgeVerificationService !== undef
 export const listKnowledgeCurationHistory = buildListKnowledgeCurationHistory(knowledgeCandidateRepository);
 export const queueKnowledgeCuration = knowledgeVerificationService ? buildQueueKnowledgeCuration(knowledgeCandidateRepository, documentIngestionQueue) : undefined;
 const accept = buildAcceptKnowledgeCandidate({ clock, generateId: randomUUID, method: "automatic",
+  documentRepository,
   repository: knowledgeCandidateRepository, ontologyReader: knowledgeOntologyReader,
   ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {}) });
 const reject = buildRejectKnowledgeCandidate({ clock, repository: knowledgeCandidateRepository, method: "automatic" });

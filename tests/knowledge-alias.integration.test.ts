@@ -43,7 +43,7 @@ describe("source-grounded knowledge aliases", () => {
     const documents = createDocumentRepository(db);
     const ontology = createKnowledgeOntologyReader(db);
     const clock = () => new Date();
-    const accept = buildAcceptKnowledgeCandidate({ repository: candidates, ontologyReader: ontology, clock, generateId: randomUUID, method: "automatic" });
+    const accept = buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db), repository: candidates, ontologyReader: ontology, clock, generateId: randomUUID, method: "automatic" });
     const reject = buildRejectKnowledgeCandidate({ repository: candidates, clock, method: "automatic" });
     const verify = vi.fn<KnowledgeVerificationService["verify"]>().mockImplementation(async (input) => ({ model: "independent-verifier", items: [
       ...input.graph.entities.map((entity) => `entity:${entity.key}`), ...input.graph.relationships.map((_, index) => `relationship:${index}`)
@@ -130,6 +130,21 @@ describe("source-grounded knowledge aliases", () => {
     expect(await generate(test.organizationId, origin.chunkId, test.userId)).toBeNull();
     expect(extract).not.toHaveBeenCalled();
     expect(await test.candidates.findByChunkId(test.organizationId, origin.chunkId)).toBeNull();
+  });
+
+  it("rejects an archived pending source before sending its entity descriptions to embedding", async () => {
+    const test = await fixture();
+    const source = await test.extract("Atlas is a hosted service.", {
+      entities: [{ key: "atlas", kind: "service", canonicalName: "Atlas", summary: "A hosted service." }], relationships: []
+    });
+    await pool.query("UPDATE documents SET status='archived' WHERE id=$1", [source.documentId]);
+    const embedMany = vi.fn();
+    const accept = buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db),
+      repository: test.candidates, ontologyReader: createKnowledgeOntologyReader(db), clock: () => new Date(), generateId: randomUUID,
+      embeddingService: { embed: vi.fn(), embedMany } });
+    await expect(accept(test.access, source.candidate.id)).rejects.toThrow("source document is not ready");
+    expect(embedMany).not.toHaveBeenCalled();
+    expect((await test.candidates.findByChunkId(test.organizationId, source.chunkId))?.status).toBe("pending");
   });
 
   it("merges fragmented identities while retaining edges, provenance and previous approval bindings", async () => {
@@ -239,7 +254,7 @@ describe("source-grounded knowledge aliases", () => {
     ], relationships: [{ sourceKey: "p", targetKey: "q", predicate: "helped" }] });
     await test.curate(test.organizationId, input.chunkId);
     expect(await test.graph.findNodesByNames(test.access, test.scope, ["승상"])).toEqual([]);
-    const accept = buildAcceptKnowledgeCandidate({ repository: test.candidates, ontologyReader: createKnowledgeOntologyReader(db),
+    const accept = buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db), repository: test.candidates, ontologyReader: createKnowledgeOntologyReader(db),
       generateId: randomUUID, clock: () => new Date() });
     await accept(test.access, input.candidate.id, "Verified relationship only", { entityKeys: [], relationshipIndexes: [0] });
     expect(await test.graph.findNodesByNames(test.access, test.scope, ["승상"])).toEqual([]);

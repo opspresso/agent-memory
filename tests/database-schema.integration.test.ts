@@ -2703,7 +2703,7 @@ describe("PostgreSQL schema", () => {
     const curate = buildCurateKnowledgeCandidate({
       candidates: repository, documents: createDocumentRepository(db), access: createOrganizationAccessRepository(db),
       graph: createKnowledgeGraphRepository(db), ontology, verification: { verify }, clock: () => now,
-      accept: buildAcceptKnowledgeCandidate({ clock: () => now, generateId: randomUUID, method: "automatic", repository, ontologyReader: ontology }),
+      accept: buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db), clock: () => now, generateId: randomUUID, method: "automatic", repository, ontologyReader: ontology }),
       reject: buildRejectKnowledgeCandidate({ clock: () => now, method: "automatic", repository })
     });
     await curate(organization, automaticChunkId);

@@ -23,6 +23,9 @@ import {
 import type { KnowledgeOntologyReader } from "@/domain/knowledge/knowledge-ontology-reader";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 import { isKnowledgeEntityKind } from "@/domain/knowledge/knowledge-entity-eligibility";
+import type { DocumentRepository } from "@/domain/document/document-repository";
+import { sameScope } from "@/domain/identity/scope-coverage";
+import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-change";
 
 export class KnowledgeCandidateReviewAccessDeniedError extends Error {
   constructor() {
@@ -176,7 +179,9 @@ export type AcceptKnowledgeCandidateResult = KnowledgeCandidatePromotionResult &
   Readonly<{ ontologyWarnings: readonly KnowledgeOntologyViolation[] }>;
 
 export function buildAcceptKnowledgeCandidate(
-  dependencies: ReviewKnowledgeCandidateDependencies
+  dependencies: ReviewKnowledgeCandidateDependencies & {
+    readonly documentRepository: Pick<DocumentRepository, "findById">;
+  }
 ) {
   return async function execute(
     access: OrganizationAccess,
@@ -207,6 +212,9 @@ export function buildAcceptKnowledgeCandidate(
       });
       return { ...promotionFromAcceptResult(existing), ontologyWarnings: [] };
     }
+    const source = await dependencies.documentRepository.findById(access.organizationId, candidate.documentId);
+    if (!source || source.status !== "ready") throw new KnowledgeCandidateSourceNotReadyError();
+    if (!sameScope(source.scope, candidate.scope)) throw new KnowledgeScopeChangedError();
     const selected = selectKnowledgeCandidateItems(candidate, selection);
     if (candidate.graph.entities.length === 0) {
       throw new InvalidKnowledgeCandidateReviewError("empty extraction cannot be accepted");
