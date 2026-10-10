@@ -119,6 +119,31 @@ describe("document scope transactions", () => {
     expect(serviceUsage.edgePredicates.map(({ term }) => term)).toEqual(["public_predicate", "public_proposed"]);
   });
 
+  it("excludes rejected terms and does not count an approved item twice in a partially reviewed candidate", async () => {
+    const f = await fixture();
+    const candidates = createKnowledgeCandidateRepository(f.db);
+    const candidate = await candidates.save(createKnowledgeCandidate({
+      id: randomUUID(), scope: f.scope, documentId: f.doc.id, chunkId: f.doc.chunkId, model: "test", now: f.now,
+      graph: { entities: [
+        { key: "a", kind: "approved_kind", canonicalName: "Alpha" },
+        { key: "b", kind: "rejected_kind", canonicalName: "Beta" },
+        { key: "c", kind: "pending_kind", canonicalName: "Gamma" }
+      ], relationships: [
+        { sourceKey: "a", targetKey: "c", predicate: "pending_predicate" },
+        { sourceKey: "b", targetKey: "c", predicate: "rejected_predicate" }
+      ] }
+    }));
+    await candidates.accept({ organizationId: f.organizationId, candidateId: candidate.id,
+      reviewedBy: f.userId, reviewedAt: f.now, entityPromotions: [{ key: "a", id: randomUUID() }],
+      relationshipIds: [randomUUID(), randomUUID()], selection: { entityKeys: ["a"], relationshipIndexes: [] } });
+    await candidates.reject({ organizationId: f.organizationId, candidateId: candidate.id,
+      reviewedBy: f.userId, reviewedAt: f.now, selection: { entityKeys: ["b"], relationshipIndexes: [1] } });
+    expect((await candidates.findById(f.organizationId, candidate.id))?.status).toBe("pending");
+    const usage = await createKnowledgeTermUsageRepository(f.db).collect(f.access);
+    expect(usage.nodeKinds).toEqual([{ term: "approved_kind", count: 1 }, { term: "pending_kind", count: 1 }]);
+    expect(usage.edgePredicates).toEqual([{ term: "pending_predicate", count: 1 }]);
+  });
+
   it.each(["expired", "future"] as const)("rejects a %s Memory contribution to existing knowledge", async (state) => {
     const f = await fixture();
     await f.node("Alice");

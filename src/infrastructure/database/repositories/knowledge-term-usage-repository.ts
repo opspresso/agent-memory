@@ -60,6 +60,10 @@ export function createKnowledgeTermUsageRepository(
           WHERE ${knowledgeCandidates.organizationId} = ${organizationId}
             AND ${knowledgeCandidates.status} = 'pending'
             AND ${documents.status} = 'ready' AND ${scopedReadPredicate(access, documents)}
+            AND NOT EXISTS (
+              SELECT 1 FROM jsonb_array_elements(${knowledgeCandidates.itemReviews}) AS review
+              WHERE review->>'item' = 'entity:' || (entity->>'key')
+            )
           GROUP BY 2
           UNION ALL
           SELECT 'predicate' AS axis,
@@ -68,10 +72,15 @@ export function createKnowledgeTermUsageRepository(
           FROM ${knowledgeCandidates} JOIN ${documents}
             ON ${documents.organizationId} = ${knowledgeCandidates.organizationId}
               AND ${documents.id} = ${knowledgeCandidates.documentId}
-          CROSS JOIN LATERAL jsonb_array_elements(${knowledgeCandidates.graph}->'relationships') AS relationship
+          CROSS JOIN LATERAL jsonb_array_elements(${knowledgeCandidates.graph}->'relationships')
+            WITH ORDINALITY AS proposed(relationship, ordinal)
           WHERE ${knowledgeCandidates.organizationId} = ${organizationId}
             AND ${knowledgeCandidates.status} = 'pending'
             AND ${documents.status} = 'ready' AND ${scopedReadPredicate(access, documents)}
+            AND NOT EXISTS (
+              SELECT 1 FROM jsonb_array_elements(${knowledgeCandidates.itemReviews}) AS review
+              WHERE review->>'item' = 'relationship:' || (ordinal - 1)::text
+            )
           GROUP BY 2
         `)
       ]);
