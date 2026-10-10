@@ -14,7 +14,7 @@ export interface DocumentIngestionQueue {
   enqueue(
     organizationId: string,
     documentId: string,
-    expectedAttempts?: number
+    generation: string
   ): Promise<DocumentQueueEnqueueResult>;
 }
 

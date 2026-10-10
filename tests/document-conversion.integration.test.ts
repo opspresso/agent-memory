@@ -46,7 +46,7 @@ describe("supported document ingestion and retrieval", () => {
       textExtractor: createMarkItDownTextExtractor({ pythonPath: process.env.DOCUMENT_PARSER_PYTHON ?? resolve(".venv-document-parser/bin/python") }) });
     const boss = await queue.start();
     await boss.work<DocumentIngestionJob>(documentIngestionQueueName, { batchSize: 1, pollingIntervalSeconds: 0.5 }, async (jobs) => {
-      for (const job of jobs) await processDocument(job.data.organizationId, job.data.documentId, job.data.expectedAttempts);
+      for (const job of jobs) await processDocument(job.data.organizationId, job.data.documentId, job.data.generation);
     });
   });
   afterAll(async () => {

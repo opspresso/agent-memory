@@ -30,6 +30,7 @@ export interface Document {
   readonly createdBy: string;
   readonly errorMessage?: string;
   readonly processingAttempts: number;
+  readonly processingGeneration: string;
   readonly processingStartedAt?: Date;
   readonly processedAt?: Date;
   readonly createdAt: Date;
@@ -116,6 +117,7 @@ export function createDocument(input: NewDocument): Document {
     metadata: Object.freeze({ ...input.metadata }),
     createdBy: input.createdBy,
     processingAttempts: 0,
+    processingGeneration: input.id,
     createdAt: new Date(input.now),
     updatedAt: new Date(input.now)
   });

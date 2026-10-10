@@ -86,7 +86,7 @@ describe("uploaded document conversion", () => {
       repository: { claimForProcessing: vi.fn().mockResolvedValue({ document, leaseId: "lease" }),
         completeProcessing, failProcessing: vi.fn() }
     });
-    await processDocument("org", "doc");
+    await processDocument("org", "doc", document.processingGeneration);
     expect(completeProcessing).toHaveBeenCalledOnce();
     expect(completeProcessing.mock.calls[0]?.[1][0]).toMatchObject({
       content: expect.stringContaining("# Orion handbook"), metadata: { textMimeType: "text/markdown" }

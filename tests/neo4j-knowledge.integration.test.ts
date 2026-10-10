@@ -149,7 +149,7 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     await buildProcessDocument({ repository:documents,clock,generateId:randomUUID,
       objectStorage:{ get:async () => new TextEncoder().encode(markdown),put:vi.fn(),delete:vi.fn() },
       textExtractor:{ extract:async () => ({ text: markdown, mimeType: "text/markdown" }) }
-    })(f.organizationId,source.documentId);
+    })(f.organizationId,source.documentId,(await documents.findById(f.organizationId,source.documentId))!.processingGeneration);
     const [chunk] = await documents.listChunksByDocument(f.organizationId,source.documentId);
     expect(chunk?.content).toContain("# 김하늘\n## 경력");
     expect(chunk?.metadata.contextSpans).toEqual([{ start:0,end:5 },{ start:7,end:12 }]);

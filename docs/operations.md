@@ -477,10 +477,12 @@ Converter는 업로드 bytes만 읽고 원격 URL·plugin·LLM을 호출하지 �
 
 | Queue | 작업 단위 | Retry 설정 |
 | --- | --- | --- |
-| `document-ingestion-v2` | Document ID별 exclusive job | 최대 3회, 초기 지연 5초와 backoff |
+| `document-ingestion-v3` | Document ID·처리 세대별 exclusive job | 최대 3회, 초기 지연 5초와 backoff |
 | `document-knowledge-enrichment-v2` | Chunk ID별 exclusive job | 최대 5회, 초기 지연 15초와 backoff |
 
 위 횟수는 실제 오류에 적용한다. Knowledge enrichment가 서버 AI quota에 막히면 현재 job을 `deferred: true` 결과로 완료하고, 제한 해제 이후의 후속 job을 원자적으로 예약한다. 이 대기는 오류 재시도 횟수를 소모하거나 복원하지 않는다. Worker는 대기하는 동안 claim을 잡고 있지 않으며, 후속 실행에서 source와 요청자의 권한을 다시 검사한다. `document knowledge enrichment deferred` 로그와 예약 작업을 확인하라. 외부 provider 오류·timeout과 문서 ingestion은 기존 오류 재시도 정책을 따른다.
+
+Document ingestion 메시지의 세대 ID는 같은 요청의 오류 재시도에서 유지한다. 사용자 retry가 새 세대를 준비하면 이전 세대의 작업은 문서를 다시 처리하지 못한다. `processingAttempts`는 claim을 얻을 때마다 증가하며 queue 세대 ID로 사용하지 않는다.
 
 두 queue의 job expiration과 document processing lease는 15분이다. Worker가 처리 claim을 다시 얻으면 새 lease ID를 사용하며 이전 worker의 늦은 complete·fail은 거부된다. 문서 retry API의 성공은 enqueue를 뜻하며 즉시 `ready`로 바뀌는 것은 아니다.
 
@@ -529,7 +531,7 @@ worker instance: DOCUMENT_WORKER_ENABLED=true
 
 현재 Docker image의 기본 command는 Next.js server이므로 전용 worker도 HTTP server와 같은 process에서 시작된다. 완전히 분리된 worker-only entry point는 제공하지 않는다. 여러 worker가 같은 pg-boss queue를 처리할 수 있으며 document processing lease가 stale worker의 늦은 상태 변경을 차단한다.
 
-Worker는 `document-ingestion-v2`와 `document-knowledge-enrichment-v2`를 소비한다. 자동 queue 이관은 제공하지 않는다. DB를 초기화할 때는 pg-boss schema의 작업도 함께 정리한다. `failed` 문서만 retry API로 등록할 수 있으며 `pending`·`processing` 문서는 상태·lease와 원본을 확인한 뒤 별도 복구 절차를 결정한다.
+Worker는 `document-ingestion-v3`와 `document-knowledge-enrichment-v2`를 소비한다. 자동 queue 이관은 제공하지 않는다. DB를 초기화할 때는 pg-boss schema의 작업도 함께 정리한다. `failed` 문서만 retry API로 등록할 수 있으며 `pending`·`processing` 문서는 상태·lease와 원본을 확인한 뒤 별도 복구 절차를 결정한다.
 
 ### 백업과 복원
 

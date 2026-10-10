@@ -39,6 +39,7 @@ function repository(overrides: Partial<DocumentRepository> = {}): DocumentReposi
     findById: vi.fn(),
     findChunkById: vi.fn(),
     listChunksByDocument: vi.fn(),
+    prepareRetry: vi.fn(),
     claimForProcessing: vi.fn(),
     completeProcessing: vi.fn(),
     failProcessing: vi.fn(),
@@ -540,7 +541,8 @@ describe("document processing", () => {
       "organization-1",
       "document-1",
       "failed to enqueue document ingestion",
-      now
+      now,
+      "document-1"
     );
   });
 
@@ -615,7 +617,7 @@ describe("document processing", () => {
       }
     });
 
-    await process("organization-1", "document-1");
+    await process("organization-1", "document-1", "document-1");
 
     expect(completeProcessing).toHaveBeenCalledWith(
       { document, leaseId: "lease-1" },
@@ -670,7 +672,7 @@ describe("document processing", () => {
       }
     });
 
-    await process("organization-1", "document-1");
+    await process("organization-1", "document-1", "document-1");
 
     expect(embedMany.mock.calls.length).toBeGreaterThan(1);
     expect(
@@ -717,7 +719,7 @@ describe("document processing", () => {
       embeddingService: { embed: vi.fn(), embedMany }
     });
 
-    await process("organization-1", "document-1");
+    await process("organization-1", "document-1", "document-1");
 
     const chunks = completeProcessing.mock.calls[0]![1];
     expect(chunks).toHaveLength(40);
@@ -761,7 +763,7 @@ describe("document processing", () => {
       }
     });
 
-    await expect(process("organization-1", "document-1")).rejects.toThrow(
+    await expect(process("organization-1", "document-1", "document-1")).rejects.toThrow(
       "extractor failed"
     );
     expect(failProcessing).toHaveBeenCalledWith(
@@ -808,7 +810,7 @@ describe("document processing", () => {
       }
     });
 
-    await expect(process("organization-1", "document-1")).rejects.toThrow(
+    await expect(process("organization-1", "document-1", "document-1")).rejects.toThrow(
       "document exceeds the 512 chunk processing limit"
     );
     expect(embedMany).not.toHaveBeenCalled();
@@ -832,7 +834,7 @@ describe("document processing", () => {
     });
 
     await expect(
-      process("organization-1", "document-1")
+      process("organization-1", "document-1", "document-1")
     ).resolves.toBeUndefined();
     expect(storage.get).not.toHaveBeenCalled();
   });

@@ -54,6 +54,7 @@ function repository(overrides: Partial<DocumentRepository>): DocumentRepository 
     findById: vi.fn(),
     findChunkById: vi.fn(),
     listChunksByDocument: vi.fn(),
+    prepareRetry: vi.fn(),
     claimForProcessing: vi.fn(),
     completeProcessing: vi.fn(),
     failProcessing: vi.fn(),
@@ -183,17 +184,20 @@ describe("document access", () => {
     const queue: DocumentIngestionQueue = { enqueue };
     const failed = document("failed");
     const retryDocument = buildRetryDocument({
+      clock: () => now,
       queue,
-      repository: repository({ findById: vi.fn().mockResolvedValue(failed) })
+      repository: repository({ findById: vi.fn().mockResolvedValue(failed),
+        prepareRetry: vi.fn().mockResolvedValue({ ...failed, status: "pending", processingGeneration: "retry-generation" }) })
     });
 
-    await expect(retryDocument(memberAccess, failed.id)).resolves.toBe(failed);
-    expect(enqueue).toHaveBeenCalledWith("organization-1", failed.id);
+    await expect(retryDocument(memberAccess, failed.id)).resolves.toMatchObject({ ...failed, status: "pending", processingGeneration: "retry-generation" });
+    expect(enqueue).toHaveBeenCalledWith("organization-1", failed.id, "retry-generation");
   });
 
   it("rejects retry for a non-failed or non-writable document", async () => {
     const queue: DocumentIngestionQueue = { enqueue: vi.fn() };
     const readyRetry = buildRetryDocument({
+      clock: () => now,
       queue,
       repository: repository({ findById: vi.fn().mockResolvedValue(document()) })
     });
@@ -209,6 +213,7 @@ describe("document access", () => {
       }
     };
     const forbiddenRetry = buildRetryDocument({
+      clock: () => now,
       queue,
       repository: repository({
         findById: vi.fn().mockResolvedValue(organizationDocument)

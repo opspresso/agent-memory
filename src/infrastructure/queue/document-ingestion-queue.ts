@@ -6,14 +6,14 @@ import {
   type DocumentKnowledgeEnrichmentQueue
 } from "@/domain/document/document-services";
 
-export const documentIngestionQueueName = "document-ingestion-v2";
+export const documentIngestionQueueName = "document-ingestion-v3";
 export const documentKnowledgeEnrichmentQueueName =
   "document-knowledge-enrichment-v2";
 const documentJobExpirationSeconds =
   documentProcessingLeaseMilliseconds / 1_000;
 
 export interface DocumentIngestionJob {
-  readonly expectedAttempts?: number;
+  readonly generation: string;
   readonly organizationId: string;
   readonly documentId: string;
 }
@@ -86,13 +86,13 @@ export function createPgBossDocumentIngestionQueue(
 
   return {
     start,
-    async enqueue(organizationId, documentId, expectedAttempts) {
+    async enqueue(organizationId, documentId, generation) {
       const instance = await start();
       const jobId = await instance.send(
         documentIngestionQueueName,
-        { organizationId, documentId, ...(expectedAttempts !== undefined ? { expectedAttempts } : {}) } satisfies DocumentIngestionJob,
+        { organizationId, documentId, generation } satisfies DocumentIngestionJob,
         // A stale job cannot claim a newer generation, so it must not suppress it.
-        { singletonKey: expectedAttempts === undefined ? documentId : `${documentId}:${expectedAttempts}` }
+        { singletonKey: `${documentId}:${generation}` }
       );
       return jobId ? "queued" : "already_queued";
     },

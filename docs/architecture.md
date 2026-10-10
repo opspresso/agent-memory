@@ -166,7 +166,7 @@ multipart upload → S3-compatible storage → document row(pending)
 
 ### 원본 저장과 처리 claim
 
-원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v2` queue는 document ID와 선택형 처리 세대(`expectedAttempts`)별 exclusive job을 보장해 같은 세대의 queued·active·retry job이 있을 때만 중복 enqueue를 병합한다.
+원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v3` queue는 document ID와 내부 `processingGeneration` UUID별 exclusive job을 보장한다. 같은 요청의 오류 재시도와 만료 lease 회수는 세대 ID를 유지하고, claim을 얻을 때마다 `processingAttempts`를 증가시킨다. 사용자의 새 retry 요청은 현재 실패 상태·관측한 처리 횟수를 검사하고 새 세대를 준비한다. 이전 세대의 claim과 늦은 enqueue 실패는 새 세대를 변경하지 못한다.
 
 ### 추출·embedding과 실패
 

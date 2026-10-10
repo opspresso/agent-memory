@@ -72,6 +72,7 @@ export function documentFromRow(row: DocumentRow): Document {
     createdBy: row.createdBy,
     ...(row.errorMessage ? { errorMessage: row.errorMessage } : {}),
     processingAttempts: row.processingAttempts,
+    processingGeneration: row.processingGeneration,
     ...(row.processingStartedAt
       ? { processingStartedAt: row.processingStartedAt }
       : {}),
@@ -130,6 +131,7 @@ export function createDocumentRepository(
       status: document.status,
       metadata: document.metadata,
       createdBy: document.createdBy,
+      processingGeneration: document.processingGeneration,
       createdAt: document.createdAt,
       updatedAt: document.updatedAt
     };
@@ -213,19 +215,20 @@ export function createDocumentRepository(
       return row ? documentFromRow(row) : null;
     },
 
-    async prepareRetry(document, expectedAttempts, receipt) {
-      if (receipt.operation !== "document.retry" || receipt.organizationId !== document.scope.organizationId || receipt.resourceId !== document.id) {
+    async prepareRetry(document, expectedAttempts, now, receipt) {
+      if (receipt && (receipt.operation !== "document.retry" || receipt.organizationId !== document.scope.organizationId || receipt.resourceId !== document.id)) {
         throw new Error("retry receipt does not match its document");
       }
       return db.transaction(async (transaction) => {
-        await refuseIngestionReplay(transaction, receipt);
+        if (receipt) await refuseIngestionReplay(transaction, receipt);
         const [current] = await transaction.select().from(documents).where(and(
           eq(documents.organizationId, document.scope.organizationId), eq(documents.id, document.id)
         )).for("update").limit(1);
-        if (!current || current.status !== "failed" || current.processingAttempts !== expectedAttempts) return null;
-        await insertIngestionReceipt(transaction, receipt);
+        if (!current || current.status !== "failed" || current.processingAttempts !== expectedAttempts ||
+            current.processingGeneration !== document.processingGeneration) return null;
+        if (receipt) await insertIngestionReceipt(transaction, receipt);
         const [updated] = await transaction.update(documents).set({ status: "pending", errorMessage: null,
-          processingStartedAt: null, processingLeaseId: null, updatedAt: receipt.createdAt }).where(and(
+          processingStartedAt: null, processingLeaseId: null, processingGeneration: sql`uuidv7()`, updatedAt: now }).where(and(
           eq(documents.organizationId, document.scope.organizationId), eq(documents.id, document.id)
         )).returning();
         return updated ? documentFromRow(updated) : null;
@@ -300,7 +303,7 @@ export function createDocumentRepository(
       return rows.map((row) => chunkFromRow(row.chunk));
     },
 
-    async claimForProcessing(organizationId, documentId, now, expectedAttempts) {
+    async claimForProcessing(organizationId, documentId, now, generation) {
       const staleBefore = new Date(
         now.getTime() - documentProcessingLeaseMilliseconds
       );
@@ -309,8 +312,7 @@ export function createDocumentRepository(
         .set({
           status: "processing",
           errorMessage: null,
-          processingAttempts: expectedAttempts === undefined ? sql`${documents.processingAttempts} + 1`
-            : sql`case when ${documents.status} = 'processing' then ${documents.processingAttempts} else ${documents.processingAttempts} + 1 end`,
+          processingAttempts: sql`${documents.processingAttempts} + 1`,
           processingLeaseId: sql`uuidv7()`,
           processingStartedAt: now,
           updatedAt: now
@@ -319,10 +321,7 @@ export function createDocumentRepository(
           and(
             eq(documents.organizationId, organizationId),
             eq(documents.id, documentId),
-            expectedAttempts === undefined ? undefined : or(
-              and(inArray(documents.status, ["pending", "failed"]), eq(documents.processingAttempts, expectedAttempts)),
-              and(eq(documents.status, "processing"), eq(documents.processingAttempts, expectedAttempts + 1))
-            ),
+            eq(documents.processingGeneration, generation),
             or(
               inArray(documents.status, ["pending", "failed"]),
               and(
@@ -415,7 +414,7 @@ export function createDocumentRepository(
       return updated !== undefined;
     },
 
-    async markEnqueueFailure(organizationId, documentId, errorMessage, now) {
+    async markEnqueueFailure(organizationId, documentId, errorMessage, now, generation) {
       await db
         .update(documents)
         .set({
@@ -427,6 +426,7 @@ export function createDocumentRepository(
           and(
             eq(documents.organizationId, organizationId),
             eq(documents.id, documentId),
+            eq(documents.processingGeneration, generation),
             eq(documents.status, "pending")
           )
         );

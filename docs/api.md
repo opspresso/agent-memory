@@ -884,5 +884,6 @@ Content는 위 문서 MIME과 **디코딩 후 원본 10 MiB** 제한을 적용�
 
 Retry는 현재 문서 write 권한을 요구한다. 같은 키·같은 expectedAttempts는 같은 요청이며, 처리
 횟수가 바뀌면 새 키와 관측한 횟수로 요청한다. 이미 처리한 요청을 replay해도 재처리를 시작하지
-않는다. Queue 메시지도 expectedAttempts를 보관해 늦게 도착한 메시지를 거절한다. 처리 중 worker가
-중단된 경우 같은 횟수에서 만료 lease만 회수한다.
+않는다. 서버는 처리 횟수와 별개인 내부 세대 ID로 queue 요청을 식별한다. 같은 요청의 오류 재시도와
+만료 lease 회수는 허용하고, 새 retry 요청으로 교체된 이전 세대의 작업은 거절한다. Claim을 얻을 때마다
+`processingAttempts`가 증가한다. 새 retry 요청을 enqueue하면 문서는 `pending` 상태를 반환한다.

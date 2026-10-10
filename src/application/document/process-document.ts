@@ -51,12 +51,10 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
   return async function execute(
     organizationId: string,
     documentId: string,
-    expectedAttempts?: number
+    generation: string
   ): Promise<void> {
     const startedAt = dependencies.clock();
-    const claim = expectedAttempts === undefined
-      ? await dependencies.repository.claimForProcessing(organizationId, documentId, startedAt)
-      : await dependencies.repository.claimForProcessing(organizationId, documentId, startedAt, expectedAttempts);
+    const claim = await dependencies.repository.claimForProcessing(organizationId, documentId, startedAt, generation);
     if (!claim) {
       return;
     }

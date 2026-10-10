@@ -66,6 +66,7 @@ function documentRepository(
     findById: vi.fn(),
     findChunkById,
     listChunksByDocument: vi.fn(),
+    prepareRetry: vi.fn(),
     claimForProcessing: vi.fn(),
     completeProcessing: vi.fn(),
     failProcessing: vi.fn(),

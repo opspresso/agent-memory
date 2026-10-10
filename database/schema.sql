@@ -92,6 +92,7 @@ CREATE TABLE "documents" (
 	"status" "document_status" DEFAULT 'pending' NOT NULL,
 	"error_message" text,
 	"processing_attempts" integer DEFAULT 0 NOT NULL,
+	"processing_generation" uuid DEFAULT uuidv7() NOT NULL,
 	"processing_lease_id" uuid,
 	"processing_started_at" timestamp with time zone,
 	"processed_at" timestamp with time zone,

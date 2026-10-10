@@ -232,10 +232,10 @@ describe("PostgreSQL schema", () => {
       const organizationId = "00000000-0000-0000-0000-000000000008";
       const documentId = "40000000-0000-0000-0000-000000000008";
       const chunkId = "50000000-0000-4000-8000-000000000008";
-      await expect(queue.enqueue(organizationId, documentId)).resolves.toBe(
+      await expect(queue.enqueue(organizationId, documentId, documentId)).resolves.toBe(
         "queued"
       );
-      await expect(queue.enqueue(organizationId, documentId)).resolves.toBe(
+      await expect(queue.enqueue(organizationId, documentId, documentId)).resolves.toBe(
         "already_queued"
       );
       await expect(
@@ -250,7 +250,7 @@ describe("PostgreSQL schema", () => {
         { data: { organizationId, documentId } }
       );
       expect(jobs).toHaveLength(1);
-      expect(jobs[0]?.data).toEqual({ organizationId, documentId });
+      expect(jobs[0]?.data).toEqual({ organizationId, documentId, generation: documentId });
       const enrichmentJobs =
         await boss.findJobs<DocumentKnowledgeEnrichmentJob>(
           documentKnowledgeEnrichmentQueueName,
@@ -282,8 +282,8 @@ describe("PostgreSQL schema", () => {
     const queue = createPgBossDocumentIngestionQueue(container.getConnectionUri(), () => {});
     try {
       const boss = await queue.start();
-      await queue.enqueue(organizationId, document.id, 0);
-      const claim = await repository.claimForProcessing(organizationId, document.id, now, 0);
+      await queue.enqueue(organizationId, document.id, document.processingGeneration);
+      const claim = await repository.claimForProcessing(organizationId, document.id, now, document.processingGeneration);
       expect(claim).not.toBeNull();
       await repository.failProcessing(claim!, "temporary extraction failure", now);
 
@@ -291,19 +291,64 @@ describe("PostgreSQL schema", () => {
         receipts: createIngestionReceiptRepository(db), fingerprint: ingestionFingerprint });
       const access: OrganizationAccess = { organizationId, userId, role: "owner", teams: [] };
       const request = { idempotencyKey: "retry-1", expectedAttempts: 1 };
-      await retry(access, document.id, request);
+      const retried = await retry(access, document.id, request);
       await retry(access, document.id, request);
       const jobs = await boss.findJobs<DocumentIngestionJob>(documentIngestionQueueName,
         { data: { organizationId, documentId: document.id } });
-      expect(jobs.map((job) => job.data.expectedAttempts).sort()).toEqual([0, 1]);
-      expect(await repository.claimForProcessing(organizationId, document.id, now, 0)).toBeNull();
-      const next = await repository.claimForProcessing(organizationId, document.id, now, 1);
+      expect(retried.processingGeneration).not.toBe(document.processingGeneration);
+      expect(new Set(jobs.map((job) => job.data.generation))).toEqual(new Set([document.processingGeneration, retried.processingGeneration]));
+      await repository.markEnqueueFailure(organizationId, document.id, "late enqueue failure", now, document.processingGeneration);
+      expect((await repository.findById(organizationId, document.id))?.status).toBe("pending");
+      expect(await repository.claimForProcessing(organizationId, document.id, now, document.processingGeneration)).toBeNull();
+      const next = await repository.claimForProcessing(organizationId, document.id, now, retried.processingGeneration);
       expect(next?.document.processingAttempts).toBe(2);
       await repository.completeProcessing(next!, [], now);
       expect((await repository.findById(organizationId, document.id))?.status).toBe("ready");
     } finally {
       await queue.stop();
     }
+  });
+
+  it("allows a queued ingestion request to retry after a transient processing failure", async () => {
+    const organizationId = randomUUID(), userId = randomUUID(), now = new Date();
+    await pool.query("INSERT INTO users (id, email, name) VALUES ($1, $2, 'Retry User')", [userId, `${userId}@example.test`]);
+    await seedOrganization(createOrganization({ id: organizationId, slug: organizationId, name: "Retry", now }), userId);
+    const repository = createDocumentRepository(db);
+    const document = createDocument({ id: randomUUID(), scope: { kind: "user", organizationId, userId },
+      title: "Transient failure", objectKey: "retry/source", checksum: "a".repeat(64), mimeType: "text/plain",
+      sizeBytes: 10, createdBy: userId, now });
+    await repository.save(document);
+    const first = await repository.claimForProcessing(organizationId, document.id, now, document.processingGeneration);
+    expect(first).not.toBeNull();
+    await repository.failProcessing(first!, "temporary provider failure", now);
+    const retry = await repository.claimForProcessing(organizationId, document.id, new Date(now.getTime() + 5_000), document.processingGeneration);
+    expect(retry).not.toBeNull();
+    expect(retry?.document.processingAttempts).toBe(2);
+    await repository.completeProcessing(retry!, [], now);
+    expect((await repository.findById(organizationId, document.id))?.status).toBe("ready");
+  });
+
+  it("prepares only one new generation for concurrent browser retries of a failed attempt", async () => {
+    const organizationId = randomUUID(), userId = randomUUID(), now = new Date();
+    await pool.query("INSERT INTO users (id, email, name) VALUES ($1, $2, 'Retry User')", [userId, `${userId}@example.test`]);
+    await seedOrganization(createOrganization({ id: organizationId, slug: organizationId, name: "Retry", now }), userId);
+    const repository = createDocumentRepository(db);
+    const document = createDocument({ id: randomUUID(), scope: { kind: "user", organizationId, userId },
+      title: "Concurrent retry", objectKey: "retry/source", checksum: "a".repeat(64), mimeType: "text/plain",
+      sizeBytes: 10, createdBy: userId, now });
+    await repository.save({ ...document, status: "failed" });
+    const queued: string[] = [];
+    const retry = buildRetryDocument({ repository, clock: () => now, queue: {
+      enqueue: async (_organization, _document, generation) => { queued.push(generation); return "queued"; }
+    } });
+    const access: OrganizationAccess = { organizationId, userId, role: "owner", teams: [] };
+    const results = await Promise.allSettled([retry(access, document.id), retry(access, document.id)]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]).not.toBe(document.processingGeneration);
+    expect(await repository.claimForProcessing(organizationId, document.id, now, document.processingGeneration)).toBeNull();
+    expect(await repository.claimForProcessing(organizationId, document.id, now, queued[0]!)).not.toBeNull();
   });
 
   it("shares durable AI request quotas across organization principals", async () => {
@@ -1789,7 +1834,8 @@ describe("PostgreSQL schema", () => {
     const claimed = await repository.claimForProcessing(
       organization,
       documentId,
-      createdAt
+      createdAt,
+      document.processingGeneration
     );
     expect(claimed).toMatchObject({
       document: {
@@ -1807,7 +1853,8 @@ describe("PostgreSQL schema", () => {
         documentId,
         new Date(
           createdAt.getTime() + documentProcessingLeaseMilliseconds - 1
-        )
+        ),
+        document.processingGeneration
       )
     ).resolves.toBeNull();
     const reclaimedAt = new Date(
@@ -1816,7 +1863,8 @@ describe("PostgreSQL schema", () => {
     const reclaimed = await repository.claimForProcessing(
       organization,
       documentId,
-      reclaimedAt
+      reclaimedAt,
+      document.processingGeneration
     );
     expect(reclaimed).toMatchObject({
       document: { processingAttempts: 2 },
@@ -1865,7 +1913,7 @@ describe("PostgreSQL schema", () => {
       sizeBytes: 128
     });
     await expect(
-      repository.claimForProcessing(organization, documentId, createdAt)
+      repository.claimForProcessing(organization, documentId, createdAt, document.processingGeneration)
     ).resolves.toBeNull();
 
     const access: OrganizationAccess = {
@@ -2611,27 +2659,28 @@ describe("PostgreSQL schema", () => {
     expect((await receipts.find({ organizationId, userId, operation: "document.upload", key: "document-event" }))?.resourceId).toBe(documents[0]?.id);
     const documentRepository = createDocumentRepository(db);
     const documentId = documents[0]!.id;
-    await documentRepository.markEnqueueFailure(organizationId, documentId, "test failure", now);
-    const queued: number[] = [];
+    await documentRepository.markEnqueueFailure(organizationId, documentId, "test failure", now, documents[0]!.processingGeneration);
+    const queued: string[] = [];
     const retry = buildRetryDocument({ repository: documentRepository, receipts, fingerprint: ingestionFingerprint,
-      clock: () => now, queue: { enqueue: async (_organization, _document, expectedAttempts) => {
-        queued.push(expectedAttempts!); return "queued";
+      clock: () => now, queue: { enqueue: async (_organization, _document, generation) => {
+        queued.push(generation); return "queued";
       } } });
+    const prepared = await retry(access, documentId, { idempotencyKey: "retry-0", expectedAttempts: 0 });
     await retry(access, documentId, { idempotencyKey: "retry-0", expectedAttempts: 0 });
-    await retry(access, documentId, { idempotencyKey: "retry-0", expectedAttempts: 0 });
-    expect(queued).toEqual([0, 0]);
-    const first = await documentRepository.claimForProcessing(organizationId, documentId, now, 0);
+    expect(queued).toEqual([prepared.processingGeneration, prepared.processingGeneration]);
+    const first = await documentRepository.claimForProcessing(organizationId, documentId, now, prepared.processingGeneration);
     expect(first).not.toBeNull();
     await documentRepository.failProcessing(first!, "test processing failure", now);
-    expect(await documentRepository.claimForProcessing(organizationId, documentId, now, 0)).toBeNull();
+    expect(await documentRepository.claimForProcessing(organizationId, documentId, now, documents[0]!.processingGeneration)).toBeNull();
     await retry(access, documentId, { idempotencyKey: "retry-0", expectedAttempts: 0 });
-    expect(queued).toEqual([0, 0]);
-    await retry(access, documentId, { idempotencyKey: "retry-1", expectedAttempts: 1 });
-    const second = await documentRepository.claimForProcessing(organizationId, documentId, now, 1);
+    expect(queued).toEqual([prepared.processingGeneration, prepared.processingGeneration]);
+    const preparedSecond = await retry(access, documentId, { idempotencyKey: "retry-1", expectedAttempts: 1 });
+    expect(await documentRepository.claimForProcessing(organizationId, documentId, now, prepared.processingGeneration)).toBeNull();
+    const second = await documentRepository.claimForProcessing(organizationId, documentId, now, preparedSecond.processingGeneration);
     const recovered = await documentRepository.claimForProcessing(organizationId, documentId,
-      new Date(now.getTime() + documentProcessingLeaseMilliseconds + 1), 1);
+      new Date(now.getTime() + documentProcessingLeaseMilliseconds + 1), preparedSecond.processingGeneration);
     expect(second?.document.processingAttempts).toBe(2);
-    expect(recovered?.document.processingAttempts).toBe(2);
+    expect(recovered?.document.processingAttempts).toBe(3);
     expect(recovered?.leaseId).not.toBe(second?.leaseId);
     await expect(retry(access, documentId, { idempotencyKey: "retry-1", expectedAttempts: 2 })).rejects.toThrow("different payload");
     const failedId = randomUUID();

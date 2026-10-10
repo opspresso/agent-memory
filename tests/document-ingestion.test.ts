@@ -24,8 +24,8 @@ describe("document ingestion orchestration", () => {
       enrichmentQueue: { enqueueKnowledgeEnrichment }
     });
 
-    await expect(ingest("organization-1", "document-1")).rejects.toBe(failure);
-    await expect(ingest("organization-1", "document-1")).resolves.toBeUndefined();
+    await expect(ingest("organization-1", "document-1", "generation-1")).rejects.toBe(failure);
+    await expect(ingest("organization-1", "document-1", "generation-1")).resolves.toBeUndefined();
     expect(listChunksByDocument).toHaveBeenCalledWith("organization-1", "document-1");
     expect(enqueueKnowledgeEnrichment.mock.calls).toEqual([
       ["organization-1", "chunk-1"], ["organization-1", "chunk-2"],
@@ -43,7 +43,7 @@ describe("document ingestion orchestration", () => {
       enrichmentQueue: { enqueueKnowledgeEnrichment }
     });
 
-    await expect(ingest("organization-1", "document-1")).rejects.toBe(failure);
+    await expect(ingest("organization-1", "document-1", "generation-1")).rejects.toBe(failure);
     expect(listChunksByDocument).not.toHaveBeenCalled();
     expect(enqueueKnowledgeEnrichment).not.toHaveBeenCalled();
   });
@@ -53,8 +53,8 @@ describe("document ingestion orchestration", () => {
     const listChunksByDocument = vi.fn();
     const ingest = buildIngestDocument({ processDocument, repository: { listChunksByDocument } });
 
-    await ingest("organization-1", "document-1");
-    expect(processDocument).toHaveBeenCalledWith("organization-1", "document-1");
+    await ingest("organization-1", "document-1", "generation-1");
+    expect(processDocument).toHaveBeenCalledWith("organization-1", "document-1", "generation-1");
     expect(listChunksByDocument).not.toHaveBeenCalled();
   });
 });
