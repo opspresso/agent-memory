@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   curate: vi.fn(),
+  findAccess: vi.fn(),
   candidateFindByChunkId: vi.fn(),
   documentClaim: vi.fn(),
   documentFindChunk: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("@/infrastructure/observability/logger", () => ({
 vi.mock("@/lib/knowledge-curation-service", () => ({ curateKnowledgeCandidate: mocks.curate }));
 
 vi.mock("@/lib/container", () => ({
+  organizationAccessRepository: { findByUser: mocks.findAccess },
   documentIngestionQueue: {
     enqueueKnowledgeEnrichment: mocks.enqueueKnowledgeEnrichment,
     start: mocks.queueStart,
@@ -50,6 +52,7 @@ describe("document worker startup", () => {
     vi.resetModules();
     mocks.loggerInfo.mockReset();
     mocks.curate.mockReset();
+    mocks.findAccess.mockReset();
     mocks.candidateFindByChunkId.mockReset();
     mocks.documentClaim.mockReset();
     mocks.documentFindChunk.mockReset();
@@ -149,5 +152,22 @@ describe("document worker startup", () => {
     );
     expect(mocks.documentFindChunk).not.toHaveBeenCalled();
     expect(mocks.curate).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001", "50000000-0000-4000-8000-000000000001", undefined);
+  });
+
+  it("checks the explicit queue requester before attempting new extraction", async () => {
+    const organizationId = "00000000-0000-4000-8000-000000000001";
+    const requestedBy = "00000000-0000-4000-8000-000000000002";
+    mocks.knowledgeExtractionService = { extract: vi.fn() };
+    mocks.documentFindChunk.mockResolvedValue({ document: {
+      status: "ready", createdBy: "original-uploader", scope: { organizationId, kind: "organization" }
+    } });
+    mocks.findAccess.mockResolvedValue(null);
+    const { startDocumentWorker } = await import("@/lib/document-worker");
+    await startDocumentWorker();
+    await mocks.work.mock.calls[1]![2]([{ data: {
+      organizationId, requestedBy, chunkId: "50000000-0000-4000-8000-000000000001"
+    } }]);
+    expect(mocks.findAccess).toHaveBeenCalledExactlyOnceWith(organizationId, requestedBy);
+    expect(mocks.knowledgeExtractionService.extract).not.toHaveBeenCalled();
   });
 });

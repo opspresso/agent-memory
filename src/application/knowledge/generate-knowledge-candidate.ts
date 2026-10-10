@@ -4,6 +4,8 @@ import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
 import type { KnowledgeExtractionService } from "@/domain/knowledge/knowledge-extraction-service";
 import type { KnowledgeOntologyReader } from "@/domain/knowledge/knowledge-ontology-reader";
+import type { OrganizationAccessRepository } from "@/domain/identity/organization-access-repository";
+import { canAccessScopedResource } from "@/domain/identity/organization-access";
 
 export class KnowledgeCandidateSourceNotFoundError extends Error {
   constructor() {
@@ -13,9 +15,10 @@ export class KnowledgeCandidateSourceNotFoundError extends Error {
 }
 
 interface GenerateKnowledgeCandidateDependencies {
-  readonly candidateRepository: KnowledgeCandidateRepository;
+  readonly accessRepository: Pick<OrganizationAccessRepository, "findByUser">;
+  readonly candidateRepository: Pick<KnowledgeCandidateRepository, "findByChunkId" | "save">;
   readonly clock: () => Date;
-  readonly documentRepository: DocumentRepository;
+  readonly documentRepository: Pick<DocumentRepository, "findChunkById">;
   readonly extractionService: KnowledgeExtractionService;
   readonly generateId: () => string;
   readonly ontologyReader: KnowledgeOntologyReader;
@@ -24,7 +27,7 @@ interface GenerateKnowledgeCandidateDependencies {
 export function buildGenerateKnowledgeCandidate(
   dependencies: GenerateKnowledgeCandidateDependencies
 ) {
-  return async function execute(organizationId: string, chunkId: string) {
+  return async function execute(organizationId: string, chunkId: string, requestedBy?: string) {
     const existing = await dependencies.candidateRepository.findByChunkId(
       organizationId,
       chunkId
@@ -39,6 +42,9 @@ export function buildGenerateKnowledgeCandidate(
     if (!source || source.document.status !== "ready") {
       throw new KnowledgeCandidateSourceNotFoundError();
     }
+    const principalId = requestedBy ?? source.document.createdBy;
+    const access = await dependencies.accessRepository.findByUser(organizationId, principalId);
+    if (!access || !canAccessScopedResource(access, "manage", source.document.scope)) return null;
     const settings =
       await dependencies.ontologyReader.findByOrganization(organizationId);
     const ontologyHint =
@@ -60,13 +66,18 @@ export function buildGenerateKnowledgeCandidate(
         ? source.chunk.metadata.textMimeType : source.document.mimeType,
       quotaKey: {
         organizationId,
-        userId: source.document.createdBy
+        userId: access.userId
       },
       ...(ontologyHint ? { ontology: ontologyHint } : {})
     });
+    // A queued request does not retain authority after its membership or source changes.
+    const currentSource = await dependencies.documentRepository.findChunkById(organizationId, chunkId);
+    const currentAccess = await dependencies.accessRepository.findByUser(organizationId, principalId);
+    if (!currentSource || currentSource.document.status !== "ready" || !currentAccess ||
+        !canAccessScopedResource(currentAccess, "manage", currentSource.document.scope)) return null;
     const candidate = createKnowledgeCandidate({
       id: dependencies.generateId(),
-      scope: source.document.scope,
+      scope: currentSource.document.scope,
       documentId: source.document.id,
       chunkId: source.chunk.id,
       model: extraction.model,

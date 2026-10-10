@@ -186,6 +186,7 @@ describe("knowledge candidate", () => {
     const candidates = candidateRepository();
     const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
     const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "organization-1", userId: "user-1", role: "owner", teams: [] }) },
       ontologyReader: ontologyReader(),
       candidateRepository: candidates,
       clock: () => now,
@@ -227,6 +228,7 @@ describe("knowledge candidate", () => {
     vi.mocked(candidates.findByChunkId).mockResolvedValue(existing);
     const extractionService = { extract: vi.fn() };
     const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "organization-1", userId: "user-1", role: "owner", teams: [] }) },
       ontologyReader: ontologyReader(),
       candidateRepository: candidates,
       clock: () => now,
@@ -261,6 +263,7 @@ describe("knowledge candidate", () => {
       now
     });
     const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "organization-1", userId: "user-1", role: "owner", teams: [] }) },
       ontologyReader: ontologyReader(),
       candidateRepository: candidateRepository(),
       clock: () => now,
@@ -301,6 +304,7 @@ describe("knowledge candidate", () => {
     });
     const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
     const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "organization-1", userId: "user-1", role: "owner", teams: [] }) },
       candidateRepository: candidateRepository(),
       clock: () => now,
       documentRepository: documentRepository(
@@ -357,6 +361,7 @@ describe("knowledge candidate", () => {
     });
     const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
     const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "organization-1", userId: "user-1", role: "owner", teams: [] }) },
       candidateRepository: candidateRepository(),
       clock: () => now,
       documentRepository: documentRepository(

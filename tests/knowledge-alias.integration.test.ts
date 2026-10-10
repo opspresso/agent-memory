@@ -59,9 +59,10 @@ describe("source-grounded knowledge aliases", () => {
     }
     async function extract(content: string, proposed: ProposedKnowledgeGraph) {
       const origin = await source(content);
-      const generate = buildGenerateKnowledgeCandidate({ candidateRepository: candidates, documentRepository: documents, ontologyReader: ontology, clock, generateId: randomUUID,
+      const generate = buildGenerateKnowledgeCandidate({ accessRepository: createOrganizationAccessRepository(db), candidateRepository: candidates, documentRepository: documents, ontologyReader: ontology, clock, generateId: randomUUID,
         extractionService: { extract: async () => ({ model: "extractor", graph: proposed }) } });
       const candidate = await generate(organizationId, origin.chunkId);
+      if (!candidate) throw new Error("fixture extraction was not authorized");
       return { ...origin, candidate };
     }
     async function promote(content: string, canonicalName: string, aliases: readonly string[] = []) {
@@ -113,6 +114,22 @@ describe("source-grounded knowledge aliases", () => {
     await test.curate(test.organizationId,input.chunkId);
     expect(test.verify).toHaveBeenCalledOnce();
     expect((await test.candidates.findByChunkId(test.organizationId,input.chunkId))?.assessmentHistory).toEqual([previous]);
+  });
+
+  it("does not extract queued source content after the requester is blocked", async () => {
+    const test = await fixture();
+    const origin = await test.source("Orion uses Atlas.");
+    await pool.query("UPDATE organization_members SET status='blocked' WHERE organization_id=$1 AND user_id=$2",
+      [test.organizationId, test.userId]);
+    const extract = vi.fn();
+    const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: createOrganizationAccessRepository(db), candidateRepository: test.candidates,
+      documentRepository: createDocumentRepository(db), ontologyReader: createKnowledgeOntologyReader(db),
+      clock: () => new Date(), generateId: randomUUID, extractionService: { extract }
+    });
+    expect(await generate(test.organizationId, origin.chunkId, test.userId)).toBeNull();
+    expect(extract).not.toHaveBeenCalled();
+    expect(await test.candidates.findByChunkId(test.organizationId, origin.chunkId)).toBeNull();
   });
 
   it("merges fragmented identities while retaining edges, provenance and previous approval bindings", async () => {

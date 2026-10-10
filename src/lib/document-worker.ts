@@ -17,6 +17,7 @@ import {
 
 import {
   documentIngestionQueue,
+  organizationAccessRepository,
   knowledgeCandidateRepository,
   knowledgeExtractionService,
   knowledgeOntologyReader,
@@ -49,6 +50,7 @@ const processDocument = buildProcessDocument({
 
 const generateKnowledgeCandidate = knowledgeExtractionService
   ? buildGenerateKnowledgeCandidate({
+      accessRepository: organizationAccessRepository,
       candidateRepository: knowledgeCandidateRepository,
       clock: () => new Date(),
       documentRepository,
@@ -121,7 +123,8 @@ export async function startDocumentWorker(): Promise<void> {
               try {
                 await generateKnowledgeCandidate(
                   data.organizationId,
-                  data.chunkId
+                  data.chunkId,
+                  data.requestedBy
                 );
                 await curateKnowledgeCandidate?.(data.organizationId, data.chunkId, data.requestedBy);
               } catch (error) {

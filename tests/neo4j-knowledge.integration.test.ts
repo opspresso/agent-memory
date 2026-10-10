@@ -105,7 +105,7 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     ] })).mockResolvedValueOnce(completion({ relationships:[{ sourceKey:"e0",targetKey:"e1",predicate:"uses",evidenceIds:["s0"] }] }));
     const candidates = createKnowledgeCandidateRepository(db), documents = createDocumentRepository(db), ontology = createKnowledgeOntologyReader(db);
     const clock = () => new Date();
-    await buildGenerateKnowledgeCandidate({ candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
+    await buildGenerateKnowledgeCandidate({ accessRepository: createOrganizationAccessRepository(db), candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
       extractionService:createEntityFirstKnowledgeExtractionService({ baseUrl:"http://model.test/v1",model:"extractor",request }) })(f.organizationId,source.chunkId);
     const verificationRequest = vi.fn<typeof fetch>().mockResolvedValue(completion({ items:Object.fromEntries(Object.entries({
       "entity:e0":{ representation:"entity",entityKind:"service" },
@@ -157,7 +157,7 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
       { key:"person",kind:"person",canonicalName:"김하늘",evidence:["# 김하늘"] },
       { key:"employer",kind:"organization",canonicalName:"북극소프트",evidence:["### 북극소프트"] }
     ],relationships:[{ sourceKey:"person",targetKey:"employer",predicate:"works_for",evidence:[chunk!.content] }] };
-    await buildGenerateKnowledgeCandidate({ candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
+    await buildGenerateKnowledgeCandidate({ accessRepository: createOrganizationAccessRepository(db), candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
       extractionService:{ extract:async () => ({ model:"fixture",graph:proposed }) }
     })(f.organizationId,chunk!.id);
     await buildCurateKnowledgeCandidate({ candidates,documents,ontology,clock,graph:f.repository,access:createOrganizationAccessRepository(db),
