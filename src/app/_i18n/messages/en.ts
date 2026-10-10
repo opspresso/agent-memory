@@ -138,7 +138,7 @@ export const en = {
   "guide.review.manual": "Needs review",
   "guide.review.manualNote": "Compare reasons and source text for uncertain, conflicting, or ontology-constrained items, then select which sources to apply.",
   "guide.review.partial": "Accept or reject knowledge from selected sources. Accepting a relationship includes its required endpoints; rejecting an entity also rejects its unreviewed relationships. Other items remain pending, and rejection does not delete previously accepted Graph data.",
-  "guide.review.history": "Run AI curation queues unextracted chunks in manageable ready documents, unverified candidates, and unfinished automatic decisions. Use chunk review for remaining extraction batches and curation history for the latest 50 assessments and automatic or human decisions. Empty extractions stay out of the default review list.",
+  "guide.review.history": "Run AI curation queues unextracted chunks in manageable ready documents, unverified candidates, and unfinished automatic decisions. Use chunk review for remaining extraction batches. Curation history shows current and previous assessments and current processing outcomes for the 50 most recently updated extractions. Empty extractions stay out of the default review list.",
   "guide.connect.title": "Connect Agents to Context through MCP.",
   "guide.connect.body":
     "Services connect to /api/mcp to remember, recall, and forget long-term memories. Agent Memory also manages RAG documents and Knowledge Graph. Use context_search to search all three together. Agent connection provides the endpoint, credentials, and an optional Agent Studio registration template.",
