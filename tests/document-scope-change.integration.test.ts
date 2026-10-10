@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { and, eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDatabase } from "@/infrastructure/database/client";
 import { initializeSchema } from "@/infrastructure/database/schema-bootstrap.mjs";
 import { createDocumentScopeChangeRepository } from "@/infrastructure/database/repositories/document-scope-change-repository";
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
 import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
+import { createKnowledgeTermUsageRepository } from "@/infrastructure/database/repositories/knowledge-term-usage-repository";
 import { documents, documentChunks, documentScopeChanges, organizations, organizationMembers, users, teams, teamMembers, knowledgeNodes, knowledgeEdges, knowledgeNodeSources, knowledgeEdgeSources } from "@/infrastructure/database/schema";
 import { createKnowledgeNode, createKnowledgeEdge } from "@/domain/knowledge/knowledge-graph";
 import { createKnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
@@ -17,6 +18,8 @@ import { createMemory } from "@/domain/memory/memory";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { buildArchiveDocument } from "@/application/document/archive-document";
 import { DocumentNotFoundError } from "@/application/document/get-document";
+import { buildSuggestKnowledgeOntology } from "@/application/knowledge/recommend-ontology";
+import { createKnowledgeOntologyReader } from "@/infrastructure/database/repositories/knowledge-ontology-reader";
 
 describe("document scope transactions", () => {
   let container: StartedPostgreSqlContainer;
@@ -71,6 +74,49 @@ describe("document scope transactions", () => {
     expect(await f.db.select().from(knowledgeNodeSources).where(eq(knowledgeNodeSources.chunkId, stale.chunkId))).toEqual([]);
     expect(await f.db.select().from(knowledgeEdgeSources).where(eq(knowledgeEdgeSources.chunkId, stale.chunkId))).toEqual([]);
     expect((await f.graph.findEdgeById(f.organizationId, edge.id))?.sources).toEqual([{ chunkId: f.doc.chunkId }]);
+  });
+
+  it("collects ontology terms only from readable ready sources, including a reader's own private terms", async () => {
+    const f = await fixture();
+    for (const label of ["public", "own", "foreign", "archived", "processing"] as const) {
+      const scope = label === "own" ? f.scope : label === "foreign"
+        ? { ...f.scope, kind: "user" as const, userId: f.otherUserId } : f.target;
+      const doc = await f.document(scope);
+      const actor = label === "foreign" ? { ...f.access, userId: f.otherUserId, role: "member" as const } : f.access;
+      const nodes = [];
+      for (const name of ["Alpha", "Beta"]) nodes.push(await f.graph.saveNode(createKnowledgeNode({
+        id: randomUUID(), scope, kind: `${label}_kind`, canonicalName: name,
+        source: { chunkId: doc.chunkId }, now: f.now
+      }), actor));
+      await f.graph.saveEdge(createKnowledgeEdge({ id: randomUUID(), organizationId: f.organizationId,
+        scope, sourceNodeId: nodes[0]!.id, targetNodeId: nodes[1]!.id, predicate: `${label}_predicate`,
+        source: { chunkId: doc.chunkId }, now: f.now }), actor);
+      await createKnowledgeCandidateRepository(f.db).save(createKnowledgeCandidate({
+        id: randomUUID(), scope, documentId: doc.id, chunkId: doc.chunkId, model: "test", now: f.now,
+        graph: { entities: [{ key: "a", kind: `${label}_candidate`, canonicalName: "Alpha" },
+          { key: "b", kind: `${label}_candidate`, canonicalName: "Beta" }],
+        relationships: [{ sourceKey: "a", targetKey: "b", predicate: `${label}_proposed` }] }
+      }));
+      if (label === "archived" || label === "processing") {
+        await f.db.update(documents).set({ status: label }).where(eq(documents.id, doc.id));
+      }
+    }
+    const usageRepository = createKnowledgeTermUsageRepository(f.db);
+    const usage = await usageRepository.collect(f.access);
+    expect(Object.fromEntries(usage.nodeKinds.map(({ term, count }) => [term, count]))).toEqual({
+      public_kind: 2, own_kind: 2, public_candidate: 2, own_candidate: 2
+    });
+    expect(Object.fromEntries(usage.edgePredicates.map(({ term, count }) => [term, count]))).toEqual({
+      public_predicate: 1, own_predicate: 1, public_proposed: 1, own_proposed: 1
+    });
+    expect(usage.nodeKinds.map(({ term }) => term)).toEqual(["own_candidate", "own_kind", "public_candidate", "public_kind"]);
+    const suggest = vi.fn().mockResolvedValue({ nodeKinds: [], edgePredicates: [] });
+    await buildSuggestKnowledgeOntology({ ontologyReader: createKnowledgeOntologyReader(f.db), usageRepository,
+      suggestionService: { suggest } })(f.access);
+    expect(suggest).toHaveBeenCalledWith(expect.objectContaining({ usage }));
+    const serviceUsage = await usageRepository.collect({ ...f.access, principalKind: "organization-agent" });
+    expect(serviceUsage.nodeKinds.map(({ term }) => term)).toEqual(["public_candidate", "public_kind"]);
+    expect(serviceUsage.edgePredicates.map(({ term }) => term)).toEqual(["public_predicate", "public_proposed"]);
   });
 
   it.each(["expired", "future"] as const)("rejects a %s Memory contribution to existing knowledge", async (state) => {

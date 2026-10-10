@@ -593,7 +593,7 @@ Node identity는 ID로 유지한다. 생성과 AI 후보 승인은 같은 scope�
 
 두 endpoint 모두 organization scope `manage` 권한(admin·owner)이 필요하다.
 
-- `GET .../knowledge/ontology/recommendations`: 조직의 graph node·edge와 pending 후보에서 관찰된 용어를 집계해, 사전에 없는 상위 용어를 반환한다. 응답은 `{ "nodeKinds": [{ "term": string, "count": number }], "edgePredicates": [...] }`이며 목록당 최대 20개다. AI 호출 없이 결정적으로 동작한다.
+- `GET .../knowledge/ontology/recommendations`: 요청자가 읽을 수 있는 graph node·edge와 ready 문서의 pending 후보에서 용어를 집계해, 사전에 없는 상위 용어를 반환한다. Graph는 읽을 수 있는 유효한 출처가 있어야 하며 edge의 양 끝 node도 읽을 수 있어야 한다. 응답은 `{ "nodeKinds": [{ "term": string, "count": number }], "edgePredicates": [...] }`이며 목록당 최대 20개다. AI 호출 없이 빈도 내림차순, 동률이면 용어 순으로 정렬한다.
 - `POST .../knowledge/ontology/suggestions`: 관찰 용어와 현재 사전을 knowledge extraction 모델에 보내 정제된 용어(동의어 통합·정규화)를 제안받는다. 응답은 `{ "nodeKinds": string[], "edgePredicates": string[] }`이며 사전에 이미 있는 용어는 제외된다. `KNOWLEDGE_EXTRACTION_MODEL`이 설정되지 않았으면 `503`, provider 상한 초과 시 `429`를 반환한다. 요청에는 용어 문자열과 개수만 전달되며 문서 본문은 전송하지 않는다.
 
 추천·제안은 사전에 자동 반영되지 않는다 — admin이 콘솔 설정 화면에서 선택해 `PATCH /api/organization`로 저장한다.

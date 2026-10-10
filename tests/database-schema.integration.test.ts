@@ -922,7 +922,7 @@ describe("PostgreSQL schema", () => {
     );
 
     const usageRepository = createKnowledgeTermUsageRepository(db);
-    await expect(usageRepository.collect(organization)).resolves.toEqual({
+    await expect(usageRepository.collect({ organizationId: organization, userId: user, role: "owner", teams: [] })).resolves.toEqual({
       nodeKinds: [
         { term: "pipeline", count: 3 },
         { term: "gadget", count: 1 }
@@ -930,7 +930,7 @@ describe("PostgreSQL schema", () => {
       edgePredicates: [{ term: "stores_in", count: 2 }]
     });
     await expect(
-      usageRepository.collect("00000000-0000-0000-0000-0000000000ee")
+      usageRepository.collect({ organizationId: "00000000-0000-0000-0000-0000000000ee", userId: user, role: "owner", teams: [] })
     ).resolves.toEqual({ nodeKinds: [], edgePredicates: [] });
   });
 

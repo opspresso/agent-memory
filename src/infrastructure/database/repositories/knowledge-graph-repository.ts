@@ -100,7 +100,7 @@ export function visibleSourcePredicate(
   )`;
 }
 
-function nodeHasVisibleSource(access: OrganizationAccess, now: Date): SQL {
+export function nodeHasVisibleSource(access: OrganizationAccess, now: Date): SQL {
   return sql`EXISTS (
     SELECT 1 FROM ${knowledgeNodeSources}
     WHERE ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
@@ -109,7 +109,7 @@ function nodeHasVisibleSource(access: OrganizationAccess, now: Date): SQL {
   )`;
 }
 
-function edgeHasVisibleSource(access: OrganizationAccess, now: Date): SQL {
+export function edgeHasVisibleSource(access: OrganizationAccess, now: Date): SQL {
   return sql`EXISTS (
     SELECT 1 FROM ${knowledgeEdgeSources}
     WHERE ${knowledgeEdgeSources.organizationId} = ${knowledgeEdges.organizationId}
