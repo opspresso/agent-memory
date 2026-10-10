@@ -3,13 +3,15 @@ import {
   InvalidDocumentError,
   type DocumentChunk
 } from "@/domain/document/document";
-import type { DocumentRepository } from "@/domain/document/document-repository";
+import type { DocumentProcessingClaim, DocumentRepository } from "@/domain/document/document-repository";
+import { maxDocumentEmbeddingBatchSize, type DocumentEmbeddingCheckpointRepository } from "@/domain/document/document-embedding-checkpoint";
+import type { DocumentProcessingCheckpoint, DocumentProcessingCheckpointRepository } from "@/domain/document/document-processing-checkpoint";
 import type {
   DocumentObjectStorage,
   DocumentTextExtractor
 } from "@/domain/document/document-services";
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
-import type { AiRequestQuotaKey } from "@/domain/shared/ai-request-limiter";
+import { AiRequestLimitExceededError, type AiRequestQuotaKey } from "@/domain/shared/ai-request-limiter";
 import type { OrganizationAccessRepository } from "@/domain/identity/organization-access-repository";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
 import { sameScope } from "@/domain/identity/scope-coverage";
@@ -17,15 +19,20 @@ import { sameScope } from "@/domain/identity/scope-coverage";
 import { chunkDocumentText } from "./chunk-text";
 import { DocumentAccessDeniedError } from "./upload-document";
 
-const documentEmbeddingBatchSize = 64;
+interface EmbeddingCheckpoints {
+  readonly repository: DocumentEmbeddingCheckpointRepository;
+  readonly fingerprint: (texts: readonly string[]) => string;
+}
 
 export interface ProcessDocumentDependencies {
   readonly accessRepository: Pick<OrganizationAccessRepository, "findByUser">;
   readonly clock: () => Date;
   readonly embeddingService?: TextEmbeddingService;
+  readonly embeddingCheckpoints?: EmbeddingCheckpoints;
+  readonly processingCheckpoints?: DocumentProcessingCheckpointRepository;
   readonly generateId: () => string;
   readonly objectStorage: DocumentObjectStorage;
-  readonly repository: Pick<DocumentRepository, "findById" | "claimForProcessing" | "completeProcessing" | "failProcessing">;
+  readonly repository: Pick<DocumentRepository, "findById" | "claimForProcessing" | "completeProcessing" | "failProcessing" | "deferProcessing">;
   readonly textExtractor: DocumentTextExtractor;
 }
 
@@ -39,17 +46,22 @@ async function embedDocumentParts(
   embeddingService: TextEmbeddingService,
   texts: readonly string[],
   quotaKey: AiRequestQuotaKey,
-  authorize: () => Promise<void>
+  authorize: () => Promise<void>,
+  checkpoints?: EmbeddingCheckpoints & { readonly claim: DocumentProcessingClaim }
 ) {
   const embeddings = [];
-  for (let offset = 0; offset < texts.length; offset += documentEmbeddingBatchSize) {
+  for (let offset = 0; offset < texts.length; offset += maxDocumentEmbeddingBatchSize) {
     await authorize();
-    embeddings.push(
-      ...(await embeddingService.embedMany(
-        texts.slice(offset, offset + documentEmbeddingBatchSize),
-        quotaKey
-      ))
-    );
+    const inputs = texts.slice(offset, offset + maxDocumentEmbeddingBatchSize);
+    const key = checkpoints ? { claim: checkpoints.claim, fingerprint: checkpoints.fingerprint(inputs) } : undefined;
+    const cached = checkpoints && key ? await checkpoints.repository.find(key) : null;
+    const batch = cached ?? await embeddingService.embedMany(inputs, quotaKey);
+    if (batch.length !== inputs.length) throw new Error("embedding result count does not match document chunks");
+    if (!cached && checkpoints && key) {
+      await authorize();
+      await checkpoints.repository.save(key, batch);
+    }
+    embeddings.push(...batch);
   }
   return embeddings;
 }
@@ -81,15 +93,19 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
 
     try {
       await authorize();
-      const content = await dependencies.objectStorage.get(document.objectKey);
-      const extracted = await dependencies.textExtractor.extract(
-        content,
-        document.mimeType
-      );
-      const parts = chunkDocumentText(extracted.text, extracted.mimeType);
-      if (parts.length === 0) {
-        throw new InvalidDocumentError("document contains no extractable text");
+      let checkpoint: DocumentProcessingCheckpoint | null = await dependencies.processingCheckpoints?.find(claim) ?? null;
+      if (!checkpoint) {
+        const content = await dependencies.objectStorage.get(document.objectKey);
+        const extracted = await dependencies.textExtractor.extract(content, document.mimeType);
+        const parts = chunkDocumentText(extracted.text, extracted.mimeType);
+        if (parts.length === 0) throw new InvalidDocumentError("document contains no extractable text");
+        checkpoint = { mimeType: extracted.mimeType, parts };
+        if (dependencies.processingCheckpoints) {
+          await authorize();
+          await dependencies.processingCheckpoints.save(claim, checkpoint);
+        }
       }
+      const { parts, mimeType } = checkpoint;
       const embeddings = dependencies.embeddingService
         ? await embedDocumentParts(
             dependencies.embeddingService,
@@ -98,14 +114,14 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
               organizationId,
               userId: requestedBy
             },
-            authorize
+            authorize,
+            dependencies.embeddingCheckpoints ? { ...dependencies.embeddingCheckpoints, claim } : undefined
           )
         : [];
-      if (
-        dependencies.embeddingService &&
-        embeddings.length !== parts.length
-      ) {
-        throw new Error("embedding result count does not match document chunks");
+      const firstEmbedding = embeddings[0];
+      if (firstEmbedding && embeddings.some((embedding) => embedding.model !== firstEmbedding.model ||
+          embedding.values.length !== firstEmbedding.values.length)) {
+        throw new InvalidDocumentError("embedding model or dimensions changed during document processing; retry the document");
       }
       await authorize();
       const completedAt = dependencies.clock();
@@ -119,7 +135,7 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
           ...(embeddings[ordinal]
             ? { embedding: embeddings[ordinal] }
             : {}),
-          metadata: { textMimeType: extracted.mimeType, start: part.start, end: part.end, ...(part.contextSpans ? { contextSpans: part.contextSpans } : {}) },
+          metadata: { textMimeType: mimeType, start: part.start, end: part.end, ...(part.contextSpans ? { contextSpans: part.contextSpans } : {}) },
           now: completedAt
         })
       );
@@ -130,15 +146,12 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
       );
     } catch (error) {
       try {
-        await dependencies.repository.failProcessing(
-          claim,
-          safeErrorMessage(error),
-          dependencies.clock()
-        );
+        if (error instanceof AiRequestLimitExceededError) await dependencies.repository.deferProcessing(claim, dependencies.clock());
+        else await dependencies.repository.failProcessing(claim, safeErrorMessage(error), dependencies.clock());
       } catch (statusError) {
         throw new AggregateError(
           [error, statusError],
-          "document processing and failure status update both failed"
+          "document processing and status update both failed"
         );
       }
       throw error;

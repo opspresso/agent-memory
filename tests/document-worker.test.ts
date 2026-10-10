@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   documentListChunks: vi.fn(),
   enqueueKnowledgeEnrichment: vi.fn(),
   deferKnowledgeEnrichment: vi.fn(),
+  deferIngestion: vi.fn(),
   knowledgeExtractionService: undefined as
     | undefined
     | { extract: ReturnType<typeof vi.fn> },
@@ -33,6 +34,7 @@ vi.mock("@/lib/container", () => ({
   documentIngestionQueue: {
     enqueueKnowledgeEnrichment: mocks.enqueueKnowledgeEnrichment,
     deferKnowledgeEnrichment: mocks.deferKnowledgeEnrichment,
+    deferIngestion: mocks.deferIngestion,
     start: mocks.queueStart,
     stop: mocks.queueStop
   },
@@ -49,6 +51,8 @@ vi.mock("@/lib/container", () => ({
     findChunkById: mocks.documentFindChunk,
     listChunksByDocument: mocks.documentListChunks
   },
+  documentProcessingCheckpointRepository: undefined,
+  documentEmbeddingCheckpoints: undefined,
   documentTextExtractor: {},
   textEmbeddingService: undefined
 }));
@@ -65,6 +69,7 @@ describe("document worker startup", () => {
     mocks.documentFindChunk.mockReset();
     mocks.documentListChunks.mockReset();
     mocks.enqueueKnowledgeEnrichment.mockReset();
+    mocks.deferIngestion.mockReset().mockResolvedValue("deferred");
     mocks.deferKnowledgeEnrichment.mockReset().mockResolvedValue("deferred");
     mocks.knowledgeExtractionService = undefined;
     mocks.queueStart.mockReset();
@@ -204,6 +209,27 @@ describe("document worker startup", () => {
     } else {
       await expect(run).rejects.toMatchObject({ message: "document knowledge enrichment job failed", details: { type: "Error" } });
       expect(mocks.deferKnowledgeEnrichment).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([true, false])("defers document ingestion quota without hiding provider failures, quota=%s", async (quota) => {
+    const { AiRequestLimitExceededError } = await import("@/domain/shared/ai-request-limiter");
+    mocks.documentClaim.mockRejectedValue(quota ? new AiRequestLimitExceededError(30) : new Error("provider failed"));
+    const { startDocumentWorker } = await import("@/lib/document-worker");
+    await startDocumentWorker();
+    expect(mocks.work.mock.calls[0]![1]).toMatchObject({ includeMetadata: true });
+    const job = { id: "job", retryCount: 1, startedOn: new Date(), data: {
+      organizationId: requester, requestedBy: requester,
+      documentId: "40000000-0000-4000-8000-000000000001", generation: "40000000-0000-4000-8000-000000000001"
+    } };
+    const run = mocks.work.mock.calls[0]![2]([job]);
+    if (quota) {
+      await expect(run).resolves.toBeUndefined();
+      expect(mocks.deferIngestion).toHaveBeenCalledExactlyOnceWith(job, 30);
+      expect(mocks.loggerError).not.toHaveBeenCalled();
+    } else {
+      await expect(run).rejects.toMatchObject({ message: "document ingestion job failed" });
+      expect(mocks.deferIngestion).not.toHaveBeenCalled();
     }
   });
 

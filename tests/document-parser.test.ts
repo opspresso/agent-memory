@@ -84,7 +84,7 @@ describe("uploaded document conversion", () => {
       objectStorage: { get: async () => content, put: vi.fn(), delete: vi.fn() },
       textExtractor: parser,
       repository: { findById: vi.fn().mockResolvedValue({ ...document, status: "processing" }), claimForProcessing: vi.fn().mockResolvedValue({ document, leaseId: "lease" }),
-        completeProcessing, failProcessing: vi.fn() }
+        completeProcessing, failProcessing: vi.fn(), deferProcessing: vi.fn() }
     });
     await processDocument("org", "doc", document.processingGeneration, "user");
     expect(completeProcessing).toHaveBeenCalledOnce();

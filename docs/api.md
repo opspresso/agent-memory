@@ -469,6 +469,8 @@ curl -i \
 
 `202` 응답의 `Location`을 polling하여 `status`가 `ready` 또는 `failed`가 될 때까지 확인한다.
 
+문서 수집이 서버 AI quota를 기다릴 때는 `pending` 상태를 유지하고 제한 해제 후 자동 재개한다. 변환·분할과 완료된 embedding batch는 내부 checkpoint에서 재사용한다. Checkpoint와 부분 chunk는 검색 결과에 포함하지 않으며 전체 처리가 끝나야 문서가 `ready`가 된다.
+
 ```bash
 curl \
   -H "Authorization: Bearer $AGENT_MEMORY_TOKEN" \

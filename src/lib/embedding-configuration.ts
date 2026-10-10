@@ -1,5 +1,21 @@
 import { defaultEmbeddingMinimumScore } from "@/domain/shared/semantic-search";
 import { maximumEmbeddingDimensions } from "@/domain/shared/text-embedding-service";
+import { ingestionFingerprint } from "./ingestion-fingerprint";
+
+export function readEmbeddingConfiguration(environment: Readonly<Record<string, string | undefined>> = process.env) {
+  const model = environment.EMBEDDING_MODEL?.trim();
+  if (!model) return undefined;
+  const baseUrl = environment.EMBEDDING_BASE_URL?.trim().replace(/\/+$/, "");
+  if (!baseUrl) throw new Error("EMBEDDING_BASE_URL must be set when EMBEDDING_MODEL is enabled");
+  return { model, baseUrl, apiKey: environment.EMBEDDING_API_KEY, dimensions: readEmbeddingDimensions(environment) };
+}
+
+export function embeddingBatchFingerprint(configuration: { readonly baseUrl: string; readonly model: string; readonly dimensions?: number }) {
+  return (texts: readonly string[]) => ingestionFingerprint({
+    schema: "document-embedding-v1", baseUrl: configuration.baseUrl, model: configuration.model,
+    dimensions: configuration.dimensions, texts
+  });
+}
 
 export function readEmbeddingDimensions(
   environment: Readonly<Record<string, string | undefined>> = process.env

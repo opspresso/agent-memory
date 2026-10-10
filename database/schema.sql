@@ -106,6 +106,29 @@ CREATE TABLE "documents" (
 	CONSTRAINT "documents_nonnegative_size_check" CHECK ("documents"."size_bytes" >= 0),
 	CONSTRAINT "documents_nonnegative_attempts_check" CHECK ("documents"."processing_attempts" >= 0)
 );
+CREATE TABLE "document_embedding_checkpoints" (
+	"organization_id" uuid NOT NULL,
+	"document_id" uuid NOT NULL,
+	"generation" uuid NOT NULL,
+	"fingerprint" text NOT NULL,
+	"embeddings" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "document_embedding_checkpoints_organization_id_document_id_generation_fingerprint_pk" PRIMARY KEY("organization_id","document_id","generation","fingerprint"),
+	CONSTRAINT "document_embedding_checkpoints_fingerprint_check" CHECK ("document_embedding_checkpoints"."fingerprint" ~ '^[0-9a-f]{64}$'),
+	CONSTRAINT "document_embedding_checkpoints_batch_check" CHECK (jsonb_typeof("document_embedding_checkpoints"."embeddings") = 'array'
+    AND jsonb_array_length("document_embedding_checkpoints"."embeddings") BETWEEN 1 AND 64)
+);
+CREATE TABLE "document_processing_checkpoints" (
+	"organization_id" uuid NOT NULL,
+	"document_id" uuid NOT NULL,
+	"generation" uuid NOT NULL,
+	"mime_type" text NOT NULL,
+	"parts" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "document_processing_checkpoints_organization_id_document_id_generation_pk" PRIMARY KEY("organization_id","document_id","generation"),
+	CONSTRAINT "document_processing_checkpoints_parts_check" CHECK (jsonb_typeof("document_processing_checkpoints"."parts") = 'array'
+    AND jsonb_array_length("document_processing_checkpoints"."parts") BETWEEN 1 AND 512)
+);
 CREATE TABLE "organization_agent_tokens" (
 	"organization_id" uuid PRIMARY KEY NOT NULL,
 	"user_id" uuid NOT NULL,
@@ -425,6 +448,8 @@ ALTER TABLE "documents" ADD CONSTRAINT "documents_organization_id_organizations_
 ALTER TABLE "documents" ADD CONSTRAINT "documents_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;
 ALTER TABLE "documents" ADD CONSTRAINT "documents_organization_team_fk" FOREIGN KEY ("organization_id","team_id") REFERENCES "public"."teams"("organization_id","id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "documents" ADD CONSTRAINT "documents_organization_user_fk" FOREIGN KEY ("organization_id","user_id") REFERENCES "public"."organization_members"("organization_id","user_id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "document_embedding_checkpoints" ADD CONSTRAINT "document_embedding_checkpoints_document_fk" FOREIGN KEY ("organization_id","document_id") REFERENCES "public"."documents"("organization_id","id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "document_processing_checkpoints" ADD CONSTRAINT "document_processing_checkpoints_document_fk" FOREIGN KEY ("organization_id","document_id") REFERENCES "public"."documents"("organization_id","id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "organization_agent_tokens" ADD CONSTRAINT "organization_agent_tokens_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "organization_agent_tokens" ADD CONSTRAINT "organization_agent_tokens_member_fk" FOREIGN KEY ("organization_id","user_id") REFERENCES "public"."organization_members"("organization_id","user_id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "organization_members" ADD CONSTRAINT "organization_members_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;

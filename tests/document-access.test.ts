@@ -57,7 +57,7 @@ function repository(overrides: Partial<DocumentRepository>): DocumentRepository 
     prepareRetry: vi.fn(),
     claimForProcessing: vi.fn(),
     completeProcessing: vi.fn(),
-    failProcessing: vi.fn(),
+    failProcessing: vi.fn(), deferProcessing: vi.fn(),
     markEnqueueFailure: vi.fn(),
     archive: vi.fn(),
     search: vi.fn(),

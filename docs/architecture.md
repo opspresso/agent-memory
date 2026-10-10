@@ -178,6 +178,10 @@ Ingestion 메시지는 실제 요청자를 보존한다. 원본 읽기 전, 각 
 
 문서당 최대 512개 chunk를 허용한다. 분할 중 한도를 넘는 즉시 실패하며, JSON 경로·값 전개도 512 × 2,000자 예산을 넘기기 전에 중단한다. Markdown의 줄·제목·표 행, CSV record와 JSON 자식 항목은 순서대로 읽어 전체 중간 목록을 만들지 않는다. Embedding은 최대 64개 chunk씩 provider에 전달한다. 최대 8개 batch를 순서대로 요청하며 각 embedding HTTP 요청의 timeout은 60초다. 이 값은 S3 조회·추출·DB 저장을 포함한 전체 처리 시간의 보장이 아니다. Lease가 재발급되면 이전 worker의 저장은 거부된다. 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다. Document 삭제는 provenance를 보존하는 archive이며 원본과 chunk를 유지하되 검색, retry, AI 후보 조회·승인에서 제외한다.
 
+변환·분할 결과는 처리 세대별 `document_processing_checkpoints`에 저장한다. 완료된 embedding batch는 `document_embedding_checkpoints`에 저장하며 세대·원문 입력·provider URL·모델·차원이 모두 일치할 때만 재사용한다. 같은 세대의 오류 재시도·quota 대기·worker 재시작은 checkpoint에 저장된 변환과 embedding을 재사용한다. Provider 응답 수신 후 checkpoint 저장 전에 process가 종료되면 해당 batch는 다시 요청할 수 있다. 새 사용자 retry는 새 세대를 시작한다. 완료·새 세대 준비·archive transaction은 해당 문서의 임시 checkpoint만 정리한다. Checkpoint 쓰기는 현재 lease를 검사하므로 늦은 worker가 정리된 값을 다시 저장할 수 없다.
+
+서버 AI quota 초과 시 문서를 `pending`으로 돌리고 lease를 해제한 뒤 후속 job을 예약한다. 부분 chunk는 검색에 공개하지 않으며 최종 chunk 저장과 `ready` 전환은 원자적으로 수행한다. Provider 오류·timeout은 `failed`와 기존 queue 오류 재시도로 처리하며 완료한 checkpoint는 같은 세대에서 재사용한다.
+
 일반 본문은 문자 예산 후반부에서 문단·줄·단어 경계 순으로 나눈다. 반복 문맥의 시작이 단어 중간이면 다음 공백까지 이동한다. 공백 없는 긴 문자열은 문자 한도로 나누되 Unicode surrogate pair를 보존한다. 분할은 원문 문자 범위를 유지하며 비공백 본문을 생략하지 않는다.
 
 Markdown chunk는 2,000자 문맥 예산에 들어가는 상위 제목 경로를 원문 그대로 함께 보존한다. 제목 경로 자체가 예산을 초과하면 일반 텍스트 분할로 처리한다. 같은 단계의 제목이나 새 최상위 제목을 만나면 이전 경로를 제거하며 fenced code 안의 제목은 문서 구조로 해석하지 않는다. 본문 없는 상위 제목은 자식 chunk의 문맥으로 사용한다. 같은 부모와 단계 아래에 연속된 본문·자식 없는 제목은 예산 안에서 함께 묶고 공통 상위 제목만 반복한다. 본문이 있는 섹션과 새 최상위 제목의 경계는 유지한다. `metadata.start/end`는 줄바꿈과 앞뒤 공백을 정규화한 추출 본문의 문자 범위이고, 반복한 제목의 원본 범위는 `metadata.contextSpans`에 기록한다. 이력서의 주인·경력·기술·프로젝트 구분도 같은 chunk의 근거로 조회할 수 있다. 변환 파일의 범위는 원본 bytes나 PDF page 좌표가 아니다. JSON의 범위는 경로·값으로 펼친 본문을 기준으로 한다.
@@ -332,7 +336,7 @@ Knowledge embedding은 `knowledge_node_sources`가 model과 함께 소유한다.
 
 서비스의 기억 lifecycle은 MCP `remember`·`recall`·`forget`으로 제공한다. `remember`는 Memory 생성 use case를, `forget`은 manage 권한과 현재 version을 검증하는 archive use case를 사용한다. Archive 후에는 회상·검색에서 제외하고 revision과 provenance는 보존한다. `recall`은 같은 검색·재정렬 흐름을 Memory만 대상으로 실행하며 문서·Graph를 조회하지 않는다. Reranker 설정·최소 점수·실패 시 hybrid 복귀를 통합 검색과 공유한다. 회상 응답은 결과 하나 최대 1,200자·전체 최대 4,000자의 `remembered` text와 구조화 Memory 검색 결과를 반환한다. 두 형식 모두 Memory ID·version을 포함해 text만 소비하는 서비스도 `forget`을 호출할 수 있다. RAG·Knowledge Graph를 함께 검색하려면 `context_search`를 사용한다.
 
-Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같은 instance-local request limiter를 공유한다. 동시 실행 수와 분당 합산 호출 수를 넘으면 provider를 호출하지 않는다. Embedding 기반 HTTP 요청은 `429`와 `Retry-After`를 반환하고, reranker는 hybrid 순위로 복귀한다. Knowledge enrichment의 서버 quota 초과는 후속 job으로 예약하며, 문서 ingestion의 제한 초과는 pg-boss retry로 처리한다.
+Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같은 instance-local request limiter를 공유한다. 동시 실행 수와 분당 합산 호출 수를 넘으면 provider를 호출하지 않는다. Embedding 기반 HTTP 요청은 `429`와 `Retry-After`를 반환하고, reranker는 hybrid 순위로 복귀한다. 문서 ingestion과 Knowledge enrichment의 서버 quota 초과는 오류 재시도를 소모하지 않는 후속 job으로 예약한다.
 
 ### 관계 지도
 

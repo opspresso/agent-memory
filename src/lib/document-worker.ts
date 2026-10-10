@@ -27,6 +27,8 @@ import {
   documentObjectStorage,
   documentRepository,
   documentTextExtractor,
+  documentProcessingCheckpointRepository,
+  documentEmbeddingCheckpoints,
   textEmbeddingService
 } from "./container";
 
@@ -50,6 +52,8 @@ const processDocument = buildProcessDocument({
   objectStorage: documentObjectStorage,
   repository: documentRepository,
   textExtractor: documentTextExtractor,
+  processingCheckpoints: documentProcessingCheckpointRepository,
+  ...(documentEmbeddingCheckpoints ? { embeddingCheckpoints: documentEmbeddingCheckpoints } : {}),
   ...(textEmbeddingService ? { embeddingService: textEmbeddingService } : {})
 });
 
@@ -81,12 +85,13 @@ function failJob(error: unknown, identifiers: { readonly organizationId: string;
 export async function startDocumentWorker(): Promise<void> {
   workers ??= (async () => {
     const boss = await documentIngestionQueue.start();
-    const ingestionWorker = boss.work<DocumentIngestionJob>(
+    const ingestionWorker = boss.work<DocumentIngestionJob, unknown, WorkOptions & { includeMetadata: true }>(
       documentIngestionQueueName,
       {
         batchSize: 1,
         localConcurrency: 2,
-        pollingIntervalSeconds: 2
+        pollingIntervalSeconds: 2,
+        includeMetadata: true
       },
       async (jobs) => {
         for (const job of jobs) {
@@ -98,6 +103,15 @@ export async function startDocumentWorker(): Promise<void> {
           try {
             await ingestDocument(data.organizationId, data.documentId, data.generation, data.requestedBy);
           } catch (error) {
+            if (error instanceof AiRequestLimitExceededError) {
+              try {
+                const outcome = await documentIngestionQueue.deferIngestion(job, error.retryAfterSeconds);
+                logger.info({ organizationId: data.organizationId, documentId: data.documentId, retryAfterSeconds: error.retryAfterSeconds, outcome }, "document ingestion deferred");
+              } catch (deferralError) {
+                failJob(deferralError, { documentId: data.documentId, organizationId: data.organizationId }, "document ingestion deferral failed");
+              }
+              continue;
+            }
             failJob(error, { documentId: data.documentId, organizationId: data.organizationId }, "document ingestion job failed");
           }
         }

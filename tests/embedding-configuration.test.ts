@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { readEmbeddingDimensions, readEmbeddingMinimumScore } from "@/lib/embedding-configuration";
+import { embeddingBatchFingerprint, readEmbeddingConfiguration, readEmbeddingDimensions, readEmbeddingMinimumScore } from "@/lib/embedding-configuration";
 import { validateRuntimeEnvironment } from "@/lib/runtime-configuration";
 
 describe("embedding dimensions", () => {
+  it("binds checkpoints to exact inputs and embedding semantics without binding credential rotation", () => {
+    const environment = { EMBEDDING_MODEL: " model ", EMBEDDING_BASE_URL: "https://provider.test/v1/", EMBEDDING_DIM: "2", EMBEDDING_API_KEY: "first-key" };
+    const configuration = readEmbeddingConfiguration(environment)!;
+    expect(configuration).toMatchObject({ model: "model", baseUrl: "https://provider.test/v1", dimensions: 2 });
+    const fingerprint = embeddingBatchFingerprint(configuration);
+    const key = fingerprint(["Alpha", "Beta"]);
+    expect(key).toMatch(/^[0-9a-f]{64}$/);
+    const rotated = readEmbeddingConfiguration({ ...environment, EMBEDDING_API_KEY: "rotated-key" })!;
+    expect(embeddingBatchFingerprint(rotated)(["Alpha", "Beta"])).toBe(key);
+    for (const change of [{ model: "other-model" }, { baseUrl: "https://other.test/v1" }, { dimensions: 3 }]) {
+      expect(embeddingBatchFingerprint({ ...configuration, ...change })(["Alpha", "Beta"])).not.toBe(key);
+    }
+    expect(fingerprint(["Beta", "Alpha"])).not.toBe(key);
+    expect(fingerprint(["Alpha ", "Beta"])).not.toBe(key);
+    expect(readEmbeddingConfiguration({})).toBeUndefined();
+    expect(() => readEmbeddingConfiguration({ EMBEDDING_MODEL: "model" })).toThrow("EMBEDDING_BASE_URL");
+  });
   it.each([undefined, "native", " NATIVE "])("omits the provider dimension for %s", (value) => {
     expect(readEmbeddingDimensions({ EMBEDDING_DIM: value })).toBeUndefined();
   });

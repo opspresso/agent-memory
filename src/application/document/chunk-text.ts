@@ -1,11 +1,6 @@
 import { InvalidDocumentError, maxDocumentChunkCharacters, maxDocumentChunks } from "@/domain/document/document";
-
-export interface TextChunk {
-  readonly content: string;
-  readonly start: number;
-  readonly end: number;
-  readonly contextSpans?: readonly { readonly start: number; readonly end: number }[];
-}
+import type { DocumentTextPart as TextChunk } from "@/domain/document/document-processing-checkpoint";
+export type { DocumentTextPart as TextChunk } from "@/domain/document/document-processing-checkpoint";
 
 export interface ChunkTextOptions {
   readonly maxCharacters?: number;

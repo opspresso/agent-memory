@@ -1,5 +1,7 @@
 import { readS3Configuration } from "./s3-configuration";
-import { readEmbeddingDimensions } from "./embedding-configuration";
+import { readEmbeddingConfiguration, embeddingBatchFingerprint } from "./embedding-configuration";
+import { createDocumentEmbeddingCheckpointRepository } from "@/infrastructure/database/repositories/document-embedding-checkpoint-repository";
+import { createDocumentProcessingCheckpointRepository } from "@/infrastructure/database/repositories/document-processing-checkpoint-repository";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createOrganizationAgentTokenRepository } from "@/infrastructure/database/repositories/organization-agent-token-repository";
 import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
@@ -90,26 +92,14 @@ export const knowledgeTermUsageRepository = createKnowledgeTermUsageRepository(
   database.db
 );
 
-const embeddingModel = process.env.EMBEDDING_MODEL?.trim();
-const embeddingBaseUrl = process.env.EMBEDDING_BASE_URL?.trim();
-function createConfiguredTextEmbeddingService() {
-  if (!embeddingModel) {
-    return undefined;
-  }
-  if (!embeddingBaseUrl) {
-    throw new Error(
-      "EMBEDDING_BASE_URL must be set when EMBEDDING_MODEL is enabled"
-    );
-  }
-  return createTextEmbeddingService({
-    apiKey: process.env.EMBEDDING_API_KEY,
-    baseUrl: embeddingBaseUrl,
-    model: embeddingModel,
-    dimensions: readEmbeddingDimensions(),
-    requestLimiter: aiRequestLimiter
-  });
-}
-export const textEmbeddingService = createConfiguredTextEmbeddingService();
+const embeddingConfiguration = readEmbeddingConfiguration();
+export const textEmbeddingService = embeddingConfiguration
+  ? createTextEmbeddingService({ ...embeddingConfiguration, requestLimiter: aiRequestLimiter }) : undefined;
+export const documentProcessingCheckpointRepository = createDocumentProcessingCheckpointRepository(database.db);
+export const documentEmbeddingCheckpoints = embeddingConfiguration ? {
+  repository: createDocumentEmbeddingCheckpointRepository(database.db),
+  fingerprint: embeddingBatchFingerprint(embeddingConfiguration)
+} : undefined;
 
 const rerankerModel = process.env.RERANKER_MODEL?.trim();
 const rerankerBaseUrl = process.env.RERANKER_BASE_URL?.trim();

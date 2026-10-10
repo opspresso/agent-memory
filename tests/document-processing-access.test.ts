@@ -20,7 +20,7 @@ function fixture(content = "Atlas uses Orion.", scope: DocumentScope = { organiz
     accessRepository: { findByUser }, objectStorage: { get, put: vi.fn(), delete: vi.fn() },
     textExtractor: { extract }, embeddingService: { embed: vi.fn(), embedMany },
     repository: { findById, claimForProcessing: vi.fn().mockResolvedValue({ document, leaseId: "lease" }),
-      completeProcessing, failProcessing } });
+      completeProcessing, failProcessing, deferProcessing: vi.fn() } });
   return { run, document, findById, findByUser, get, extract, embedMany, completeProcessing, failProcessing };
 }
 
@@ -85,6 +85,15 @@ describe("document processing authorization", () => {
       return texts.map(() => ({ model: "embedding", values: [1, 0] }));
     });
     await expect(test.run("org", "doc", "doc", "retry-user")).rejects.toThrow("document access denied");
+    expect(test.completeProcessing).not.toHaveBeenCalled();
+  });
+
+  it.each(["model", "dimensions"])("does not publish mixed embeddings when the provider changes %s between batches", async (change) => {
+    const test = fixture(Array.from({ length: 65 }, () => "x".repeat(2_000)).join("\n"));
+    test.embedMany.mockImplementationOnce(async (texts) => texts.map(() => ({ model: "embedding", values: [1, 0] })))
+      .mockImplementationOnce(async (texts) => texts.map(() => ({ model: change === "model" ? "other" : "embedding",
+        values: change === "dimensions" ? [1, 0, 0] : [1, 0] })));
+    await expect(test.run("org", "doc", "doc", "retry-user")).rejects.toThrow("embedding model or dimensions changed");
     expect(test.completeProcessing).not.toHaveBeenCalled();
   });
 });

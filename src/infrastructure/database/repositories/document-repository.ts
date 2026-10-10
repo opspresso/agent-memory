@@ -35,6 +35,7 @@ import { insertIngestionReceipt, refuseIngestionReplay } from "./ingestion-recei
 import { documentChunks, documents } from "../schema";
 import { hybridSearchExpressions } from "./hybrid-search";
 import { scopedReadPredicate } from "./scope-predicates";
+import { documentProcessingClaimPredicate, deleteDocumentProcessingCheckpoints } from "./document-processing-claim";
 
 type DocumentRow = typeof documents.$inferSelect;
 type ChunkRow = typeof documentChunks.$inferSelect;
@@ -231,6 +232,7 @@ export function createDocumentRepository(
           processingStartedAt: null, processingLeaseId: null, processingGeneration: sql`uuidv7()`, updatedAt: now }).where(and(
           eq(documents.organizationId, document.scope.organizationId), eq(documents.id, document.id)
         )).returning();
+        await deleteDocumentProcessingCheckpoints(transaction, document.scope.organizationId, document.id);
         return updated ? documentFromRow(updated) : null;
       });
     },
@@ -344,7 +346,7 @@ export function createDocumentRepository(
     },
 
     async completeProcessing(claim, chunks, now) {
-      const { document, leaseId } = claim;
+      const { document } = claim;
       await db.transaction(async (transaction) => {
         await transaction
           .delete(documentChunks)
@@ -378,18 +380,12 @@ export function createDocumentRepository(
             processedAt: now,
             updatedAt: now
           })
-          .where(
-            and(
-              eq(documents.organizationId, document.scope.organizationId),
-              eq(documents.id, document.id),
-              eq(documents.status, "processing"),
-              eq(documents.processingLeaseId, leaseId)
-            )
-          )
+          .where(documentProcessingClaimPredicate(claim))
           .returning({ id: documents.id });
         if (!updated) {
           throw new Error("document processing claim was lost");
         }
+        await deleteDocumentProcessingCheckpoints(transaction, document.scope.organizationId, document.id);
       });
     },
 
@@ -402,15 +398,15 @@ export function createDocumentRepository(
           processingLeaseId: null,
           updatedAt: now
         })
-        .where(
-          and(
-            eq(documents.organizationId, claim.document.scope.organizationId),
-            eq(documents.id, claim.document.id),
-            eq(documents.status, "processing"),
-            eq(documents.processingLeaseId, claim.leaseId)
-          )
-        )
+        .where(documentProcessingClaimPredicate(claim))
         .returning({ id: documents.id });
+      return updated !== undefined;
+    },
+
+    async deferProcessing(claim, now) {
+      const [updated] = await db.update(documents).set({
+        status: "pending", errorMessage: null, processingLeaseId: null, processingStartedAt: null, updatedAt: now
+      }).where(documentProcessingClaimPredicate(claim)).returning({ id: documents.id });
       return updated !== undefined;
     },
 
@@ -433,27 +429,30 @@ export function createDocumentRepository(
     },
 
     async archive(organizationId, documentId, now, expectedScope) {
-      const [archived] = await db
-        .update(documents)
-        .set({
-          status: "archived",
-          errorMessage: null,
-          processingLeaseId: null,
-          updatedAt: now
-        })
-        .where(
-          and(
-            eq(documents.organizationId, organizationId),
-            eq(documents.id, documentId),
-            eq(documents.organizationId, expectedScope.organizationId),
-            eq(documents.scopeKind, expectedScope.kind),
-            expectedScope.kind === "team" ? eq(documents.teamId, expectedScope.teamId) : isNull(documents.teamId),
-            expectedScope.kind === "user" ? eq(documents.userId, expectedScope.userId) : isNull(documents.userId),
-            sql`${documents.status} <> 'archived'`
+      return db.transaction(async (transaction) => {
+        const [archived] = await transaction
+          .update(documents)
+          .set({
+            status: "archived",
+            errorMessage: null,
+            processingLeaseId: null,
+            updatedAt: now
+          })
+          .where(
+            and(
+              eq(documents.organizationId, organizationId),
+              eq(documents.id, documentId),
+              eq(documents.organizationId, expectedScope.organizationId),
+              eq(documents.scopeKind, expectedScope.kind),
+              expectedScope.kind === "team" ? eq(documents.teamId, expectedScope.teamId) : isNull(documents.teamId),
+              expectedScope.kind === "user" ? eq(documents.userId, expectedScope.userId) : isNull(documents.userId),
+              sql`${documents.status} <> 'archived'`
+            )
           )
-        )
-        .returning({ id: documents.id });
-      return archived !== undefined;
+          .returning({ id: documents.id });
+        if (archived) await deleteDocumentProcessingCheckpoints(transaction, organizationId, documentId);
+        return archived !== undefined;
+      });
     },
 
     async list(input) {

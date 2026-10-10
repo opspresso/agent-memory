@@ -464,6 +464,7 @@ Converter는 업로드 bytes만 읽고 원격 URL·plugin·LLM을 호출하지 �
 - 추출 결과가 512 chunks를 넘으면 provider 호출 전에 실패한다. 이 한도는 작업량을 제한하며 S3·DB 지연을 포함한 전체 처리 시간이 15분 lease 안에 끝남을 보장하지는 않는다. 원본을 더 작은 문서로 나눈 뒤 다시 업로드하라.
 - Markdown에서 같은 부모·단계의 본문 없는 소제목이 연속되면 2,000자 예산 안에서 묶어 제목 수만으로 chunk 한도를 소모하지 않게 한다. 각 제목과 원문 범위를 보존하며 본문이 있는 섹션·최상위 제목은 별도로 처리한다.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
+- 변환·분할 결과와 완료된 embedding batch는 내부 checkpoint에 저장한다. 같은 처리 세대의 재시작·재시도에서는 완료한 단계를 재사용하며, embedding은 provider URL·모델·차원·입력 순서가 같은 batch만 재사용한다. 문서 완료·새 retry 세대 준비·archive 시 해당 임시 데이터만 정리한다. 원본과 완료된 chunk는 이 정리 대상이 아니다.
 - `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v3` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
 - 지식 추출과 검증의 HTTP timeout은 요청당 3분이다. 로컬 모델의 긴 structured output 생성을 허용하면서 최대 세 요청이 15분 job expiration 안에서 끝나도록 제한한다. Provider 오류·timeout은 job 실패와 재시도로 남는다.
 - 개체 추출이 끝나면 `knowledge_extraction_checkpoints`에 결과를 저장한다. 관계 추출 전 quota가 소진되거나 worker가 다시 시작돼도 같은 입력의 개체 추출을 반복하지 않는다. 원문·모델·언어·온톨로지 지침 등이 달라지면 checkpoint를 재사용하지 않는다. 내부 checkpoint는 승인 후보나 완료된 Graph가 아니다.
@@ -480,7 +481,7 @@ Converter는 업로드 bytes만 읽고 원격 URL·plugin·LLM을 호출하지 �
 | `document-ingestion-v3` | Document ID·처리 세대별 exclusive job | 최대 3회, 초기 지연 5초와 backoff |
 | `document-knowledge-enrichment-v3` | Chunk ID별 exclusive job | 최대 5회, 초기 지연 15초와 backoff |
 
-위 횟수는 실제 오류에 적용한다. Knowledge enrichment가 서버 AI quota에 막히면 현재 job을 `deferred: true` 결과로 완료하고, 제한 해제 이후의 후속 job을 원자적으로 예약한다. 이 대기는 오류 재시도 횟수를 소모하거나 복원하지 않는다. Worker는 대기하는 동안 claim을 잡고 있지 않으며, 후속 실행에서 source와 요청자의 권한을 다시 검사한다. `document knowledge enrichment deferred` 로그와 예약 작업을 확인하라. 외부 provider 오류·timeout과 문서 ingestion은 기존 오류 재시도 정책을 따른다.
+위 횟수는 실제 오류에 적용한다. 문서 ingestion이나 Knowledge enrichment가 서버 AI quota에 막히면 현재 job을 `deferred: true` 결과로 완료하고, 제한 해제 이후의 후속 job을 원자적으로 예약한다. 이 대기는 오류 재시도 횟수를 소모하거나 복원하지 않는다. Worker는 대기하는 동안 claim을 잡고 있지 않으며, 후속 실행에서 source와 요청자의 권한을 다시 검사한다. `document ingestion deferred` 또는 `document knowledge enrichment deferred` 로그와 예약 작업을 확인하라. 외부 provider 오류·timeout은 기존 오류 재시도 정책을 따른다.
 
 Document ingestion 메시지의 세대 ID는 같은 요청의 오류 재시도에서 유지한다. 사용자 retry가 새 세대를 준비하면 이전 세대의 작업은 문서를 다시 처리하지 못한다. `processingAttempts`는 claim을 얻을 때마다 증가하며 queue 세대 ID로 사용하지 않는다.
 

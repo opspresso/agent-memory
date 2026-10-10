@@ -76,6 +76,7 @@ export interface DocumentRepository {
     errorMessage: string,
     now: Date
   ): Promise<boolean>;
+  deferProcessing(claim: DocumentProcessingClaim, now: Date): Promise<boolean>;
   markEnqueueFailure(
     organizationId: string,
     documentId: string,
