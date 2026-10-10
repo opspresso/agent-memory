@@ -125,6 +125,15 @@ describe("document processing", () => {
     expect([...source].every((character, index) => /\s/.test(character) || covered.has(index))).toBe(true);
   });
 
+  it("omits overlap wholly inside a complete final word", () => {
+    const paragraph = `${"prefix ".repeat(10)}${"long".repeat(10)}`;
+    const following = "Following provision keeps its whole text.";
+    const source = `${paragraph}\n\n${following}`;
+    const chunks = chunkText(source, { maxCharacters: 120, overlapCharacters: 20 });
+    expect(chunks.map((chunk) => chunk.content)).toEqual([paragraph, following]);
+    expect(chunks.every((chunk) => chunk.content === source.slice(chunk.start, chunk.end))).toBe(true);
+  });
+
   it("preserves Markdown heading context across chunks", () => {
     const chunks = chunkDocumentText(
       `### Agent Studio\n\n${"production AI agent platform ".repeat(100)}`,

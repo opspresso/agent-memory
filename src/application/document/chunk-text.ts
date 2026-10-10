@@ -90,6 +90,7 @@ export function chunkText(
     if (start > 0 && !/\s/.test(text[start - 1] ?? "") && !/\s/.test(text[start] ?? "")) {
       const boundary = text.slice(start, actualEnd).search(/\s/);
       if (boundary >= 0) start += boundary;
+      else if (/\s/.test(text[actualEnd] ?? "")) start = actualEnd;
     }
     if (splitsSurrogatePair(text, start)) start += 1;
   }
