@@ -1,3 +1,4 @@
+import { readAiJsonResponse } from "./read-ai-response";
 import { z } from "zod";
 
 import { maximumEmbeddingDimensions, type TextEmbeddingService } from "@/domain/shared/text-embedding-service";
@@ -65,13 +66,15 @@ export function createTextEmbeddingService(
       signal: AbortSignal.timeout(60_000)
     });
     if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
       throw new SafeOperationalError(
         `embedding request failed with status ${response.status}`,
         { code: "EMBEDDING_HTTP_ERROR" }
       );
     }
 
-    const parsed = embeddingResponseSchema.safeParse(await response.json());
+    // Budget 32 bytes per returned float, plus separate envelope metadata.
+    const parsed = embeddingResponseSchema.safeParse(await readAiJsonResponse(response, 64 * 1_024 + texts.length * (dimensions ?? maximumEmbeddingDimensions) * 32));
     if (!parsed.success) {
       throw new SafeOperationalError("embedding response is invalid", {
         code: "EMBEDDING_RESPONSE_INVALID"

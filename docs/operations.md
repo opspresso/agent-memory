@@ -306,6 +306,8 @@ OpenAI-compatible local endpoint를 사용하려면 embedding, reranker, knowled
 
 Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 동시 실행·분당 호출 제한과 PostgreSQL의 조직·사용자 분당 quota를 공유한다. Replica를 늘려도 같은 조직·사용자의 durable quota는 늘어나지 않는다. Provider account 전체 예산은 별도로 관리한다.
 
+Provider 응답 본문은 JSON 파싱 전에 byte 상한을 적용한다. 추출·검증은 32 MiB, 온톨로지 추천은 128 KiB다. Embedding은 `64 KiB + 입력 수 × 차원 × 32 bytes`를 사용하며 차원 미지정 시 16,000으로 계산한다. Reranker는 `64 KiB + 요청한 점수 수 × 128 bytes`다. 실제로 읽은 본문 크기를 검사하므로 `Content-Length`가 없거나 작게 선언돼도 상한을 지킨다. 상한 초과는 응답을 취소하고 기존 실패 처리 경로로 전달한다. 잘못된 JSON·UTF-8이나 읽기 오류에 원문·provider 본문을 포함하지 않는다.
+
 #### 기존 데이터와 model 변경
 
 현재 검증은 `evidence-v7`를 사용한다. 미완료 후보의 policy가 오래되거나 검증에 사용한 출처·참고 node의 공개 범위나 상태가 바뀌면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 출처 정보가 없는 과거 판정은 공개 응답과 자동 판단에 사용하지 않는다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.

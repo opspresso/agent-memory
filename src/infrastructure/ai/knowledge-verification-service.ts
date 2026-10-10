@@ -1,9 +1,8 @@
+import { createKnowledgeStructuredClient, type KnowledgeStructuredClientConfiguration } from "./knowledge-structured-client";
 import { z } from "zod";
 import type { KnowledgeVerificationService } from "@/domain/knowledge/knowledge-verification-service";
-import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 import { entityReviewKey, relationshipReviewKey } from "@/domain/knowledge/knowledge-candidate-selection";
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
-import { knowledgeRequestTimeoutMilliseconds } from "./knowledge-request-timeout";
 import { knowledgeRepresentations, limitKnowledgeAssessmentReason } from "@/domain/knowledge/knowledge-assessment";
 import { knowledgeSourceInstructions } from "./knowledge-source-instructions";
 import { sourceEvidencePassages, resolveSourceEvidence } from "./knowledge-source-evidence";
@@ -75,11 +74,9 @@ const instructions = `Independently audit proposed knowledge against the supplie
 
 ${knowledgeSourceInstructions}`;
 
-export function createKnowledgeVerificationService(configuration: {
-  readonly baseUrl: string; readonly model: string; readonly apiKey?: string;
-  readonly requestLimiter?: AiRequestLimiter; readonly request?: typeof fetch;
-}): KnowledgeVerificationService {
-  const request = configuration.request ?? fetch;
+export function createKnowledgeVerificationService(configuration: KnowledgeStructuredClientConfiguration): KnowledgeVerificationService {
+  const client = createKnowledgeStructuredClient(configuration, "verification");
+  const model = configuration.model.trim();
   async function verify(input: Parameters<KnowledgeVerificationService["verify"]>[0]) {
     // Extraction keys often encode kinds (e.g. location_1). Keep all of them
     // outside the independent verifier, including IDs and relation endpoints.
@@ -98,31 +95,22 @@ export function createKnowledgeVerificationService(configuration: {
     const requested = [...facts, ...aliases];
     const sourcePassages = sourceEvidencePassages(input.content);
     const evidenceFor = (id: string) => id === "none" ? "" : resolveSourceEvidence(sourcePassages, id);
-    if (facts.length === 0) { return { model: configuration.model, items: [] }; }
-    const response = await request(`${configuration.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
-      method: "POST", headers: { "Content-Type": "application/json", ...(configuration.apiKey ? { Authorization: `Bearer ${configuration.apiKey}` } : {}) },
-      signal: AbortSignal.timeout(knowledgeRequestTimeoutMilliseconds),
-      body: JSON.stringify({ model: configuration.model, temperature: 0,
-        messages: [{ role: "system", content: instructions }, { role: "user", content: JSON.stringify({
-          documentTitle: input.documentTitle, content: input.content, facts: requested,
-          existingKnowledge: input.existingKnowledge, sourcePassages
-        }) }],
-        response_format: { type: "json_schema", json_schema: { name: "knowledge_verification", strict: true,
-          schema: { type: "object", additionalProperties: false, required: ["items"],
-            $defs: { sourceEvidence: { type:"string",enum:["none",...sourcePassages.map((passage) => passage.id)] } }, properties: {
-            items: { type: "object", additionalProperties: false,
-              required: requested.map((fact) => fact.item),
-              properties: Object.fromEntries([...facts.map((fact) => [fact.item, fact.item.startsWith("entity:")?entityJudgementSchema:judgementSchema]), ...aliases.map((alias) => [alias.item, alias.checkDescription?descriptionAliasJudgementSchema:aliasJudgementSchema])])
-            }
-          } }
-        } }
-      })
-    });
-    if (!response.ok) { throw new SafeOperationalError("knowledge verification request failed", { code: "KNOWLEDGE_VERIFICATION_HTTP_ERROR" }); }
+    if (facts.length === 0) { return { model, items: [] }; }
+    const content = await client.generate(instructions, {
+      documentTitle: input.documentTitle, content: input.content, facts: requested,
+      existingKnowledge: input.existingKnowledge, sourcePassages
+    }, { name: "knowledge_verification", strict: true,
+      schema: { type: "object", additionalProperties: false, required: ["items"],
+        $defs: { sourceEvidence: { type:"string",enum:["none",...sourcePassages.map((passage) => passage.id)] } }, properties: {
+        items: { type: "object", additionalProperties: false,
+          required: requested.map((fact) => fact.item),
+          properties: Object.fromEntries([...facts.map((fact) => [fact.item, fact.item.startsWith("entity:")?entityJudgementSchema:judgementSchema]), ...aliases.map((alias) => [alias.item, alias.checkDescription?descriptionAliasJudgementSchema:aliasJudgementSchema])])
+        }
+      } }
+    }, input.quotaKey);
     let result: z.infer<typeof resultSchema>;
     try {
-      const completion = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1) }).parse(await response.json());
-      result = resultSchema.parse(JSON.parse(completion.choices[0]!.message.content));
+      result = resultSchema.parse(content);
     } catch {
       throw new SafeOperationalError("knowledge verification response is invalid", { code: "KNOWLEDGE_VERIFICATION_RESPONSE_INVALID" });
     }
@@ -130,7 +118,7 @@ export function createKnowledgeVerificationService(configuration: {
       throw new SafeOperationalError("knowledge verification response does not cover the requested items", { code: "KNOWLEDGE_VERIFICATION_COVERAGE_INVALID" });
     }
     try {
-      return { model: configuration.model, items: facts.map((fact) => {
+      return { model, items: facts.map((fact) => {
         const { evidenceId, ...judgement } = (fact.item.startsWith("entity:")
           ? itemSchema.extend({ entityKind:z.string().trim().min(1).max(100) }):itemSchema).parse(result.items[fact.item]);
         return { item: originalItems.get(fact.item) ?? fact.item, ...judgement, evidence:evidenceFor(evidenceId) };
@@ -142,5 +130,5 @@ export function createKnowledgeVerificationService(configuration: {
       throw new SafeOperationalError("knowledge verification response is invalid", { code: "KNOWLEDGE_VERIFICATION_RESPONSE_INVALID" });
     }
   }
-  return { verify: (input) => configuration.requestLimiter ? configuration.requestLimiter.run(() => verify(input), input.quotaKey) : verify(input) };
+  return { verify };
 }
