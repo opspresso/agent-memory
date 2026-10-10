@@ -3,6 +3,66 @@ import { Client } from "pg";
 
 import { resetInstallationFixture } from "./installation-fixture";
 
+test("locks revision inputs until the saved version is loaded", async ({ page }, testInfo) => {
+  test.skip(process.env.E2E_AUTHENTICATED !== "true", "requires a disposable PostgreSQL database");
+  await resetInstallationFixture();
+  const headers = { Origin: "http://127.0.0.1:3110", "x-forwarded-for": "192.0.2.98" };
+  const signup = await page.request.post("/api/auth/sign-up/email", { headers,
+    data: { email: `e2e+${process.env.E2E_RUN_ID}-${testInfo.retry}@nalbam.com`, name: "Revision Operator", password: "agent-memory-e2e-password" } });
+  expect(signup.ok()).toBe(true);
+  await page.goto("/memories");
+  const created = await page.request.post("/api/memories", { headers,
+    data: { kind: "fact", scope: { kind: "user" }, title: "Pending revision fixture", content: "Original", source: { type: "user" } } });
+  expect(created.status()).toBe(201);
+  const memory = await created.json() as { id: string };
+  await page.goto(`/memories?memory=${memory.id}`);
+  await page.getByRole("tab", { name: "Edit", exact: true }).click();
+  const content = page.getByRole("textbox", { name: "Content", exact: true });
+  await content.fill("First edit");
+  const started = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  const readStarted = Promise.withResolvers<void>(), releaseRead = Promise.withResolvers<void>();
+  let saved = false;
+  const pattern = `**/api/memories/${memory.id}`;
+  await page.route(pattern, async (route) => {
+    if (route.request().method() === "GET" && saved) {
+      const response = await route.fetch();
+      readStarted.resolve();
+      await releaseRead.promise;
+      return route.fulfill({ response });
+    }
+    if (route.request().method() !== "PATCH") return route.continue();
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    saved = true;
+    started.resolve();
+    await release.promise;
+    await route.fulfill({ response });
+  });
+  try {
+    await page.getByRole("button", { name: "Save revision", exact: true }).click();
+    await started.promise;
+    await expect(content).toBeDisabled();
+    await expect(page.getByRole("textbox", { name: "Title", exact: true })).toBeDisabled();
+    await expect(page.getByRole("textbox", { name: "Reason for change", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeDisabled();
+    release.resolve();
+    await readStarted.promise;
+    await expect(content).toBeDisabled();
+    releaseRead.resolve();
+    await expect(content).toBeEnabled();
+    await expect(content).toHaveValue("First edit");
+    await content.fill("Second edit");
+    await page.getByRole("button", { name: "Save revision", exact: true }).click();
+    await expect(content).toBeEnabled();
+    await expect.poll(async () => (await (await page.request.get(`/api/memories/${memory.id}`)).json()).version).toBe(3);
+    expect(await (await page.request.get(`/api/memories/${memory.id}`)).json()).toMatchObject({ content: "Second edit", version: 3 });
+  } finally {
+    release.resolve();
+    releaseRead.resolve();
+    await page.unroute(pattern);
+  }
+});
+
 test("loads history on demand, isolates failures and reaches versions beyond the first hundred", async ({ page }, testInfo) => {
   test.skip(process.env.E2E_AUTHENTICATED !== "true", "requires a disposable PostgreSQL database");
   test.setTimeout(90_000);
