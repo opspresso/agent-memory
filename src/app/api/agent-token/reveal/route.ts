@@ -1,8 +1,9 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { organizationAgentTokenUseCases } from "@/lib/container";
 import { organizationAgentTokenErrorResponse } from "@/lib/organization-agent-token-http";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 
-export async function POST(request: Request) {
+export const POST = withRouteErrorBoundary("POST /api/agent-token/reveal", async function POST(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
@@ -19,4 +20,4 @@ export async function POST(request: Request) {
     }
     throw error;
   }
-}
+});

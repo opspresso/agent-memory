@@ -1,8 +1,9 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { knowledgeErrorResponse } from "@/lib/knowledge-http";
 import { suggestKnowledgeOntologyRecord } from "@/lib/knowledge-ontology-service";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 
-export async function POST(request: Request) {
+export const POST = withRouteErrorBoundary("POST /api/knowledge/ontology/suggestions", async function POST(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
@@ -19,4 +20,4 @@ export async function POST(request: Request) {
     }
     throw error;
   }
-}
+});

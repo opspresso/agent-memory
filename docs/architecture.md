@@ -347,6 +347,8 @@ Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같
 
 ## 관측성과 민감정보
 
+API handler는 `withRouteErrorBoundary`로 인증·요청 해석·operation의 예상 밖 오류를 처리한다. 이 경계는 안전한 오류 metadata를 기록하고 고정 HTTP `500` 응답을 반환해 Next.js의 기본 오류 logger에 원본 예외가 전달되는 것을 막는다. 각 route의 domain 오류 응답과 Next.js의 redirect·render 제어 흐름은 유지한다. Readiness는 자체 경계에서 안전한 HTTP `503`을 반환한다.
+
 Pino는 작업명, organization ID, 결과 수, 처리 시간을 구조화해 기록한다. 일반 Error는 allowlist된 type·code만 직렬화하고 message를 기록하지 않는다. Provider·storage adapter가 만든 `SafeOperationalError`만 입력을 포함하지 않는 고정 message와 code를 기록하며, cause는 message 없이 type·code chain만 최대 3단계 보존한다. Reranker가 실패하면 본문 없이 fallback을 기록한다. 검색어와 본문은 retrieval log에 포함하지 않는다. Langfuse key가 모두 설정되면 OpenTelemetry trace를 내보내며 token과 secret을 마스킹하고 media upload를 비활성화한다. Retrieval 실패는 observation 안에서 고정된 실패 상태로 기록하고 원래 오류는 observation 밖에서 다시 던져 SDK가 오류 message를 span에 기록하지 못하게 한다. Embedding과 reranker 입력·출력은 telemetry 대상이 아니다.
 
 ## 수집 receipt

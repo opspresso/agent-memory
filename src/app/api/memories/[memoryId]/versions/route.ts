@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   memoryErrorResponse,
@@ -13,7 +14,7 @@ interface RouteContext {
   readonly params: Promise<{ memoryId: string }>;
 }
 
-export async function GET(request: Request, context: RouteContext) {
+export const GET = withRouteErrorBoundary("GET /api/memories/[memoryId]/versions", async function GET(request: Request, context: RouteContext) {
   const params = await context.params;
   const memoryId = memoryIdSchema.safeParse(params.memoryId);
   if (!memoryId.success) {
@@ -57,4 +58,4 @@ export async function GET(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});

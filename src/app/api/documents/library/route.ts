@@ -1,8 +1,9 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { documentErrorResponse, publicDocument } from "@/lib/document-http";
 import { listDocumentRecords } from "@/lib/document-service";
 
-export async function GET(request: Request) {
+export const GET = withRouteErrorBoundary("GET /api/documents/library", async function GET(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) return authorization.response;
   const query = new URL(request.url).searchParams;
@@ -14,4 +15,4 @@ export async function GET(request: Request) {
     if (response) return response;
     throw error;
   }
-}
+});

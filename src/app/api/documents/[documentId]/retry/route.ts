@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { documentErrorResponse, publicDocument } from "@/lib/document-http";
 import { documentIdSchema } from "@/lib/document-schemas";
@@ -7,7 +8,7 @@ interface RouteContext {
   readonly params: Promise<{ documentId: string }>;
 }
 
-export async function POST(request: Request, context: RouteContext) {
+export const POST = withRouteErrorBoundary("POST /api/documents/[documentId]/retry", async function POST(request: Request, context: RouteContext) {
   const { documentId } = await context.params;
   const parsedDocumentId = documentIdSchema.safeParse(documentId);
   if (!parsedDocumentId.success) {
@@ -32,4 +33,4 @@ export async function POST(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});

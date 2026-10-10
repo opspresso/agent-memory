@@ -1,8 +1,9 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { publicKnowledgeCandidate, knowledgeCandidateErrorResponse } from "@/lib/knowledge-candidate-http";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { queueKnowledgeCuration, listKnowledgeCurationHistory } from "@/lib/knowledge-curation-service";
 
-export async function POST(request: Request) {
+export const POST = withRouteErrorBoundary("POST /api/knowledge/curation", async function POST(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) { return authorization.response; }
   if (!queueKnowledgeCuration) {
@@ -15,11 +16,11 @@ export async function POST(request: Request) {
     if (response) { return response; }
     throw error;
   }
-}
+});
 
-export async function GET(request: Request) {
+export const GET = withRouteErrorBoundary("GET /api/knowledge/curation", async function GET(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) { return authorization.response; }
   const sources = await listKnowledgeCurationHistory(authorization.access);
   return Response.json({ sources: sources.map((source) => ({ ...source, candidate: publicKnowledgeCandidate(source.candidate) })) });
-}
+});

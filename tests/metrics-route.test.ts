@@ -20,6 +20,7 @@ vi.mock("@/lib/process-metrics", () => ({
 
 import { GET } from "@/app/api/metrics/route";
 import { getEffectiveRuntimeEnvironment } from "@/lib/runtime-settings";
+import { readMetricsToken } from "@/lib/metrics-auth";
 
 describe("metrics route", () => {
   afterEach(() => {
@@ -69,9 +70,10 @@ describe("metrics route", () => {
   it("rejects an unsafe configured token", async () => {
     vi.stubEnv("METRICS_BEARER_TOKEN", "short-token");
 
-    await expect(
-      GET(new Request("https://memory.example.com/api/metrics"))
-    ).rejects.toThrow("METRICS_BEARER_TOKEN must contain at least 32 characters");
+    expect(() => readMetricsToken()).toThrow("METRICS_BEARER_TOKEN must contain at least 32 characters");
+    const response = await GET(new Request("https://memory.example.com/api/metrics"));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Internal server error" });
   });
 
   it("uses a rotated DB token even when this replica still has the old env token", async () => {

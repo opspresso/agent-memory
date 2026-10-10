@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   knowledgeCandidateErrorResponse,
@@ -14,7 +15,7 @@ interface RouteContext {
   readonly params: Promise<{ candidateId: string }>;
 }
 
-export async function POST(request: Request, context: RouteContext) {
+export const POST = withRouteErrorBoundary("POST /api/knowledge/candidates/[candidateId]/reject", async function POST(request: Request, context: RouteContext) {
   const { candidateId } = await context.params;
   const parsedCandidateId = knowledgeCandidateIdSchema.safeParse(candidateId);
   if (!parsedCandidateId.success) {
@@ -50,4 +51,4 @@ export async function POST(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});

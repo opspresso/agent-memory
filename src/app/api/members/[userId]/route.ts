@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   organizationAdministrationErrorResponse,
@@ -32,7 +33,7 @@ async function routeAccess(request: Request, context: RouteContext) {
   return { ...authorization, userId: userId.data };
 }
 
-export async function PATCH(request: Request, context: RouteContext) {
+export const PATCH = withRouteErrorBoundary("PATCH /api/members/[userId]", async function PATCH(request: Request, context: RouteContext) {
   const authorization = await routeAccess(request, context);
   if (!authorization.authorized) {
     return authorization.response;
@@ -62,9 +63,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});
 
-export async function DELETE(request: Request, context: RouteContext) {
+export const DELETE = withRouteErrorBoundary("DELETE /api/members/[userId]", async function DELETE(request: Request, context: RouteContext) {
   const authorization = await routeAccess(request, context);
   if (!authorization.authorized) {
     return authorization.response;
@@ -82,4 +83,4 @@ export async function DELETE(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});

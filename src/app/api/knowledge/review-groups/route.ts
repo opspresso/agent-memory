@@ -1,8 +1,9 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { listKnowledgeReviewGroups } from "@/lib/knowledge-candidate-service";
 import { knowledgeCandidateErrorResponse } from "@/lib/knowledge-candidate-http";
 
-export async function GET(request: Request) {
+export const GET = withRouteErrorBoundary("GET /api/knowledge/review-groups", async function GET(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) { return authorization.response; }
   const params = new URL(request.url).searchParams;
@@ -16,4 +17,4 @@ export async function GET(request: Request) {
     if (response) { return response; }
     throw error;
   }
-}
+});

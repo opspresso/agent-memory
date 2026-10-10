@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   memoryErrorResponse,
@@ -42,7 +43,7 @@ async function routeAccess(request: Request, context: RouteContext) {
   };
 }
 
-export async function GET(request: Request, context: RouteContext) {
+export const GET = withRouteErrorBoundary("GET /api/memories/[memoryId]", async function GET(request: Request, context: RouteContext) {
   const route = await routeAccess(request, context);
   if (!route.valid) {
     return route.response;
@@ -60,9 +61,9 @@ export async function GET(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});
 
-export async function PATCH(request: Request, context: RouteContext) {
+export const PATCH = withRouteErrorBoundary("PATCH /api/memories/[memoryId]", async function PATCH(request: Request, context: RouteContext) {
   const route = await routeAccess(request, context);
   if (!route.valid) {
     return route.response;
@@ -121,9 +122,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});
 
-export async function DELETE(request: Request, context: RouteContext) {
+export const DELETE = withRouteErrorBoundary("DELETE /api/memories/[memoryId]", async function DELETE(request: Request, context: RouteContext) {
   const route = await routeAccess(request, context);
   if (!route.valid) {
     return route.response;
@@ -158,4 +159,4 @@ export async function DELETE(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});

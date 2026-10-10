@@ -1,9 +1,10 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { documentIdSchema } from "@/lib/document-schemas";
 import { documentErrorResponse, publicDocument } from "@/lib/document-http";
 import { getDocumentChunkRecord } from "@/lib/document-service";
 
-export async function GET(request: Request, context: { readonly params: Promise<{ chunkId: string }> }) {
+export const GET = withRouteErrorBoundary("GET /api/document-chunks/[chunkId]", async function GET(request: Request, context: { readonly params: Promise<{ chunkId: string }> }) {
   const { chunkId } = await context.params;
   const parsed = documentIdSchema.safeParse(chunkId);
   if (!parsed.success) return Response.json({ error: "Invalid resource ID" }, { status: 400 });
@@ -17,4 +18,4 @@ export async function GET(request: Request, context: { readonly params: Promise<
     if (response) return response;
     throw error;
   }
-}
+});

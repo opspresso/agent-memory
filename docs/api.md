@@ -152,6 +152,8 @@ JSON body를 읽는 조직 API는 UTF-8 JSON을 요구하며 전체 body를 1 Mi
 
 오류 응답은 기본적으로 `{ "error": string }`이며 schema validation 오류는 `issues`를 추가할 수 있다.
 
+처리하지 못한 서버 오류는 HTTP `500`, `{ "error": "Internal server error" }`, `Cache-Control: no-store`를 반환한다. 서버는 고정 작업명과 안전한 오류 type·code만 기록하며 DB query·bind 값, provider 본문과 요청 내용을 응답이나 기본 framework 오류 로그에 전달하지 않는다.
+
 | Status | 의미 | 다음 행동 |
 | --- | --- | --- |
 | `400` | JSON·UUID·query·입력 schema 오류 | `error`와 `issues`를 보고 입력을 수정한다. |

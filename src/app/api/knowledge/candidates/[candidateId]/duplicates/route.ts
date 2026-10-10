@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { knowledgeCandidateErrorResponse } from "@/lib/knowledge-candidate-http";
 import { findKnowledgeCandidateDuplicateRecords } from "@/lib/knowledge-candidate-service";
@@ -8,7 +9,7 @@ interface RouteContext {
   readonly params: Promise<{ candidateId: string }>;
 }
 
-export async function GET(request: Request, context: RouteContext) {
+export const GET = withRouteErrorBoundary("GET /api/knowledge/candidates/[candidateId]/duplicates", async function GET(request: Request, context: RouteContext) {
   const { candidateId } = await context.params;
   const parsedCandidateId = knowledgeCandidateIdSchema.safeParse(candidateId);
   if (!parsedCandidateId.success) {
@@ -39,4 +40,4 @@ export async function GET(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});

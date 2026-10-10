@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { organizationAdministrationErrorResponse } from "@/lib/organization-administration-http";
 import {
@@ -13,7 +14,7 @@ interface RouteContext {
   }>;
 }
 
-export async function DELETE(request: Request, context: RouteContext) {
+export const DELETE = withRouteErrorBoundary("DELETE /api/teams/[teamId]/members/[userId]", async function DELETE(request: Request, context: RouteContext) {
   const params = await context.params;
   const teamId = teamIdSchema.safeParse(params.teamId);
   const userId = memberUserIdSchema.safeParse(params.userId);
@@ -38,4 +39,4 @@ export async function DELETE(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});
