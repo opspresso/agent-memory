@@ -156,7 +156,7 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     const assessment = { model: "synthetic-verifier", policyVersion: "evidence-v2", assessedAt: new Date().toISOString(),
       items: ["entity:api", "entity:db", "relationship:0"].map((item) => ({ item, verdict: "review", evidence: "", reason: "This synthetic example needs a human source check." })) };
     for (const [id, sourceChunk] of [[candidateId, chunkId], [rejectCandidateId, rejectChunkId]]) {
-      await database.query("INSERT INTO knowledge_candidates (id, organization_id, document_id, chunk_id, model, graph, assessment) VALUES ($1,$2,$3,$4,$5,$6,$7)", [id, organization.id, readyId, sourceChunk, "synthetic-e2e-extractor", JSON.stringify(graph), JSON.stringify(assessment)]);
+      await database.query("INSERT INTO knowledge_candidates (id, organization_id, document_id, chunk_id, model, graph, assessment) VALUES ($1,$2,$3,$4,$5,$6,$7)", [id, organization.id, readyId, sourceChunk, "synthetic-e2e-extractor", JSON.stringify(graph), JSON.stringify({ ...assessment, sources: [{ chunkId: sourceChunk }], contextNodeIds: [] })]);
     }
 
     await page.goto(`/documents?document=${pendingId}`);

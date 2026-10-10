@@ -624,7 +624,9 @@ Runtime은 개체를 먼저 식별·검증한 뒤, 살아남은 entity key만 �
 
 완료된 개체 단계는 내부 checkpoint에 저장해 같은 입력의 관계 추출을 재개할 때 재사용한다. Checkpoint는 후보 목록·Graph·추출 완료 수에 포함하지 않는다. 서버 AI quota로 중단된 enrichment는 오류 재시도 횟수를 소모하지 않고 후속 실행을 예약한다. 원문이나 추출 설정이 바뀌면 개체 단계부터 새로 수행하며, 이미 저장된 후보는 기존 계약에 따라 재사용한다.
 
-현재 검증 policy는 `evidence-v6`다. 핵심 관계는 다른 검증을 모두 통과하면 모델의 `incidental` 표기에도 보존될 수 있으며, 판정 이유에 이를 기록한다. 근거 없는 주장·불확실성·종류 불일치·일시적 이동·응답은 이 규칙으로 승격하지 않는다.
+Assessment의 `sources`는 원문과 비교에 사용한 Memory·chunk 참조이며, `contextNodeIds`는 비교에 사용한 원래 Knowledge node ID 목록이다. 현재 판정과 `assessmentHistory`는 출처와 참고 node가 현재 후보 scope 전체에서 유효할 때만 반환한다. 병합된 node는 같은 조직의 병합 이력을 따라 남은 node의 권한을 검사한다. 비공개·보관·만료·삭제 또는 확인할 수 없는 참조 때문에 숨긴 판정은 DB에서 삭제하지 않는다. 미완료 후보는 새 검증 후 다시 자동 처리할 수 있다.
+
+현재 검증 policy는 `evidence-v7`다. 핵심 관계는 다른 검증을 모두 통과하면 모델의 `incidental` 표기에도 보존될 수 있으며, 판정 이유에 이를 기록한다. 근거 없는 주장·불확실성·종류 불일치·일시적 이동·응답은 이 규칙으로 승격하지 않는다.
 
 법률·규정이 권한이나 의무를 정의하는 직위는 `role` 추출 대상이며, 특정 사람을 대신 부르는 호칭과 구분한다. 추출·검증 모델은 규범과 실제 사건, 문서 구성과 법률의 주제를 구분하고 조건·예외·시행 시점을 보존하도록 지시받는다. 원문 인용 일치만으로 법률 해석의 정확성이나 현행성을 보장하지 않는다.
 
@@ -646,7 +648,7 @@ Runtime은 개체를 먼저 식별·검증한 뒤, 살아남은 entity key만 �
 
 자동 검증은 추출과 별도의 structured-output 요청이다. 기본은 추출 모델이며 `KNOWLEDGE_VERIFICATION_BASE_URL`과 `KNOWLEDGE_VERIFICATION_MODEL`을 함께 지정하면 독립 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다.
 
-`evidence-v6`의 `assessment.aliases`에는 `entityKey`, `alias`, `identity`, `verdict`, `evidence`, `reason`을 저장한다. 별칭 identity는 `same_entity`, `generic_reference`, `different_entity`, `uncertain` 중 하나이며 원문 인용과 별칭 자체의 원문 출현이 확인된 `same_entity`만 자동 승격한다. 기존 이름 뒤에 수식어를 붙인 별칭은 선택형 `assessment.aliases[].descriptiveExpansion`으로 설명형 확장 여부를 따로 검증하며, `true`이면 같은 대상을 가리켜도 별칭으로 승격하지 않는다.
+`evidence-v7`의 `assessment.aliases`에는 `entityKey`, `alias`, `identity`, `verdict`, `evidence`, `reason`을 저장한다. 별칭 identity는 `same_entity`, `generic_reference`, `different_entity`, `uncertain` 중 하나이며 원문 인용과 별칭 자체의 원문 출현이 확인된 `same_entity`만 자동 승격한다. 기존 이름 뒤에 수식어를 붙인 별칭은 선택형 `assessment.aliases[].descriptiveExpansion`으로 설명형 확장 여부를 따로 검증하며, `true`이면 같은 대상을 가리켜도 별칭으로 승격하지 않는다.
 
 직함·호칭과 다른 개체의 이름은 별칭에서 제외하고, 불확실한 별칭은 개체와 연결 관계를 수동 검토로 남긴다. Provider 응답 스키마는 모든 항목 ID를 필수 object key로 지정하고 추가 key를 금지한다. 서버에서도 전체 항목 집합을 다시 검증한다.
 

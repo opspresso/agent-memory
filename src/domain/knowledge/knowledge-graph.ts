@@ -2,6 +2,8 @@ import type { ScopedResource } from "@/domain/identity/organization-access";
 import { serializedJsonByteLength } from "@/domain/shared/json-size";
 import { knowledgeAliases } from "./knowledge-alias";
 import { isKnowledgeEntityKind } from "./knowledge-entity-eligibility";
+import type { KnowledgeSource } from "./knowledge-source";
+export type { KnowledgeSource } from "./knowledge-source";
 
 import {
   isSymmetricKnowledgePredicate,
@@ -13,11 +15,6 @@ import {
 export interface KnowledgeEmbedding {
   readonly model: string;
   readonly values: readonly number[];
-}
-
-export interface KnowledgeSource {
-  readonly memoryId?: string;
-  readonly chunkId?: string;
 }
 
 export interface KnowledgeNode {

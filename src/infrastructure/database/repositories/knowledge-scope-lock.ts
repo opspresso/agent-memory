@@ -10,11 +10,14 @@ import { inArrayParameter } from "./array-predicate";
 
 export type KnowledgeTransaction = Parameters<Parameters<AgentMemoryDatabase["transaction"]>[0]>[0];
 
+export async function lockKnowledgeScopeForRead(transaction: KnowledgeTransaction, organizationId: string) {
+  await transaction.execute(sql`select pg_advisory_xact_lock_shared(hashtextextended(${`knowledge-scope:${organizationId}`}, 0))`);
+}
+
 export async function lockKnowledgeScope(transaction: KnowledgeTransaction, organizationId: string, exclusive = false) {
   const key = `knowledge-scope:${organizationId}`;
-  await transaction.execute(exclusive
-    ? sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`
-    : sql`select pg_advisory_xact_lock_shared(hashtextextended(${key}, 0))`);
+  if (exclusive) await transaction.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+  else await lockKnowledgeScopeForRead(transaction, organizationId);
   await transaction.insert(knowledgeGraphVersions).values({ organizationId }).onConflictDoUpdate({
     target: knowledgeGraphVersions.organizationId, set: { revision: sql`uuidv7()` }
   });

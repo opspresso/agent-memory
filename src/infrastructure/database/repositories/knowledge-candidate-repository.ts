@@ -6,7 +6,7 @@ import { entityReviewKey, relationshipReviewKey, reviewedCandidateState, selectK
 import { AmbiguousKnowledgeIdentityError, resolveKnowledgeIdentity } from "@/domain/knowledge/knowledge-alias";
 import { mergeKnowledgeDescriptions } from "@/domain/knowledge/knowledge-description";
 import type { KnowledgeCandidate } from "@/domain/knowledge/knowledge-candidate";
-import { currentKnowledgeAssessmentPolicyVersion } from "@/domain/knowledge/knowledge-assessment";
+import { currentKnowledgeAssessmentPolicyVersion, assertAutomaticKnowledgeAssessment, KnowledgeAssessmentUnavailableError } from "@/domain/knowledge/knowledge-assessment";
 import { knowledgeCanonicalNameKey, normalizeKnowledgeKind } from "@/domain/knowledge/knowledge-identity";
 import type { KnowledgeCandidateRepository } from "@/domain/knowledge/knowledge-candidate-repository";
 import {
@@ -39,9 +39,12 @@ import {
   saveKnowledgeNodeContribution
 } from "./knowledge-node-persistence";
 import { scopedManagePredicate, scopedReadPredicate } from "./scope-predicates";
-import { loadKnowledgeSourceScopes, lockKnowledgeScope } from "./knowledge-scope-lock";
+import { loadKnowledgeSourceScopes, lockKnowledgeScope, lockKnowledgeScopeForRead } from "./knowledge-scope-lock";
 import { createOrganizationAccessRepository } from "./organization-access-repository";
 import { canAccessScopedResource } from "@/domain/identity/organization-access";
+import { assessmentVisibilityPredicate, hasVisibleAssessmentPredicate, visibleCandidateColumns } from "./knowledge-assessment-visibility";
+import { uniqueKnowledgeSources } from "@/domain/knowledge/knowledge-source";
+import { lockKnowledgeAssessmentSources } from "./knowledge-assessment-source-lock";
 
 type CandidateRow = typeof knowledgeCandidates.$inferSelect;
 type AgentMemoryTransaction = Parameters<
@@ -189,9 +192,9 @@ function candidateValues(candidate: KnowledgeCandidate) {
 export function createKnowledgeCandidateRepository(
   db: AgentMemoryDatabase
 ): KnowledgeCandidateRepository {
-  async function findById(organizationId: string, candidateId: string) {
-    const [row] = await db
-      .select({ candidate: knowledgeCandidates, document: documents })
+  async function findById(organizationId: string, candidateId: string, reader: Pick<AgentMemoryDatabase, "select"> = db) {
+    const [row] = await reader
+      .select({ candidate: visibleCandidateColumns(), document: documents })
       .from(knowledgeCandidates)
       .innerJoin(
         documents,
@@ -214,7 +217,7 @@ export function createKnowledgeCandidateRepository(
 
   async function findByChunkId(organizationId: string, chunkId: string) {
     const [row] = await db
-      .select({ candidate: knowledgeCandidates, document: documents })
+      .select({ candidate: visibleCandidateColumns(), document: documents })
       .from(knowledgeCandidates)
       .innerJoin(
         documents,
@@ -255,7 +258,8 @@ export function createKnowledgeCandidateRepository(
         SELECT count(*)::int AS "totalChunks", count(${knowledgeCandidates.id})::int AS "extractedChunks",
           count(*) FILTER (WHERE ${knowledgeCandidates.status} <> 'pending'
             OR (jsonb_array_length(${knowledgeCandidates.graph}->'entities') = 0
-            OR (${knowledgeCandidates.assessment}->>'policyVersion' = ${currentKnowledgeAssessmentPolicyVersion} AND NOT EXISTS (
+            OR (${knowledgeCandidates.assessment}->>'policyVersion' = ${currentKnowledgeAssessmentPolicyVersion}
+              AND ${assessmentVisibilityPredicate(knowledgeCandidates.assessment, new Date())} AND NOT EXISTS (
               SELECT 1 FROM jsonb_array_elements(${knowledgeCandidates.assessment}->'items') item
               WHERE item->>'verdict' <> 'review' AND NOT EXISTS (
                 SELECT 1 FROM jsonb_array_elements(${knowledgeCandidates.itemReviews}) reviewed WHERE reviewed->>'item' = item->>'item'
@@ -282,13 +286,31 @@ export function createKnowledgeCandidateRepository(
     },
 
     async saveAssessment(organizationId, candidateId, assessment) {
-      await db.update(knowledgeCandidates).set({ assessment,
-        assessmentHistory:sql`CASE WHEN ${knowledgeCandidates.assessment} IS NULL THEN ${knowledgeCandidates.assessmentHistory}
-          ELSE ${knowledgeCandidates.assessmentHistory} || jsonb_build_array(${knowledgeCandidates.assessment}) END` })
-        .where(and(eq(knowledgeCandidates.organizationId, organizationId), eq(knowledgeCandidates.id, candidateId),
-          eq(knowledgeCandidates.status, "pending"), sql`(${knowledgeCandidates.assessment} IS NULL
-            OR ${knowledgeCandidates.assessment}->>'policyVersion' IS DISTINCT FROM ${assessment.policyVersion})`));
-      return findById(organizationId, candidateId);
+      await db.transaction(async (transaction) => {
+        // This protects provenance without invalidating the topology projection.
+        await lockKnowledgeScopeForRead(transaction, organizationId);
+        const [current] = await transaction.select({ candidate: knowledgeCandidates, document: documents,
+          visible: assessmentVisibilityPredicate(knowledgeCandidates.assessment, new Date()) })
+          .from(knowledgeCandidates).innerJoin(documents, and(
+            eq(documents.organizationId, knowledgeCandidates.organizationId), eq(documents.id, knowledgeCandidates.documentId)
+          )).where(and(eq(knowledgeCandidates.organizationId, organizationId), eq(knowledgeCandidates.id, candidateId)))
+          .for("update", { of: knowledgeCandidates }).limit(1);
+        if (!current || current.candidate.status !== "pending") return;
+        if (current.visible && current.candidate.assessment?.policyVersion === assessment.policyVersion) return;
+        if (!Array.isArray(assessment.contextNodeIds) || assessment.contextNodeIds.some((id) => typeof id !== "string" || !id.trim()) ||
+            !assessment.sources?.some((source) => source.chunkId === current.candidate.chunkId && source.memoryId === undefined)) {
+          throw new KnowledgeAssessmentUnavailableError();
+        }
+        const normalized = { ...assessment, sources: uniqueKnowledgeSources(assessment.sources), contextNodeIds: [...new Set(assessment.contextNodeIds)] };
+        await lockKnowledgeAssessmentSources(transaction, knowledgeScopeFromRow(current.document), normalized);
+        await transaction.update(knowledgeCandidates).set({ assessment: normalized,
+          assessmentHistory: current.candidate.assessment
+            ? [...current.candidate.assessmentHistory, current.candidate.assessment] : current.candidate.assessmentHistory
+        }).where(eq(knowledgeCandidates.id, candidateId));
+      });
+      const candidate = await findById(organizationId, candidateId);
+      if (candidate?.status === "pending" && !candidate.assessment) throw new KnowledgeAssessmentUnavailableError();
+      return candidate;
     },
 
     async deferIdentityResolution(organizationId, candidateId, entityKeys) {
@@ -310,7 +332,7 @@ export function createKnowledgeCandidateRepository(
     },
 
     async listReviewSources(access, assessmentHistory = false) {
-      const query = db.select({ candidate: knowledgeCandidates, document: documents, ordinal: documentChunks.ordinal })
+      const query = db.select({ candidate: visibleCandidateColumns(), document: documents, ordinal: documentChunks.ordinal })
         .from(knowledgeCandidates).innerJoin(documents, and(
           eq(documents.organizationId, knowledgeCandidates.organizationId),
           eq(documents.id, knowledgeCandidates.documentId)
@@ -319,7 +341,7 @@ export function createKnowledgeCandidateRepository(
           eq(documentChunks.id, knowledgeCandidates.chunkId)
         )).where(and(
           eq(knowledgeCandidates.organizationId, access.organizationId),
-          assessmentHistory ? sql`${knowledgeCandidates.assessment} IS NOT NULL` : eq(knowledgeCandidates.status, "pending"), eq(documents.status, "ready"),
+          assessmentHistory ? hasVisibleAssessmentPredicate() : eq(knowledgeCandidates.status, "pending"), eq(documents.status, "ready"),
           sql`jsonb_array_length(${knowledgeCandidates.graph}->'entities') > 0`,
           candidateReviewPredicate(access)
         )).orderBy(assessmentHistory ? desc(knowledgeCandidates.updatedAt) : asc(knowledgeCandidates.createdAt), asc(knowledgeCandidates.id));
@@ -356,7 +378,7 @@ export function createKnowledgeCandidateRepository(
 
     async listPending(access, limit) {
       const rows = await db
-        .select({ candidate: knowledgeCandidates, document: documents })
+        .select({ candidate: visibleCandidateColumns(), document: documents })
         .from(knowledgeCandidates)
         .innerJoin(
           documents,
@@ -389,7 +411,7 @@ export function createKnowledgeCandidateRepository(
         // Resolve and merge names atomically with every other graph/scope mutation.
         await lockKnowledgeScope(transaction, input.organizationId, true);
         const [locked] = await transaction
-          .select({ candidate: knowledgeCandidates, document: documents })
+          .select({ candidate: visibleCandidateColumns(), document: documents })
           .from(knowledgeCandidates)
           .innerJoin(
             documents,
@@ -436,6 +458,10 @@ export function createKnowledgeCandidateRepository(
           return { status: "source_not_ready" } as const;
         }
         const selected = selectKnowledgeCandidateItems(candidate, input.selection);
+        if (input.method === "automatic") {
+          assertAutomaticKnowledgeAssessment(candidate.assessment, selected.items, "accept");
+          await lockKnowledgeAssessmentSources(transaction, candidate.scope, candidate.assessment);
+        }
         const promotions = new Map(
           input.entityPromotions.map((promotion) => [promotion.key, promotion])
         );
@@ -465,10 +491,10 @@ export function createKnowledgeCandidateRepository(
           const priorReview = candidate.itemReviews?.find((review) => review.item === entityReviewKey(entity.key));
           const aliasReviewMethod = priorReview ? priorReview.method ?? "human" : input.method ?? "human";
           const aliases = aliasReviewMethod === "automatic" ? verifiedAliases : entity.aliases ?? [];
-          let existing = await graphRepository.findNodesByNames(reviewer, candidate.scope, [entity.canonicalName, ...aliases]);
+          let existing = await graphRepository.findNodesForScope(reviewer, candidate.scope, [entity.canonicalName, ...aliases]);
           const sources = await loadKnowledgeSourceScopes(transaction, input.organizationId, existing.flatMap((node) => node.sources), input.reviewedAt);
           if ([...sources.values()].some((source) => !source.available)) {
-            existing = await graphRepository.findNodesByNames(reviewer, candidate.scope, [entity.canonicalName, ...aliases]);
+            existing = await graphRepository.findNodesForScope(reviewer, candidate.scope, [entity.canonicalName, ...aliases]);
           }
           const identity = resolveKnowledgeIdentity({ ...entity, aliases }, existing);
           if (identity.status === "ambiguous") throw new AmbiguousKnowledgeIdentityError([entity.key]);
@@ -613,7 +639,7 @@ export function createKnowledgeCandidateRepository(
         const edgeIds = new Set(edges.map((edge) => edge.id));
         return {
           status: "promoted",
-          candidate: candidateFromRow(reviewed, candidate.scope),
+          candidate: (await findById(input.organizationId, candidate.id, transaction))!,
           nodes: selected.graph.entities.flatMap((entity) => {
             const node = nodesById.get(nodeIds.get(entity.key)!);
             return node ? [node] : [];
@@ -626,7 +652,7 @@ export function createKnowledgeCandidateRepository(
     async reject(input) {
       return db.transaction(async (transaction) => {
         await lockKnowledgeScope(transaction, input.organizationId);
-        const [locked] = await transaction.select({ candidate: knowledgeCandidates, document: documents })
+        const [locked] = await transaction.select({ candidate: visibleCandidateColumns(), document: documents })
           .from(knowledgeCandidates).innerJoin(documents, and(
             eq(documents.organizationId, knowledgeCandidates.organizationId),
             eq(documents.id, knowledgeCandidates.documentId)
@@ -639,6 +665,10 @@ export function createKnowledgeCandidateRepository(
         const selected = selectKnowledgeCandidateItems(candidate, input.selection, "rejected");
         if (candidate.status === "rejected") { return candidate; }
         if (candidate.status !== "pending") { return input.selection && selected.items.length === 0 ? candidate : null; }
+        if (input.method === "automatic") {
+          assertAutomaticKnowledgeAssessment(candidate.assessment, selected.items, "ignore");
+          await lockKnowledgeAssessmentSources(transaction, candidate.scope, candidate.assessment);
+        }
         const state = reviewedCandidateState(candidate, selected.items.map((item) => ({
           item, decision: "rejected", method: input.method ?? "human", reviewedBy: input.reviewedBy, reviewedAt: input.reviewedAt.toISOString(),
           ...(input.reason ? { reason: input.reason } : {})
@@ -651,7 +681,7 @@ export function createKnowledgeCandidateRepository(
           reviewedAt: state.status === "pending" ? null : input.reviewedAt,
           updatedAt: input.reviewedAt
         }).where(and(eq(knowledgeCandidates.organizationId, input.organizationId), eq(knowledgeCandidates.id, input.candidateId))).returning();
-        return row ? candidateFromRow(row, candidate.scope) : null;
+        return row ? findById(input.organizationId, candidate.id, transaction) : null;
       });
     }
   };

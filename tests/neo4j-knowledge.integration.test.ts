@@ -118,7 +118,7 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
       reject:buildRejectKnowledgeCandidate({ repository:candidates,clock,method:"automatic" }) })(f.organizationId,source.chunkId, f.userId);
     const approved = await candidates.findByChunkId(f.organizationId,source.chunkId);
     expect(approved?.status).toBe("accepted");
-    expect(approved?.assessment).toMatchObject({ model:"verifier",policyVersion:"evidence-v6" });
+    expect(approved?.assessment).toMatchObject({ model:"verifier",policyVersion:"evidence-v7" });
     expect(approved?.itemReviews?.every((item) => item.method === "automatic")).toBe(true);
     const [atlas] = await f.repository.findNodesByNames(f.access,f.scope,["Atlas"]);
     const result = await f.repository.findNeighborhood(f.access,atlas!.id,2,100);

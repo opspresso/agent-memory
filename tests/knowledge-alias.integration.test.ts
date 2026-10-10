@@ -104,12 +104,12 @@ describe("source-grounded knowledge aliases", () => {
     const test = await fixture();
     const content = "제갈량이 전략을 세웠다.";
     const input = await test.extract(content,{ entities:[{ key:"p",kind:"person",canonicalName:"제갈량",evidence:[content] }],relationships:[] });
-    const previous = { model:"old-verifier",policyVersion:"evidence-v2",assessedAt:new Date().toISOString(),
+    const previous = { contextNodeIds: [], sources: [{ chunkId: input.chunkId }], model:"old-verifier",policyVersion:"evidence-v2",assessedAt:new Date().toISOString(),
       items:[{ item:"entity:p",verdict:"review" as const,evidence:content,reason:"Previous policy." }] };
     await test.candidates.saveAssessment(test.organizationId,input.candidate.id,previous);
     await test.curate(test.organizationId,input.chunkId);
     const current = await test.candidates.findByChunkId(test.organizationId,input.chunkId);
-    expect(current?.assessment?.policyVersion).toBe("evidence-v6");
+    expect(current?.assessment?.policyVersion).toBe("evidence-v7");
     expect(current?.assessmentHistory).toEqual([previous]);
     expect(current?.status).toBe("accepted");
     await test.curate(test.organizationId,input.chunkId);

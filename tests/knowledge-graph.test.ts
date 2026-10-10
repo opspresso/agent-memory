@@ -66,6 +66,7 @@ function repository(
   return {
     saveNode: vi.fn(),
     findNodesByNames: vi.fn(),
+    findNodesForScope: vi.fn(),
     findNodeById: vi.fn(),
     deleteNode: vi.fn(),
     mergeNodes: vi.fn(),

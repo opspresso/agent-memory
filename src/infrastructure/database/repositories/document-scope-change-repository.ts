@@ -96,7 +96,7 @@ export function createDocumentScopeChangeRepository(db: AgentMemoryDatabase): Do
         const displayNodes = eligibleNodes.map((node) => knowledgeNodeIdentityFromRow(node, contributionsByNode.get(node.id) ?? []));
         const proposedNames = [...new Set(displayNodes.flatMap((node) => [node.canonicalName, ...node.aliases]))];
         const possibleDuplicates = proposedNames.length
-          ? await createKnowledgeGraphRepository(transaction, () => input.now).findNodesByNames(access, input.scope, proposedNames)
+          ? await createKnowledgeGraphRepository(transaction, () => input.now).findNodesForScope(access, input.scope, proposedNames)
           : [];
         const nodeIdentityKeys = (kind: string, names: readonly string[]) => names.map((name) => JSON.stringify([kind, knowledgeCanonicalNameKey(name)]));
         const nodeIdentities = new Map<string, Map<string, typeof displayNodes[number]>>();

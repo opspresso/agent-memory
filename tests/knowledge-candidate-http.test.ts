@@ -56,7 +56,7 @@ describe("knowledge candidate HTTP boundary", () => {
     const candidate = createKnowledgeCandidate({ id:"candidate",documentId:"document",chunkId:"chunk",model:"extractor",
       scope:{ organizationId:"00000000-0000-0000-0000-000000000001",kind:"organization" },
       graph:{ entities:[{ key:"api",kind:"service",canonicalName:"API" }],relationships:[] },now:new Date() });
-    const assessment = { model:"verifier",policyVersion:"evidence-v5",assessedAt:new Date().toISOString(),
+    const assessment = { contextNodeIds: [], sources: [{ chunkId: candidate.chunkId }], model:"verifier",policyVersion:"evidence-v5",assessedAt:new Date().toISOString(),
       items:[{ item:"entity:api",representation:"entity" as const,entityKind:"service",support:"explicit" as const,
         usefulness:"useful" as const,conflict:false,verdict:"accept" as const,evidence:"API",reason:"Named service." }],
       aliases:[{ entityKey:"api",alias:"API service",identity:"same_entity" as const,descriptiveExpansion:true,

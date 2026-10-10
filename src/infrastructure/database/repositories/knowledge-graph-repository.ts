@@ -47,6 +47,7 @@ import { createOrganizationAccessRepository } from "./organization-access-reposi
 import { edgeFromRow, findOrCreateKnowledgeEdge } from "./knowledge-edge-persistence";
 import {
   memoryReadPredicate,
+  scopeCoveragePredicate,
   scopedReadPredicate
 } from "./scope-predicates";
 import {
@@ -76,7 +77,8 @@ function documentSourceAccessPredicate(access: OrganizationAccess): SQL {
 export function visibleSourcePredicate(
   access: OrganizationAccess,
   sources: typeof knowledgeNodeSources | typeof knowledgeEdgeSources,
-  now: Date
+  now: Date,
+  audience?: ScopedResource
 ): SQL {
   return sql`(
     EXISTS (
@@ -87,6 +89,7 @@ export function visibleSourcePredicate(
         AND ${memories.validFrom} <= ${now.toISOString()}::timestamptz
         AND (${memories.expiresAt} IS NULL OR ${memories.expiresAt} > ${now.toISOString()}::timestamptz)
         AND ${memoryReadPredicate(access)}
+        AND ${audience ? scopeCoveragePredicate(memories, audience) : sql`true`}
     ) OR EXISTS (
       SELECT 1 FROM ${documentChunks}
       JOIN ${documents}
@@ -96,16 +99,17 @@ export function visibleSourcePredicate(
         AND ${documentChunks.id} = ${sources.chunkId}
         AND ${documents.status} = 'ready'
         AND ${documentSourceAccessPredicate(access)}
+        AND ${audience ? scopeCoveragePredicate(documents, audience) : sql`true`}
     )
   )`;
 }
 
-export function nodeHasVisibleSource(access: OrganizationAccess, now: Date): SQL {
+export function nodeHasVisibleSource(access: OrganizationAccess, now: Date, audience?: ScopedResource): SQL {
   return sql`EXISTS (
     SELECT 1 FROM ${knowledgeNodeSources}
     WHERE ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
       AND ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
-      AND ${visibleSourcePredicate(access, knowledgeNodeSources, now)}
+      AND ${visibleSourcePredicate(access, knowledgeNodeSources, now, audience)}
   )`;
 }
 
@@ -165,13 +169,13 @@ function scoreExpressions(input: KnowledgeNodeSearchInput, now: Date) {
   });
 }
 
-function nodeNamePredicate(access: OrganizationAccess, names: readonly string[], now: Date) {
+function nodeNamePredicate(access: OrganizationAccess, names: readonly string[], now: Date, audience?: ScopedResource) {
   return sql`EXISTS (
     SELECT 1 FROM ${knowledgeNodeSources}
     WHERE ${knowledgeNodeSources.organizationId} = ${knowledgeNodes.organizationId}
       AND ${knowledgeNodeSources.nodeId} = ${knowledgeNodes.id}
       AND ${knowledgeNodeSources.names} ?| ${sql.param([...names])}::text[]
-      AND ${visibleSourcePredicate(access, knowledgeNodeSources, now)}
+      AND ${visibleSourcePredicate(access, knowledgeNodeSources, now, audience)}
   )`;
 }
 
@@ -193,6 +197,40 @@ export function createKnowledgeGraphRepository(
   clock: () => Date = () => new Date(),
   topology?: KnowledgeTopologyReader
 ): KnowledgeGraphRepository {
+  async function findNames(access: OrganizationAccess, scope: ScopedResource, names: readonly string[], audience?: ScopedResource) {
+    const now = clock();
+    const nameKeys = [
+      ...new Set(names.map(knowledgeCanonicalNameKey))
+    ];
+    if (nameKeys.length === 0) {
+      return [];
+    }
+    const rows = await db
+      .select({ node: knowledgeNodes, source: knowledgeNodeSourceMetadataColumns })
+      .from(knowledgeNodes)
+      .innerJoin(knowledgeNodeSources, and(eq(knowledgeNodeSources.organizationId, knowledgeNodes.organizationId),
+        eq(knowledgeNodeSources.nodeId, knowledgeNodes.id)))
+      .where(
+        and(
+          eq(knowledgeNodes.organizationId, access.organizationId),
+          nodeScopePredicate(scope),
+          nodeAccessPredicate(access),
+          visibleSourcePredicate(access, knowledgeNodeSources, now, audience),
+          nodeNamePredicate(access, nameKeys, now, audience)
+        )
+      )
+      .orderBy(asc(knowledgeNodes.id), asc(knowledgeNodeSources.id));
+    // Names, summaries and provenance must come from one visibility snapshot.
+    const nodes = new Map(rows.map((row) => [row.node.id, row.node]));
+    const sources = sourcesByResourceId(rows.map((row) => row.source), (row) => row.nodeId);
+    return [...nodes.values()].map((row) =>
+      knowledgeNodeIdentityFromRow(
+        row,
+        sources.get(row.id) ?? []
+      )
+    );
+  }
+
   return {
     async saveNode(node, access) {
       return db.transaction(async (transaction) => {
@@ -200,9 +238,9 @@ export function createKnowledgeGraphRepository(
         await assertKnowledgeSourceScopes(transaction, node.scope, node.sources);
         const now = clock();
         const repository = createKnowledgeGraphRepository(transaction, () => now);
-        let existing = await repository.findNodesByNames(access, node.scope, [node.canonicalName]);
+        let existing = await repository.findNodesForScope(access, node.scope, [node.canonicalName]);
         const evidence = await loadKnowledgeSourceScopes(transaction, node.scope.organizationId, existing.flatMap((node) => node.sources), now);
-        if ([...evidence.values()].some((source) => !source.available)) existing = await repository.findNodesByNames(access, node.scope, [node.canonicalName]);
+        if ([...evidence.values()].some((source) => !source.available)) existing = await repository.findNodesForScope(access, node.scope, [node.canonicalName]);
         const identity = resolveKnowledgeIdentity({ ...node, aliases: [] }, existing);
         if (identity.status === "ambiguous") throw new AmbiguousKnowledgeIdentityError([]);
         const saved = await saveKnowledgeNodeContribution(transaction, node, "replace", identity.status === "resolved" ? identity.target.id : null);
@@ -215,50 +253,8 @@ export function createKnowledgeGraphRepository(
       });
     },
 
-    async findNodesByNames(access, scope, names) {
-      const now = clock();
-      const nameKeys = [
-        ...new Set(names.map(knowledgeCanonicalNameKey))
-      ];
-      if (nameKeys.length === 0) {
-        return [];
-      }
-      const rows = await db
-        .select()
-        .from(knowledgeNodes)
-        .where(
-          and(
-            eq(knowledgeNodes.organizationId, access.organizationId),
-            nodeScopePredicate(scope),
-            nodeAccessPredicate(access),
-            nodeHasVisibleSource(access, now),
-            nodeNamePredicate(access, nameKeys, now)
-          )
-        )
-        .orderBy(asc(knowledgeNodes.id));
-      const sourceRows = rows.length > 0
-        ? await db
-            .select(knowledgeNodeSourceMetadataColumns)
-            .from(knowledgeNodeSources)
-            .where(
-              and(
-                eq(knowledgeNodeSources.organizationId, access.organizationId),
-                visibleSourcePredicate(access, knowledgeNodeSources, now),
-                inArray(
-                  knowledgeNodeSources.nodeId,
-                  rows.map((row) => row.id)
-                )
-              )
-            )
-        : [];
-      const sources = sourcesByResourceId(sourceRows, (row) => row.nodeId);
-      return rows.filter((row) => sources.has(row.id)).map((row) =>
-        knowledgeNodeIdentityFromRow(
-          row,
-          sources.get(row.id) ?? []
-        )
-      );
-    },
+    findNodesByNames: (access, scope, names) => findNames(access, scope, names),
+    findNodesForScope: (access, scope, names) => findNames(access, scope, names, scope),
 
     async findNodeById(organizationId, nodeId) {
       const [row] = await db

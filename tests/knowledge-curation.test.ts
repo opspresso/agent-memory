@@ -15,13 +15,14 @@ function setup() {
   const findByChunkId = vi.fn().mockResolvedValue(candidate);
   const existingKnowledge = vi.fn().mockResolvedValue([]);
   const deferIdentityResolution = vi.fn();
+  const findSource = vi.fn().mockResolvedValue({ document: { status: "ready", scope: candidate.scope, createdBy: "owner", title: "People" }, chunk: { content: "A leads the team." } });
   const run = buildCurateKnowledgeCandidate({
     candidates: { findByChunkId, saveAssessment, deferIdentityResolution },
-    documents: { findChunkById: vi.fn().mockResolvedValue({ document: { status: "ready", createdBy: "owner", title: "People" }, chunk: { content: "A leads the team." } }) },
-    access: { findByUser }, graph: { findNodesByNames: existingKnowledge },
+    documents: { findChunkById: findSource },
+    access: { findByUser }, graph: { findNodesForScope: existingKnowledge },
     ontology: { findByOrganization: vi.fn().mockResolvedValue(null) }, verification: { verify }, accept, reject, clock: () => now
   });
-  return { run, findByUser, verify, accept, reject, saveAssessment, findByChunkId, existingKnowledge, deferIdentityResolution };
+  return { run, findSource, findByUser, verify, accept, reject, saveAssessment, findByChunkId, existingKnowledge, deferIdentityResolution };
 }
 describe("automatic curation orchestration", () => {
   it("reassesses pending extraction when its saved policy is obsolete", async () => {
@@ -30,16 +31,18 @@ describe("automatic curation orchestration", () => {
       items:[{ item:"entity:a",verdict:"accept",evidence:"A leads the team.",reason:"Old policy." }] } });
     await test.run("org","ch", "owner");
     expect(test.verify).toHaveBeenCalledOnce();
-    expect(test.saveAssessment).toHaveBeenCalledWith("org","c",expect.objectContaining({ policyVersion:"evidence-v6" }));
+    expect(test.saveAssessment).toHaveBeenCalledWith("org","c",expect.objectContaining({ policyVersion:"evidence-v7" }));
   });
   it("bounds accumulated context without truncating the source under verification", async () => {
     const test = setup();
-    test.existingKnowledge.mockResolvedValue([{ canonicalName: "A", aliases: [], kind: "person", summary: "x".repeat(10_000) }]);
+    test.existingKnowledge.mockResolvedValue([{ id: "context-node", canonicalName: "A", aliases: [], sources: [{ chunkId: "context-source" }], kind: "person", summary: "x".repeat(10_000) }]);
     await test.run("org", "ch", "owner");
     expect(test.verify.mock.calls[0]?.[0]).toMatchObject({
       content: "A leads the team.",
       existingKnowledge: [{ name: "A", summary: "x".repeat(2_000) }]
     });
+    expect(test.saveAssessment.mock.calls[0]?.[2].sources).toEqual([{ chunkId: "ch" }, { chunkId: "context-source" }]);
+    expect(test.saveAssessment.mock.calls[0]?.[2].contextNodeIds).toEqual(["context-node"]);
   });
   it("verifies then persists its assessment before automatically accepting qualified facts", async () => {
     const test = setup();
@@ -61,14 +64,29 @@ describe("automatic curation orchestration", () => {
     test.findByUser.mockResolvedValueOnce({ organizationId: "org", userId: "owner", role: "owner", teams: [] }).mockResolvedValueOnce(null);
     await test.run("org", "ch", "owner");
     expect(test.verify).toHaveBeenCalledOnce();
+    expect(test.saveAssessment).not.toHaveBeenCalled();
     expect(test.accept).not.toHaveBeenCalled();
     expect(test.reject).not.toHaveBeenCalled();
+  });
+
+  it("does not save assessment when the document broadens beyond the requester's current manage permission", async () => {
+    const test = setup();
+    const scope = { organizationId: "org", kind: "user", userId: "owner" };
+    test.findByChunkId.mockResolvedValue({ ...candidate, scope });
+    test.findSource.mockResolvedValueOnce({ document: { status: "ready", scope }, chunk: { content: "A leads the team." } })
+      .mockResolvedValueOnce({ document: { status: "ready", scope: candidate.scope } });
+    test.findByUser.mockResolvedValue({ organizationId: "org", userId: "owner", role: "member", teams: [] });
+    await test.run("org", "ch", "owner");
+    expect(test.verify).toHaveBeenCalledOnce();
+    expect(test.saveAssessment).not.toHaveBeenCalled();
+    expect(test.accept).not.toHaveBeenCalled();
   });
 
   it("leaves a team writer's extracted candidates for a manager to review", async () => {
     const test = setup();
     test.findByChunkId.mockResolvedValue({ ...candidate, scope: { organizationId: "org", kind: "team", teamId: "team" } });
     test.findByUser.mockResolvedValue({ organizationId: "org", userId: "owner", role: "member", teams: [{ teamId: "team", role: "member" }] });
+    test.findSource.mockResolvedValue({ document: { status: "ready", scope: { organizationId: "org", kind: "team", teamId: "team" } } });
     await test.run("org", "ch", "owner");
     expect(test.verify).not.toHaveBeenCalled();
     expect(test.accept).not.toHaveBeenCalled();

@@ -308,7 +308,7 @@ Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 �
 
 #### 기존 데이터와 model 변경
 
-현재 검증은 `evidence-v6`를 사용한다. 미완료 후보의 policy가 오래되면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.
+현재 검증은 `evidence-v7`를 사용한다. 미완료 후보의 policy가 오래되거나 검증에 사용한 출처·참고 node의 공개 범위나 상태가 바뀌면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 출처 정보가 없는 과거 판정은 공개 응답과 자동 판단에 사용하지 않는다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.
 
 #### 추출기 평가
 

@@ -299,6 +299,8 @@ const proposedRelationshipResponseSchema = z.object({
 });
 
 const knowledgeAssessmentResponseSchema = z.object({ model: z.string(), policyVersion: z.string(), assessedAt: z.string(),
+  sources: z.array(knowledgeSourceResponseSchema).min(1),
+  contextNodeIds: z.array(z.string().min(1)),
     aliases: z.array(z.object({ entityKey: z.string(), alias: z.string(),
       descriptiveExpansion:z.boolean().optional(),
       identity: z.enum(["same_entity", "generic_reference", "different_entity", "uncertain"]),

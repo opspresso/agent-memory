@@ -26,6 +26,7 @@ import { isKnowledgeEntityKind } from "@/domain/knowledge/knowledge-entity-eligi
 import type { DocumentRepository } from "@/domain/document/document-repository";
 import { sameScope } from "@/domain/identity/scope-coverage";
 import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-change";
+import { assertAutomaticKnowledgeAssessment } from "@/domain/knowledge/knowledge-assessment";
 
 export class KnowledgeCandidateReviewAccessDeniedError extends Error {
   constructor() {
@@ -216,6 +217,7 @@ export function buildAcceptKnowledgeCandidate(
     if (!source || source.status !== "ready") throw new KnowledgeCandidateSourceNotReadyError();
     if (!sameScope(source.scope, candidate.scope)) throw new KnowledgeScopeChangedError();
     const selected = selectKnowledgeCandidateItems(candidate, selection);
+    if (dependencies.method === "automatic") assertAutomaticKnowledgeAssessment(candidate.assessment, selected.items, "accept");
     if (candidate.graph.entities.length === 0) {
       throw new InvalidKnowledgeCandidateReviewError("empty extraction cannot be accepted");
     }
@@ -317,6 +319,9 @@ export function buildRejectKnowledgeCandidate(
       throw new KnowledgeCandidateReviewConflictError();
     }
     const normalized = normalizedReason(reason);
+    if (dependencies.method === "automatic" && candidate.status === "pending") {
+      assertAutomaticKnowledgeAssessment(candidate.assessment, selected.items, "ignore");
+    }
     const rejected = await dependencies.repository.reject({
       candidateId,
       ...(selection ? { selection } : {}),
