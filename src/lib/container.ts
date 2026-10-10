@@ -5,6 +5,7 @@ import { createOrganizationAgentTokenRepository } from "@/infrastructure/databas
 import { createOrganizationAdministrationRepository } from "@/infrastructure/database/repositories/organization-administration-repository";
 import { createMemoryRepository } from "@/infrastructure/database/repositories/memory-repository";
 import { createKnowledgeCandidateRepository } from "@/infrastructure/database/repositories/knowledge-candidate-repository";
+import { createKnowledgeExtractionCheckpointRepository } from "@/infrastructure/database/repositories/knowledge-extraction-checkpoint-repository";
 import { createKnowledgeGraphRepository } from "@/infrastructure/database/repositories/knowledge-graph-repository";
 import { createKnowledgeGraphProjection } from "@/infrastructure/database/repositories/knowledge-graph-projection";
 import { knowledgeTopologyStore } from "./neo4j";
@@ -160,6 +161,7 @@ function createConfiguredKnowledgeExtractionService() {
     );
   }
   return createEntityFirstKnowledgeExtractionService({
+    checkpoints: createKnowledgeExtractionCheckpointRepository(database.db),
     apiKey: process.env.KNOWLEDGE_EXTRACTION_API_KEY,
     baseUrl: knowledgeExtractionBaseUrl,
     model: knowledgeExtractionModel,

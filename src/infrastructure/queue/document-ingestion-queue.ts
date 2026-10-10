@@ -1,4 +1,4 @@
-import { PgBoss } from "pg-boss";
+import { PgBoss, type JobWithMetadata } from "pg-boss";
 
 import {
   documentProcessingLeaseMilliseconds,
@@ -28,6 +28,7 @@ export interface PgBossDocumentIngestionQueue
   extends DocumentIngestionQueue, DocumentKnowledgeEnrichmentQueue {
   start(): Promise<PgBoss>;
   stop(): Promise<void>;
+  deferKnowledgeEnrichment(claim: Pick<JobWithMetadata, "id" | "retryCount" | "startedOn">, retryAfterSeconds: number): Promise<"deferred" | "lost_claim">;
 }
 
 export function createPgBossDocumentIngestionQueue(
@@ -110,6 +111,46 @@ export function createPgBossDocumentIngestionQueue(
         });
       }
       return jobId ? "queued" : "already_queued";
+    },
+    async deferKnowledgeEnrichment(claim, retryAfterSeconds) {
+      if (!Number.isSafeInteger(retryAfterSeconds) || retryAfterSeconds < 1) throw new Error("invalid knowledge deferral delay");
+      const instance = await start();
+      const database = instance.getDb();
+      if (!database.beginTransaction) throw new Error("knowledge deferral requires transactional queue storage");
+      const transaction = await database.beginTransaction();
+      try {
+        await transaction.db.executeSql("SET LOCAL statement_timeout = '5s'");
+        // pg-boss completion has no expected-attempt argument. Fence and lock the
+        // original claim so a late worker cannot complete a newer retry of this ID.
+        // The driver exposes timestamps as Date, which retains only milliseconds.
+        const locked = await transaction.db.executeSql(
+          "SELECT id FROM pgboss.job WHERE name=$1 AND id=$2 AND state='active' AND retry_count=$3 AND date_trunc('milliseconds', started_on)=$4 FOR UPDATE",
+          [documentKnowledgeEnrichmentQueueName, claim.id, claim.retryCount, claim.startedOn]
+        );
+        if (!locked.rows.length) {
+          await transaction.rollback();
+          return "lost_claim";
+        }
+        const current = await instance.getJobById<DocumentKnowledgeEnrichmentJob>(documentKnowledgeEnrichmentQueueName, claim.id, { db: transaction.db });
+        if (!current) throw new Error("knowledge queue claim disappeared");
+        await instance.complete(documentKnowledgeEnrichmentQueueName, claim.id, { deferred: true }, { db: transaction.db });
+        const replacement = await instance.send(documentKnowledgeEnrichmentQueueName, current.data, {
+          db: transaction.db, singletonKey: current.singletonKey ?? current.data.chunkId,
+          priority: current.priority, startAfter: retryAfterSeconds,
+          // Quota waits neither spend nor replenish retries for actual failures.
+          retryLimit: Math.max(0, current.retryLimit - current.retryCount),
+          retryDelay: current.retryBackoff ? current.retryDelay * 2 ** current.retryCount : current.retryDelay,
+          retryBackoff: current.retryBackoff,
+          ...(current.retryDelayMax !== undefined ? { retryDelayMax: current.retryDelayMax } : {}),
+          expireInSeconds: current.expireInSeconds, deleteAfterSeconds: current.deleteAfterSeconds
+        });
+        if (!replacement) throw new Error("knowledge deferral did not create a continuation");
+        await transaction.commit();
+        return "deferred";
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
     },
     async stop() {
       const running = started;

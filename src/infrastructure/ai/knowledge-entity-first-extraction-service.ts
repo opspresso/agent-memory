@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import type { KnowledgeExtractionCheckpointRepository } from "@/domain/knowledge/knowledge-extraction-checkpoint";
+import type { ProposedKnowledgeGraph } from "@/domain/knowledge/knowledge-candidate";
 import type { KnowledgeExtractionService } from "@/domain/knowledge/knowledge-extraction-service";
 import { isKnowledgeEntityKind } from "@/domain/knowledge/knowledge-entity-eligibility";
 import { groundKnowledgeGraph } from "@/domain/knowledge/knowledge-extraction-quality";
@@ -13,10 +16,13 @@ const evidenceIdsSchema = z.array(z.string()).min(1).max(20);
 const identifiedEntitiesSchema = z.object({ entities: z.array(proposedGraphSchema.shape.entities.element.omit({ key:true,evidence:true }).extend({ evidenceIds:evidenceIdsSchema })).max(100) });
 const identifiedRelationshipsSchema = z.object({ relationships:z.array(proposedGraphSchema.shape.relationships.element.omit({ evidence:true }).extend({ evidenceIds:evidenceIdsSchema })).max(200) });
 
-export function createEntityFirstKnowledgeExtractionService(configuration: KnowledgeExtractionServiceConfiguration): KnowledgeExtractionService {
+export function createEntityFirstKnowledgeExtractionService(configuration: KnowledgeExtractionServiceConfiguration & { readonly checkpoints?: KnowledgeExtractionCheckpointRepository }): KnowledgeExtractionService {
   const client = createKnowledgeStructuredClient(configuration);
   return {
     async extract(input) {
+      if (configuration.checkpoints && (!input.source || input.source.organizationId !== input.quotaKey?.organizationId)) {
+        throw new Error("checkpointed extraction requires matching source and quota identities");
+      }
       if (!input.content.trim()) return { model:configuration.model.trim(),graph:{ entities:[],relationships:[] } };
       const strict = input.ontology?.mode === "strict";
       const kinds = input.ontology?.nodeKinds.filter(isKnowledgeEntityKind).map(normalizeKnowledgeKind);
@@ -32,26 +38,41 @@ export function createEntityFirstKnowledgeExtractionService(configuration: Knowl
       const evidence = { ...entitySchema.items.properties.evidence,items:{ $ref:"#/$defs/sourceEvidence" } };
       const instructions = extractionInstructions(input.ontology,configuration.language??"source");
       const source = { documentTitle:input.documentTitle,documentType:input.mimeType,content:input.content,sourcePassages };
-      const extracted = await client.generate(`${instructions}
+      const entityInstructions = `${instructions}
 
 This is the entity identification pass. Return {"entities":[{"canonicalName":"name copied from source","kind":"entity kind","aliases":[],"evidenceIds":["s0"],"summary":"brief source-grounded summary"}]}.
 Use IDs from sourcePassages for evidenceIds. Do not write quotes or invent IDs. The server assigns entity keys; do not generate keys. Return independently identifiable named entities, reusable named concepts, and defined roles discussed as topics. Do not output relationships in this pass.
 Do not create a node for a sentence, proposition, employment, opinion, or unnamed event. Copy names from the source.
 Use the complete proper name without surrounding classification words such as service, product, company, technology, 서비스, 제품, 회사, 기술, unless those words are part of the actual name. Keep the type in kind, not in canonicalName.
 Do not reclassify a nickname or courtesy name as a concept to create an extra node. Put explicitly supported alternative proper names in aliases. Shared nicknames never establish that two people are the same person.
-A generic title or pronoun is not an alternative proper name. A legal office whose powers, appointment, or duties are defined in the source is a role entity, not a person's alias. Return an empty entities array when no eligible entities are supported.`,source,
-      { name:"knowledge_entities",strict:true,schema:{ type:"object",additionalProperties:false,
+A generic title or pronoun is not an alternative proper name. A legal office whose powers, appointment, or duties are defined in the source is a role entity, not a person's alias. Return an empty entities array when no eligible entities are supported.`;
+      const entityResponseSchema = { name:"knowledge_entities",strict:true,schema:{ type:"object",additionalProperties:false,
         $defs:{ sourceEvidence:evidenceDefinition },
         properties:{ entities:{ ...entitySchema,items:{ ...entitySchema.items,properties:{
           canonicalName:{ type:"string",description:"The identifying name copied from the source, including a reusable concept or defined role. For 'Orion 회사', use 'Orion' and kind organization. For 'Falcon 서비스', use 'Falcon' and kind service. Preserve complete multiword names and intrinsic brand words." },
           kind:entitySchema.items.properties.kind, aliases:entitySchema.items.properties.aliases,
           evidenceIds:evidence, summary:entitySchema.items.properties.summary
-        },required:["canonicalName","kind","aliases","evidenceIds","summary"] } } },required:["entities"] } },input.quotaKey);
-      const entities = identifiedEntitiesSchema.safeParse(extracted);
-      if (!entities.success) throw new SafeOperationalError("knowledge entity extraction response is invalid",{ code:"KNOWLEDGE_EXTRACTION_ENTITIES_INVALID" });
-      const grounded = groundKnowledgeGraph(input.content,normalizeLinkedEntityNames(input.content,{
-        entities:entities.data.entities.map(({ evidenceIds,...entity },index) => ({ ...entity,key:`e${index}`,evidence:evidenceFor(evidenceIds) })),relationships:[] }));
-      const graph = { entities:grounded.entities.filter((entity) => !strict || !kinds?.length || kinds.includes(entity.kind)),relationships:[] };
+        },required:["canonicalName","kind","aliases","evidenceIds","summary"] } } },required:["entities"] } };
+      const checkpointKey = configuration.checkpoints && input.source ? { ...input.source,
+        fingerprint: createHash("sha256").update(JSON.stringify({ version: 1,
+          baseUrl: configuration.baseUrl.trim().replace(/\/+$/, ""), model: configuration.model.trim(),
+          instructions: entityInstructions, source, schema: entityResponseSchema })).digest("hex") } : undefined;
+      const saved = checkpointKey ? await configuration.checkpoints!.find(checkpointKey) : null;
+      let graph: ProposedKnowledgeGraph;
+      if (saved) {
+        graph = groundKnowledgeGraph(input.content, { entities: saved.entities, relationships: [] });
+      } else {
+        const extracted = await client.generate(entityInstructions, source, entityResponseSchema, input.quotaKey);
+        const entities = identifiedEntitiesSchema.safeParse(extracted);
+        if (!entities.success) throw new SafeOperationalError("knowledge entity extraction response is invalid",{ code:"KNOWLEDGE_EXTRACTION_ENTITIES_INVALID" });
+        graph = groundKnowledgeGraph(input.content,normalizeLinkedEntityNames(input.content,{
+          entities:entities.data.entities.map(({ evidenceIds,...entity },index) => ({ ...entity,key:`e${index}`,evidence:evidenceFor(evidenceIds) })),relationships:[] }));
+        if (checkpointKey) {
+          const checkpoint = await configuration.checkpoints!.save({ ...checkpointKey, model: configuration.model.trim(), entities: graph.entities });
+          graph = groundKnowledgeGraph(input.content, { entities: checkpoint.entities, relationships: [] });
+        }
+      }
+      graph = { entities: graph.entities.filter((entity) => !strict || !kinds?.length || kinds.includes(entity.kind)), relationships: [] };
       if (graph.entities.length < 2) return { model:configuration.model.trim(),graph };
       const keys = graph.entities.map((entity) => entity.key);
       const relationshipSchema = graphSchema.schema.properties.relationships;

@@ -204,6 +204,7 @@ describe("knowledge candidate", () => {
     });
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
+      source: { organizationId: "organization-1", chunkId: chunk.id },
       documentTitle: document.title,
       mimeType: textMimeType,
       quotaKey: {
@@ -322,6 +323,7 @@ describe("knowledge candidate", () => {
 
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
+      source: { organizationId: "organization-1", chunkId: chunk.id },
       documentTitle: document.title,
       mimeType: document.mimeType,
       quotaKey: {
@@ -379,6 +381,7 @@ describe("knowledge candidate", () => {
 
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
+      source: { organizationId: "organization-1", chunkId: chunk.id },
       documentTitle: document.title,
       mimeType: document.mimeType,
       quotaKey: {

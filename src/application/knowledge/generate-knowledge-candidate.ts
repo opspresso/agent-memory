@@ -64,6 +64,7 @@ export function buildGenerateKnowledgeCandidate(
       mimeType: typeof source.chunk.metadata.textMimeType === "string" &&
         isDocumentTextMimeType(source.chunk.metadata.textMimeType)
         ? source.chunk.metadata.textMimeType : source.document.mimeType,
+      source: { organizationId, chunkId: source.chunk.id },
       quotaKey: {
         organizationId,
         userId: access.userId

@@ -3,6 +3,8 @@ import { curateKnowledgeCandidate } from "./knowledge-curation-service";
 import { readKnowledgeEnrichmentConcurrency } from "./document-worker-configuration";
 
 import { z } from "zod";
+import type { WorkOptions } from "pg-boss";
+import { AiRequestLimitExceededError } from "@/domain/shared/ai-request-limiter";
 
 import { buildProcessDocument } from "@/application/document/process-document";
 import { buildIngestDocument } from "@/application/document/ingest-document";
@@ -103,12 +105,13 @@ export async function startDocumentWorker(): Promise<void> {
       }
     );
     const enrichmentWorker = generateKnowledgeCandidate
-      ? boss.work<DocumentKnowledgeEnrichmentJob>(
+      ? boss.work<DocumentKnowledgeEnrichmentJob, unknown, WorkOptions & { includeMetadata: true }>(
           documentKnowledgeEnrichmentQueueName,
           {
             batchSize: 1,
             localConcurrency: readKnowledgeEnrichmentConcurrency(),
-            pollingIntervalSeconds: 2
+            pollingIntervalSeconds: 2,
+            includeMetadata: true
           },
           async (jobs) => {
             for (const job of jobs) {
@@ -128,6 +131,11 @@ export async function startDocumentWorker(): Promise<void> {
                 );
                 await curateKnowledgeCandidate?.(data.organizationId, data.chunkId, data.requestedBy);
               } catch (error) {
+                if (error instanceof AiRequestLimitExceededError) {
+                  const outcome = await documentIngestionQueue.deferKnowledgeEnrichment(job, error.retryAfterSeconds);
+                  logger.info({ organizationId: data.organizationId, chunkId: data.chunkId, retryAfterSeconds: error.retryAfterSeconds, outcome }, "document knowledge enrichment deferred");
+                  continue;
+                }
                 logger.error(
                   {
                     err: error,

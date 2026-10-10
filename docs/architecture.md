@@ -205,6 +205,8 @@ Graph 쓰기는 같은 조직별 Knowledge scope 잠금을 사용한다. 공개 
 - 후속 queue 등록에 실패하면 ingestion 재실행에서 등록을 다시 시도한다.
 - 후보는 출처 chunk·현재 문서 scope·모델을 보존한다. 청크별 후보는 하나이며 재시도는 저장된 추출을 재사용한다.
 
+서버의 AI quota 초과는 모델 실패와 구분한다. Worker는 현재 job의 ID·시작 시각·재시도 횟수를 잠금 아래 확인한 뒤, 현재 job 완료와 `Retry-After` 이후의 후속 job 생성을 같은 transaction으로 저장한다. 예약에 실패하면 완료도 롤백한다. 후속 job은 남은 오류 재시도 횟수와 우선순위·요청자를 유지한다. Quota 대기는 오류 재시도를 소모하지 않으며, 만료된 claim으로 새 작업을 변경하지 않는다. 일반 provider 오류·timeout은 기존 재시도 정책을 따른다.
+
 #### 개체 식별과 관계 추출
 
 Runtime은 두 단계의 structured-output 요청을 사용한다. 단일 호출 추출기는 평가 비교용이다. 각 요청은 AI limiter를 개별적으로 통과한다.
@@ -212,6 +214,8 @@ Runtime은 두 단계의 structured-output 요청을 사용한다. 단일 호출
 1. 원문에서 이름과 인용이 있는 개체를 식별한다. 이름·종류를 정규화하고 부적격 개체를 제거한다.
 2. 살아남은 개체 key만 관계 끝점의 enum으로 전달해 관계를 추출한다. 개체가 0–1개면 이 요청을 생략한다.
 3. 인용과 연결 구조를 검사해 후보를 만든다. 관계가 없는 결과도 정상으로 보존한다. 관계 요청이 실패하면 부분 Graph를 승인 후보로 반환하지 않는다.
+
+완료된 개체 단계는 내부 `knowledge_extraction_checkpoints`에 저장한다. 조직·chunk와 원문·문서 형식·제목·모델·endpoint·언어·온톨로지 지침·응답 schema의 fingerprint로 결과를 구분한다. API key는 fingerprint 입력과 checkpoint에 넣지 않는다. 동일 입력의 동시 저장은 첫 결과를 재사용하며, 조직이 다른 chunk를 연결할 수 없도록 복합 FK를 적용한다. 재개 시 권한과 ready 상태를 다시 확인한 뒤 저장된 개체로 관계 추출을 계속한다. 설정이나 원문이 달라지면 새로운 개체 단계를 수행한다. Checkpoint는 후보·Graph·추출 완료 수로 공개하지 않으며 이전 fingerprint의 결과도 내부 기록으로 보존한다.
 
 추출과 검증은 같은 종류·관계 정의와 문서 구조 해석 규칙을 사용한다. 종류를 설명보다 먼저 판단하며, 새 entity key는 서버가 부여한다. 제목은 문맥으로 다루고 항상 행위자로 해석하지 않는다. 이력서의 경력·기술·프로젝트와 짧은 목록도 이름이 확인된 주체와 원문의 구조를 기준으로 평가한다.
 
@@ -323,7 +327,7 @@ Knowledge embedding은 `knowledge_node_sources`가 model과 함께 소유한다.
 
 서비스의 기억 lifecycle은 MCP `remember`·`recall`·`forget`으로 제공한다. `remember`는 Memory 생성 use case를, `forget`은 manage 권한과 현재 version을 검증하는 archive use case를 사용한다. Archive 후에는 회상·검색에서 제외하고 revision과 provenance는 보존한다. `recall`은 같은 검색·재정렬 흐름을 Memory만 대상으로 실행하며 문서·Graph를 조회하지 않는다. Reranker 설정·최소 점수·실패 시 hybrid 복귀를 통합 검색과 공유한다. 회상 응답은 결과 하나 최대 1,200자·전체 최대 4,000자의 `remembered` text와 구조화 Memory 검색 결과를 반환한다. 두 형식 모두 Memory ID·version을 포함해 text만 소비하는 서비스도 `forget`을 호출할 수 있다. RAG·Knowledge Graph를 함께 검색하려면 `context_search`를 사용한다.
 
-Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같은 instance-local request limiter를 공유한다. 동시 실행 수와 분당 합산 호출 수를 넘으면 provider를 호출하지 않는다. Embedding 기반 HTTP 요청은 `429`와 `Retry-After`를 반환하고, reranker는 hybrid 순위로 복귀하며, worker의 제한 초과는 pg-boss retry로 복구한다.
+Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같은 instance-local request limiter를 공유한다. 동시 실행 수와 분당 합산 호출 수를 넘으면 provider를 호출하지 않는다. Embedding 기반 HTTP 요청은 `429`와 `Retry-After`를 반환하고, reranker는 hybrid 순위로 복귀한다. Knowledge enrichment의 서버 quota 초과는 후속 job으로 예약하며, 문서 ingestion의 제한 초과는 pg-boss retry로 처리한다.
 
 ### 관계 지도
 

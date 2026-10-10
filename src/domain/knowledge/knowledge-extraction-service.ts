@@ -21,5 +21,6 @@ export interface KnowledgeExtractionService {
     readonly mimeType: string;
     readonly ontology?: KnowledgeExtractionOntologyHint;
     readonly quotaKey?: AiRequestQuotaKey;
+    readonly source?: { readonly organizationId: string; readonly chunkId: string };
   }): Promise<KnowledgeExtractionResult>;
 }

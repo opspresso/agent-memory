@@ -8,17 +8,19 @@ const mocks = vi.hoisted(() => ({
   documentFindChunk: vi.fn(),
   documentListChunks: vi.fn(),
   enqueueKnowledgeEnrichment: vi.fn(),
+  deferKnowledgeEnrichment: vi.fn(),
   knowledgeExtractionService: undefined as
     | undefined
     | { extract: ReturnType<typeof vi.fn> },
   loggerInfo: vi.fn(),
+  loggerError: vi.fn(),
   queueStart: vi.fn(),
   queueStop: vi.fn(),
   work: vi.fn()
 }));
 
 vi.mock("@/infrastructure/observability/logger", () => ({
-  logger: { info: mocks.loggerInfo }
+  logger: { info: mocks.loggerInfo, error: mocks.loggerError }
 }));
 
 vi.mock("@/lib/knowledge-curation-service", () => ({ curateKnowledgeCandidate: mocks.curate }));
@@ -27,6 +29,7 @@ vi.mock("@/lib/container", () => ({
   organizationAccessRepository: { findByUser: mocks.findAccess },
   documentIngestionQueue: {
     enqueueKnowledgeEnrichment: mocks.enqueueKnowledgeEnrichment,
+    deferKnowledgeEnrichment: mocks.deferKnowledgeEnrichment,
     start: mocks.queueStart,
     stop: mocks.queueStop
   },
@@ -51,6 +54,7 @@ describe("document worker startup", () => {
   beforeEach(() => {
     vi.resetModules();
     mocks.loggerInfo.mockReset();
+    mocks.loggerError.mockReset();
     mocks.curate.mockReset();
     mocks.findAccess.mockReset();
     mocks.candidateFindByChunkId.mockReset();
@@ -58,6 +62,7 @@ describe("document worker startup", () => {
     mocks.documentFindChunk.mockReset();
     mocks.documentListChunks.mockReset();
     mocks.enqueueKnowledgeEnrichment.mockReset();
+    mocks.deferKnowledgeEnrichment.mockReset().mockResolvedValue("deferred");
     mocks.knowledgeExtractionService = undefined;
     mocks.queueStart.mockReset();
     mocks.queueStop.mockReset();
@@ -169,5 +174,28 @@ describe("document worker startup", () => {
     } }]);
     expect(mocks.findAccess).toHaveBeenCalledExactlyOnceWith(organizationId, requestedBy);
     expect(mocks.knowledgeExtractionService.extract).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("defers quota backpressure only, quota=%s", async (quota) => {
+    const { AiRequestLimitExceededError } = await import("@/domain/shared/ai-request-limiter");
+    mocks.knowledgeExtractionService = { extract: vi.fn() };
+    mocks.candidateFindByChunkId.mockResolvedValue({ id: "candidate" });
+    const error = quota ? new AiRequestLimitExceededError(42) : new Error("provider failed");
+    mocks.curate.mockRejectedValue(error);
+    const { startDocumentWorker } = await import("@/lib/document-worker");
+    await startDocumentWorker();
+    expect(mocks.work.mock.calls[1]![1]).toMatchObject({ includeMetadata: true });
+    const job = { id: "job", retryCount: 2, startedOn: new Date(), data: {
+      organizationId: "00000000-0000-4000-8000-000000000001", chunkId: "50000000-0000-4000-8000-000000000001"
+    } };
+    const run = mocks.work.mock.calls[1]![2]([job]);
+    if (quota) {
+      await expect(run).resolves.toBeUndefined();
+      expect(mocks.deferKnowledgeEnrichment).toHaveBeenCalledExactlyOnceWith(job, 42);
+      expect(mocks.loggerError).not.toHaveBeenCalled();
+    } else {
+      await expect(run).rejects.toBe(error);
+      expect(mocks.deferKnowledgeEnrichment).not.toHaveBeenCalled();
+    }
   });
 });
