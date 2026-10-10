@@ -549,6 +549,10 @@ Database만 복원하고 object storage를 복원하지 않으면 document metad
 
 DB dump와 object mirror 전체를 하나의 transaction으로 묶지 않으므로 쓰기 중에는 두 저장소의 시점이 달라질 수 있다. 일관된 복원 지점이 필요하면 web과 worker의 쓰기를 함께 중단하는 운영 절차를 마련하라. Agent Memory의 백업·복원 작업은 공유 PostgreSQL·MinIO에 있는 Agent Studio DB와 bucket을 변경하지 않아야 한다.
 
+기존 데이터를 보존하는 schema 교체는 별도 빈 DB에 현재 schema를 초기화하고, 호환되는 기존 열을 복원하는 방식으로 준비할 수 있다. 자동 migration은 제공하지 않는다. 운영자는 실제 dump로 복원을 먼저 검증하고, 새 기본값이 적용되는 열을 제외한 기존 행의 내용·건수와 참조 무결성을 대조해야 한다. 호환되지 않는 데이터가 있으면 전환하지 않는다.
+
+최종 전환 때는 자동 Sync와 web·worker 쓰기를 중단하고 새 dump로 복원을 반복한다. 처리 중 작업이 없는지 확인하고, queue 형식이 바뀌면 구버전 작업을 새 worker가 소비하도록 복사하지 않는다. 검증된 새 DB로 연결을 전환한 뒤 새 image의 readiness와 권한·검색을 확인한다. 원본 object와 이전 DB는 복구용으로 보존하며, 삭제는 별도 승인 범위에서 수행한다.
+
 ### 삭제와 원본 보존
 
 팀 삭제는 PostgreSQL resource만 cascade 삭제하고 S3 호환 storage의 문서 원본 object는 제거하지 않는다. PostgreSQL metadata가 사라지기 전에 대상 object를 식별하거나 별도로 구성한 object storage lifecycle로 제거하라. 조직 삭제 UI·API는 제공하지 않는다. 운영자가 DB를 직접 초기화할 때도 object storage와 queue의 정리는 별도로 관리해야 한다.
