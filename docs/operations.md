@@ -363,6 +363,8 @@ pnpm eval:knowledge --python .venv-knowledge-eval/bin/python --verify
 
 기본 결과는 Git에서 제외한 `.eval-results/knowledge/`에 저장한다. `--output`으로 위치를 바꿀 수 있다. 요약은 model·language·corpus/policy hash, 개체·관계·별칭 precision/recall/F1, 잘못된 병합, 요청 오류와 추출 지연 시간을 포함한다. 오류가 있는 비교는 결과를 보존하고 종료 코드 1을 반환한다. 모델 오류를 빈 추출 성공으로 처리하지 않는다. 모델 응답이 원문과 맞는지와 관계 방향·개체 정체성은 각 사례의 저장 결과로 검토한다. 지연 시간은 공유 모델 endpoint의 관측값이며 독립적인 성능 보장은 아니다.
 
+잘못된 corpus·재사용 결과·Python 응답은 원문을 포함하지 않는 오류로 보고한다. Python 응답은 선택한 사례 순서와 일치해야 하며, 응답 형식이나 순서가 잘못되면 비교 프로세스를 종료·회수한다. 결과 본문은 저장된 평가 파일에서 확인한다.
+
 평가 기록은 [comparison.json](../evaluation/knowledge/comparison.json)에 보존한다. 2026-09-13에 `nvidia/Qwen3.6-35B-A3B-NVFP4`와 동일 모델의 독립 검증 요청으로 측정한 결과는 다음과 같다. 모든 방식에 같은 원문 근거·개체 자격 규칙과 `evidence-v3`를 적용했다. 단일 호출 비교기도 새 개체 자격 필터를 포함하므로 수정 전 v0.27.0 전체의 재현 결과는 아니다.
 
 | 방식 | 승인 전 관계 후보 precision | 자동 반영한 정답 개체 / 56 | 자동 반영한 정답 관계 / 22 | 자동 반영한 오답 개체·관계 | 검증 요청·응답 오류 |

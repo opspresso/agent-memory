@@ -57,6 +57,63 @@ function run(input: {
 }
 
 describe("knowledge evaluation CLI language", () => {
+  it.each(["json", "schema"])("rejects malformed %s corpus without printing source text", async (kind) => {
+    const { directory, corpusPath } = await fixture();
+    const sentinel = "PRIVATE_EVALUATION_SOURCE_SENTINEL";
+    await writeFile(corpusPath, kind === "json" ? `{ "cases": ${sentinel} }` : JSON.stringify({ ...JSON.parse(corpus), schemaVersion: sentinel }));
+    const result = await run({ corpusPath, output: join(directory, "output"), language: "en", baseUrl: "http://127.0.0.1:1/v1" }).catch((error) => error);
+    expect(result.code).toBe(1);
+    expect(result.stderr).not.toContain(sentinel);
+    expect(result.stderr).toContain("invalid extraction corpus");
+  });
+
+  it.each(["summary", "rows"])("rejects malformed reused %s without printing source text", async (kind) => {
+    const { directory, corpusPath } = await fixture();
+    const sentinel = "PRIVATE_REUSED_SOURCE_SENTINEL";
+    await writeFile(join(directory, "summary.json"), kind === "summary" ? `{ "model": ${sentinel} }` : JSON.stringify({
+      model: "test-model", language: "en", corpusSha256: createHash("sha256").update(corpus).digest("hex")
+    }));
+    await writeFile(join(directory, "single-pass.json"), `[{ "graph": ${sentinel} }]`);
+    const result = await run({ corpusPath, output: join(directory, "output"), language: "en", baseUrl: "http://127.0.0.1:1/v1", reuse: directory }).catch((error) => error);
+    expect(result.code).toBe(1);
+    expect(result.stderr).not.toContain(sentinel);
+    expect(result.stderr).toContain("invalid reused extraction");
+  });
+
+  it.each(["json", "schema", "unexpected-id"])("terminates a Python adapter with invalid %s and keeps its output out of diagnostics", async (kind) => {
+    const { directory, corpusPath } = await fixture();
+    const python = join(directory, "malformed-adapter.mjs"), pidFile = join(directory, "adapter.pid");
+    const sentinel = "PRIVATE_PYTHON_SOURCE_SENTINEL";
+    const line = kind === "json" ? sentinel : JSON.stringify({ id: kind === "unexpected-id" ? sentinel : "service",
+      status: kind === "schema" ? sentinel : "ok", milliseconds: 1, graph: { entities: [], relationships: [] } });
+    await writeFile(python, `#!/usr/bin/env node
+import { writeFileSync } from "node:fs";
+writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+process.stdout.write(${JSON.stringify(line + "\n")});
+setInterval(() => {}, 1000);
+`);
+    await chmod(python, 0o700);
+    let pid: number | undefined;
+    try {
+      const result = await run({ corpusPath, output: join(directory, "output"), language: "en", baseUrl: "http://127.0.0.1:1/v1", variants: "llamaindex", python }).catch((error) => error);
+      pid = Number(await readFile(pidFile, "utf8"));
+      let alive = true;
+      try { process.kill(pid, 0); } catch { alive = false; }
+      expect({ alive, leaked: `${result.stdout}${result.stderr}`.includes("PRIVATE_PYTHON_SOURCE_SENTINEL") })
+        .toEqual({ alive: false, leaked: false });
+      expect(result.code).toBe(1);
+    } finally {
+      if (pid) { try { process.kill(pid, "SIGKILL"); } catch { /* The adapter was already reaped. */ } }
+    }
+  });
+
+  it("reports an unavailable Python executable without an unhandled child error", async () => {
+    const { directory, corpusPath } = await fixture();
+    await expect(run({ corpusPath, output: join(directory, "output"), language: "en", baseUrl: "http://127.0.0.1:1/v1",
+      variants: "llamaindex", python: join(directory, "missing-python") }))
+      .rejects.toMatchObject({ code: 1, stderr: expect.stringContaining("Python comparison could not start") });
+  });
+
   it.each([
     ["en", "English"],
     ["source", "the language of the supplied document content"]
