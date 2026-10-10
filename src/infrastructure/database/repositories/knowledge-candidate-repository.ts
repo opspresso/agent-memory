@@ -435,7 +435,8 @@ export function createKnowledgeCandidateRepository(
           locked.candidate,
           knowledgeScopeFromRow(locked.document)
         );
-        const reviewer = await createOrganizationAccessRepository(transaction).findByUser(input.organizationId, input.reviewedBy);
+        const membership = await createOrganizationAccessRepository(transaction).findByUser(input.organizationId, input.reviewedBy);
+        const reviewer = membership ? { ...membership, principalKind: input.principalKind } : null;
         if (!reviewer || !canAccessScopedResource(reviewer, "manage", candidate.scope)) return { status: "access_denied" } as const;
         // The idempotent already-accepted return must stay ahead of both the
         // source-readiness and promotion-completeness checks: callers replay
@@ -660,7 +661,8 @@ export function createKnowledgeCandidateRepository(
           .for("update").limit(1);
         if (!locked) { return null; }
         const candidate = candidateFromRow(locked.candidate, knowledgeScopeFromRow(locked.document));
-        const reviewer = await createOrganizationAccessRepository(transaction).findByUser(input.organizationId, input.reviewedBy);
+        const membership = await createOrganizationAccessRepository(transaction).findByUser(input.organizationId, input.reviewedBy);
+        const reviewer = membership ? { ...membership, principalKind: input.principalKind } : null;
         if (!reviewer || !canAccessScopedResource(reviewer, "manage", candidate.scope)) return null;
         const selected = selectKnowledgeCandidateItems(candidate, input.selection, "rejected");
         if (candidate.status === "rejected") { return candidate; }

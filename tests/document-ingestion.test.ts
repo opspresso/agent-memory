@@ -54,7 +54,7 @@ describe("document ingestion orchestration", () => {
     const ingest = buildIngestDocument({ processDocument, repository: { listChunksByDocument } });
 
     await ingest("organization-1", "document-1", "generation-1", "requester");
-    expect(processDocument).toHaveBeenCalledWith("organization-1", "document-1", "generation-1", "requester");
+    expect(processDocument).toHaveBeenCalledWith("organization-1", "document-1", "generation-1", "requester", undefined);
     expect(listChunksByDocument).not.toHaveBeenCalled();
   });
 });

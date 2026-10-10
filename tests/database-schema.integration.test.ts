@@ -232,17 +232,17 @@ describe("PostgreSQL schema", () => {
       const organizationId = "00000000-0000-0000-0000-000000000008";
       const documentId = "40000000-0000-0000-0000-000000000008";
       const chunkId = "50000000-0000-4000-8000-000000000008";
-      await expect(queue.enqueue(organizationId, documentId, documentId, "10000000-0000-4000-8000-000000000008")).resolves.toBe(
+      await expect(queue.enqueue(organizationId, documentId, documentId, "10000000-0000-4000-8000-000000000008", "organization-agent")).resolves.toBe(
         "queued"
       );
-      await expect(queue.enqueue(organizationId, documentId, documentId, "10000000-0000-4000-8000-000000000008")).resolves.toBe(
+      await expect(queue.enqueue(organizationId, documentId, documentId, "10000000-0000-4000-8000-000000000008", "organization-agent")).resolves.toBe(
         "already_queued"
       );
       await expect(
-        queue.enqueueKnowledgeEnrichment(organizationId, chunkId, { userId: "10000000-0000-4000-8000-000000000008", action: "write" })
+        queue.enqueueKnowledgeEnrichment(organizationId, chunkId, { userId: "10000000-0000-4000-8000-000000000008", action: "write", principalKind: "organization-agent" })
       ).resolves.toBe("queued");
       await expect(
-        queue.enqueueKnowledgeEnrichment(organizationId, chunkId, { userId: "10000000-0000-4000-8000-000000000008", action: "write" })
+        queue.enqueueKnowledgeEnrichment(organizationId, chunkId, { userId: "10000000-0000-4000-8000-000000000008", action: "write", principalKind: "organization-agent" })
       ).resolves.toBe("already_queued");
 
       const jobs = await boss.findJobs<DocumentIngestionJob>(
@@ -250,7 +250,7 @@ describe("PostgreSQL schema", () => {
         { data: { organizationId, documentId } }
       );
       expect(jobs).toHaveLength(1);
-      expect(jobs[0]?.data).toEqual({ organizationId, documentId, generation: documentId, requestedBy: "10000000-0000-4000-8000-000000000008" });
+      expect(jobs[0]?.data).toEqual({ organizationId, documentId, generation: documentId, requestedBy: "10000000-0000-4000-8000-000000000008", principalKind: "organization-agent" });
       const enrichmentJobs =
         await boss.findJobs<DocumentKnowledgeEnrichmentJob>(
           documentKnowledgeEnrichmentQueueName,
@@ -262,6 +262,7 @@ describe("PostgreSQL schema", () => {
           }
         );
       expect(enrichmentJobs).toHaveLength(1);
+      expect(enrichmentJobs[0]?.data.principal).toEqual({ userId: "10000000-0000-4000-8000-000000000008", action: "write", principalKind: "organization-agent" });
       expect(errors).toEqual([]);
     } finally {
       await queue.stop();

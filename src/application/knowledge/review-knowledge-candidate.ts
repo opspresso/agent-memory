@@ -209,7 +209,8 @@ export function buildAcceptKnowledgeCandidate(
         organizationId: access.organizationId,
         relationshipIds: [],
         reviewedAt: dependencies.clock(),
-        reviewedBy: access.userId
+        reviewedBy: access.userId,
+        principalKind: access.principalKind
       });
       return { ...promotionFromAcceptResult(existing), ontologyWarnings: [] };
     }
@@ -271,7 +272,8 @@ export function buildAcceptKnowledgeCandidate(
         dependencies.generateId()
       ),
       reviewedAt: dependencies.clock(),
-      reviewedBy: access.userId
+      reviewedBy: access.userId,
+      principalKind: access.principalKind
     });
     return { ...promotionFromAcceptResult(promoted), ontologyWarnings };
   };
@@ -329,7 +331,8 @@ export function buildRejectKnowledgeCandidate(
       organizationId: access.organizationId,
       ...(normalized ? { reason: normalized } : {}),
       reviewedAt: dependencies.clock(),
-      reviewedBy: access.userId
+      reviewedBy: access.userId,
+      principalKind: access.principalKind
     });
     if (!rejected) {
       throw new KnowledgeCandidateReviewConflictError();

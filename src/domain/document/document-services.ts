@@ -1,5 +1,6 @@
 import type { DocumentTextMimeType } from "./document-format";
 import type { KnowledgeExtractionPrincipal } from "../knowledge/knowledge-extraction-service";
+import type { OrganizationAccess } from "../identity/organization-access";
 
 export const documentProcessingLeaseMilliseconds = 15 * 60 * 1_000;
 
@@ -16,7 +17,8 @@ export interface DocumentIngestionQueue {
     organizationId: string,
     documentId: string,
     generation: string,
-    requestedBy: string
+    requestedBy: string,
+    principalKind?: OrganizationAccess["principalKind"]
   ): Promise<DocumentQueueEnqueueResult>;
 }
 

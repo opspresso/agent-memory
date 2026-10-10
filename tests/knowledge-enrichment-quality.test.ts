@@ -16,13 +16,13 @@ describe("knowledge enrichment quality", () => {
     expect(listUnextractedChunks).not.toHaveBeenCalled();
   });
   it("requeues chunks whose extraction failed before a candidate was saved", async () => {
-    const access = { organizationId: "org", userId: "owner", role: "owner" as const, teams: [] };
+    const access = { organizationId: "org", userId: "owner", role: "owner" as const, teams: [], principalKind: "organization-agent" as const };
     const listUnextractedChunks = vi.fn().mockResolvedValue(["failed-chunk", "active-chunk"]);
     const enqueueKnowledgeEnrichment = vi.fn().mockResolvedValueOnce("queued").mockResolvedValueOnce("already_queued");
     const queue = buildQueueKnowledgeCuration({ listReviewSources: vi.fn().mockResolvedValue([]), listUnextractedChunks }, { enqueueKnowledgeEnrichment });
     expect(await queue(access)).toEqual({ queued: 1 });
     expect(listUnextractedChunks).toHaveBeenCalledExactlyOnceWith(access);
-    expect(enqueueKnowledgeEnrichment.mock.calls).toEqual([["org", "failed-chunk", { userId: "owner", action: "manage" }], ["org", "active-chunk", { userId: "owner", action: "manage" }]]);
+    expect(enqueueKnowledgeEnrichment.mock.calls).toEqual([["org", "failed-chunk", { userId: "owner", action: "manage", principalKind: "organization-agent" }], ["org", "active-chunk", { userId: "owner", action: "manage", principalKind: "organization-agent" }]]);
   });
   it("uses bounded concurrency without exceeding the shared AI ceiling", () => {
     expect(readKnowledgeEnrichmentConcurrency({})).toBe(4);

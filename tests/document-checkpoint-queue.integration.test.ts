@@ -77,7 +77,7 @@ describe("checkpointed document ingestion", () => {
           embeddingCheckpoints: { repository: createDocumentEmbeddingCheckpointRepository(database.db), fingerprint: embeddingBatchFingerprint(configuration) },
           embeddingService: createTextEmbeddingService({ ...configuration, request, requestLimiter: limiter }) });
         try {
-          await process(job.data.organizationId, job.data.documentId, job.data.generation, job.data.requestedBy);
+          await process(job.data.organizationId, job.data.documentId, job.data.generation, job.data.requestedBy, job.data.principalKind);
         } catch (error) {
           if (!(error instanceof AiRequestLimitExceededError)) throw error;
           const status = (await f.repository.findById(f.organizationId, f.document.id))?.status;
@@ -92,7 +92,7 @@ describe("checkpointed document ingestion", () => {
         }
       });
     try {
-      await queue.enqueue(f.organizationId, f.document.id, f.document.processingGeneration, f.userId);
+      await queue.enqueue(f.organizationId, f.document.id, f.document.processingGeneration, f.userId, "organization-agent");
       await expect.poll(async () => {
         const document = await f.repository.findById(f.organizationId, f.document.id);
         const jobs = await boss.findJobs(documentIngestionQueueName, { data: { documentId: f.document.id } });
@@ -102,7 +102,7 @@ describe("checkpointed document ingestion", () => {
       expect(extract).toHaveBeenCalledOnce();
       expect(batches).toEqual(Array.from({ length: 8 }, () => 64));
       expect(deferrals).toEqual(Array.from({ length: 7 }, () => ({ status: "pending", chunkCount: 0, retryCount: 0, retryLimit: 3,
-        data: { organizationId: f.organizationId, documentId: f.document.id, generation: f.document.processingGeneration, requestedBy: f.userId } })));
+        data: { organizationId: f.organizationId, documentId: f.document.id, generation: f.document.processingGeneration, requestedBy: f.userId, principalKind: "organization-agent" } })));
       expect(await f.repository.listChunksByDocument(f.organizationId, f.document.id)).toHaveLength(512);
       expect(await checkpointCounts(f.document.id)).toEqual({ processing: 0, embeddings: 0 });
     } finally { await boss.offWork(documentIngestionQueueName); }

@@ -13,7 +13,7 @@ import type {
 import type { TextEmbeddingService } from "@/domain/shared/text-embedding-service";
 import { AiRequestLimitExceededError, type AiRequestQuotaKey } from "@/domain/shared/ai-request-limiter";
 import type { OrganizationAccessRepository } from "@/domain/identity/organization-access-repository";
-import { canAccessScopedResource } from "@/domain/identity/organization-access";
+import { canAccessScopedResource, type OrganizationAccess } from "@/domain/identity/organization-access";
 import { sameScope } from "@/domain/identity/scope-coverage";
 
 import { chunkDocumentText } from "./chunk-text";
@@ -71,7 +71,8 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
     organizationId: string,
     documentId: string,
     generation: string,
-    requestedBy: string
+    requestedBy: string,
+    principalKind?: OrganizationAccess["principalKind"]
   ): Promise<void> {
     const startedAt = dependencies.clock();
     const claim = await dependencies.repository.claimForProcessing(organizationId, documentId, startedAt, generation);
@@ -88,7 +89,7 @@ export function buildProcessDocument(dependencies: ProcessDocumentDependencies) 
           current.processingAttempts !== document.processingAttempts || !sameScope(current.scope, document.scope)) {
         throw new Error("document processing claim was lost");
       }
-      if (!access || !canAccessScopedResource(access, "write", current.scope)) throw new DocumentAccessDeniedError();
+      if (!access || !canAccessScopedResource({ ...access, principalKind }, "write", current.scope)) throw new DocumentAccessDeniedError();
     }
 
     try {

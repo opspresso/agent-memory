@@ -83,7 +83,7 @@ export function buildUploadDocument(dependencies: UploadDocumentDependencies) {
         throw new DocumentAccessDeniedError();
       }
       // Repair a crash between the resource transaction and queue publication.
-      if (document.status === "pending") await dependencies.queue.enqueue(input.access.organizationId, document.id, document.processingGeneration, input.access.userId);
+      if (document.status === "pending") await dependencies.queue.enqueue(input.access.organizationId, document.id, document.processingGeneration, input.access.userId, input.access.principalKind);
       return document;
     };
     if (identity) {
@@ -139,7 +139,7 @@ export function buildUploadDocument(dependencies: UploadDocumentDependencies) {
     }
 
     try {
-      await dependencies.queue.enqueue(input.access.organizationId, document.id, document.processingGeneration, input.access.userId);
+      await dependencies.queue.enqueue(input.access.organizationId, document.id, document.processingGeneration, input.access.userId, input.access.principalKind);
     } catch (error) {
       try {
         await dependencies.repository.markEnqueueFailure(

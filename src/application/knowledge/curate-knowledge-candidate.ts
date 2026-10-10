@@ -27,14 +27,18 @@ export function buildCurateKnowledgeCandidate(dependencies: {
   readonly reject: Review;
   readonly clock: () => Date;
 }) {
-  return async function curate(organizationId: string, chunkId: string, requestedBy: string): Promise<void> {
+  return async function curate(organizationId: string, chunkId: string, requestedBy: string, principalKind?: OrganizationAccess["principalKind"]): Promise<void> {
     let candidate = await dependencies.candidates.findByChunkId(organizationId, chunkId);
     if (!candidate || candidate.status !== "pending" || candidate.graph.entities.length === 0) { return; }
     const source = await dependencies.documents.findChunkById(organizationId, chunkId);
     if (!source || source.document.status !== "ready") { return; }
     if (!sameScope(candidate.scope, source.document.scope)) throw new KnowledgeScopeChangedError();
     const principalId = requestedBy;
-    let access = await dependencies.access.findByUser(organizationId, principalId);
+    const loadAccess = async () => {
+      const membership = await dependencies.access.findByUser(organizationId, principalId);
+      return membership ? { ...membership, principalKind } : null;
+    };
+    let access = await loadAccess();
     if (!access || !canAccessScopedResource(access, "manage", candidate.scope)) { return; }
     if (candidate.assessment?.policyVersion !== currentKnowledgeAssessmentPolicyVersion) {
       const existing = await dependencies.graph.findNodesForScope(access, candidate.scope, candidate.graph.entities.flatMap((entity) => [entity.canonicalName, ...(entity.aliases ?? [])]));
@@ -45,7 +49,7 @@ export function buildCurateKnowledgeCandidate(dependencies: {
       });
       const [currentSource, currentAccess] = await Promise.all([
         dependencies.documents.findChunkById(organizationId, chunkId),
-        dependencies.access.findByUser(organizationId, principalId)
+        loadAccess()
       ]);
       if (!currentSource || currentSource.document.status !== "ready" || !currentAccess ||
           !canAccessScopedResource(currentAccess, "manage", currentSource.document.scope)) return;
@@ -56,7 +60,7 @@ export function buildCurateKnowledgeCandidate(dependencies: {
     }
     if (!candidate?.assessment || candidate.status !== "pending") { return; }
     // Verification can be slow: refresh the principal before any graph mutation.
-    access = await dependencies.access.findByUser(organizationId, principalId);
+    access = await loadAccess();
     if (!access || !canAccessScopedResource(access, "manage", candidate.scope)) { return; }
     const reviewed = new Set(candidate.itemReviews?.map((review) => review.item));
     const verdicts = new Map(candidate.assessment.items.map((item) => [item.item, item.verdict]));
@@ -71,7 +75,7 @@ export function buildCurateKnowledgeCandidate(dependencies: {
       } catch (error) {
         if (error instanceof AmbiguousKnowledgeIdentityError) {
           await dependencies.candidates.deferIdentityResolution(organizationId, candidate.id, error.entityKeys);
-          return curate(organizationId, chunkId, requestedBy);
+          return curate(organizationId, chunkId, requestedBy, principalKind);
         }
         if (!(error instanceof KnowledgeOntologyViolationError)) { throw error; }
         // A stricter dictionary changed after assessment; leave these items for a reviewer.

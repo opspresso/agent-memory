@@ -23,6 +23,17 @@ function fixture() {
 }
 
 describe("knowledge extraction authorization", () => {
+  it.each(["before", "during"])("retains an organization agent's restriction when its issuer owns a private source %s extraction", async (timing) => {
+    const test = fixture();
+    const privateSource = { document: { ...test.document, scope: { organizationId: "org", kind: "user", userId: "owner" } }, chunk: test.chunk };
+    if (timing === "before") test.findChunkById.mockResolvedValue(privateSource);
+    else test.findChunkById.mockResolvedValueOnce({ document: test.document, chunk: test.chunk }).mockResolvedValue(privateSource);
+    const principal = { userId: "owner", action: "write" as const, principalKind: "organization-agent" as const };
+    expect(await test.run("org", "chunk", principal)).toBeNull();
+    expect(test.extract).toHaveBeenCalledTimes(timing === "before" ? 0 : 1);
+    expect(test.save).not.toHaveBeenCalled();
+  });
+
   it.each([null, { ...owner, role: "member" as const }, { ...owner, organizationId: "other-org" }])(
     "does not send source content to AI without current manage access: %j", async (access) => {
       const test = fixture();

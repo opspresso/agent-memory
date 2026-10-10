@@ -12,7 +12,7 @@ export function buildQueueKnowledgeCuration(repository: Pick<KnowledgeCandidateR
     let queued = 0;
     if (!term) {
       for (const chunkId of await repository.listUnextractedChunks(access)) {
-        if (await queue.enqueueKnowledgeEnrichment(access.organizationId, chunkId, { userId: access.userId, action: "manage" }) === "queued") { queued += 1; }
+        if (await queue.enqueueKnowledgeEnrichment(access.organizationId, chunkId, { userId: access.userId, action: "manage", principalKind: access.principalKind }) === "queued") { queued += 1; }
       }
     }
     for (const { candidate } of sources) {
@@ -21,9 +21,9 @@ export function buildQueueKnowledgeCuration(repository: Pick<KnowledgeCandidateR
       const reviewed = new Set(candidate.itemReviews?.map((review) => review.item));
       if (candidate.assessment?.policyVersion === currentKnowledgeAssessmentPolicyVersion && !candidate.assessment.items.some((item) => item.verdict !== "review" && !reviewed.has(item.item))) { continue; }
       if (term) {
-        await queue.enqueueKnowledgeEnrichment(access.organizationId, candidate.chunkId, { userId: access.userId, action: "manage" }, 20);
+        await queue.enqueueKnowledgeEnrichment(access.organizationId, candidate.chunkId, { userId: access.userId, action: "manage", principalKind: access.principalKind }, 20);
         queued += 1;
-      } else if (await queue.enqueueKnowledgeEnrichment(access.organizationId, candidate.chunkId, { userId: access.userId, action: "manage" }) === "queued") { queued += 1; }
+      } else if (await queue.enqueueKnowledgeEnrichment(access.organizationId, candidate.chunkId, { userId: access.userId, action: "manage", principalKind: access.principalKind }) === "queued") { queued += 1; }
     }
     return { queued };
   };

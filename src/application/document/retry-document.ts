@@ -66,7 +66,7 @@ export function buildRetryDocument(dependencies: RetryDocumentDependencies) {
       if (!canAccessScopedResource(access, "write", document.scope)) throw new DocumentAccessDeniedError();
       if ((document.status === "pending" || document.status === "failed") && document.processingAttempts === request.expectedAttempts) {
         try {
-          await dependencies.queue.enqueue(access.organizationId, document.id, document.processingGeneration, access.userId);
+          await dependencies.queue.enqueue(access.organizationId, document.id, document.processingGeneration, access.userId, access.principalKind);
         } catch (error) {
           await dependencies.repository.markEnqueueFailure(access.organizationId, document.id, "failed to enqueue document retry", dependencies.clock(), document.processingGeneration);
           throw error;
@@ -81,7 +81,7 @@ export function buildRetryDocument(dependencies: RetryDocumentDependencies) {
     const prepared = await dependencies.repository.prepareRetry(document, document.processingAttempts, dependencies.clock());
     if (!prepared) throw new DocumentNotRetryableError();
     try {
-      await dependencies.queue.enqueue(access.organizationId, prepared.id, prepared.processingGeneration, access.userId);
+      await dependencies.queue.enqueue(access.organizationId, prepared.id, prepared.processingGeneration, access.userId, access.principalKind);
     } catch (error) {
       await dependencies.repository.markEnqueueFailure(access.organizationId, prepared.id, "failed to enqueue document retry", dependencies.clock(), prepared.processingGeneration);
       throw error;

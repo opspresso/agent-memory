@@ -35,6 +35,7 @@ import {
 const ingestionJobSchema = z.object({
   generation: z.uuid(),
   requestedBy: z.uuid(),
+  principalKind: z.enum(["user", "organization-agent"]).optional(),
   organizationId: z.uuid(),
   documentId: z.uuid()
 });
@@ -42,7 +43,7 @@ const ingestionJobSchema = z.object({
 const enrichmentJobSchema = z.object({
   organizationId: z.uuid(),
   chunkId: z.uuid(),
-  principal: z.object({ userId: z.uuid(), action: z.enum(["write", "manage"]) })
+  principal: z.object({ userId: z.uuid(), action: z.enum(["write", "manage"]), principalKind: z.enum(["user", "organization-agent"]).optional() })
 });
 
 const processDocument = buildProcessDocument({
@@ -101,7 +102,7 @@ export async function startDocumentWorker(): Promise<void> {
             "processing document ingestion job"
           );
           try {
-            await ingestDocument(data.organizationId, data.documentId, data.generation, data.requestedBy);
+            await ingestDocument(data.organizationId, data.documentId, data.generation, data.requestedBy, data.principalKind);
           } catch (error) {
             if (error instanceof AiRequestLimitExceededError) {
               try {
@@ -142,7 +143,7 @@ export async function startDocumentWorker(): Promise<void> {
                   data.chunkId,
                   data.principal
                 );
-                await curateKnowledgeCandidate?.(data.organizationId, data.chunkId, data.principal.userId);
+                await curateKnowledgeCandidate?.(data.organizationId, data.chunkId, data.principal.userId, data.principal.principalKind);
               } catch (error) {
                 if (error instanceof AiRequestLimitExceededError) {
                   try {

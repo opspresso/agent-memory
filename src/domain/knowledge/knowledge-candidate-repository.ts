@@ -54,6 +54,7 @@ export interface KnowledgeCandidateRepository {
     readonly relationshipIds: readonly string[];
     readonly reviewedAt: Date;
     readonly reviewedBy: string;
+    readonly principalKind?: OrganizationAccess["principalKind"];
   }): Promise<KnowledgeCandidateAcceptResult>;
   reject(input: {
     readonly candidateId: string;
@@ -63,5 +64,6 @@ export interface KnowledgeCandidateRepository {
     readonly reason?: string;
     readonly reviewedAt: Date;
     readonly reviewedBy: string;
+    readonly principalKind?: OrganizationAccess["principalKind"];
   }): Promise<KnowledgeCandidate | null>;
 }

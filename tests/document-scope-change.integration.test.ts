@@ -396,6 +396,25 @@ describe("document scope transactions", () => {
     expect((await f.db.select().from(knowledgeNodes).where(eq(knowledgeNodes.organizationId, f.organizationId))).map((node) => node.id)).toEqual([test.contextNode.id]);
   });
 
+  it("does not give an organization-agent reviewer its issuer's private rights after embedding", async () => {
+    const f = await fixture(), context = await f.document(f.target);
+    const test = await assessedCandidate(f, { chunkId: context.chunkId }, "accept");
+    const embedMany = vi.fn(async (texts: readonly string[]) => {
+      await f.change(test.doc, f.scope);
+      return texts.map(() => ({ model: "test", values: [1, 0] }));
+    });
+    const accept = buildAcceptKnowledgeCandidate({ repository: test.candidates, documentRepository: createDocumentRepository(f.db),
+      ontologyReader: createKnowledgeOntologyReader(f.db), clock: () => f.now, generateId: randomUUID,
+      embeddingService: { embed: vi.fn(), embedMany } });
+    await expect(accept({ ...f.access, principalKind: "organization-agent" }, test.candidate.id)).rejects.toThrow("knowledge candidate review access denied");
+    expect(embedMany).toHaveBeenCalledOnce();
+    expect((await test.candidates.findById(f.organizationId, test.candidate.id))?.status).toBe("pending");
+    const input = { organizationId: f.organizationId, candidateId: test.candidate.id, reviewedBy: f.userId,
+      reviewedAt: f.now, principalKind: "organization-agent" as const };
+    expect(await test.candidates.reject(input)).toBeNull();
+    expect((await test.candidates.findById(f.organizationId, test.candidate.id))?.status).toBe("pending");
+  });
+
   it.each(["deleted", "private"])("invalidates comparison with a %s context node while its source document remains public", async (change) => {
     const f = await fixture(), context = await f.document(f.target);
     const test = await assessedCandidate(f, { chunkId: context.chunkId });

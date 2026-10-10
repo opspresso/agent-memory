@@ -387,6 +387,17 @@ describe("document processing", () => {
     expect(save).toHaveBeenCalledBefore(queue.enqueue as ReturnType<typeof vi.fn>);
   });
 
+  it("carries an organization-agent upload's principal restriction into ingestion", async () => {
+    const queue: DocumentIngestionQueue = { enqueue: vi.fn() };
+    const upload = buildUploadDocument({ checksum: () => "a".repeat(64), clock: () => now,
+      generateId: () => "document-1", limits: uploadLimits, objectStorage: objectStorage(), queue,
+      repository: repository({ save: vi.fn().mockResolvedValue("saved") }) });
+    const result = await upload({ access: { ...access, role: "owner", principalKind: "organization-agent" },
+      scope: { kind: "organization", organizationId: access.organizationId }, title: "Source", mimeType: "text/plain",
+      content: new TextEncoder().encode("Named source.") });
+    expect(queue.enqueue).toHaveBeenCalledWith(access.organizationId, result.id, result.processingGeneration, access.userId, "organization-agent");
+  });
+
   it("does not persist metadata when object storage fails", async () => {
     const storageFailure = new Error("object storage unavailable");
     const save = vi.fn<DocumentRepository["save"]>();

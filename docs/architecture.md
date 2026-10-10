@@ -262,6 +262,8 @@ Runtime은 두 단계의 structured-output 요청을 사용한다. 단일 호출
 
 새 후보 추출은 모델 호출 전에 현재 권한을 확인하고 해당 principal의 AI quota를 사용한다. 문서 수집·문서 retry에서 이어지는 추출은 요청자의 `write`, 별도 Knowledge 재처리는 요청자의 `manage` 권한을 요구한다. 따라서 팀 멤버가 업로드한 문서도 후보를 만들지만, Graph 승인은 팀 manager나 조직 관리자에게 남는다. 추출 후에는 문서 상태·scope와 멤버십을 다시 조회한다. 접근이 철회되거나 출처가 보관되면 후보를 저장하지 않는다. 모델 호출을 시작한 뒤의 권한 철회는 이미 전송된 내용을 회수하지 못한다.
 
+큐는 요청자의 ID와 `principalKind`를 함께 전달한다. `organization-agent`는 worker가 현재 멤버십을 조회한 뒤에도 조직 scope로 제한하며, 토큰 발급자의 개인·팀 권한을 상속하지 않는다. 수집 재시도·quota 연기·검증 재시도와 최종 승인·거절 transaction에서도 이 제한을 유지한다. 명시적 사용자 위임으로 인증된 요청은 해당 사용자의 현재 권한을 적용한다.
+
 1. Assessment를 먼저 저장한다.
 2. 항목별 결정을 멱등하게 적용한다. 재시도가 같은 검증 요청이나 Graph를 반복 생성하지 않도록 한다. 자동 처리에는 `method: automatic`을 기록한다.
 3. 승인 transaction에서 candidate를 잠그고 node·edge, candidate와 resource의 연결, 검토자 기록을 함께 저장한다.

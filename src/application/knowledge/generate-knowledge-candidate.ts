@@ -45,7 +45,7 @@ export function buildGenerateKnowledgeCandidate(
     const principalId = principal.userId;
     const requiredAction = principal.action;
     const access = await dependencies.accessRepository.findByUser(organizationId, principalId);
-    if (!access || !canAccessScopedResource(access, requiredAction, source.document.scope)) return null;
+    if (!access || !canAccessScopedResource({ ...access, principalKind: principal.principalKind }, requiredAction, source.document.scope)) return null;
     const settings =
       await dependencies.ontologyReader.findByOrganization(organizationId);
     const ontologyHint =
@@ -76,7 +76,7 @@ export function buildGenerateKnowledgeCandidate(
     const currentSource = await dependencies.documentRepository.findChunkById(organizationId, chunkId);
     const currentAccess = await dependencies.accessRepository.findByUser(organizationId, principalId);
     if (!currentSource || currentSource.document.status !== "ready" || !currentAccess ||
-        !canAccessScopedResource(currentAccess, requiredAction, currentSource.document.scope)) return null;
+        !canAccessScopedResource({ ...currentAccess, principalKind: principal.principalKind }, requiredAction, currentSource.document.scope)) return null;
     const candidate = createKnowledgeCandidate({
       id: dependencies.generateId(),
       scope: currentSource.document.scope,

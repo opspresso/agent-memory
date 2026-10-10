@@ -109,7 +109,8 @@ describe("document worker startup", () => {
     });
   });
 
-  it("enqueues and processes one independent job per document chunk", async () => {
+  it.each([undefined, "user", "organization-agent"] as const)("enqueues and processes one independent job per document chunk with %s principal", async (principalKind) => {
+    const principal = { ...writePrincipal, principalKind };
     mocks.knowledgeExtractionService = { extract: vi.fn() };
     mocks.work
       .mockResolvedValueOnce("ingestion-worker")
@@ -138,7 +139,8 @@ describe("document worker startup", () => {
           organizationId: "00000000-0000-4000-8000-000000000001",
           documentId: "40000000-0000-4000-8000-000000000001",
           generation: "40000000-0000-4000-8000-000000000001",
-          requestedBy: requester
+          requestedBy: requester,
+          principalKind
         }
       }
     ]);
@@ -146,12 +148,12 @@ describe("document worker startup", () => {
       [
         "00000000-0000-4000-8000-000000000001",
         "50000000-0000-4000-8000-000000000001",
-        writePrincipal
+        principal
       ],
       [
         "00000000-0000-4000-8000-000000000001",
         "50000000-0000-4000-8000-000000000002",
-        writePrincipal
+        principal
       ]
     ]);
 
@@ -160,7 +162,7 @@ describe("document worker startup", () => {
         data: {
           organizationId: "00000000-0000-4000-8000-000000000001",
           chunkId: "50000000-0000-4000-8000-000000000001",
-          principal: writePrincipal
+          principal
         }
       }
     ]);
@@ -169,7 +171,7 @@ describe("document worker startup", () => {
       "50000000-0000-4000-8000-000000000001"
     );
     expect(mocks.documentFindChunk).not.toHaveBeenCalled();
-    expect(mocks.curate).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001", "50000000-0000-4000-8000-000000000001", requester);
+    expect(mocks.curate).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001", "50000000-0000-4000-8000-000000000001", requester, principalKind);
   });
 
   it("checks the explicit queue requester before attempting new extraction", async () => {

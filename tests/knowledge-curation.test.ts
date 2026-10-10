@@ -25,6 +25,20 @@ function setup() {
   return { run, findSource, findByUser, verify, accept, reject, saveAssessment, findByChunkId, existingKnowledge, deferIdentityResolution };
 }
 describe("automatic curation orchestration", () => {
+  it.each(["before", "during"])("retains organization-agent scope restrictions %s verification", async (timing) => {
+    const test = setup();
+    const scope = { organizationId: "org", kind: "user", userId: "owner" };
+    const privateSource = { document: { status: "ready", scope }, chunk: { content: "A leads the team." } };
+    if (timing === "before") {
+      test.findByChunkId.mockResolvedValue({ ...candidate, scope });
+      test.findSource.mockResolvedValue(privateSource);
+    } else test.findSource.mockResolvedValueOnce({ document: { status: "ready", scope: candidate.scope }, chunk: { content: "A leads the team." } }).mockResolvedValue(privateSource);
+    await test.run("org", "ch", "owner", "organization-agent");
+    expect(test.verify).toHaveBeenCalledTimes(timing === "before" ? 0 : 1);
+    expect(test.saveAssessment).not.toHaveBeenCalled();
+    expect(test.accept).not.toHaveBeenCalled();
+  });
+
   it("reassesses pending extraction when its saved policy is obsolete", async () => {
     const test = setup();
     test.findByChunkId.mockResolvedValue({ ...candidate,assessment:{ model:"old",policyVersion:"evidence-v5",assessedAt:now.toISOString(),
@@ -44,9 +58,10 @@ describe("automatic curation orchestration", () => {
     expect(test.saveAssessment.mock.calls[0]?.[2].sources).toEqual([{ chunkId: "ch" }, { chunkId: "context-source" }]);
     expect(test.saveAssessment.mock.calls[0]?.[2].contextNodeIds).toEqual(["context-node"]);
   });
-  it("verifies then persists its assessment before automatically accepting qualified facts", async () => {
+  it.each([undefined, "user", "organization-agent"] as const)("verifies then persists its assessment before automatically accepting qualified facts for %s", async (principalKind) => {
     const test = setup();
-    await test.run("org", "ch", "owner");
+    await test.run("org", "ch", "owner", principalKind);
+    expect(test.accept.mock.calls[0]?.[0].principalKind).toBe(principalKind);
     expect(test.verify).toHaveBeenCalledOnce();
     expect(test.saveAssessment).toHaveBeenCalledOnce();
     expect(test.accept).toHaveBeenCalledWith(expect.objectContaining({ userId: "owner" }), "c", expect.stringContaining("Automatic"), { entityKeys: ["a"], relationshipIndexes: [] });

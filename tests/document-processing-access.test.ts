@@ -25,6 +25,13 @@ function fixture(content = "Atlas uses Orion.", scope: DocumentScope = { organiz
 }
 
 describe("document processing authorization", () => {
+  it("does not inherit the token issuer's private write permission", async () => {
+    const test = fixture(undefined, { organizationId: "org", kind: "user", userId: "retry-user" });
+    await expect(test.run("org", "doc", "doc", "retry-user", "organization-agent")).rejects.toThrow("document access denied");
+    expect(test.get).not.toHaveBeenCalled();
+    expect(test.embedMany).not.toHaveBeenCalled();
+  });
+
   it.each([null, { ...owner, role: "member" as const }, { ...owner, organizationId: "other" }])(
     "checks the current requester before reading stored bytes: %j", async (access) => {
       const test = fixture();
@@ -37,9 +44,9 @@ describe("document processing authorization", () => {
     }
   );
 
-  it("charges the retry requester instead of the original uploader", async () => {
+  it.each([undefined, "user", "organization-agent"] as const)("charges the retry requester with %s principal instead of the original uploader", async (principalKind) => {
     const test = fixture();
-    await test.run("org", "doc", "doc", "retry-user");
+    await test.run("org", "doc", "doc", "retry-user", principalKind);
     expect(test.findByUser).toHaveBeenCalledWith("org", "retry-user");
     expect(test.embedMany).toHaveBeenCalledWith(["Atlas uses Orion."], { organizationId: "org", userId: "retry-user" });
     expect(test.completeProcessing).toHaveBeenCalledOnce();

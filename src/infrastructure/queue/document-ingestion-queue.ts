@@ -1,5 +1,6 @@
 import { PgBoss, type JobWithMetadata } from "pg-boss";
 import type { KnowledgeExtractionPrincipal } from "@/domain/knowledge/knowledge-extraction-service";
+import type { OrganizationAccess } from "@/domain/identity/organization-access";
 
 import {
   documentProcessingLeaseMilliseconds,
@@ -16,6 +17,7 @@ const documentJobExpirationSeconds =
 export interface DocumentIngestionJob {
   readonly generation: string;
   readonly requestedBy: string;
+  readonly principalKind?: OrganizationAccess["principalKind"];
   readonly organizationId: string;
   readonly documentId: string;
 }
@@ -132,11 +134,11 @@ export function createPgBossDocumentIngestionQueue(
 
   return {
     start,
-    async enqueue(organizationId, documentId, generation, requestedBy) {
+    async enqueue(organizationId, documentId, generation, requestedBy, principalKind) {
       const instance = await start();
       const jobId = await instance.send(
         documentIngestionQueueName,
-        { organizationId, documentId, generation, requestedBy } satisfies DocumentIngestionJob,
+        { organizationId, documentId, generation, requestedBy, principalKind } satisfies DocumentIngestionJob,
         // A stale job cannot claim a newer generation, so it must not suppress it.
         { singletonKey: `${documentId}:${generation}` }
       );
