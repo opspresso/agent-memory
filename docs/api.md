@@ -638,7 +638,7 @@ Assessment의 `sources`는 원문과 비교에 사용한 Memory·chunk 참조이
 
 `GET /api/knowledge/progress`는 읽기 가능한 ready 문서 청크를 대상으로 `{ totalChunks, extractedChunks, curatedChunks, enabled }`를 반환한다. Curated는 검증과 자동 처리가 끝났거나 사람이 완료한 청크다. 이 숫자는 수동 검토까지 모두 끝났다는 의미가 아니다.
 
-`GET /api/knowledge/curation`은 검토 권한이 있는 ready 문서에서 조회 가능한 검증 이력이 있는 최근 갱신 후보 50개를 `{ sources: [{ candidate, documentTitle, ordinal }] }`로 반환한다. Candidate는 공개 가능한 현재 assessment·assessmentHistory와 항목별 자동·수동 처리 기록을 포함한다. 현재 assessment가 숨겨져도 유효한 이전 이력이 있으면 반환한다.
+`GET /api/knowledge/curation`은 검토 권한이 있는 ready 문서에서 조회 가능한 검증 이력이 있는 최근 갱신 후보 50개를 `{ sources: [{ candidate, documentTitle, ordinal }] }`로 반환한다. 새 검증을 저장하면 후보의 `updatedAt`을 검증 시각으로 갱신한다. 이미 유효한 같은 정책의 검증을 재사용하면 순서를 바꾸지 않는다. Candidate는 공개 가능한 현재 assessment·assessmentHistory와 항목별 자동·수동 처리 기록을 포함한다. 현재 assessment가 숨겨져도 유효한 이전 이력이 있으면 반환한다.
 
 #### 자동 검토 등록
 

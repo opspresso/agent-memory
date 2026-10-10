@@ -89,6 +89,42 @@ describe("document scope transactions", () => {
     return { doc, candidate, assessment, candidates, contextNode };
   }
 
+  it("returns a newly verified older extraction in the latest fifty history records", async () => {
+    const f = await fixture(), repository = createKnowledgeCandidateRepository(f.db);
+    const candidates = Array.from({ length: 51 }, (_, index) => createKnowledgeCandidate({
+      id: randomUUID(), scope: f.scope, documentId: f.doc.id, chunkId: randomUUID(), model: "extractor",
+      now: new Date(f.now.getTime() - 60_000 + index * 1_000),
+      graph: { entities: [{ key: "liu", kind: "person", canonicalName: "Liu Bei" }], relationships: [] }
+    }));
+    await f.db.insert(documentChunks).values(candidates.map((candidate, index) => ({
+      id: candidate.chunkId, organizationId: f.organizationId, documentId: f.doc.id,
+      ordinal: index + 1, content: "Liu Bei meets Guan Yu."
+    })));
+    const assessmentFor = (candidate: typeof candidates[number], now: Date) => assessKnowledgeCandidate({
+      candidate, content: "Liu Bei meets Guan Yu.", model: "verifier", now, ontology: null,
+      items: [{ item: "entity:liu", entityKind: "person", representation: "entity", support: "uncertain",
+        usefulness: "useful", conflict: false, evidence: "Liu Bei meets Guan Yu.", reason: "Needs review." }]
+    });
+    for (const candidate of candidates) {
+      await repository.save(candidate);
+      await repository.saveAssessment(f.organizationId, candidate.id, {
+        ...assessmentFor(candidate, candidate.createdAt), policyVersion: "previous-policy"
+      });
+    }
+    const oldest = candidates[0]!;
+    expect((await repository.listReviewSources(f.access, true)).map((row) => row.candidate.id)).not.toContain(oldest.id);
+
+    await repository.saveAssessment(f.organizationId, oldest.id, assessmentFor(oldest, f.now));
+
+    const history = await repository.listReviewSources(f.access, true);
+    expect(history).toHaveLength(50);
+    expect(history[0]?.candidate.id).toBe(oldest.id);
+    expect(history[0]?.candidate.updatedAt).toEqual(f.now);
+    expect(history[0]?.candidate.assessmentHistory).toHaveLength(1);
+    await repository.saveAssessment(f.organizationId, oldest.id, assessmentFor(oldest, new Date(f.now.getTime() + 60_000)));
+    expect((await repository.findById(f.organizationId, oldest.id))?.updatedAt).toEqual(f.now);
+  });
+
   it("keeps SQL provenance audience coverage equal to the domain policy across organizations and owners", async () => {
     const f = await fixture(), other = await fixture(), secondTeam = randomUUID();
     await f.db.insert(teams).values({ id: secondTeam, organizationId: f.organizationId, slug: secondTeam, name: "Second team" });

@@ -303,7 +303,7 @@ export function createKnowledgeCandidateRepository(
         }
         const normalized = { ...assessment, sources: uniqueKnowledgeSources(assessment.sources), contextNodeIds: [...new Set(assessment.contextNodeIds)] };
         await lockKnowledgeAssessmentSources(transaction, knowledgeScopeFromRow(current.document), normalized);
-        await transaction.update(knowledgeCandidates).set({ assessment: normalized,
+        await transaction.update(knowledgeCandidates).set({ assessment: normalized, updatedAt: new Date(normalized.assessedAt),
           assessmentHistory: current.candidate.assessment
             ? [...current.candidate.assessmentHistory, current.candidate.assessment] : current.candidate.assessmentHistory
         }).where(eq(knowledgeCandidates.id, candidateId));
