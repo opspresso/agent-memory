@@ -509,6 +509,8 @@ Health의 `200`은 PostgreSQL 연결·현재 schema fingerprint와 Neo4j 연결 
 
 Pino log는 stdout에 JSON으로 기록한다. 일반 예외의 message는 버리고 type·code만 기록한다. Provider·storage adapter의 고정 operational error는 안전한 message·code와 message 없는 bounded cause type chain을 기록해 HTTP status, 실패 operation, 외부 예외 종류를 구분한다. Retrieval log에는 operation, organization ID, result count, duration만 포함하고 query와 본문은 기록하지 않는다.
 
+Worker는 pg-boss로 오류를 넘기기 전에 새 오류 객체를 만든다. 실패 상태와 재시도 정책은 유지하며 `output.details`에는 위와 같은 안전한 진단 정보만 보존한다. 일반 오류의 원문 message·stack·쿼리 인자·임의 속성을 queue 실패 기록에 복제하지 않는다. 세부 원인은 작업 ID와 Pino의 type·code를 함께 확인한다.
+
 Langfuse는 public key와 secret key를 모두 설정할 때 활성화된다. `LANGFUSE_EXPORT_MODE` 기본값은 일반 runtime에서 `batched`, Vercel에서 `immediate`다.
 
 ## 운영 topology와 데이터 보호

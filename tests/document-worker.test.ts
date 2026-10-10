@@ -194,8 +194,26 @@ describe("document worker startup", () => {
       expect(mocks.deferKnowledgeEnrichment).toHaveBeenCalledExactlyOnceWith(job, 42);
       expect(mocks.loggerError).not.toHaveBeenCalled();
     } else {
-      await expect(run).rejects.toBe(error);
+      await expect(run).rejects.toMatchObject({ message: "document knowledge enrichment job failed", details: { type: "Error" } });
       expect(mocks.deferKnowledgeEnrichment).not.toHaveBeenCalled();
     }
+  });
+
+  it("does not hand source-bearing errors to pg-boss failure storage", async () => {
+    mocks.knowledgeExtractionService = { extract: vi.fn() };
+    mocks.candidateFindByChunkId.mockResolvedValue({ id: "candidate" });
+    const privateValue = "private-source-sentinel";
+    mocks.curate.mockRejectedValue(Object.assign(new Error(`Failed query params: ${privateValue}`, {
+      cause: Object.assign(new Error(privateValue), { code: "23503", detail: privateValue })
+    }), { params: [privateValue] }));
+    const { startDocumentWorker } = await import("@/lib/document-worker");
+    await startDocumentWorker();
+    const result = await mocks.work.mock.calls[1]![2]([{ data: {
+      organizationId: "00000000-0000-4000-8000-000000000001", chunkId: "50000000-0000-4000-8000-000000000001"
+    } }]).catch((error: Error) => error);
+    expect(result).toBeInstanceOf(Error);
+    expect(JSON.stringify({ ...result, message: result.message, stack: result.stack })).not.toContain(privateValue);
+    expect(result.details).toMatchObject({ cause: { code: "23503" } });
+    expect(mocks.loggerError).toHaveBeenCalledOnce();
   });
 });

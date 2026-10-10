@@ -10,6 +10,7 @@ import { buildProcessDocument } from "@/application/document/process-document";
 import { buildIngestDocument } from "@/application/document/ingest-document";
 import { buildGenerateKnowledgeCandidate } from "@/application/knowledge/generate-knowledge-candidate";
 import { logger } from "@/infrastructure/observability/logger";
+import { safeErrorForBoundary } from "@/infrastructure/observability/error-details";
 import {
   documentIngestionQueueName,
   documentKnowledgeEnrichmentQueueName,
@@ -70,6 +71,11 @@ const ingestDocument = buildIngestDocument({
 
 let workers: Promise<readonly string[]> | undefined;
 
+function failJob(error: unknown, identifiers: { readonly organizationId: string; readonly documentId?: string; readonly chunkId?: string }, message: string): never {
+  logger.error({ err: error, ...identifiers }, message);
+  throw safeErrorForBoundary(error, message);
+}
+
 export async function startDocumentWorker(): Promise<void> {
   workers ??= (async () => {
     const boss = await documentIngestionQueue.start();
@@ -91,15 +97,7 @@ export async function startDocumentWorker(): Promise<void> {
             if (data.expectedAttempts === undefined) await ingestDocument(data.organizationId, data.documentId);
             else await ingestDocument(data.organizationId, data.documentId, data.expectedAttempts);
           } catch (error) {
-            logger.error(
-              {
-                err: error,
-                documentId: data.documentId,
-                organizationId: data.organizationId
-              },
-              "document ingestion job failed"
-            );
-            throw error;
+            failJob(error, { documentId: data.documentId, organizationId: data.organizationId }, "document ingestion job failed");
           }
         }
       }
@@ -132,19 +130,15 @@ export async function startDocumentWorker(): Promise<void> {
                 await curateKnowledgeCandidate?.(data.organizationId, data.chunkId, data.requestedBy);
               } catch (error) {
                 if (error instanceof AiRequestLimitExceededError) {
-                  const outcome = await documentIngestionQueue.deferKnowledgeEnrichment(job, error.retryAfterSeconds);
-                  logger.info({ organizationId: data.organizationId, chunkId: data.chunkId, retryAfterSeconds: error.retryAfterSeconds, outcome }, "document knowledge enrichment deferred");
+                  try {
+                    const outcome = await documentIngestionQueue.deferKnowledgeEnrichment(job, error.retryAfterSeconds);
+                    logger.info({ organizationId: data.organizationId, chunkId: data.chunkId, retryAfterSeconds: error.retryAfterSeconds, outcome }, "document knowledge enrichment deferred");
+                  } catch (deferralError) {
+                    failJob(deferralError, { organizationId: data.organizationId, chunkId: data.chunkId }, "document knowledge deferral failed");
+                  }
                   continue;
                 }
-                logger.error(
-                  {
-                    err: error,
-                    chunkId: data.chunkId,
-                    organizationId: data.organizationId
-                  },
-                  "document knowledge enrichment job failed"
-                );
-                throw error;
+                failJob(error, { chunkId: data.chunkId, organizationId: data.organizationId }, "document knowledge enrichment job failed");
               }
             }
           }

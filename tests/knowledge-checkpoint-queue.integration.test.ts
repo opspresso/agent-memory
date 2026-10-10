@@ -13,6 +13,7 @@ import { createKnowledgeCandidateRepository } from "@/infrastructure/database/re
 import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createKnowledgeOntologyReader } from "@/infrastructure/database/repositories/knowledge-ontology-reader";
+import { safeErrorForBoundary } from "@/infrastructure/observability/error-details";
 
 describe("checkpointed knowledge jobs", () => {
   let container: StartedPostgreSqlContainer;
@@ -155,6 +156,23 @@ describe("checkpointed knowledge jobs", () => {
         return rows.rows.length === 2 && rows.rows.every((row) => row.state === "completed");
       }, { timeout: 8_000, interval: 100 }).toBe(true);
       expect(attempts).toBe(2);
+    } finally { await boss.offWork(queueName); }
+  });
+
+  it("stores a failed job without private provider or SQL error payloads", async () => {
+    const f = await fixture(), boss = await queue.start();
+    const privateValue = "private-source-sentinel";
+    await boss.work(queueName, { pollingIntervalSeconds: .5 }, async () => {
+      throw safeErrorForBoundary(Object.assign(new Error(`params: ${privateValue}`, {
+        cause: Object.assign(new Error(privateValue), { code: "23503" })
+      }), { params: [privateValue] }), "knowledge job failed");
+    });
+    try {
+      const id = await boss.send(queueName, { organizationId: f.organizationId, chunkId: f.chunkId }, { retryLimit: 0 });
+      await expect.poll(async () => (await boss.getJobById(queueName, id!))?.state, { timeout: 5_000, interval: 100 }).toBe("failed");
+      const job = await boss.getJobById(queueName, id!);
+      expect(JSON.stringify(job?.output)).not.toContain(privateValue);
+      expect(job?.output).toMatchObject({ message: "knowledge job failed", details: { cause: { code: "23503" } } });
     } finally { await boss.offWork(queueName); }
   });
 });
