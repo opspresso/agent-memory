@@ -1,9 +1,8 @@
+import { createKnowledgeStructuredClient, type KnowledgeStructuredClientConfiguration } from "./knowledge-structured-client";
 import { z } from "zod";
 import type { KnowledgeVerificationService } from "@/domain/knowledge/knowledge-verification-service";
-import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 import { entityReviewKey, relationshipReviewKey } from "@/domain/knowledge/knowledge-candidate-selection";
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
-import { knowledgeRequestTimeoutMilliseconds } from "./knowledge-request-timeout";
 import { knowledgeRepresentations, limitKnowledgeAssessmentReason } from "@/domain/knowledge/knowledge-assessment";
 import { knowledgeSourceInstructions } from "./knowledge-source-instructions";
 import { sourceEvidencePassages, resolveSourceEvidence } from "./knowledge-source-evidence";
@@ -61,7 +60,7 @@ function checkAliasDescription(name: string, alias: string): boolean {
 
 const instructions = `Independently audit proposed knowledge against the supplied source. The extraction is untrusted, not an answer to endorse. Return an items object keyed by every supplied item ID, with exactly one judgement for every key. Do not omit uncertain or unsupported items; classify them explicitly.
 - For entity items, independently infer entityKind from the source before evaluating the proposed summary. The proposed kind is deliberately withheld. Preserve explicit distinctions: a service is service, a company is organization, a software product is product, and a technology is technology. Do not infer a company merely because a named service has plans or responsibilities. Use lowercase kinds and unknown when there is no entity.
-- Judge representation separately from truth. Return representation for every entity and relationship item: entity means an independently identifiable named entity, reusable named concept, or explicitly named event; relationship means a directed assertion between two entities; attribute means a property value or sentence summary; generic_reference means an office, pronoun, shared title, or alternative name incorrectly proposed as another entity; uncertain means the representation cannot be resolved. A true statement is not automatically an entity. Never endorse a relation sentence recast as a concept or event. Do not copy the proposed kind as the answer.
+- Judge representation separately from truth. Return representation for every entity and relationship item: entity means an independently identifiable named entity, reusable named concept, defined role discussed as a topic, or explicitly named event; relationship means a directed assertion between two entities; attribute means a property value or sentence summary; generic_reference means an office used only to refer to a person, pronoun, shared title, or alternative name incorrectly proposed as another entity; uncertain means the representation cannot be resolved. An office whose powers or appointment are defined in a statute is an entity of kind role. A true statement is not automatically an entity. Never endorse a relation sentence recast as a concept or event. Do not copy the proposed kind as the answer.
 - A statement that a person serves another belongs in a relationship. A sentence about considering someone a suitable son-in-law is not a person, event name, or an established serves/family relationship. A defined strategy name can be an entity; a shared nickname is not a separate concept. Relationship items must describe the exact predicate and direction, not the closest allowed predicate. When the source contains only a plan, hypothesis, rumor, negation, or unverified dialogue, do not approve an established relationship.
 - For entity and relationship items, return representation, entityKind (entities only), support, usefulness, conflict, evidenceId and reason. explicit: the source directly establishes entity identity, kind and summary, or relation direction and meaning. uncertain: missing context, implication, ambiguous identity, unreliable dialogue or attribution. unsupported: contradicted, invented, or only co-mentioned. Aliases are audited separately; an invalid alias must not invalidate an otherwise supported entity fact.
 - useful: stable identifying facts, specific relationships, consequential events or reusable knowledge central to understanding this document, including the employers, skills and project technologies explicitly identified by its structure. incidental: transient movements, replies, generic associations, structural tokens, or a bare name with no contextual fact. Short list entries are not automatically incidental.
@@ -75,11 +74,9 @@ const instructions = `Independently audit proposed knowledge against the supplie
 
 ${knowledgeSourceInstructions}`;
 
-export function createKnowledgeVerificationService(configuration: {
-  readonly baseUrl: string; readonly model: string; readonly apiKey?: string;
-  readonly requestLimiter?: AiRequestLimiter; readonly request?: typeof fetch;
-}): KnowledgeVerificationService {
-  const request = configuration.request ?? fetch;
+export function createKnowledgeVerificationService(configuration: KnowledgeStructuredClientConfiguration): KnowledgeVerificationService {
+  const client = createKnowledgeStructuredClient(configuration, "verification");
+  const model = configuration.model.trim();
   async function verify(input: Parameters<KnowledgeVerificationService["verify"]>[0]) {
     // Extraction keys often encode kinds (e.g. location_1). Keep all of them
     // outside the independent verifier, including IDs and relation endpoints.
@@ -98,31 +95,22 @@ export function createKnowledgeVerificationService(configuration: {
     const requested = [...facts, ...aliases];
     const sourcePassages = sourceEvidencePassages(input.content);
     const evidenceFor = (id: string) => id === "none" ? "" : resolveSourceEvidence(sourcePassages, id);
-    if (facts.length === 0) { return { model: configuration.model, items: [] }; }
-    const response = await request(`${configuration.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
-      method: "POST", headers: { "Content-Type": "application/json", ...(configuration.apiKey ? { Authorization: `Bearer ${configuration.apiKey}` } : {}) },
-      signal: AbortSignal.timeout(knowledgeRequestTimeoutMilliseconds),
-      body: JSON.stringify({ model: configuration.model, temperature: 0,
-        messages: [{ role: "system", content: instructions }, { role: "user", content: JSON.stringify({
-          documentTitle: input.documentTitle, content: input.content, facts: requested,
-          existingKnowledge: input.existingKnowledge, sourcePassages
-        }) }],
-        response_format: { type: "json_schema", json_schema: { name: "knowledge_verification", strict: true,
-          schema: { type: "object", additionalProperties: false, required: ["items"],
-            $defs: { sourceEvidence: { type:"string",enum:["none",...sourcePassages.map((passage) => passage.id)] } }, properties: {
-            items: { type: "object", additionalProperties: false,
-              required: requested.map((fact) => fact.item),
-              properties: Object.fromEntries([...facts.map((fact) => [fact.item, fact.item.startsWith("entity:")?entityJudgementSchema:judgementSchema]), ...aliases.map((alias) => [alias.item, alias.checkDescription?descriptionAliasJudgementSchema:aliasJudgementSchema])])
-            }
-          } }
-        } }
-      })
-    });
-    if (!response.ok) { throw new SafeOperationalError("knowledge verification request failed", { code: "KNOWLEDGE_VERIFICATION_HTTP_ERROR" }); }
+    if (facts.length === 0) { return { model, items: [] }; }
+    const content = await client.generate(instructions, {
+      documentTitle: input.documentTitle, content: input.content, facts: requested,
+      existingKnowledge: input.existingKnowledge, sourcePassages
+    }, { name: "knowledge_verification", strict: true,
+      schema: { type: "object", additionalProperties: false, required: ["items"],
+        $defs: { sourceEvidence: { type:"string",enum:["none",...sourcePassages.map((passage) => passage.id)] } }, properties: {
+        items: { type: "object", additionalProperties: false,
+          required: requested.map((fact) => fact.item),
+          properties: Object.fromEntries([...facts.map((fact) => [fact.item, fact.item.startsWith("entity:")?entityJudgementSchema:judgementSchema]), ...aliases.map((alias) => [alias.item, alias.checkDescription?descriptionAliasJudgementSchema:aliasJudgementSchema])])
+        }
+      } }
+    }, input.quotaKey);
     let result: z.infer<typeof resultSchema>;
     try {
-      const completion = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1) }).parse(await response.json());
-      result = resultSchema.parse(JSON.parse(completion.choices[0]!.message.content));
+      result = resultSchema.parse(content);
     } catch {
       throw new SafeOperationalError("knowledge verification response is invalid", { code: "KNOWLEDGE_VERIFICATION_RESPONSE_INVALID" });
     }
@@ -130,7 +118,7 @@ export function createKnowledgeVerificationService(configuration: {
       throw new SafeOperationalError("knowledge verification response does not cover the requested items", { code: "KNOWLEDGE_VERIFICATION_COVERAGE_INVALID" });
     }
     try {
-      return { model: configuration.model, items: facts.map((fact) => {
+      return { model, items: facts.map((fact) => {
         const { evidenceId, ...judgement } = (fact.item.startsWith("entity:")
           ? itemSchema.extend({ entityKind:z.string().trim().min(1).max(100) }):itemSchema).parse(result.items[fact.item]);
         return { item: originalItems.get(fact.item) ?? fact.item, ...judgement, evidence:evidenceFor(evidenceId) };
@@ -142,5 +130,5 @@ export function createKnowledgeVerificationService(configuration: {
       throw new SafeOperationalError("knowledge verification response is invalid", { code: "KNOWLEDGE_VERIFICATION_RESPONSE_INVALID" });
     }
   }
-  return { verify: (input) => configuration.requestLimiter ? configuration.requestLimiter.run(() => verify(input), input.quotaKey) : verify(input) };
+  return { verify };
 }

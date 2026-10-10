@@ -40,6 +40,12 @@ export interface KnowledgeGraphRepository {
     scope: KnowledgeNode["scope"],
     names: readonly string[]
   ): Promise<readonly KnowledgeNodeIdentity[]>;
+  /** Match names using only source contributions that cover the requested scope. */
+  findNodesForScope(
+    access: OrganizationAccess,
+    scope: KnowledgeNode["scope"],
+    names: readonly string[]
+  ): Promise<readonly KnowledgeNodeIdentity[]>;
   findNodeById(
     organizationId: string,
     nodeId: string

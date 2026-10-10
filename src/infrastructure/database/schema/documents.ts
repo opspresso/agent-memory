@@ -41,6 +41,7 @@ export const documents = pgTable(
     status: documentStatus().notNull().default("pending"),
     errorMessage: text(),
     processingAttempts: integer().notNull().default(0),
+    processingGeneration: uuid().notNull().default(sql`uuidv7()`),
     processingLeaseId: uuid(),
     processingStartedAt: timestamp({ withTimezone: true }),
     processedAt: timestamp({ withTimezone: true }),

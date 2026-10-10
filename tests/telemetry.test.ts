@@ -2,10 +2,8 @@ import { context, propagation, trace } from "@opentelemetry/api";
 import { NodeSDK, type tracing } from "@opentelemetry/sdk-node";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import {
-  createAuthenticationLogger,
-  serializeErrorForLog
-} from "@/infrastructure/observability/logger";
+import { createAuthenticationLogger } from "@/infrastructure/observability/logger";
+import { serializeErrorForLog, safeErrorForBoundary } from "@/infrastructure/observability/error-details";
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
 import {
   observeRetrieval,
@@ -145,6 +143,21 @@ describe("structured error logging", () => {
     expect(serializeErrorForLog("private-customer-data")).toEqual({
       type: "UnknownError"
     });
+  });
+
+  it("creates a persistable failure without original messages, stacks or arbitrary properties", () => {
+    const privateValue = "private-source-sentinel";
+    const cause = Object.assign(new Error(privateValue), { code: "23503" });
+    const original = Object.assign(new AggregateError(Array.from({ length: 8 }, () => cause), privateValue, { cause }), {
+      params: [privateValue], token: privateValue
+    });
+    const safe = safeErrorForBoundary(original, "job execution failed");
+    expect(safe).toBeInstanceOf(Error);
+    expect(safe.message).toBe("job execution failed");
+    expect(safe).not.toHaveProperty("cause");
+    expect(safe.details.errors).toHaveLength(5);
+    expect(safe.details.cause?.code).toBe("23503");
+    expect(JSON.stringify({ ...safe, message: safe.message, stack: safe.stack })).not.toContain(privateValue);
   });
 });
 

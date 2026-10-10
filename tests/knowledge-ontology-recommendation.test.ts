@@ -27,6 +27,15 @@ function usageRepository(summary: KnowledgeOntologyTermUsageSummary) {
 }
 
 describe("knowledge ontology recommendation", () => {
+  it.each(["recommend", "suggest"])("passes the requesting principal to %s term collection", async (operation) => {
+    const usage = usageRepository({ nodeKinds: [], edgePredicates: [] });
+    const dependencies = { ontologyReader: ontologyReader(), usageRepository: usage,
+      suggestionService: { suggest: vi.fn().mockResolvedValue({ nodeKinds: [], edgePredicates: [] }) } };
+    await (operation === "recommend" ? buildRecommendKnowledgeOntologyTerms(dependencies)
+      : buildSuggestKnowledgeOntology(dependencies))(admin);
+    expect(usage.collect).toHaveBeenCalledWith(admin);
+  });
+
   it("recommends observed terms that are not in the dictionary yet", async () => {
     const recommend = buildRecommendKnowledgeOntologyTerms({
       ontologyReader: ontologyReader({

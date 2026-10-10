@@ -24,7 +24,7 @@ describe("automatic knowledge curation policy", () => {
       representation:item === "entity:liu"?"entity":"relationship",entityKind:item === "entity:liu"?"person":"concept",support:"explicit",usefulness:"useful",conflict:false,evidence:source,reason:"The words occur in the source." }));
     const result = assessKnowledgeCandidate({ candidate:proposed,content:source,model:"verifier",items:results,ontology:null,now:new Date() });
     expect(result.items.map((item) => item.verdict)).toEqual(["ignore","accept","ignore"]);
-    expect(result.policyVersion).toBe("evidence-v5");
+    expect(result.policyVersion).toBe("evidence-v7");
     expect(result.items[0]?.representation).toBe("relationship");
   });
   it("does not let a positive relation revive an endpoint whose entity representation is uncertain", () => {

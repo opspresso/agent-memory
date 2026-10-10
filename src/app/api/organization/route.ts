@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   organizationAdministrationErrorResponse,
@@ -10,7 +11,7 @@ import {
   updateOrganizationSettingsRecord
 } from "@/lib/organization-administration-service";
 
-export async function GET(request: Request) {
+export const GET = withRouteErrorBoundary("GET /api/organization", async function GET(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
@@ -28,9 +29,9 @@ export async function GET(request: Request) {
     }
     throw error;
   }
-}
+});
 
-export async function PATCH(request: Request) {
+export const PATCH = withRouteErrorBoundary("PATCH /api/organization", async function PATCH(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
@@ -59,4 +60,4 @@ export async function PATCH(request: Request) {
     }
     throw error;
   }
-}
+});

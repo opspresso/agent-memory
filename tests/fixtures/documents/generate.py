@@ -24,7 +24,7 @@ def archive(name, files):
     with zipfile.ZipFile(ROOT / name, "w", zipfile.ZIP_DEFLATED) as target:
         for path, content in files.items():
             info = zipfile.ZipInfo(path, (2026, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
+            info.compress_type = zipfile.ZIP_STORED if path == "mimetype" else zipfile.ZIP_DEFLATED
             target.writestr(info, content)
 
 
@@ -67,8 +67,9 @@ legacy.save(str(ROOT / "sample.xls"))
 archive("sample.epub", {
     "mimetype": "application/epub+zip",
     "META-INF/container.xml": '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles><rootfile full-path="book/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
-    "book/content.opf": '<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Orion handbook</dc:title><dc:language>ko</dc:language><dc:identifier id="book">orion-fixture</dc:identifier></metadata><manifest><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="chapter"/></spine></package>',
-    "book/chapter.xhtml": f'<html xmlns="http://www.w3.org/1999/xhtml"><body><h1>Orion handbook</h1><p>{TEXT}</p></body></html>',
+    "book/content.opf": '<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Orion handbook</dc:title><dc:language>ko</dc:language><dc:identifier id="book">orion-fixture</dc:identifier><meta property="dcterms:modified">2026-01-01T00:00:00Z</meta></metadata><manifest><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest><spine><itemref idref="chapter"/></spine></package>',
+    "book/chapter.xhtml": f'<html xmlns="http://www.w3.org/1999/xhtml" lang="ko" xml:lang="ko"><head><title>Orion handbook</title></head><body><h1>Orion handbook</h1><p>{TEXT}</p></body></html>',
+    "book/nav.xhtml": '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="ko" xml:lang="ko"><head><title>목차</title></head><body><nav epub:type="toc"><h1>목차</h1><ol><li><a href="chapter.xhtml">Orion handbook</a></li></ol></nav></body></html>',
 })
 
 (ROOT / "sample.html").write_text(f'<html><head><title>Orion</title><style>hidden-style</style></head><body><h1>Orion handbook</h1><p>{TEXT}</p><table><tr><th>Product</th><th>Owner</th></tr><tr><td>Orion</td><td>김하늘</td></tr></table><script>hidden-script</script></body></html>')

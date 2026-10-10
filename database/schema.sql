@@ -92,6 +92,7 @@ CREATE TABLE "documents" (
 	"status" "document_status" DEFAULT 'pending' NOT NULL,
 	"error_message" text,
 	"processing_attempts" integer DEFAULT 0 NOT NULL,
+	"processing_generation" uuid DEFAULT uuidv7() NOT NULL,
 	"processing_lease_id" uuid,
 	"processing_started_at" timestamp with time zone,
 	"processed_at" timestamp with time zone,
@@ -104,6 +105,29 @@ CREATE TABLE "documents" (
         OR ("documents"."scope_kind" = 'user' AND "documents"."team_id" IS NULL AND "documents"."user_id" IS NOT NULL)),
 	CONSTRAINT "documents_nonnegative_size_check" CHECK ("documents"."size_bytes" >= 0),
 	CONSTRAINT "documents_nonnegative_attempts_check" CHECK ("documents"."processing_attempts" >= 0)
+);
+CREATE TABLE "document_embedding_checkpoints" (
+	"organization_id" uuid NOT NULL,
+	"document_id" uuid NOT NULL,
+	"generation" uuid NOT NULL,
+	"fingerprint" text NOT NULL,
+	"embeddings" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "document_embedding_checkpoints_organization_id_document_id_generation_fingerprint_pk" PRIMARY KEY("organization_id","document_id","generation","fingerprint"),
+	CONSTRAINT "document_embedding_checkpoints_fingerprint_check" CHECK ("document_embedding_checkpoints"."fingerprint" ~ '^[0-9a-f]{64}$'),
+	CONSTRAINT "document_embedding_checkpoints_batch_check" CHECK (jsonb_typeof("document_embedding_checkpoints"."embeddings") = 'array'
+    AND jsonb_array_length("document_embedding_checkpoints"."embeddings") BETWEEN 1 AND 64)
+);
+CREATE TABLE "document_processing_checkpoints" (
+	"organization_id" uuid NOT NULL,
+	"document_id" uuid NOT NULL,
+	"generation" uuid NOT NULL,
+	"mime_type" text NOT NULL,
+	"parts" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "document_processing_checkpoints_organization_id_document_id_generation_pk" PRIMARY KEY("organization_id","document_id","generation"),
+	CONSTRAINT "document_processing_checkpoints_parts_check" CHECK (jsonb_typeof("document_processing_checkpoints"."parts") = 'array'
+    AND jsonb_array_length("document_processing_checkpoints"."parts") BETWEEN 1 AND 512)
 );
 CREATE TABLE "organization_agent_tokens" (
 	"organization_id" uuid PRIMARY KEY NOT NULL,
@@ -202,6 +226,17 @@ CREATE TABLE "knowledge_candidates" (
 	CONSTRAINT "knowledge_candidates_organization_id_id_unique" UNIQUE("organization_id","id"),
 	CONSTRAINT "knowledge_candidates_review_state_check" CHECK (("knowledge_candidates"."status" = 'pending' AND "knowledge_candidates"."reviewed_by" IS NULL AND "knowledge_candidates"."reviewed_at" IS NULL)
         OR ("knowledge_candidates"."status" IN ('accepted', 'rejected') AND "knowledge_candidates"."reviewed_by" IS NOT NULL AND "knowledge_candidates"."reviewed_at" IS NOT NULL))
+);
+CREATE TABLE "knowledge_extraction_checkpoints" (
+	"organization_id" uuid NOT NULL,
+	"chunk_id" uuid NOT NULL,
+	"fingerprint" text NOT NULL,
+	"model" text NOT NULL,
+	"entities" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "knowledge_extraction_checkpoints_pk" PRIMARY KEY("organization_id","chunk_id","fingerprint"),
+	CONSTRAINT "knowledge_extraction_checkpoints_fingerprint_check" CHECK ("knowledge_extraction_checkpoints"."fingerprint" ~ '^[0-9a-f]{64}$'),
+	CONSTRAINT "knowledge_extraction_checkpoints_entities_check" CHECK (jsonb_typeof("knowledge_extraction_checkpoints"."entities") = 'array' AND jsonb_array_length("knowledge_extraction_checkpoints"."entities") <= 100)
 );
 CREATE TABLE "knowledge_edge_sources" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
@@ -413,6 +448,8 @@ ALTER TABLE "documents" ADD CONSTRAINT "documents_organization_id_organizations_
 ALTER TABLE "documents" ADD CONSTRAINT "documents_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;
 ALTER TABLE "documents" ADD CONSTRAINT "documents_organization_team_fk" FOREIGN KEY ("organization_id","team_id") REFERENCES "public"."teams"("organization_id","id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "documents" ADD CONSTRAINT "documents_organization_user_fk" FOREIGN KEY ("organization_id","user_id") REFERENCES "public"."organization_members"("organization_id","user_id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "document_embedding_checkpoints" ADD CONSTRAINT "document_embedding_checkpoints_document_fk" FOREIGN KEY ("organization_id","document_id") REFERENCES "public"."documents"("organization_id","id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "document_processing_checkpoints" ADD CONSTRAINT "document_processing_checkpoints_document_fk" FOREIGN KEY ("organization_id","document_id") REFERENCES "public"."documents"("organization_id","id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "organization_agent_tokens" ADD CONSTRAINT "organization_agent_tokens_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "organization_agent_tokens" ADD CONSTRAINT "organization_agent_tokens_member_fk" FOREIGN KEY ("organization_id","user_id") REFERENCES "public"."organization_members"("organization_id","user_id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "organization_members" ADD CONSTRAINT "organization_members_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
@@ -433,6 +470,7 @@ ALTER TABLE "knowledge_candidates" ADD CONSTRAINT "knowledge_candidates_organiza
 ALTER TABLE "knowledge_candidates" ADD CONSTRAINT "knowledge_candidates_reviewed_by_users_id_fk" FOREIGN KEY ("reviewed_by") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;
 ALTER TABLE "knowledge_candidates" ADD CONSTRAINT "knowledge_candidates_organization_document_fk" FOREIGN KEY ("organization_id","document_id") REFERENCES "public"."documents"("organization_id","id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "knowledge_candidates" ADD CONSTRAINT "knowledge_candidates_document_chunk_fk" FOREIGN KEY ("organization_id","document_id","chunk_id") REFERENCES "public"."document_chunks"("organization_id","document_id","id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "knowledge_extraction_checkpoints" ADD CONSTRAINT "knowledge_extraction_checkpoints_chunk_fk" FOREIGN KEY ("organization_id","chunk_id") REFERENCES "public"."document_chunks"("organization_id","id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "knowledge_edge_sources" ADD CONSTRAINT "knowledge_edge_sources_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "knowledge_edge_sources" ADD CONSTRAINT "knowledge_edge_sources_organization_edge_fk" FOREIGN KEY ("organization_id","edge_id") REFERENCES "public"."knowledge_edges"("organization_id","id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "knowledge_edge_sources" ADD CONSTRAINT "knowledge_edge_sources_organization_memory_fk" FOREIGN KEY ("organization_id","memory_id") REFERENCES "public"."memories"("organization_id","id") ON DELETE restrict ON UPDATE no action;

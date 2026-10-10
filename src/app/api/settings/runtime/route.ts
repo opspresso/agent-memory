@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { z } from "zod";
 
 import { InvalidAppSettingsError } from "@/application/settings/manage-app-settings";
@@ -39,7 +40,7 @@ async function authorize(request: Request) {
   return authentication;
 }
 
-export async function GET(request: Request) {
+export const GET = withRouteErrorBoundary("GET /api/settings/runtime", async function GET(request: Request) {
   const authentication = await authorize(request);
   if (!authentication.authenticated) {
     return authentication.response;
@@ -47,9 +48,9 @@ export async function GET(request: Request) {
   return Response.json(await appSettingsUseCases.getView(), {
     headers: { "Cache-Control": "no-store" }
   });
-}
+});
 
-export async function PUT(request: Request) {
+export const PUT = withRouteErrorBoundary("PUT /api/settings/runtime", async function PUT(request: Request) {
   const authentication = await authorize(request);
   if (!authentication.authenticated) {
     return authentication.response;
@@ -79,4 +80,4 @@ export async function PUT(request: Request) {
     }
     throw error;
   }
-}
+});

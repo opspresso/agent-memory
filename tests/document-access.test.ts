@@ -54,9 +54,10 @@ function repository(overrides: Partial<DocumentRepository>): DocumentRepository 
     findById: vi.fn(),
     findChunkById: vi.fn(),
     listChunksByDocument: vi.fn(),
+    prepareRetry: vi.fn(),
     claimForProcessing: vi.fn(),
     completeProcessing: vi.fn(),
-    failProcessing: vi.fn(),
+    failProcessing: vi.fn(), deferProcessing: vi.fn(),
     markEnqueueFailure: vi.fn(),
     archive: vi.fn(),
     search: vi.fn(),
@@ -183,17 +184,20 @@ describe("document access", () => {
     const queue: DocumentIngestionQueue = { enqueue };
     const failed = document("failed");
     const retryDocument = buildRetryDocument({
+      clock: () => now,
       queue,
-      repository: repository({ findById: vi.fn().mockResolvedValue(failed) })
+      repository: repository({ findById: vi.fn().mockResolvedValue(failed),
+        prepareRetry: vi.fn().mockResolvedValue({ ...failed, status: "pending", processingGeneration: "retry-generation" }) })
     });
 
-    await expect(retryDocument(memberAccess, failed.id)).resolves.toBe(failed);
-    expect(enqueue).toHaveBeenCalledWith("organization-1", failed.id);
+    await expect(retryDocument(memberAccess, failed.id)).resolves.toMatchObject({ ...failed, status: "pending", processingGeneration: "retry-generation" });
+    expect(enqueue).toHaveBeenCalledWith("organization-1", failed.id, "retry-generation", memberAccess.userId, undefined);
   });
 
   it("rejects retry for a non-failed or non-writable document", async () => {
     const queue: DocumentIngestionQueue = { enqueue: vi.fn() };
     const readyRetry = buildRetryDocument({
+      clock: () => now,
       queue,
       repository: repository({ findById: vi.fn().mockResolvedValue(document()) })
     });
@@ -209,6 +213,7 @@ describe("document access", () => {
       }
     };
     const forbiddenRetry = buildRetryDocument({
+      clock: () => now,
       queue,
       repository: repository({
         findById: vi.fn().mockResolvedValue(organizationDocument)
@@ -217,5 +222,15 @@ describe("document access", () => {
     await expect(
       forbiddenRetry(memberAccess, organizationDocument.id)
     ).rejects.toBeInstanceOf(DocumentAccessDeniedError);
+  });
+
+  it("retains organization-agent restrictions when scheduling a document retry", async () => {
+    const queue: DocumentIngestionQueue = { enqueue: vi.fn() };
+    const failed = { ...document("failed"), scope: { kind: "organization" as const, organizationId: memberAccess.organizationId } };
+    const pending = { ...failed, status: "pending" as const, processingGeneration: "retry-generation" };
+    const retry = buildRetryDocument({ clock: () => now, queue, repository: repository({
+      findById: vi.fn().mockResolvedValue(failed), prepareRetry: vi.fn().mockResolvedValue(pending) }) });
+    await retry({ ...memberAccess, role: "owner", principalKind: "organization-agent" }, failed.id);
+    expect(queue.enqueue).toHaveBeenCalledWith(memberAccess.organizationId, failed.id, pending.processingGeneration, memberAccess.userId, "organization-agent");
   });
 });

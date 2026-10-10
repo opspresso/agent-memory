@@ -39,9 +39,10 @@ function repository(overrides: Partial<DocumentRepository> = {}): DocumentReposi
     findById: vi.fn(),
     findChunkById: vi.fn(),
     listChunksByDocument: vi.fn(),
+    prepareRetry: vi.fn(),
     claimForProcessing: vi.fn(),
     completeProcessing: vi.fn(),
-    failProcessing: vi.fn(),
+    failProcessing: vi.fn(), deferProcessing: vi.fn(),
     markEnqueueFailure: vi.fn(),
     archive: vi.fn(),
     search: vi.fn(),
@@ -58,6 +59,10 @@ function objectStorage(
     delete: vi.fn(),
     ...overrides
   };
+}
+
+function processingDocument(input: Parameters<typeof createDocument>[0]) {
+  return { ...createDocument(input), status: "processing" as const, processingAttempts: 1 };
 }
 
 describe("document processing", () => {
@@ -100,6 +105,38 @@ describe("document processing", () => {
       for (let index = chunk.start; index < chunk.end; index += 1) covered.add(index);
     }
     expect(covered.size).toBe(source.length);
+  });
+
+  it("prefers paragraph boundaries over spaces inside the next provision", () => {
+    const paragraph = "First complete provision. ".repeat(4).trim();
+    const source = `${paragraph}\n\nSecond provision has conditions and exceptions that belong together.\n\nLast provision.`;
+    const chunks = chunkText(source, { maxCharacters: 150, overlapCharacters: 0 });
+    expect(chunks[0]?.content).toBe(paragraph);
+    expect(chunks[1]?.content).toContain("Second provision has conditions and exceptions that belong together.");
+    expect(chunks.every((chunk) => chunk.content === source.slice(chunk.start, chunk.end))).toBe(true);
+  });
+
+  it("starts overlapping legal text at word boundaries without dropping source characters", () => {
+    const source = Array.from({ length: 20 }, (_, index) =>
+      `제${index + 1}조 대한민국헌법은 권리와 의무를 규정하며 조건과 예외를 함께 읽어야 한다.`).join("\n\n");
+    const chunks = chunkText(source, { maxCharacters: 120, overlapCharacters: 20 });
+    const covered = new Set<number>();
+    for (const chunk of chunks) {
+      expect(chunk.content).toBe(source.slice(chunk.start, chunk.end));
+      expect(chunk.content.length).toBeLessThanOrEqual(120);
+      if (chunk.start > 0) expect(source[chunk.start - 1]).toMatch(/\s/);
+      for (let index = chunk.start; index < chunk.end; index += 1) covered.add(index);
+    }
+    expect([...source].every((character, index) => /\s/.test(character) || covered.has(index))).toBe(true);
+  });
+
+  it("omits overlap wholly inside a complete final word", () => {
+    const paragraph = `${"prefix ".repeat(10)}${"long".repeat(10)}`;
+    const following = "Following provision keeps its whole text.";
+    const source = `${paragraph}\n\n${following}`;
+    const chunks = chunkText(source, { maxCharacters: 120, overlapCharacters: 20 });
+    expect(chunks.map((chunk) => chunk.content)).toEqual([paragraph, following]);
+    expect(chunks.every((chunk) => chunk.content === source.slice(chunk.start, chunk.end))).toBe(true);
   });
 
   it("preserves Markdown heading context across chunks", () => {
@@ -350,6 +387,17 @@ describe("document processing", () => {
     expect(save).toHaveBeenCalledBefore(queue.enqueue as ReturnType<typeof vi.fn>);
   });
 
+  it("carries an organization-agent upload's principal restriction into ingestion", async () => {
+    const queue: DocumentIngestionQueue = { enqueue: vi.fn() };
+    const upload = buildUploadDocument({ checksum: () => "a".repeat(64), clock: () => now,
+      generateId: () => "document-1", limits: uploadLimits, objectStorage: objectStorage(), queue,
+      repository: repository({ save: vi.fn().mockResolvedValue("saved") }) });
+    const result = await upload({ access: { ...access, role: "owner", principalKind: "organization-agent" },
+      scope: { kind: "organization", organizationId: access.organizationId }, title: "Source", mimeType: "text/plain",
+      content: new TextEncoder().encode("Named source.") });
+    expect(queue.enqueue).toHaveBeenCalledWith(access.organizationId, result.id, result.processingGeneration, access.userId, "organization-agent");
+  });
+
   it("does not persist metadata when object storage fails", async () => {
     const storageFailure = new Error("object storage unavailable");
     const save = vi.fn<DocumentRepository["save"]>();
@@ -508,7 +556,8 @@ describe("document processing", () => {
       "organization-1",
       "document-1",
       "failed to enqueue document ingestion",
-      now
+      now,
+      "document-1"
     );
   });
 
@@ -543,7 +592,7 @@ describe("document processing", () => {
   });
 
   it("extracts, chunks, embeds, and completes a claimed document", async () => {
-    const document = createDocument({
+    const document = processingDocument({
       id: "document-1",
       scope: {
         kind: "team",
@@ -560,12 +609,14 @@ describe("document processing", () => {
     });
     const completeProcessing = vi.fn<DocumentRepository["completeProcessing"]>();
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       generateId: () => "chunk-1",
       objectStorage: objectStorage({
         get: vi.fn().mockResolvedValue(new TextEncoder().encode("Rollback safely"))
       }),
       repository: repository({
+        findById: vi.fn().mockResolvedValue(document),
         claimForProcessing: vi.fn().mockResolvedValue({
           document,
           leaseId: "lease-1"
@@ -583,7 +634,7 @@ describe("document processing", () => {
       }
     });
 
-    await process("organization-1", "document-1");
+    await process("organization-1", "document-1", "document-1", "user-1");
 
     expect(completeProcessing).toHaveBeenCalledWith(
       { document, leaseId: "lease-1" },
@@ -599,7 +650,7 @@ describe("document processing", () => {
   });
 
   it("bounds embedding request batches for large documents", async () => {
-    const document = createDocument({
+    const document = processingDocument({
       id: "document-1",
       scope: { kind: "organization", organizationId: "organization-1" },
       title: "Large handbook",
@@ -616,6 +667,7 @@ describe("document processing", () => {
     );
     let nextChunkId = 0;
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       embeddingService: { embed: vi.fn(), embedMany },
       generateId: () => `chunk-${nextChunkId++}`,
@@ -623,6 +675,7 @@ describe("document processing", () => {
         get: vi.fn().mockResolvedValue(new TextEncoder().encode("content"))
       }),
       repository: repository({
+        findById: vi.fn().mockResolvedValue(document),
         claimForProcessing: vi.fn().mockResolvedValue({
           document,
           leaseId: "lease-1"
@@ -638,7 +691,7 @@ describe("document processing", () => {
       }
     });
 
-    await process("organization-1", "document-1");
+    await process("organization-1", "document-1", "document-1", "user-1");
 
     expect(embedMany.mock.calls.length).toBeGreaterThan(1);
     expect(
@@ -655,7 +708,7 @@ describe("document processing", () => {
     const source = Array.from({ length: 40 }, (_, index) =>
       `# Owner ${index}\n\n## References\n\n${Array.from({ length: 16 }, (_, reference) => `### Reference ${index}-${reference}`).join("\n\n")}`
     ).join("\n\n");
-    const document = createDocument({
+    const document = processingDocument({
       id: "document-1",
       scope: { kind: "organization", organizationId: "organization-1" },
       title: "Heading-dense handbook",
@@ -673,10 +726,12 @@ describe("document processing", () => {
     );
     let nextChunkId = 0;
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       generateId: () => `chunk-${nextChunkId++}`,
       objectStorage: objectStorage({ get: vi.fn().mockResolvedValue(new TextEncoder().encode(source)) }),
       repository: repository({
+        findById: vi.fn().mockResolvedValue(document),
         claimForProcessing: vi.fn().mockResolvedValue({ document, leaseId: "lease-1" }),
         completeProcessing,
         failProcessing
@@ -685,7 +740,7 @@ describe("document processing", () => {
       embeddingService: { embed: vi.fn(), embedMany }
     });
 
-    await process("organization-1", "document-1");
+    await process("organization-1", "document-1", "document-1", "user-1");
 
     const chunks = completeProcessing.mock.calls[0]![1];
     expect(chunks).toHaveLength(40);
@@ -699,7 +754,7 @@ describe("document processing", () => {
   });
 
   it("records a bounded failure when extraction fails", async () => {
-    const document = createDocument({
+    const document = processingDocument({
       id: "document-1",
       scope: { kind: "organization", organizationId: "organization-1" },
       title: "Unreadable",
@@ -712,12 +767,14 @@ describe("document processing", () => {
     });
     const failProcessing = vi.fn<DocumentRepository["failProcessing"]>();
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       generateId: () => "chunk-1",
       objectStorage: objectStorage({
         get: vi.fn().mockResolvedValue(new TextEncoder().encode("content"))
       }),
       repository: repository({
+        findById: vi.fn().mockResolvedValue(document),
         claimForProcessing: vi.fn().mockResolvedValue({
           document,
           leaseId: "lease-1"
@@ -729,7 +786,7 @@ describe("document processing", () => {
       }
     });
 
-    await expect(process("organization-1", "document-1")).rejects.toThrow(
+    await expect(process("organization-1", "document-1", "document-1", "user-1")).rejects.toThrow(
       "extractor failed"
     );
     expect(failProcessing).toHaveBeenCalledWith(
@@ -740,7 +797,7 @@ describe("document processing", () => {
   });
 
   it("rejects documents that exceed the processing lease chunk budget", async () => {
-    const document = createDocument({
+    const document = processingDocument({
       id: "document-1",
       scope: { kind: "organization", organizationId: "organization-1" },
       title: "Oversized handbook",
@@ -754,6 +811,7 @@ describe("document processing", () => {
     const embedMany = vi.fn();
     const failProcessing = vi.fn<DocumentRepository["failProcessing"]>();
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       embeddingService: { embed: vi.fn(), embedMany },
       generateId: () => "chunk-1",
@@ -761,6 +819,7 @@ describe("document processing", () => {
         get: vi.fn().mockResolvedValue(new TextEncoder().encode("content"))
       }),
       repository: repository({
+        findById: vi.fn().mockResolvedValue(document),
         claimForProcessing: vi.fn().mockResolvedValue({
           document,
           leaseId: "lease-1"
@@ -776,7 +835,7 @@ describe("document processing", () => {
       }
     });
 
-    await expect(process("organization-1", "document-1")).rejects.toThrow(
+    await expect(process("organization-1", "document-1", "document-1", "user-1")).rejects.toThrow(
       "document exceeds the 512 chunk processing limit"
     );
     expect(embedMany).not.toHaveBeenCalled();
@@ -790,6 +849,7 @@ describe("document processing", () => {
   it("treats an already processed job as an idempotent success", async () => {
     const storage = objectStorage();
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       generateId: () => "chunk-1",
       objectStorage: storage,
@@ -800,7 +860,7 @@ describe("document processing", () => {
     });
 
     await expect(
-      process("organization-1", "document-1")
+      process("organization-1", "document-1", "document-1", "user-1")
     ).resolves.toBeUndefined();
     expect(storage.get).not.toHaveBeenCalled();
   });

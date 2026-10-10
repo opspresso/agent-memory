@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { version as appVersion } from "../../../../package.json";
 
 import { hasMetricsAccess, readMetricsToken } from "@/lib/metrics-auth";
@@ -6,7 +7,7 @@ import { getEffectiveRuntimeEnvironment } from "@/lib/runtime-settings";
 
 const responseHeaders = { "Cache-Control": "no-store" };
 
-export async function GET(request: Request): Promise<Response> {
+export const GET = withRouteErrorBoundary("GET /api/metrics", async function GET(request: Request): Promise<Response> {
   const token = readMetricsToken(await getEffectiveRuntimeEnvironment());
   if (!token || !hasMetricsAccess(request, token)) {
     return Response.json(
@@ -52,4 +53,4 @@ export async function GET(request: Request): Promise<Response> {
       "Content-Type": "text/plain; version=0.0.4; charset=utf-8"
     }
   });
-}
+});

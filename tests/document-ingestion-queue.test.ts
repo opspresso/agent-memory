@@ -55,18 +55,18 @@ describe("document ingestion queue", () => {
     mocks.send.mockResolvedValueOnce("job-1").mockResolvedValueOnce(null);
     const queue = createPgBossDocumentIngestionQueue("postgresql://database", vi.fn());
 
-    await expect(queue.enqueue("organization-1", "document-1")).resolves.toBe(
+    await expect(queue.enqueue("organization-1", "document-1", "generation-1", "requester")).resolves.toBe(
       "queued"
     );
-    await expect(queue.enqueue("organization-1", "document-1")).resolves.toBe(
+    await expect(queue.enqueue("organization-1", "document-1", "generation-1", "requester")).resolves.toBe(
       "already_queued"
     );
     expect(mocks.createQueue).toHaveBeenCalledWith(
-      "document-ingestion-v2",
+      "document-ingestion-v3",
       expect.objectContaining({ policy: "exclusive" })
     );
     expect(mocks.createQueue).toHaveBeenCalledWith(
-      "document-knowledge-enrichment-v2",
+      "document-knowledge-enrichment-v3",
       expect.objectContaining({ policy: "exclusive" })
     );
   });

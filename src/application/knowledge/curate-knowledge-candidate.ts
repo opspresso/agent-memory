@@ -11,6 +11,8 @@ import { currentKnowledgeAssessmentPolicyVersion } from "@/domain/knowledge/know
 import { entityReviewKey, relationshipReviewKey } from "@/domain/knowledge/knowledge-candidate-selection";
 import { KnowledgeOntologyViolationError } from "@/domain/knowledge/knowledge-ontology";
 import { AmbiguousKnowledgeIdentityError } from "@/domain/knowledge/knowledge-alias";
+import { sameScope } from "@/domain/identity/scope-coverage";
+import { KnowledgeScopeChangedError } from "@/domain/knowledge/knowledge-scope-change";
 
 type Review = (access: OrganizationAccess, id: string, reason: string, selection: KnowledgeCandidateSelection) => Promise<unknown>;
 
@@ -18,36 +20,47 @@ export function buildCurateKnowledgeCandidate(dependencies: {
   readonly candidates: Pick<KnowledgeCandidateRepository, "findByChunkId" | "saveAssessment" | "deferIdentityResolution">;
   readonly documents: Pick<DocumentRepository, "findChunkById">;
   readonly access: Pick<OrganizationAccessRepository, "findByUser">;
-  readonly graph: Pick<KnowledgeGraphRepository, "findNodesByNames">;
+  readonly graph: Pick<KnowledgeGraphRepository, "findNodesForScope">;
   readonly ontology: KnowledgeOntologyReader;
   readonly verification: KnowledgeVerificationService;
   readonly accept: Review;
   readonly reject: Review;
   readonly clock: () => Date;
 }) {
-  return async function curate(organizationId: string, chunkId: string, requestedBy?: string): Promise<void> {
+  return async function curate(organizationId: string, chunkId: string, requestedBy: string, principalKind?: OrganizationAccess["principalKind"]): Promise<void> {
     let candidate = await dependencies.candidates.findByChunkId(organizationId, chunkId);
     if (!candidate || candidate.status !== "pending" || candidate.graph.entities.length === 0) { return; }
     const source = await dependencies.documents.findChunkById(organizationId, chunkId);
     if (!source || source.document.status !== "ready") { return; }
-    const principalId = requestedBy ?? source.document.createdBy;
-    let access = await dependencies.access.findByUser(organizationId, principalId);
+    if (!sameScope(candidate.scope, source.document.scope)) throw new KnowledgeScopeChangedError();
+    const principalId = requestedBy;
+    const loadAccess = async () => {
+      const membership = await dependencies.access.findByUser(organizationId, principalId);
+      return membership ? { ...membership, principalKind } : null;
+    };
+    let access = await loadAccess();
     if (!access || !canAccessScopedResource(access, "manage", candidate.scope)) { return; }
     if (candidate.assessment?.policyVersion !== currentKnowledgeAssessmentPolicyVersion) {
-      const existing = await dependencies.graph.findNodesByNames(access, candidate.scope, candidate.graph.entities.flatMap((entity) => [entity.canonicalName, ...(entity.aliases ?? [])]));
+      const existing = await dependencies.graph.findNodesForScope(access, candidate.scope, candidate.graph.entities.flatMap((entity) => [entity.canonicalName, ...(entity.aliases ?? [])]));
       const verification = await dependencies.verification.verify({
         content: source.chunk.content, documentTitle: source.document.title, graph: candidate.graph,
         existingKnowledge: existing.map((node) => ({ name: node.canonicalName, aliases: node.aliases.slice(0, 100), kind: node.kind, summary: node.summary?.slice(0, 2_000) })),
         quotaKey: { organizationId, userId: access.userId }
       });
+      const [currentSource, currentAccess] = await Promise.all([
+        dependencies.documents.findChunkById(organizationId, chunkId),
+        loadAccess()
+      ]);
+      if (!currentSource || currentSource.document.status !== "ready" || !currentAccess ||
+          !canAccessScopedResource(currentAccess, "manage", currentSource.document.scope)) return;
       const ontology = await dependencies.ontology.findByOrganization(organizationId);
       candidate = await dependencies.candidates.saveAssessment(organizationId, candidate.id, assessKnowledgeCandidate({
-        candidate, content: source.chunk.content, ...verification, ontology, now: dependencies.clock()
+        candidate, content: source.chunk.content, ...verification, contextNodes: existing, ontology, now: dependencies.clock()
       }));
     }
     if (!candidate?.assessment || candidate.status !== "pending") { return; }
     // Verification can be slow: refresh the principal before any graph mutation.
-    access = await dependencies.access.findByUser(organizationId, principalId);
+    access = await loadAccess();
     if (!access || !canAccessScopedResource(access, "manage", candidate.scope)) { return; }
     const reviewed = new Set(candidate.itemReviews?.map((review) => review.item));
     const verdicts = new Map(candidate.assessment.items.map((item) => [item.item, item.verdict]));
@@ -62,7 +75,7 @@ export function buildCurateKnowledgeCandidate(dependencies: {
       } catch (error) {
         if (error instanceof AmbiguousKnowledgeIdentityError) {
           await dependencies.candidates.deferIdentityResolution(organizationId, candidate.id, error.entityKeys);
-          return curate(organizationId, chunkId, requestedBy);
+          return curate(organizationId, chunkId, requestedBy, principalKind);
         }
         if (!(error instanceof KnowledgeOntologyViolationError)) { throw error; }
         // A stricter dictionary changed after assessment; leave these items for a reviewer.

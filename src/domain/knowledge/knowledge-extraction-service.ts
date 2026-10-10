@@ -1,7 +1,14 @@
 import type { ProposedKnowledgeGraph } from "./knowledge-candidate";
 import type { AiRequestQuotaKey } from "../shared/ai-request-limiter";
+import type { OrganizationAccess } from "../identity/organization-access";
 
 export type KnowledgeExtractionLanguage = "source" | "ko" | "en";
+
+export interface KnowledgeExtractionPrincipal {
+  readonly userId: string;
+  readonly action: "write" | "manage";
+  readonly principalKind?: OrganizationAccess["principalKind"];
+}
 
 export interface KnowledgeExtractionResult {
   readonly model: string;
@@ -21,5 +28,6 @@ export interface KnowledgeExtractionService {
     readonly mimeType: string;
     readonly ontology?: KnowledgeExtractionOntologyHint;
     readonly quotaKey?: AiRequestQuotaKey;
+    readonly source?: { readonly organizationId: string; readonly chunkId: string };
   }): Promise<KnowledgeExtractionResult>;
 }

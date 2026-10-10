@@ -306,13 +306,38 @@ OpenAI-compatible local endpoint를 사용하려면 embedding, reranker, knowled
 
 Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 동시 실행·분당 호출 제한과 PostgreSQL의 조직·사용자 분당 quota를 공유한다. Replica를 늘려도 같은 조직·사용자의 durable quota는 늘어나지 않는다. Provider account 전체 예산은 별도로 관리한다.
 
+Provider 응답 본문은 JSON 파싱 전에 byte 상한을 적용한다. 추출·검증은 32 MiB, 온톨로지 추천은 128 KiB다. Embedding은 `64 KiB + 입력 수 × 차원 × 32 bytes`를 사용하며 차원 미지정 시 16,000으로 계산한다. Reranker는 `64 KiB + 요청한 점수 수 × 128 bytes`다. 실제로 읽은 본문 크기를 검사하므로 `Content-Length`가 없거나 작게 선언돼도 상한을 지킨다. 상한 초과는 응답을 취소하고 기존 실패 처리 경로로 전달한다. 잘못된 JSON·UTF-8이나 읽기 오류에 원문·provider 본문을 포함하지 않는다.
+
 #### 기존 데이터와 model 변경
 
-현재 검증은 `evidence-v5`를 사용한다. 미완료 후보의 policy가 오래되면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.
+현재 검증은 `evidence-v7`를 사용한다. 미완료 후보의 policy가 오래되거나 검증에 사용한 출처·참고 node의 공개 범위나 상태가 바뀌면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 출처 정보가 없는 과거 판정은 공개 응답과 자동 판단에 사용하지 않는다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.
 
 #### 추출기 평가
 
 `evaluation/knowledge/corpus.json`은 업로드 문서와 무관하게 작성한 30개 합성 진단 사례다. 사람·서비스·개념·이름 있는 사건, 별칭, 부정·계획·가정·소문, Markdown·JSON 등을 포함한다. 개체 종류와 대표 이름의 정확한 일치와, 명시적으로 주석한 원문 표기 변형을 같은 개체로 보는 일치를 별도로 보고한다. 표기 변형은 평가용 대응표이며 application의 별칭으로 등록하지 않는다. 이 자료의 점수를 운영 문서 전체의 정확도로 해석하지 마라.
+
+`evaluation/knowledge/normative-corpus.json`은 규정이 정의한 직위, 사람을 가리키는 호칭, 본문의 법률 개념, 조건부 권한을 구분하는 4개 합성 사례다. 같은 AI 설정에서 `pnpm eval:knowledge --variants entity-first --verify --corpus evaluation/knowledge/normative-corpus.json`으로 평가한다. 조건부 권한 사례는 제한된 사전에서 의미를 보존할 수 없는 관계가 생략되는지 확인한다.
+
+[규범 문서 평가 기록](../evaluation/knowledge/normative-comparison.json)은 `openai/gpt-6-luna`로 추출·독립 검증한 수정 전후 결과를 담는다. 4개 사례에서 승인된 정답 개체는 5/7에서 7/7, 관계는 1/3에서 3/3으로 늘었고 오답은 양쪽 모두 0개였다. 각 사례를 한 번씩 평가한 진단 결과이며 운영 문서 전체의 정확도나 반복 실행의 동일성을 보장하지 않는다.
+
+검증 단계만 비교하려면 [주장 검증 사례](../evaluation/knowledge/verification-corpus.json)를 사용한다. 30개 합성 사례에는 정상 관계, 부정·계획·조건, 잘못된 방향·요약·별칭, 원문 안의 지시가 포함된다. 사례마다 지정한 한 항목의 승인·보류를 평가하며 추출 recall은 측정하지 않는다.
+
+```bash
+pnpm eval:verification --variants chat,jev --repeats 3
+```
+
+`chat`은 현재 추출·검증 모델 설정을 사용한다. `jev`는 별도의 `OPENROUTER_API_KEY`가 필요하며 [OpenRouter Decisions API](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request)를 호출한다. 다른 chat endpoint의 key를 자동으로 전송하지 않는다. 결과는 `.eval-results/knowledge/verification/`에 저장한다. `--split calibration|validation`으로 사례를 선택하고 `--output`으로 경로를 바꿀 수 있다. 응답 오류나 미완료 사례가 있으면 종료 코드는 1이며, 알 수 없는 비용을 0으로 기록하지 않는다.
+
+JEV는 생성 문장 대신 유형이 정해진 판정을 반환하므로 chat 모델을 그대로 대체할 수 없다. 평가 adapter는 기존 지식과의 충돌·사용자 정의 kind를 지원하지 않으며 runtime에 연결하지 않는다. `--threshold`는 선택한 답의 확률이 낮을 때 보류하도록 하는 평가 변수다. 기본값 `0`은 원래 판정을 측정하기 위한 값이며 운영 승인 기준이 아니다.
+
+[2026-10-10 검증 비교](../evaluation/knowledge/verification-comparison.json)는 같은 30개 사례를 3회 반복한 결과다. 아래 비용은 응답의 `usage.cost` 합계다.
+
+| 검증기 | 정상 주장 승인 / 36 | 잘못된 주장 승인 / 54 | 중앙 지연 시간 | 90회 비용(USD) |
+| --- | --- | --- | --- | --- |
+| `openai/gpt-6-luna` chat | 35 | 0 | 3,718 ms | 0.016868 |
+| `typesafe/jev-1.13` Decisions | 36 | 3 | 400 ms | 0.006173 |
+
+JEV는 같은 설명형 별칭을 3회 모두 승인했다. 저장된 판정에 확률 기준 0.9를 적용하면 오승인은 0개가 되지만 정상 승인도 16/36으로 줄었다. 따라서 현재 runtime은 chat 검증을 유지한다. 이 자료는 개발 중 사용한 진단 사례이며, 분리된 `validation` 집합도 미공개 성능 평가로 해석하지 않는다.
 
 현재 runtime만 평가할 때는 다음 명령을 사용한다.
 
@@ -339,6 +364,8 @@ pnpm eval:knowledge --python .venv-knowledge-eval/bin/python --verify
 평가는 process 환경과 `.env.local`의 extraction·verification 설정을 사용하며 DB 설정 override를 읽지 않는다. `KNOWLEDGE_EXTRACTION_LANGUAGE`는 모든 비교 방식의 설명 언어에 적용하며 runtime과 같은 기본값 `ko`를 사용한다. 운영과 같은 모델·언어를 평가하려면 해당 값을 명시하라. 현재 설정된 모델에 합성 본문을 실제로 전송한다. `single-pass`, `llamaindex`, `entity-first`를 `--variants`의 comma-separated 목록으로 선택하며 `--limit`으로 앞 사례 수를 제한한다. `--verify`는 자동 승인 정책까지 적용한다. `--reuse <이전 결과 디렉터리>`는 모델·언어·corpus hash·사례 순서가 일치하는 저장된 추출을 재사용해 검증만 비교한다. 언어가 기록되지 않은 과거 결과는 다시 추출해야 한다.
 
 기본 결과는 Git에서 제외한 `.eval-results/knowledge/`에 저장한다. `--output`으로 위치를 바꿀 수 있다. 요약은 model·language·corpus/policy hash, 개체·관계·별칭 precision/recall/F1, 잘못된 병합, 요청 오류와 추출 지연 시간을 포함한다. 오류가 있는 비교는 결과를 보존하고 종료 코드 1을 반환한다. 모델 오류를 빈 추출 성공으로 처리하지 않는다. 모델 응답이 원문과 맞는지와 관계 방향·개체 정체성은 각 사례의 저장 결과로 검토한다. 지연 시간은 공유 모델 endpoint의 관측값이며 독립적인 성능 보장은 아니다.
+
+잘못된 corpus·재사용 결과·Python 응답은 원문을 포함하지 않는 오류로 보고한다. Python 응답은 선택한 사례 순서와 일치해야 하며, 응답 형식이나 순서가 잘못되면 비교 프로세스를 종료·회수한다. 결과 본문은 저장된 평가 파일에서 확인한다.
 
 평가 기록은 [comparison.json](../evaluation/knowledge/comparison.json)에 보존한다. 2026-09-13에 `nvidia/Qwen3.6-35B-A3B-NVFP4`와 동일 모델의 독립 검증 요청으로 측정한 결과는 다음과 같다. 모든 방식에 같은 원문 근거·개체 자격 규칙과 `evidence-v3`를 적용했다. 단일 호출 비교기도 새 개체 자격 필터를 포함하므로 수정 전 v0.27.0 전체의 재현 결과는 아니다.
 
@@ -441,11 +468,13 @@ Converter는 업로드 bytes만 읽고 원격 URL·plugin·LLM을 호출하지 �
 - 추출 결과가 512 chunks를 넘으면 provider 호출 전에 실패한다. 이 한도는 작업량을 제한하며 S3·DB 지연을 포함한 전체 처리 시간이 15분 lease 안에 끝남을 보장하지는 않는다. 원본을 더 작은 문서로 나눈 뒤 다시 업로드하라.
 - Markdown에서 같은 부모·단계의 본문 없는 소제목이 연속되면 2,000자 예산 안에서 묶어 제목 수만으로 chunk 한도를 소모하지 않게 한다. 각 제목과 원문 범위를 보존하며 본문이 있는 섹션·최상위 제목은 별도로 처리한다.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
-- `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
+- 변환·분할 결과와 완료된 embedding batch는 내부 checkpoint에 저장한다. 같은 처리 세대의 재시작·재시도에서는 완료한 단계를 재사용하며, embedding은 provider URL·모델·차원·입력 순서가 같은 batch만 재사용한다. 문서 완료·새 retry 세대 준비·archive 시 해당 임시 데이터만 정리한다. 원본과 완료된 chunk는 이 정리 대상이 아니다.
+- `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v3` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
 - 지식 추출과 검증의 HTTP timeout은 요청당 3분이다. 로컬 모델의 긴 structured output 생성을 허용하면서 최대 세 요청이 15분 job expiration 안에서 끝나도록 제한한다. Provider 오류·timeout은 job 실패와 재시도로 남는다.
+- 개체 추출이 끝나면 `knowledge_extraction_checkpoints`에 결과를 저장한다. 관계 추출 전 quota가 소진되거나 worker가 다시 시작돼도 같은 입력의 개체 추출을 반복하지 않는다. 원문·모델·언어·온톨로지 지침 등이 달라지면 checkpoint를 재사용하지 않는다. 내부 checkpoint는 승인 후보나 완료된 Graph가 아니다.
 - 추출 응답의 구조를 확인한 뒤 원문 인용을 검증한다. 원문 근거가 없는 항목, 없는 개체를 참조하는 관계와 자기 자신을 가리키는 관계는 제외하며 같은 청크의 정상 지식은 보존한다. 중복 키가 동일 kind·정규화 이름을 가리키면 통합하고, 서로 다른 개체를 가리키면 해당 개체들과 그 키를 참조하는 관계를 제외한다. 이 정규화가 끝난 graph에 candidate 불변 조건과 별도 AI 검증을 적용한다.
 - AI 추출 후 별도 검증 요청으로 원문 근거·유용성·충돌을 평가한다. 독립 검증 설정을 사용하며 미설정이면 추출 모델·endpoint를 사용한다. 명시성·유용성·원문 인용·개체 자격·종류·충돌·온톨로지 정책을 통과한 항목은 자동 승인한다. 핵심 관계는 모델의 `incidental` 표기만으로 제외하지 않으며, 불확실한 항목은 수동 검토로 남긴다. 검증 요청도 AI quota를 소비하며 실패하면 자동 반영하지 않고 enrichment job을 재시도한다. 검증 대상 원문과 제안은 유지하고, 참고할 기존 개체 개요는 개체당 2,000자로 제한해 출처 누적으로 요청이 계속 커지는 것을 막는다.
-- 기본 자동 검토는 문서 생성자의 현재 active membership과 source scope `manage` 권한을 요구한다. 검토 화면의 일괄 실행은 인증된 요청자를 job에 기록하며 worker가 그 권한을 다시 확인한다. 저장된 추출과 assessment는 재사용한다. 재추출을 위한 구버전 호환 경로는 없으며 worker 실행이 필요하다.
+- 자동 검토는 큐에 기록한 실제 요청자의 현재 active membership과 source scope `manage` 권한을 요구한다. 업로드·문서 retry의 후속 추출에는 요청자의 `write` 권한을 적용한다. Worker는 각 단계에서 현재 권한과 조직 전용 Agent의 scope 제한을 확인한다. 저장된 추출과 현재 정책·출처 조건이 유효한 assessment를 재사용하며 worker 실행이 필요하다.
 
 검증된 별칭은 `knowledge_node_sources.names`에 출처별로 저장한다. 일반 속성에 이름 목록을 넣거나 모델 설정만 바꿔도 기존 node가 자동으로 병합되지는 않는다. 새 후보 승인과 명시적 병합에서 검증된 이름을 보존하며 이후 이름 조회·검색·추출 검증에 사용한다. 공유 별칭이 여러 개체와 일치하면 수동 검토에서 identity를 해결해야 한다. 이 column과 index를 포함한 현재 schema는 `pnpm db:generate`로 생성하며, 기존 설치의 schema 변경은 Database 초기화 절차와 명시적 데이터 보존·초기화 결정을 따른다.
 
@@ -453,8 +482,12 @@ Converter는 업로드 bytes만 읽고 원격 URL·plugin·LLM을 호출하지 �
 
 | Queue | 작업 단위 | Retry 설정 |
 | --- | --- | --- |
-| `document-ingestion-v2` | Document ID별 exclusive job | 최대 3회, 초기 지연 5초와 backoff |
-| `document-knowledge-enrichment-v2` | Chunk ID별 exclusive job | 최대 5회, 초기 지연 15초와 backoff |
+| `document-ingestion-v3` | Document ID·처리 세대별 exclusive job | 최대 3회, 초기 지연 5초와 backoff |
+| `document-knowledge-enrichment-v3` | Chunk ID별 exclusive job | 최대 5회, 초기 지연 15초와 backoff |
+
+위 횟수는 실제 오류에 적용한다. 문서 ingestion이나 Knowledge enrichment가 서버 AI quota에 막히면 현재 job을 `deferred: true` 결과로 완료하고, 제한 해제 이후의 후속 job을 원자적으로 예약한다. 이 대기는 오류 재시도 횟수를 소모하거나 복원하지 않는다. Worker는 대기하는 동안 claim을 잡고 있지 않으며, 후속 실행에서 source와 요청자의 권한을 다시 검사한다. `document ingestion deferred` 또는 `document knowledge enrichment deferred` 로그와 예약 작업을 확인하라. 외부 provider 오류·timeout은 기존 오류 재시도 정책을 따른다.
+
+Document ingestion 메시지의 세대 ID는 같은 요청의 오류 재시도에서 유지한다. 사용자 retry가 새 세대를 준비하면 이전 세대의 작업은 문서를 다시 처리하지 못한다. `processingAttempts`는 claim을 얻을 때마다 증가하며 queue 세대 ID로 사용하지 않는다.
 
 두 queue의 job expiration과 document processing lease는 15분이다. Worker가 처리 claim을 다시 얻으면 새 lease ID를 사용하며 이전 worker의 늦은 complete·fail은 거부된다. 문서 retry API의 성공은 enqueue를 뜻하며 즉시 `ready`로 바뀌는 것은 아니다.
 
@@ -483,6 +516,8 @@ Health의 `200`은 PostgreSQL 연결·현재 schema fingerprint와 Neo4j 연결 
 
 Pino log는 stdout에 JSON으로 기록한다. 일반 예외의 message는 버리고 type·code만 기록한다. Provider·storage adapter의 고정 operational error는 안전한 message·code와 message 없는 bounded cause type chain을 기록해 HTTP status, 실패 operation, 외부 예외 종류를 구분한다. Retrieval log에는 operation, organization ID, result count, duration만 포함하고 query와 본문은 기록하지 않는다.
 
+Worker는 pg-boss로 오류를 넘기기 전에 새 오류 객체를 만든다. 실패 상태와 재시도 정책은 유지하며 `output.details`에는 위와 같은 안전한 진단 정보만 보존한다. 일반 오류의 원문 message·stack·쿼리 인자·임의 속성을 queue 실패 기록에 복제하지 않는다. 세부 원인은 작업 ID와 Pino의 type·code를 함께 확인한다.
+
 Langfuse는 public key와 secret key를 모두 설정할 때 활성화된다. `LANGFUSE_EXPORT_MODE` 기본값은 일반 runtime에서 `batched`, Vercel에서 `immediate`다.
 
 ## 운영 topology와 데이터 보호
@@ -501,7 +536,7 @@ worker instance: DOCUMENT_WORKER_ENABLED=true
 
 현재 Docker image의 기본 command는 Next.js server이므로 전용 worker도 HTTP server와 같은 process에서 시작된다. 완전히 분리된 worker-only entry point는 제공하지 않는다. 여러 worker가 같은 pg-boss queue를 처리할 수 있으며 document processing lease가 stale worker의 늦은 상태 변경을 차단한다.
 
-Worker는 `document-ingestion-v2`와 `document-knowledge-enrichment-v2`를 소비한다. 자동 queue 이관은 제공하지 않는다. DB를 초기화할 때는 pg-boss schema의 작업도 함께 정리한다. `failed` 문서만 retry API로 등록할 수 있으며 `pending`·`processing` 문서는 상태·lease와 원본을 확인한 뒤 별도 복구 절차를 결정한다.
+Worker는 `document-ingestion-v3`와 `document-knowledge-enrichment-v3`를 소비한다. 자동 queue 이관은 제공하지 않는다. DB를 초기화할 때는 pg-boss schema의 작업도 함께 정리한다. `failed` 문서만 retry API로 등록할 수 있으며 `pending`·`processing` 문서는 상태·lease와 원본을 확인한 뒤 별도 복구 절차를 결정한다.
 
 ### 백업과 복원
 
@@ -513,6 +548,10 @@ Worker는 `document-ingestion-v2`와 `document-knowledge-enrichment-v2`를 소�
 Database만 복원하고 object storage를 복원하지 않으면 document metadata는 남지만 원본 재처리가 실패할 수 있다. Object storage만 복원하면 권한·상태·chunk·provenance를 복구할 수 없다. 두 저장소의 보존 시점과 복원 절차를 함께 관리하라. 암호화된 설정과 Agent token을 복원하려면 백업 당시의 `BETTER_AUTH_SECRET`도 필요하다. 이 값은 DB·object backup과 별도의 secret manager에서 보존하라.
 
 DB dump와 object mirror 전체를 하나의 transaction으로 묶지 않으므로 쓰기 중에는 두 저장소의 시점이 달라질 수 있다. 일관된 복원 지점이 필요하면 web과 worker의 쓰기를 함께 중단하는 운영 절차를 마련하라. Agent Memory의 백업·복원 작업은 공유 PostgreSQL·MinIO에 있는 Agent Studio DB와 bucket을 변경하지 않아야 한다.
+
+기존 데이터를 보존하는 schema 교체는 별도 빈 DB에 현재 schema를 초기화하고, 호환되는 기존 열을 복원하는 방식으로 준비할 수 있다. 자동 migration은 제공하지 않는다. 운영자는 실제 dump로 복원을 먼저 검증하고, 새 기본값이 적용되는 열을 제외한 기존 행의 내용·건수와 참조 무결성을 대조해야 한다. 호환되지 않는 데이터가 있으면 전환하지 않는다.
+
+최종 전환 때는 자동 Sync와 web·worker 쓰기를 중단하고 새 dump로 복원을 반복한다. 처리 중 작업이 없는지 확인하고, queue 형식이 바뀌면 구버전 작업을 새 worker가 소비하도록 복사하지 않는다. 검증된 새 DB로 연결을 전환한 뒤 새 image의 readiness와 권한·검색을 확인한다. 원본 object와 이전 DB는 복구용으로 보존하며, 삭제는 별도 승인 범위에서 수행한다.
 
 ### 삭제와 원본 보존
 
@@ -572,14 +611,14 @@ Worker가 비활성화된 상태에서 upload한 문서는 자동으로 `ready`�
 
 Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node 생성 또는 문서 처리와 semantic query를 실패시킬 수 있다. Provider를 사용하지 않을 계획이면 `EMBEDDING_MODEL`을 비워 lexical-only 모드로 실행하라. Reranker 장애는 통합 검색·Memory 회상을 실패시키지 않고 권한 필터가 적용된 hybrid 순위로 복귀한다. 반복 fallback은 `context reranking unavailable` log와 provider 상태를 확인하라.
 
-모든 embedding, reranker, extraction, ontology suggestion 호출은 instance-local concurrency·minute limit를 먼저 거친 뒤 PostgreSQL의 organization·user minute bucket을 소비한다. 여러 replica와 background worker가 같은 durable quota를 공유하며 초과 요청은 `429` 또는 queue retry로 처리한다. Reranker의 quota 초과는 예외적으로 hybrid 순위 복귀로 처리한다. Bucket은 입력·본문 없이 organization ID와 내부 principal key, minute, count만 저장하고 하루가 지난 row를 후속 요청에서 정리한다.
+모든 embedding, reranker, extraction, verification, ontology suggestion 호출은 instance-local concurrency·minute limit를 먼저 거친 뒤 PostgreSQL의 organization·user minute bucket을 소비한다. 여러 replica와 background worker가 같은 durable quota를 공유한다. 일반 요청은 초과 시 `429`를 반환하고, 문서 ingestion과 Knowledge enrichment는 오류 재시도를 소모하지 않는 후속 job으로 예약한다. Reranker의 quota 초과는 hybrid 순위 복귀로 처리한다. Bucket은 입력·본문 없이 organization ID와 내부 principal key, minute, count만 저장하고 하루가 지난 row를 후속 요청에서 정리한다.
 
 ### AI 후보가 생성되지 않음
 
 1. 문서가 `ready`인지 확인한다.
 2. `KNOWLEDGE_EXTRACTION_MODEL`과 `KNOWLEDGE_EXTRACTION_BASE_URL`을 확인한다.
 3. Provider가 JSON Schema structured output을 지원하는지 확인한다.
-4. `document-knowledge-enrichment-v2` queue 오류를 application log에서 확인한다.
+4. `document-knowledge-enrichment-v3` queue 오류를 application log에서 확인한다.
 5. 후보 조회 사용자에게 source scope의 `manage` 권한이 있는지 확인한다.
 
 Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지 않는다.

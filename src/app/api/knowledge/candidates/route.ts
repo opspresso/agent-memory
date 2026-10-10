@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   knowledgeCandidateErrorResponse,
@@ -5,7 +6,7 @@ import {
 } from "@/lib/knowledge-candidate-http";
 import { listKnowledgeCandidateRecords } from "@/lib/knowledge-candidate-service";
 
-export async function GET(request: Request) {
+export const GET = withRouteErrorBoundary("GET /api/knowledge/candidates", async function GET(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
@@ -29,4 +30,4 @@ export async function GET(request: Request) {
     }
     throw error;
   }
-}
+});

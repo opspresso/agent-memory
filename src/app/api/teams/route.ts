@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   organizationAdministrationErrorResponse,
@@ -9,16 +10,16 @@ import {
   listTeamRecords
 } from "@/lib/organization-administration-service";
 
-export async function GET(request: Request) {
+export const GET = withRouteErrorBoundary("GET /api/teams", async function GET(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
   }
   const teams = await listTeamRecords(authorization.access);
   return Response.json({ teams, count: teams.length });
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withRouteErrorBoundary("POST /api/teams", async function POST(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
@@ -48,4 +49,4 @@ export async function POST(request: Request) {
     }
     throw error;
   }
-}
+});

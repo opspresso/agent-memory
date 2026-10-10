@@ -1,4 +1,6 @@
 import type { DocumentTextMimeType } from "./document-format";
+import type { KnowledgeExtractionPrincipal } from "../knowledge/knowledge-extraction-service";
+import type { OrganizationAccess } from "../identity/organization-access";
 
 export const documentProcessingLeaseMilliseconds = 15 * 60 * 1_000;
 
@@ -14,7 +16,9 @@ export interface DocumentIngestionQueue {
   enqueue(
     organizationId: string,
     documentId: string,
-    expectedAttempts?: number
+    generation: string,
+    requestedBy: string,
+    principalKind?: OrganizationAccess["principalKind"]
   ): Promise<DocumentQueueEnqueueResult>;
 }
 
@@ -31,7 +35,7 @@ export interface DocumentKnowledgeEnrichmentQueue {
   enqueueKnowledgeEnrichment(
     organizationId: string,
     chunkId: string,
-    requestedBy?: string,
+    principal: KnowledgeExtractionPrincipal,
     priority?: number
   ): Promise<DocumentQueueEnqueueResult>;
 }

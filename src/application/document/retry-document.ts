@@ -13,7 +13,7 @@ import { DocumentAccessDeniedError } from "./upload-document";
 export interface RetryDocumentDependencies {
   readonly receipts?: IngestionReceiptRepository;
   readonly fingerprint?: (input: unknown) => string;
-  readonly clock?: () => Date;
+  readonly clock: () => Date;
   readonly queue: DocumentIngestionQueue;
   readonly repository: DocumentRepository;
 }
@@ -42,7 +42,7 @@ export function buildRetryDocument(dependencies: RetryDocumentDependencies) {
       throw new DocumentAccessDeniedError();
     }
     if (request) {
-      if (!dependencies.receipts || !dependencies.fingerprint || !dependencies.clock || !dependencies.repository.prepareRetry) {
+      if (!dependencies.receipts || !dependencies.fingerprint) {
         throw new Error("idempotent document retry is not configured");
       }
       const identity = { organizationId: access.organizationId, userId: access.userId,
@@ -52,7 +52,7 @@ export function buildRetryDocument(dependencies: RetryDocumentDependencies) {
       if (previous && previous.payloadHash !== payloadHash) throw new IngestionConflictError();
       if (!previous) {
         try {
-          const prepared = await dependencies.repository.prepareRetry(document, request.expectedAttempts,
+          const prepared = await dependencies.repository.prepareRetry(document, request.expectedAttempts, dependencies.clock(),
             { ...identity, payloadHash, resourceId: documentId, createdAt: dependencies.clock() });
           if (!prepared) throw new DocumentNotRetryableError();
         } catch (error) {
@@ -66,9 +66,9 @@ export function buildRetryDocument(dependencies: RetryDocumentDependencies) {
       if (!canAccessScopedResource(access, "write", document.scope)) throw new DocumentAccessDeniedError();
       if ((document.status === "pending" || document.status === "failed") && document.processingAttempts === request.expectedAttempts) {
         try {
-          await dependencies.queue.enqueue(access.organizationId, document.id, request.expectedAttempts);
+          await dependencies.queue.enqueue(access.organizationId, document.id, document.processingGeneration, access.userId, access.principalKind);
         } catch (error) {
-          await dependencies.repository.markEnqueueFailure(access.organizationId, document.id, "failed to enqueue document retry", dependencies.clock());
+          await dependencies.repository.markEnqueueFailure(access.organizationId, document.id, "failed to enqueue document retry", dependencies.clock(), document.processingGeneration);
           throw error;
         }
       }
@@ -78,7 +78,14 @@ export function buildRetryDocument(dependencies: RetryDocumentDependencies) {
       throw new DocumentNotRetryableError();
     }
 
-    await dependencies.queue.enqueue(access.organizationId, document.id);
-    return document;
+    const prepared = await dependencies.repository.prepareRetry(document, document.processingAttempts, dependencies.clock());
+    if (!prepared) throw new DocumentNotRetryableError();
+    try {
+      await dependencies.queue.enqueue(access.organizationId, prepared.id, prepared.processingGeneration, access.userId, access.principalKind);
+    } catch (error) {
+      await dependencies.repository.markEnqueueFailure(access.organizationId, prepared.id, "failed to enqueue document retry", dependencies.clock(), prepared.processingGeneration);
+      throw error;
+    }
+    return prepared;
   };
 }

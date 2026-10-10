@@ -71,7 +71,7 @@ export function buildRecommendKnowledgeOntologyTerms(
     authorizeOntologyAdministrator(access);
     const [settings, usage] = await Promise.all([
       dependencies.ontologyReader.findByOrganization(access.organizationId),
-      dependencies.usageRepository.collect(access.organizationId)
+      dependencies.usageRepository.collect(access)
     ]);
     const ontology = settings?.ontology ?? emptyKnowledgeOntology;
     return {
@@ -95,7 +95,7 @@ export function buildSuggestKnowledgeOntology(
     }
     const [settings, usage] = await Promise.all([
       dependencies.ontologyReader.findByOrganization(access.organizationId),
-      dependencies.usageRepository.collect(access.organizationId)
+      dependencies.usageRepository.collect(access)
     ]);
     const ontology = settings?.ontology ?? emptyKnowledgeOntology;
     const suggested = await dependencies.suggestionService.suggest({

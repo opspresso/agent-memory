@@ -1,6 +1,7 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 
-export async function GET(request: Request) {
+export const GET = withRouteErrorBoundary("GET /api/me", async function GET(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
@@ -12,4 +13,4 @@ export async function GET(request: Request) {
     teams: authorization.access.teams,
     user: authorization.user
   });
-}
+});

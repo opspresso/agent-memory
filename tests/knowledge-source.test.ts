@@ -66,6 +66,18 @@ function chunkRecord() {
 }
 
 describe("knowledge source authorization", () => {
+  it.each([{}, { memoryId: "" }, { chunkId: " " }, { memoryId: "memory-1", chunkId: "chunk-1" }])(
+    "rejects a missing or ambiguous reference before loading a source: %j", async (source) => {
+      const findById = vi.fn().mockResolvedValue(memory());
+      const findChunkById = vi.fn().mockResolvedValue(chunkRecord());
+      const authorize = buildAuthorizeKnowledgeSource({ clock: () => now,
+        memoryRepository: { findById }, documentRepository: { findChunkById } });
+      await expect(authorize(access, source, memory().scope)).rejects.toBeInstanceOf(KnowledgeSourceNotFoundError);
+      expect(findById).not.toHaveBeenCalled();
+      expect(findChunkById).not.toHaveBeenCalled();
+    }
+  );
+
   it.each([
     { status: "archived" as const },
     { validFrom: new Date(now.getTime() + 1) },

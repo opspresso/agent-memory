@@ -198,8 +198,9 @@ describe("organization route authorization", () => {
       ]);
       const repository: DocumentRepository = {
         save: vi.fn(), findById: vi.fn(), findChunkById: vi.fn(),
-        listChunksByDocument: vi.fn(), claimForProcessing: vi.fn(),
-        completeProcessing: vi.fn(), failProcessing: vi.fn(),
+        listChunksByDocument: vi.fn(), prepareRetry: vi.fn(),
+        claimForProcessing: vi.fn(),
+        completeProcessing: vi.fn(), failProcessing: vi.fn(), deferProcessing: vi.fn(),
         markEnqueueFailure: vi.fn(), archive: vi.fn(), search
       };
       const server = createAgentMemoryMcpServer(authorization.access, {

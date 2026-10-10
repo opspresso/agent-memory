@@ -14,6 +14,7 @@ import {
   createMemoryRecord
 } from "@/lib/memory-service";
 import { authorizeOrganizationMcpRoute } from "@/lib/organization-authorization";
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 
 
 export const runtime = "nodejs";
@@ -49,8 +50,6 @@ async function handleMcpRequest(request: Request) {
   return transport.handleRequest(request);
 }
 
-export {
-  handleMcpRequest as DELETE,
-  handleMcpRequest as GET,
-  handleMcpRequest as POST
-};
+export const DELETE = withRouteErrorBoundary("DELETE /api/mcp", handleMcpRequest);
+export const GET = withRouteErrorBoundary("GET /api/mcp", handleMcpRequest);
+export const POST = withRouteErrorBoundary("POST /api/mcp", handleMcpRequest);

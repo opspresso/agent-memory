@@ -12,17 +12,17 @@ describe("knowledge enrichment quality", () => {
     const listUnextractedChunks = vi.fn();
     const queue = buildQueueKnowledgeCuration({ listReviewSources: vi.fn().mockResolvedValue([make("관우"), make("조조")]), listUnextractedChunks }, { enqueueKnowledgeEnrichment });
     expect(await queue({ organizationId: "org", userId: "owner", role: "owner", teams: [] }, "관우")).toEqual({ queued: 1 });
-    expect(enqueueKnowledgeEnrichment).toHaveBeenCalledExactlyOnceWith("org", "관우", "owner", 20);
+    expect(enqueueKnowledgeEnrichment).toHaveBeenCalledExactlyOnceWith("org", "관우", { userId: "owner", action: "manage" }, 20);
     expect(listUnextractedChunks).not.toHaveBeenCalled();
   });
   it("requeues chunks whose extraction failed before a candidate was saved", async () => {
-    const access = { organizationId: "org", userId: "owner", role: "owner" as const, teams: [] };
+    const access = { organizationId: "org", userId: "owner", role: "owner" as const, teams: [], principalKind: "organization-agent" as const };
     const listUnextractedChunks = vi.fn().mockResolvedValue(["failed-chunk", "active-chunk"]);
     const enqueueKnowledgeEnrichment = vi.fn().mockResolvedValueOnce("queued").mockResolvedValueOnce("already_queued");
     const queue = buildQueueKnowledgeCuration({ listReviewSources: vi.fn().mockResolvedValue([]), listUnextractedChunks }, { enqueueKnowledgeEnrichment });
     expect(await queue(access)).toEqual({ queued: 1 });
     expect(listUnextractedChunks).toHaveBeenCalledExactlyOnceWith(access);
-    expect(enqueueKnowledgeEnrichment.mock.calls).toEqual([["org", "failed-chunk", "owner"], ["org", "active-chunk", "owner"]]);
+    expect(enqueueKnowledgeEnrichment.mock.calls).toEqual([["org", "failed-chunk", { userId: "owner", action: "manage", principalKind: "organization-agent" }], ["org", "active-chunk", { userId: "owner", action: "manage", principalKind: "organization-agent" }]]);
   });
   it("uses bounded concurrency without exceeding the shared AI ceiling", () => {
     expect(readKnowledgeEnrichmentConcurrency({})).toBe(4);

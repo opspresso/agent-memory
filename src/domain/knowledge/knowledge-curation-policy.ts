@@ -7,6 +7,7 @@ import type { OrganizationKnowledgeOntology } from "./knowledge-ontology-reader"
 import { defaultKnowledgeOntology, evaluateKnowledgeOntology } from "./knowledge-ontology";
 import { knowledgeEntityEligibilityIssue } from "./knowledge-entity-eligibility";
 import { isVagueKnowledgePredicate, normalizeKnowledgeKind } from "./knowledge-identity";
+import { uniqueKnowledgeSources, type KnowledgeSource } from "./knowledge-source";
 
 const incidentalMovement = new Set(["comes_from", "went_to", "visits", "visited", "responds_to"]);
 // Named, source-verified facts in these relations are useful by contract.
@@ -21,6 +22,7 @@ const normalize = (text: string) => text.normalize("NFKC").replace(/\s+/g, " ").
 export function assessKnowledgeCandidate(input: {
   candidate: KnowledgeCandidate; content: string; model: string; items: readonly KnowledgeItemVerification[];
   aliases?: readonly KnowledgeAliasVerification[];
+  contextNodes?: readonly { readonly id: string; readonly sources: readonly KnowledgeSource[] }[];
   now: Date; ontology: OrganizationKnowledgeOntology | null;
 }): KnowledgeCandidateAssessment {
   const graph = input.candidate.graph;
@@ -123,5 +125,11 @@ export function assessKnowledgeCandidate(input: {
       }
     }
   });
-  return { model: input.model, policyVersion: currentKnowledgeAssessmentPolicyVersion, assessedAt: input.now.toISOString(), items: [...items.values()], ...(aliases.length ? { aliases } : {}) };
+  if (input.contextNodes?.some((node) => !node.id.trim() || !node.sources.length)) {
+    throw new InvalidKnowledgeCandidateError("verification context must identify its node and sources");
+  }
+  return { model: input.model, policyVersion: currentKnowledgeAssessmentPolicyVersion, assessedAt: input.now.toISOString(),
+    sources: uniqueKnowledgeSources([{ chunkId: input.candidate.chunkId }, ...(input.contextNodes ?? []).flatMap((node) => node.sources)]),
+    contextNodeIds: Object.freeze([...new Set(input.contextNodes?.map((node) => node.id) ?? [])]),
+    items: [...items.values()], ...(aliases.length ? { aliases } : {}) };
 }

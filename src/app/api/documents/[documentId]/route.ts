@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { documentErrorResponse, publicDocument, documentScopeEtag, parseDocumentScopeEtag } from "@/lib/document-http";
 import { documentIdSchema, changeDocumentScopeSchema } from "@/lib/document-schemas";
@@ -13,7 +14,7 @@ interface RouteContext {
   readonly params: Promise<{ documentId: string }>;
 }
 
-export async function GET(request: Request, context: RouteContext) {
+export const GET = withRouteErrorBoundary("GET /api/documents/[documentId]", async function GET(request: Request, context: RouteContext) {
   const { documentId } = await context.params;
   const parsedDocumentId = documentIdSchema.safeParse(documentId);
   if (!parsedDocumentId.success) {
@@ -35,9 +36,9 @@ export async function GET(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});
 
-export async function PATCH(request: Request, context: RouteContext) {
+export const PATCH = withRouteErrorBoundary("PATCH /api/documents/[documentId]", async function PATCH(request: Request, context: RouteContext) {
   const { documentId } = await context.params;
   const parsedId = documentIdSchema.safeParse(documentId);
   if (!parsedId.success) return Response.json({ error: "Invalid resource ID" }, { status: 400 });
@@ -62,9 +63,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (response) return response;
     throw error;
   }
-}
+});
 
-export async function DELETE(request: Request, context: RouteContext) {
+export const DELETE = withRouteErrorBoundary("DELETE /api/documents/[documentId]", async function DELETE(request: Request, context: RouteContext) {
   const { documentId } = await context.params;
   const parsedDocumentId = documentIdSchema.safeParse(documentId);
   if (!parsedDocumentId.success) {
@@ -87,4 +88,4 @@ export async function DELETE(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});

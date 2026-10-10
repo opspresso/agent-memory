@@ -35,8 +35,16 @@ const graphSchema = z.object({ entities:z.array(z.object({ key:z.string(),kind:z
 const rowSchema = z.object({ id:z.string(),status:z.enum(["ok","error"]),error:z.string().optional(),errorLocation:z.string().optional(),milliseconds:z.number(),graph:graphSchema });
 type ExtractionRow = z.infer<typeof rowSchema>;
 
+function parseEvaluationJson<T>(text: string, schema: z.ZodType<T>, message: string): T {
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { throw new Error(message); }
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw new Error(message);
+  return parsed.data;
+}
+
 const corpusText = await readFile(values.corpus ? resolve(values.corpus) : new URL("./corpus.json",import.meta.url),"utf8");
-const corpus = corpusSchema.parse(JSON.parse(corpusText));
+const corpus = parseEvaluationJson(corpusText, corpusSchema, "invalid extraction corpus");
 const limit = values.limit === undefined ? corpus.cases.length : Number(values.limit);
 if (!Number.isSafeInteger(limit) || limit < 1 || limit > corpus.cases.length) throw new Error("limit must select a positive number of corpus cases");
 const cases = corpus.cases.slice(0,limit);
@@ -68,23 +76,38 @@ async function pythonRows(): Promise<ExtractionRow[]> {
   // Never relay a dependency's stderr: validation errors can contain source text.
   child.stderr.resume();
   child.stdout.setEncoding("utf8");
-  const done = new Promise<void>((accept,reject) => {
-    child.once("error",reject);
-    child.once("close",(code) => code === 0 ? accept() : reject(new Error(`Python comparison exited with status ${code}`)));
+  let failedStart = false, failedInput = false, outputComplete = false;
+  // Resolve on close even after spawn/pipe failure so cleanup cannot reject unobserved.
+  const done = new Promise<number | null>((accept) => {
+    child.once("error", () => { failedStart = true; });
+    child.once("close", accept);
   });
-  child.stdin.end(JSON.stringify({ ...corpus,cases,language }));
-  for await (const chunk of child.stdout) {
-    buffer += String(chunk);
-    let end: number;
-    while ((end = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0,end); buffer = buffer.slice(end+1);
-      if (!line.trim()) continue;
-      const row = rowSchema.parse(JSON.parse(line));
-      rows.push(row);
-      process.stdout.write(`llamaindex ${row.id}: ${row.status}\n`);
+  child.stdin.on("error", () => { failedInput = true; child.kill("SIGKILL"); });
+  try {
+    child.stdin.end(JSON.stringify({ ...corpus,cases,language }));
+    for await (const chunk of child.stdout) {
+      buffer += String(chunk);
+      let end: number;
+      while ((end = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0,end); buffer = buffer.slice(end+1);
+        if (!line.trim()) continue;
+        const row = parseEvaluationJson(line, rowSchema, "invalid Python comparison row");
+        if (row.id !== cases[rows.length]?.id) throw new Error("unexpected Python comparison row");
+        rows.push(row);
+        process.stdout.write(`llamaindex ${row.id}: ${row.status}\n`);
+      }
     }
+    outputComplete = true;
+  } catch {
+    throw new Error("Python comparison output is invalid");
+  } finally {
+    if (!outputComplete) child.kill("SIGKILL");
+    await done;
   }
-  await done;
+  const code = await done;
+  if (failedStart) throw new Error("Python comparison could not start");
+  if (failedInput) throw new Error("Python comparison input closed before delivery");
+  if (code !== 0) throw new Error(`Python comparison exited with status ${code}`);
   if (buffer.trim() || rows.length !== cases.length || cases.some((item,index) => item.id !== rows[index]?.id)) {
     throw new Error("Python comparison did not cover the corpus exactly once");
   }
@@ -119,11 +142,12 @@ const summaries = [];
 for (const variant of variants) {
   let rows: ExtractionRow[];
   if (values.reuse) {
-    const original = JSON.parse(await readFile(resolve(values.reuse,"summary.json"),"utf8")) as { corpusSha256:string;model:string;language?:string };
+    const original = parseEvaluationJson(await readFile(resolve(values.reuse,"summary.json"),"utf8"),
+      z.object({ corpusSha256:z.string(),model:z.string(),language:z.string().optional() }), "invalid reused extraction summary");
     if (original.model !== model || original.language !== language || original.corpusSha256 !== createHash("sha256").update(corpusText).digest("hex")) {
       throw new Error("reused extraction must match the model, language and corpus");
     }
-    rows = z.array(rowSchema).parse(JSON.parse(await readFile(resolve(values.reuse,`${variant}.json`),"utf8"))).slice(0,limit);
+    rows = parseEvaluationJson(await readFile(resolve(values.reuse,`${variant}.json`),"utf8"), z.array(rowSchema), "invalid reused extraction rows").slice(0,limit);
     if (rows.length !== cases.length || rows.some((row,index) => row.id !== cases[index]!.id)) throw new Error("reused extraction must cover selected cases in order");
   } else {
     rows = variant === "llamaindex" ? await pythonRows() : await currentRows(variant);

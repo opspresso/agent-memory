@@ -1,3 +1,4 @@
+import { createOrganizationAccessRepository } from "@/infrastructure/database/repositories/organization-access-repository";
 import { createHash, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
@@ -42,11 +43,11 @@ describe("supported document ingestion and retrieval", () => {
     await database.db.insert(organizationMembers).values([userId, otherUserId].map((id) => ({ organizationId, userId: id, role: "member" as const, status: "active" as const })));
     repository = createDocumentRepository(database.db);
     queue = createPgBossDocumentIngestionQueue(container.getConnectionUri(), (error) => errors.push(error));
-    const processDocument = buildProcessDocument({ repository, objectStorage, clock: () => new Date(), generateId: randomUUID,
+    const processDocument = buildProcessDocument({ accessRepository: createOrganizationAccessRepository(database.db), repository, objectStorage, clock: () => new Date(), generateId: randomUUID,
       textExtractor: createMarkItDownTextExtractor({ pythonPath: process.env.DOCUMENT_PARSER_PYTHON ?? resolve(".venv-document-parser/bin/python") }) });
     const boss = await queue.start();
     await boss.work<DocumentIngestionJob>(documentIngestionQueueName, { batchSize: 1, pollingIntervalSeconds: 0.5 }, async (jobs) => {
-      for (const job of jobs) await processDocument(job.data.organizationId, job.data.documentId, job.data.expectedAttempts);
+      for (const job of jobs) await processDocument(job.data.organizationId, job.data.documentId, job.data.generation, job.data.requestedBy, job.data.principalKind);
     });
   });
   afterAll(async () => {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { SafeOperationalError } from "@/infrastructure/observability/safe-operational-error";
-import { knowledgeRequestTimeoutMilliseconds } from "./knowledge-request-timeout";
+import { createKnowledgeStructuredClient, type KnowledgeStructuredClientConfiguration } from "./knowledge-structured-client";
 
 import type {
   KnowledgeExtractionOntologyHint,
@@ -11,16 +11,10 @@ import type {
 import { defaultKnowledgeOntology } from "@/domain/knowledge/knowledge-ontology";
 import { groundKnowledgeGraph } from "@/domain/knowledge/knowledge-extraction-quality";
 import { isKnowledgeEntityKind } from "@/domain/knowledge/knowledge-entity-eligibility";
-import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
 import { knowledgeSourceInstructions } from "./knowledge-source-instructions";
 
-export interface KnowledgeExtractionServiceConfiguration {
-  readonly apiKey?: string;
-  readonly baseUrl: string;
-  readonly model: string;
+export interface KnowledgeExtractionServiceConfiguration extends KnowledgeStructuredClientConfiguration {
   readonly language?: KnowledgeExtractionLanguage;
-  readonly requestLimiter?: AiRequestLimiter;
-  readonly request?: typeof fetch;
 }
 
 export const proposedGraphSchema = z.object({
@@ -53,16 +47,6 @@ export const proposedGraphSchema = z.object({
       })
     )
     .max(200)
-});
-
-const completionResponseSchema = z.object({
-  choices: z
-    .array(
-      z.object({
-        message: z.object({ content: z.string() })
-      })
-    )
-    .min(1)
 });
 
 const defaultKindInstruction = `- Prefer these lowercase kinds: ${defaultKnowledgeOntology.nodeKinds.join(", ")}.`;
@@ -241,113 +225,23 @@ export function buildResponseJsonSchema(kindEnum?: readonly string[], predicateE
   } as const;
 }
 
-function requiredSetting(value: string, name: string): string {
-  const setting = value.trim();
-  if (setting.length === 0) {
-    throw new Error(`${name} must not be empty`);
-  }
-  return setting;
-}
-
 export function createKnowledgeExtractionService(
   configuration: KnowledgeExtractionServiceConfiguration
 ): KnowledgeExtractionService {
-  const baseUrl = requiredSetting(
-    configuration.baseUrl,
-    "knowledge extraction base URL"
-  ).replace(/\/+$/, "");
-  const endpoint = new URL(`${baseUrl}/chat/completions`).toString();
-  const model = requiredSetting(
-    configuration.model,
-    "knowledge extraction model"
-  );
-  const apiKey = configuration.apiKey?.trim();
-  const request = configuration.request ?? fetch;
-
-  async function extractGraph(
-    input: Parameters<KnowledgeExtractionService["extract"]>[0]
-  ) {
-    const response = await request(endpoint, {
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: extractionInstructions(input.ontology, configuration.language ?? "source")
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              documentTitle: input.documentTitle,
-              documentType: input.mimeType,
-              content: input.content
-            })
-          }
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: buildResponseJsonSchema(
-            input.ontology?.mode === "strict"
-              ? input.ontology.nodeKinds.filter(isKnowledgeEntityKind)
-              : undefined,
-            input.ontology?.mode === "strict"
-              ? input.ontology.edgePredicates
-              : undefined
-          )
-        },
-        temperature: 0
-      }),
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
-      },
-      method: "POST",
-      signal: AbortSignal.timeout(knowledgeRequestTimeoutMilliseconds)
-    });
-    if (!response.ok) {
-      throw new SafeOperationalError(
-        `knowledge extraction request failed with status ${response.status}`,
-        { code: "KNOWLEDGE_EXTRACTION_HTTP_ERROR" }
-      );
-    }
-    const completion = completionResponseSchema.safeParse(
-      await response.json()
-    );
-    if (!completion.success) {
-      throw new SafeOperationalError(
-        "knowledge extraction response is invalid",
-        { code: "KNOWLEDGE_EXTRACTION_RESPONSE_INVALID" }
-      );
-    }
-    let content: unknown;
-    try {
-      content = JSON.parse(completion.data.choices[0]!.message.content);
-    } catch {
-      throw new SafeOperationalError(
-        "knowledge extraction response content is not JSON",
-        { code: "KNOWLEDGE_EXTRACTION_RESPONSE_NOT_JSON" }
-      );
-    }
-    const graph = proposedGraphSchema.safeParse(content);
-    if (!graph.success) {
-      throw new SafeOperationalError("knowledge extraction graph is invalid", {
-        code: "KNOWLEDGE_EXTRACTION_GRAPH_INVALID"
-      });
-    }
-    return {
-      model,
-      graph: groundKnowledgeGraph(input.content, normalizeLinkedEntityNames(input.content, graph.data))
-    };
-  }
-
+  const client = createKnowledgeStructuredClient(configuration);
   return {
-    extract(input) {
-      return configuration.requestLimiter
-        ? configuration.requestLimiter.run(
-            () => extractGraph(input),
-            input.quotaKey
-          )
-        : extractGraph(input);
+    async extract(input) {
+      const content = await client.generate(
+        extractionInstructions(input.ontology, configuration.language ?? "source"),
+        { documentTitle: input.documentTitle, documentType: input.mimeType, content: input.content },
+        buildResponseJsonSchema(
+          input.ontology?.mode === "strict" ? input.ontology.nodeKinds.filter(isKnowledgeEntityKind) : undefined,
+          input.ontology?.mode === "strict" ? input.ontology.edgePredicates : undefined
+        ), input.quotaKey
+      );
+      const graph = proposedGraphSchema.safeParse(content);
+      if (!graph.success) throw new SafeOperationalError("knowledge extraction graph is invalid", { code: "KNOWLEDGE_EXTRACTION_GRAPH_INVALID" });
+      return { model: configuration.model.trim(), graph: groundKnowledgeGraph(input.content, normalizeLinkedEntityNames(input.content, graph.data)) };
     }
   };
 }

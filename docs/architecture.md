@@ -166,7 +166,9 @@ multipart upload → S3-compatible storage → document row(pending)
 
 ### 원본 저장과 처리 claim
 
-원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v2` queue는 document ID와 선택형 처리 세대(`expectedAttempts`)별 exclusive job을 보장해 같은 세대의 queued·active·retry job이 있을 때만 중복 enqueue를 병합한다.
+원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v3` queue는 document ID와 내부 `processingGeneration` UUID별 exclusive job을 보장한다. 같은 요청의 오류 재시도와 만료 lease 회수는 세대 ID를 유지하고, claim을 얻을 때마다 `processingAttempts`를 증가시킨다. 사용자의 새 retry 요청은 현재 실패 상태·관측한 처리 횟수를 검사하고 새 세대를 준비한다. 이전 세대의 claim과 늦은 enqueue 실패는 새 세대를 변경하지 못한다.
+
+Ingestion 메시지는 실제 요청자를 보존한다. 원본 읽기 전, 각 embedding batch 전, 최종 저장 전에 현재 멤버십·문서 write 권한과 처리 세대·claim을 확인한다. 다른 사용자가 retry하면 그 요청자의 quota를 사용한다.
 
 ### 추출·embedding과 실패
 
@@ -175,6 +177,12 @@ multipart upload → S3-compatible storage → document row(pending)
 텍스트·Markdown·CSV·JSON·XML은 Node.js에서 UTF-8로 읽는다. PDF·DOCX·PPTX·XLSX·XLS·HTML·EPUB는 infrastructure adapter가 별도 Python process의 [MarkItDown](https://github.com/microsoft/markitdown) converter로 Markdown으로 변환한다. 파일 bytes만 stdin으로 전달하며 URL 수집, plugin 탐색, OCR, LLM 호출은 사용하지 않는다. 허용된 converter만 직접 호출하며 Python 네트워크 접근을 차단한다. MarkItDown의 간접 의존성인 ONNX Runtime도 import 전에 [telemetry를 비활성화](https://github.com/microsoft/onnxruntime/blob/main/docs/Privacy.md#disabling-telemetry)해 네트워크 전송과 식별자 파일 생성을 막는다. Application credential은 child process에 전달하지 않는다. 변환은 60초, 출력은 8 MiB로 제한하고 ZIP 기반 형식은 압축 해제 전 64 MiB·4,096개 항목 한도를 검사한다. Linux에서는 process 주소 공간을 2 GiB로 제한한다.
 
 문서당 최대 512개 chunk를 허용한다. 분할 중 한도를 넘는 즉시 실패하며, JSON 경로·값 전개도 512 × 2,000자 예산을 넘기기 전에 중단한다. Markdown의 줄·제목·표 행, CSV record와 JSON 자식 항목은 순서대로 읽어 전체 중간 목록을 만들지 않는다. Embedding은 최대 64개 chunk씩 provider에 전달한다. 최대 8개 batch를 순서대로 요청하며 각 embedding HTTP 요청의 timeout은 60초다. 이 값은 S3 조회·추출·DB 저장을 포함한 전체 처리 시간의 보장이 아니다. Lease가 재발급되면 이전 worker의 저장은 거부된다. 실패한 문서는 안전한 공개 오류와 `failed` 상태를 남겨 retry 요청으로 다시 queue에 넣는다. 최초 queue 등록이 실패해도 document ID를 반환해 복구 경로를 유지한다. 검색은 `ready` 상태이고 호출자가 읽을 수 있는 chunk만 반환한다. Document 삭제는 provenance를 보존하는 archive이며 원본과 chunk를 유지하되 검색, retry, AI 후보 조회·승인에서 제외한다.
+
+변환·분할 결과는 처리 세대별 `document_processing_checkpoints`에 저장한다. 완료된 embedding batch는 `document_embedding_checkpoints`에 저장하며 세대·원문 입력·provider URL·모델·차원이 모두 일치할 때만 재사용한다. 같은 세대의 오류 재시도·quota 대기·worker 재시작은 checkpoint에 저장된 변환과 embedding을 재사용한다. Provider 응답 수신 후 checkpoint 저장 전에 process가 종료되면 해당 batch는 다시 요청할 수 있다. 새 사용자 retry는 새 세대를 시작한다. 완료·새 세대 준비·archive transaction은 해당 문서의 임시 checkpoint만 정리한다. Checkpoint 쓰기는 현재 lease를 검사하므로 늦은 worker가 정리된 값을 다시 저장할 수 없다.
+
+서버 AI quota 초과 시 문서를 `pending`으로 돌리고 lease를 해제한 뒤 후속 job을 예약한다. 부분 chunk는 검색에 공개하지 않으며 최종 chunk 저장과 `ready` 전환은 원자적으로 수행한다. Provider 오류·timeout은 `failed`와 기존 queue 오류 재시도로 처리하며 완료한 checkpoint는 같은 세대에서 재사용한다.
+
+일반 본문은 문자 예산 후반부에서 문단·줄·단어 경계 순으로 나눈다. 반복 문맥의 시작이 단어 중간이면 다음 공백까지 이동한다. 공백 없는 긴 문자열은 문자 한도로 나누되 Unicode surrogate pair를 보존한다. 분할은 원문 문자 범위를 유지하며 비공백 본문을 생략하지 않는다.
 
 Markdown chunk는 2,000자 문맥 예산에 들어가는 상위 제목 경로를 원문 그대로 함께 보존한다. 제목 경로 자체가 예산을 초과하면 일반 텍스트 분할로 처리한다. 같은 단계의 제목이나 새 최상위 제목을 만나면 이전 경로를 제거하며 fenced code 안의 제목은 문서 구조로 해석하지 않는다. 본문 없는 상위 제목은 자식 chunk의 문맥으로 사용한다. 같은 부모와 단계 아래에 연속된 본문·자식 없는 제목은 예산 안에서 함께 묶고 공통 상위 제목만 반복한다. 본문이 있는 섹션과 새 최상위 제목의 경계는 유지한다. `metadata.start/end`는 줄바꿈과 앞뒤 공백을 정규화한 추출 본문의 문자 범위이고, 반복한 제목의 원본 범위는 `metadata.contextSpans`에 기록한다. 이력서의 주인·경력·기술·프로젝트 구분도 같은 chunk의 근거로 조회할 수 있다. 변환 파일의 범위는 원본 bytes나 PDF page 좌표가 아니다. JSON의 범위는 경로·값으로 펼친 본문을 기준으로 한다.
 
@@ -196,20 +204,27 @@ Graph 쓰기는 같은 조직별 Knowledge scope 잠금을 사용한다. 공개 
 
 #### 작업 등록과 실패 경계
 
-`buildIngestDocument`는 문서 처리를 마친 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. 추출 모델이 설정돼 있으면 각 chunk를 `document-knowledge-enrichment-v2` queue의 별도 job으로 보낸다. Worker는 job 해석, operation 호출, 재시도와 로그를 담당한다.
+`buildIngestDocument`는 문서 처리를 마친 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. 추출 모델이 설정돼 있으면 각 chunk를 `document-knowledge-enrichment-v3` queue의 별도 job으로 보낸다. Worker는 job 해석, operation 호출, 재시도와 로그를 담당한다.
 
+- 후속 job은 요청자와 필요한 권한을 명시한다. 문서 수집·재처리에서 이어지는 추출은 `write`, 별도 Knowledge 재처리는 `manage`를 요구한다. 자동 검토·Graph 반영은 항상 요청자의 현재 `manage` 권한을 요구한다.
 - Chunk ID별 exclusive job을 사용하며 각 job은 독립적으로 재시도한다.
 - 한 chunk의 실패는 문서의 `ready` 상태나 다른 chunk의 검색·후보 생성을 되돌리지 않는다.
 - 후속 queue 등록에 실패하면 ingestion 재실행에서 등록을 다시 시도한다.
 - 후보는 출처 chunk·현재 문서 scope·모델을 보존한다. 청크별 후보는 하나이며 재시도는 저장된 추출을 재사용한다.
 
+서버의 AI quota 초과는 모델 실패와 구분한다. Worker는 현재 job의 ID·시작 시각·재시도 횟수를 잠금 아래 확인한 뒤, 현재 job 완료와 `Retry-After` 이후의 후속 job 생성을 같은 transaction으로 저장한다. 예약에 실패하면 완료도 롤백한다. 후속 job은 남은 오류 재시도 횟수와 우선순위·요청자를 유지한다. Quota 대기는 오류 재시도를 소모하지 않으며, 만료된 claim으로 새 작업을 변경하지 않는다. 일반 provider 오류·timeout은 기존 재시도 정책을 따른다.
+
 #### 개체 식별과 관계 추출
 
 Runtime은 두 단계의 structured-output 요청을 사용한다. 단일 호출 추출기는 평가 비교용이다. 각 요청은 AI limiter를 개별적으로 통과한다.
 
+추출·검증·온톨로지 추천은 같은 structured client에서 HTTP 요청, quota, JSON 응답 해석을 처리한다. 기능별 timeout과 오류 코드는 유지한다. AI adapter는 본문 byte 상한을 파싱 전에 검사하고 실패 응답을 취소한다. 기능별 상한은 [AI provider 연결](operations.md#ai-provider-연결)을 따른다.
+
 1. 원문에서 이름과 인용이 있는 개체를 식별한다. 이름·종류를 정규화하고 부적격 개체를 제거한다.
 2. 살아남은 개체 key만 관계 끝점의 enum으로 전달해 관계를 추출한다. 개체가 0–1개면 이 요청을 생략한다.
 3. 인용과 연결 구조를 검사해 후보를 만든다. 관계가 없는 결과도 정상으로 보존한다. 관계 요청이 실패하면 부분 Graph를 승인 후보로 반환하지 않는다.
+
+완료된 개체 단계는 내부 `knowledge_extraction_checkpoints`에 저장한다. 조직·chunk와 원문·문서 형식·제목·모델·endpoint·언어·온톨로지 지침·응답 schema의 fingerprint로 결과를 구분한다. API key는 fingerprint 입력과 checkpoint에 넣지 않는다. 동일 입력의 동시 저장은 첫 결과를 재사용하며, 조직이 다른 chunk를 연결할 수 없도록 복합 FK를 적용한다. 재개 시 권한과 ready 상태를 다시 확인한 뒤 저장된 개체로 관계 추출을 계속한다. 설정이나 원문이 달라지면 새로운 개체 단계를 수행한다. Checkpoint는 후보·Graph·추출 완료 수로 공개하지 않으며 이전 fingerprint의 결과도 내부 기록으로 보존한다.
 
 추출과 검증은 같은 종류·관계 정의와 문서 구조 해석 규칙을 사용한다. 종류를 설명보다 먼저 판단하며, 새 entity key는 서버가 부여한다. 제목은 문맥으로 다루고 항상 행위자로 해석하지 않는다. 이력서의 경력·기술·프로젝트와 짧은 목록도 이름이 확인된 주체와 원문의 구조를 기준으로 평가한다.
 
@@ -227,9 +242,11 @@ Runtime은 두 단계의 structured-output 요청을 사용한다. 단일 호출
 
 #### 독립 검증과 자동 판단
 
-검증 adapter는 원문과 현재 읽을 수 있는 기존 지식을 대조한다. 기존 지식은 출처의 대표 이름·별칭으로 찾는다. 추출과 다른 검증 모델·endpoint를 설정할 수 있다. 별도 검증 endpoint는 추출용 API key를 상속하지 않는다.
+검증 adapter는 원문과 같은 scope의 기존 지식을 대조한다. 기존 지식의 이름·설명·출처는 하나의 조회 snapshot에서 읽으며, 각 출처가 후보 scope 전체에 공개된 정보만 사용한다. 이름 기반 연결과 scope 변경의 충돌 판정에도 같은 출처 범위 검사를 적용한다. 추출과 다른 검증 모델·endpoint를 설정할 수 있다. 별도 검증 endpoint는 추출용 API key를 상속하지 않는다.
 
-`evidence-v5`는 다음 기준으로 자동 승인·수동 검토·자동 제외를 결정한다. 모델이 제시한 숫자 점수는 승인 임계값으로 쓰지 않는다.
+`evidence-v7`는 다음 기준으로 자동 승인·수동 검토·자동 제외를 결정한다. 모델이 제시한 숫자 점수는 승인 임계값으로 쓰지 않는다.
+
+법률·규정의 추출과 독립 검증은 직위 자체의 권한·임명·의무를 설명하는 `role`과 사람을 대신 부르는 호칭을 구분한다. 본문에 명시된 법률 개념도 추출 대상이다. 조문 제목은 독립 개념인지 확인하고, 법률의 주제와 문서의 구성 관계를 구분한다. 조건·예외·허용·부정·시행 시점을 설명과 근거에 보존하도록 지시하며, 한정된 권한을 무조건적인 행위로 표현하는 관계는 제외하도록 한다. 이는 모델 지침이며 의미 정확성을 결정적으로 보장하지 않는다.
 
 | 기준 | 처리 규칙 |
 | --- | --- |
@@ -243,16 +260,26 @@ Runtime은 두 단계의 structured-output 요청을 사용한다. 단일 호출
 
 #### 승인 저장과 재검증
 
-자동 검토에도 활성 멤버십과 출처 scope의 `manage` 권한이 필요하다. 긴 AI 호출 뒤에는 권한 주체를 다시 확인한다.
+자동 검토에도 활성 멤버십과 출처 scope의 `manage` 권한이 필요하다. 긴 AI 호출 뒤에는 검증 결과 저장 전에도 원문 상태와 요청자의 현재 관리 권한을 다시 확인한다.
+
+새 후보 추출은 모델 호출 전에 현재 권한을 확인하고 해당 principal의 AI quota를 사용한다. 문서 수집·문서 retry에서 이어지는 추출은 요청자의 `write`, 별도 Knowledge 재처리는 요청자의 `manage` 권한을 요구한다. 따라서 팀 멤버가 업로드한 문서도 후보를 만들지만, Graph 승인은 팀 manager나 조직 관리자에게 남는다. 추출 후에는 문서 상태·scope와 멤버십을 다시 조회한다. 접근이 철회되거나 출처가 보관되면 후보를 저장하지 않는다. 모델 호출을 시작한 뒤의 권한 철회는 이미 전송된 내용을 회수하지 못한다.
+
+큐는 요청자의 ID와 `principalKind`를 함께 전달한다. `organization-agent`는 worker가 현재 멤버십을 조회한 뒤에도 조직 scope로 제한하며, 토큰 발급자의 개인·팀 권한을 상속하지 않는다. 수집 재시도·quota 연기·검증 재시도와 최종 승인·거절 transaction에서도 이 제한을 유지한다. 명시적 사용자 위임으로 인증된 요청은 해당 사용자의 현재 권한을 적용한다.
 
 1. Assessment를 먼저 저장한다.
 2. 항목별 결정을 멱등하게 적용한다. 재시도가 같은 검증 요청이나 Graph를 반복 생성하지 않도록 한다. 자동 처리에는 `method: automatic`을 기록한다.
 3. 승인 transaction에서 candidate를 잠그고 node·edge, candidate와 resource의 연결, 검토자 기록을 함께 저장한다.
 4. 부분 검토는 원래 Graph를 보존하고 `itemReviews`에 결정을 누적한다. 미검토 항목은 `pending`으로 유지한다.
 
+미완료 후보 승인은 embedding 요청 전에 출처 문서의 `ready` 상태와 현재 scope를 확인한다. 승인 transaction에서도 출처·권한을 다시 검사한다. 이미 완료된 승인의 재요청은 embedding을 만들지 않고 현재 읽을 수 있는 기존 결과를 반환한다.
+
 빈 추출은 이력으로 보존하되 기본 검토 큐에서 제외한다. 통합 큐는 권한 검사를 통과한 수동 검토 대상의 `pending` 항목을 개체·관계별로 묶어 페이지를 만든다. 현재 strict 사전이 자동 승인 묶음을 거부하면 수동 검토에 표시한다. 원래 assessment는 바꾸지 않으며 사전이 허용하는 개별 항목은 선택 승인할 수 있다.
 
-미완료 후보의 검토 정책 버전이 바뀌면 새 검증을 실행하고 이전 결과를 `assessmentHistory`에 보존한다. 같은 정책의 결과와 이미 처리한 항목은 재사용한다. 재검증은 원본 추출·기존 승인·거절 결정을 바꾸거나 승인된 Graph를 자동 삭제하지 않는다. 완료된 과거 Graph의 재추출·정리는 별도 데이터 운영 작업이다.
+Assessment는 원문 chunk와 비교에 사용한 출처를 `sources`, 참고한 Knowledge node를 `contextNodeIds`에 기록한다. 조회는 각 현재 판정과 과거 판정의 의존성을 따로 검사한다. 출처가 보관·만료되거나 후보보다 좁은 scope가 되면 해당 판정을 반환하지 않는다. 공개 원문을 근거로 만든 비공개 Knowledge의 설명도 node scope로 보호한다. 정상 병합은 같은 조직의 병합 이력을 따라 남은 node의 현재 scope를 검사하며, 원래 참조 ID는 보존한다. 삭제·불명확한 병합 경로·출처 정보 누락은 사용 불가로 처리한다.
+
+검증 결과 저장과 자동 승인·제외 transaction은 참고 node와 출처를 잠그고 현재 범위를 다시 검사한다. 판정 저장만으로 Neo4j topology revision을 바꾸지 않는다. 자동 승인은 embedding 전에도 현재 정책과 선택 항목의 승인 판정을 요구한다.
+
+미완료 후보의 검토 정책 버전이 바뀌면 새 검증을 실행하고 이전 결과를 `assessmentHistory`에 보존한다. 같은 정책이며 의존성이 유효한 결과와 이미 처리한 항목은 재사용한다. 현재 정책이라도 의존성이 사용 불가인 미완료 판정은 다시 검증한다. 재검증은 원본 추출·기존 승인·거절 결정을 바꾸거나 승인된 Graph를 자동 삭제하지 않는다. 완료된 과거 Graph의 재추출·정리는 별도 데이터 운영 작업이다.
 
 Node 병합 시 candidate의 연결도 남는 resource로 옮겨 재승인 결과를 일치시킨다. 대칭 관계의 끝점 순서를 정규화하고 중복 관계의 출처를 합친다. 개체 설명은 현재 보이는 출처의 description으로만 구성한다.
 
@@ -288,7 +315,7 @@ AI가 제안한 대표 이름은 NFKC·공백 정규화 후 원문에 있어야 
 
 Node identity는 ID로 유지하며 저장된 대표 이름은 내부 label이다. 공개 `canonicalName`은 읽을 수 있는 출처 이름 중 내부 label과 정규화 key가 같은 값을 사용하고, 없으면 정규화 key 순서로 첫 이름을 선택한다. 같은 key의 표기가 여러 개면 문자열 정렬상 마지막 표기를 사용해 조회 순서에 의존하지 않는다. `aliases`에는 나머지 읽을 수 있는 이름만 포함한다. 정확한 이름 조회와 lexical 검색에도 숨겨진 내부 label을 넣지 않는다. Node source는 비어 있지 않은 이름 map을 필수로 저장한다.
 
-Node 생성과 후보 승인은 조직별 배타 잠금 안에서 호출자가 읽을 수 있는 출처 이름으로 신규·기존 ID를 결정한다. Persistence에는 이 결정과 원래 기여 이름을 따로 전달하며 저장 label로 다시 연결하지 않는다. 저장 label에는 전역 이름 unique 제약을 두지 않고, scope 조회에는 별도의 nonunique index를 사용한다. 같은 호출자의 동시 재기여는 같은 ID로 수렴한다. Node 생성·후보 승인·병합은 각 출처가 제공한 이름만 보존하며 대상이나 이전 node의 저장 대표 이름을 다른 출처에 복사하지 않는다.
+Node 생성과 후보 승인은 조직별 배타 잠금 안에서 신규·기존 ID를 결정한다. 이때 호출자가 읽을 수 있고 대상 scope 전체에 공개된 출처 이름을 사용한다. Persistence에는 이 결정과 원래 기여 이름을 따로 전달하며 저장 label로 다시 연결하지 않는다. 저장 label에는 전역 이름 unique 제약을 두지 않고, scope 조회에는 별도의 nonunique index를 사용한다. 같은 호출자의 동시 재기여는 같은 ID로 수렴한다. Node 생성·후보 승인·병합은 각 출처가 제공한 이름만 보존하며 대상이나 이전 node의 저장 대표 이름을 다른 출처에 복사하지 않는다.
 
 출처의 `primary_name_keys`는 원래 대표 이름의 역할을 `names`의 별칭과 구분하며, 비어 있지 않고 모두 해당 이름 map에 존재해야 한다. 병합은 이 역할도 출처별로 합친다. Identity resolver와 scope 충돌 검사는 현재 읽을 수 있는 원래 대표 이름을 사용하고 표시명을 대표 이름의 근거로 재해석하지 않는다. 따라서 같은 별칭이 표시명으로 선택된 서로 다른 개체도 별칭 공유만으로 병합하지 않는다.
 
@@ -299,7 +326,7 @@ Node kind와 출처 이름 key는 NFKC·공백·대소문자 및 온톨로지 �
 - 검증된 이름이 여러 node를 연결하면 후보 대표 이름과 일치하는 node를 우선하고, 없으면 생성 시각·ID 순으로 target을 정한다. 이름이 같아도 kind가 다르면 자동 병합하지 않는다.
 - 병합은 출처·관계·과거 candidate binding과 audit을 함께 보존한다. 출처 이름과 원래 대표 이름의 역할을 다른 출처로 복사하지 않는다.
 
-조직은 통제 어휘 사전(`ontology`: node kind·edge predicate 목록)과 검증 모드(`ontologyMode`: `off`·`warn`·`strict`)를 가진다. 신규 조직은 추출 프롬프트의 기본 kind 목록과 범용 edge predicate 목록으로 구성된 domain의 `defaultKnowledgeOntology` + `warn` 모드로 생성된다. 사전 확장은 두 경로로 지원한다 — 조직의 graph·pending 후보에서 관찰된 용어의 결정적 빈도 집계(`KnowledgeTermUsageRepository`), 그리고 관찰 용어를 extraction 모델에 보내 정제·통합을 제안받는 AI 경로(`KnowledgeOntologySuggestionService`, 용어 문자열만 전송). 두 경로 모두 admin·owner 전용이며 저장은 항상 설정 PATCH를 거친다. 검증은 application 계층에서 node 생성, edge 생성, AI 후보 승인의 세 쓰기 경로에 일괄 적용된다 — `warn`은 응답에 경고를 싣고, `strict`는 embedding 호출과 영속화 전에 `422`로 거부한다. 검증 모드가 켜져 있고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전을 힌트로 주입하고, `strict`에서는 entity kind를 structured output schema의 enum으로 제약한다. 사전 조회는 `KnowledgeOntologyReader` port를 통해 organizations 행에서 읽는다.
+조직은 통제 어휘 사전(`ontology`: node kind·edge predicate 목록)과 검증 모드(`ontologyMode`: `off`·`warn`·`strict`)를 가진다. 신규 조직은 추출 프롬프트의 기본 kind 목록과 범용 edge predicate 목록으로 구성된 domain의 `defaultKnowledgeOntology` + `warn` 모드로 생성된다. 사전 확장은 두 경로로 지원한다 — 조직의 graph·pending 후보에서 관찰된 용어의 결정적 빈도 집계(`KnowledgeTermUsageRepository`), 그리고 관찰 용어를 extraction 모델에 보내 정제·통합을 제안받는 AI 경로(`KnowledgeOntologySuggestionService`, 용어 문자열만 전송). 용어 집계도 요청자의 읽기 권한과 출처 유효성을 적용하며, 다른 사용자의 비공개 정보와 처리 전·보관된 문서의 후보를 제외한다. 두 경로 모두 admin·owner 전용이며 저장은 항상 설정 PATCH를 거친다. 검증은 application 계층에서 node 생성, edge 생성, AI 후보 승인의 세 쓰기 경로에 일괄 적용된다 — `warn`은 응답에 경고를 싣고, `strict`는 embedding 호출과 영속화 전에 `422`로 거부한다. 검증 모드가 켜져 있고 사전이 비어 있지 않으면 AI 추출 프롬프트에 조직 사전을 힌트로 주입하고, `strict`에서는 entity kind를 structured output schema의 enum으로 제약한다. 사전 조회는 `KnowledgeOntologyReader` port를 통해 organizations 행에서 읽는다.
 
 Graph resource 삭제는 해당 scope의 `manage` 권한을 요구한다. Edge 삭제는 edge와 provenance row만 제거하고, node 삭제는 연결 edge와 각 provenance row를 함께 제거한다. 어느 경우에도 source Memory나 document를 삭제하지 않는다.
 
@@ -311,13 +338,13 @@ AI candidate는 원본 추출과 검증·처리 이력을 graph와 분리해 보
 
 Knowledge embedding은 `knowledge_node_sources`가 model과 함께 소유한다. 같은 출처 재기여나 AI 후보 승인에서 새 embedding을 제공하면 vector·model 쌍을 교체하고, 제공하지 않으면 기존 쌍을 유지하며, embedding 없는 새 출처는 두 값을 모두 NULL로 저장한다. 검색은 현재 읽을 수 있고 유효한 출처 중 query와 model·차원이 맞는 vector의 최대 점수를 사용한다. Node 병합은 고유 출처의 vector를 그대로 옮기며, 같은 출처가 양쪽에 있으면 target vector를 유지하고 target에 없을 때만 source vector를 채운다. 공유 node 설명·vector·검색 index는 저장하지 않는다.
 
-통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node 후보를 각각 검색한다. Semantic search가 활성화되어도 query embedding은 한 번만 생성해 세 저장소 검색에 공유한다. Reranker가 설정되면 종류별로 `min(100, max(12, limit × 4))`개까지 후보를 조회한 뒤 같은 총량 상한 안에서 source별로 균형 있게 구성하고, 권한 필터가 완료된 후보만 외부 reranker에 보낸다. Reranker 입력은 query 4,000자, 후보당 8,000자로 제한한다. 성공하면 relevance score로 최종 순위를 정하고, timeout·provider 오류·잘못된 응답이면 기존 hybrid score 순위로 복귀한다. 모든 AI call은 인증 access 또는 document creator에서 organization·user quota key를 만들고, instance-local limiter와 PostgreSQL minute bucket을 모두 통과해야 한다. 따라서 여러 replica와 worker가 같은 tenant·principal budget을 공유한다. API와 MCP는 동일한 application operation을 사용한다.
+통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node 후보를 각각 검색한다. Semantic search가 활성화되어도 query embedding은 한 번만 생성해 세 저장소 검색에 공유한다. Reranker가 설정되면 종류별로 `min(100, max(12, limit × 4))`개까지 후보를 조회한 뒤 같은 총량 상한 안에서 source별로 균형 있게 구성하고, 권한 필터가 완료된 후보만 외부 reranker에 보낸다. Reranker 입력은 query 4,000자, 후보당 8,000자로 제한한다. 성공하면 relevance score로 최종 순위를 정하고, timeout·provider 오류·잘못된 응답이면 기존 hybrid score 순위로 복귀한다. 모든 AI call은 인증된 요청자 또는 queue에 기록한 요청자에서 organization·user quota key를 만들고, instance-local limiter와 PostgreSQL minute bucket을 모두 통과해야 한다. 따라서 여러 replica와 worker가 같은 tenant·principal budget을 공유한다. API와 MCP는 동일한 application operation을 사용한다.
 
 ### Memory 전용 회상
 
 서비스의 기억 lifecycle은 MCP `remember`·`recall`·`forget`으로 제공한다. `remember`는 Memory 생성 use case를, `forget`은 manage 권한과 현재 version을 검증하는 archive use case를 사용한다. Archive 후에는 회상·검색에서 제외하고 revision과 provenance는 보존한다. `recall`은 같은 검색·재정렬 흐름을 Memory만 대상으로 실행하며 문서·Graph를 조회하지 않는다. Reranker 설정·최소 점수·실패 시 hybrid 복귀를 통합 검색과 공유한다. 회상 응답은 결과 하나 최대 1,200자·전체 최대 4,000자의 `remembered` text와 구조화 Memory 검색 결과를 반환한다. 두 형식 모두 Memory ID·version을 포함해 text만 소비하는 서비스도 `forget`을 호출할 수 있다. RAG·Knowledge Graph를 함께 검색하려면 `context_search`를 사용한다.
 
-Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같은 instance-local request limiter를 공유한다. 동시 실행 수와 분당 합산 호출 수를 넘으면 provider를 호출하지 않는다. Embedding 기반 HTTP 요청은 `429`와 `Retry-After`를 반환하고, reranker는 hybrid 순위로 복귀하며, worker의 제한 초과는 pg-boss retry로 복구한다.
+Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같은 instance-local request limiter를 공유한다. 동시 실행 수와 분당 합산 호출 수를 넘으면 provider를 호출하지 않는다. Embedding 기반 HTTP 요청은 `429`와 `Retry-After`를 반환하고, reranker는 hybrid 순위로 복귀한다. 문서 ingestion과 Knowledge enrichment의 서버 quota 초과는 오류 재시도를 소모하지 않는 후속 job으로 예약한다.
 
 ### 관계 지도
 
@@ -335,6 +362,8 @@ Embedding, reranker, knowledge extraction, 온톨로지 AI 제안 adapter는 같
 
 ## 관측성과 민감정보
 
+API handler는 `withRouteErrorBoundary`로 인증·요청 해석·operation의 예상 밖 오류를 처리한다. 이 경계는 안전한 오류 metadata를 기록하고 고정 HTTP `500` 응답을 반환해 Next.js의 기본 오류 logger에 원본 예외가 전달되는 것을 막는다. 각 route의 domain 오류 응답과 Next.js의 redirect·render 제어 흐름은 유지한다. Readiness는 자체 경계에서 안전한 HTTP `503`을 반환한다.
+
 Pino는 작업명, organization ID, 결과 수, 처리 시간을 구조화해 기록한다. 일반 Error는 allowlist된 type·code만 직렬화하고 message를 기록하지 않는다. Provider·storage adapter가 만든 `SafeOperationalError`만 입력을 포함하지 않는 고정 message와 code를 기록하며, cause는 message 없이 type·code chain만 최대 3단계 보존한다. Reranker가 실패하면 본문 없이 fallback을 기록한다. 검색어와 본문은 retrieval log에 포함하지 않는다. Langfuse key가 모두 설정되면 OpenTelemetry trace를 내보내며 token과 secret을 마스킹하고 media upload를 비활성화한다. Retrieval 실패는 observation 안에서 고정된 실패 상태로 기록하고 원래 오류는 observation 밖에서 다시 던져 SDK가 오류 message를 span에 기록하지 못하게 한다. Embedding과 reranker 입력·출력은 telemetry 대상이 아니다.
 
 ## 수집 receipt
@@ -348,8 +377,8 @@ Payload fingerprint는 JSON key 순서·생성 시각·인증 role에 의존하�
 요청 내용을 반영한다. Archive 뒤에도 receipt를 유지해 재생성을 막는다. 문서 queue 등록은 resource
 transaction 뒤에 수행하며, pending upload replay가 동일 ID로 queue publication을 복구한다.
 
-멱등 문서 retry는 receipt와 pending 상태를 함께 commit한 뒤 queue에 발행한다. Queue 메시지의
-expectedAttempts와 현재 처리 횟수가 일치할 때만 새 처리를 claim한다. 만료된 processing lease는
-같은 횟수로 회수하므로 worker 재시작과 새 retry 요청을 구분한다. 완료된 처리의 오래된 queue
-메시지는 새 처리를 시작하지 않는다. 멱등 수집 queue의 중복 제거 키는 document ID와
-expectedAttempts를 함께 사용하므로 이전 세대의 queued·active·retry job이 새 세대를 막지 않는다.
+멱등 문서 retry는 `expectedAttempts`로 관측한 처리 횟수를 검사하고, 새 `processingGeneration`과
+pending 상태·receipt를 함께 commit한 뒤 queue에 발행한다. Worker는 메시지와 현재 문서의
+처리 세대가 같을 때만 claim한다. 같은 세대의 오류 재시도·만료 lease 회수도 새 claim마다
+`processingAttempts`를 증가시킨다. 완료되거나 새 세대로 교체된 처리의 오래된 메시지는 새 작업을
+시작하지 않는다. Queue의 중복 제거 키는 document ID와 처리 세대를 함께 사용한다.

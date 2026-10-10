@@ -43,13 +43,14 @@ describe("source-grounded knowledge aliases", () => {
     const documents = createDocumentRepository(db);
     const ontology = createKnowledgeOntologyReader(db);
     const clock = () => new Date();
-    const accept = buildAcceptKnowledgeCandidate({ repository: candidates, ontologyReader: ontology, clock, generateId: randomUUID, method: "automatic" });
+    const accept = buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db), repository: candidates, ontologyReader: ontology, clock, generateId: randomUUID, method: "automatic" });
     const reject = buildRejectKnowledgeCandidate({ repository: candidates, clock, method: "automatic" });
     const verify = vi.fn<KnowledgeVerificationService["verify"]>().mockImplementation(async (input) => ({ model: "independent-verifier", items: [
       ...input.graph.entities.map((entity) => `entity:${entity.key}`), ...input.graph.relationships.map((_, index) => `relationship:${index}`)
     ].map((item) => ({ item, representation: item.startsWith("entity:") ? "entity" : "relationship", entityKind: "person", support: "explicit", usefulness: "useful", conflict: false, evidence: input.content, reason: "The supplied source establishes this identity." })),
     aliases: input.graph.entities.flatMap((entity) => (entity.aliases ?? []).map((alias) => ({ entityKey: entity.key, alias, identity: "same_entity", evidence: input.content, reason: "Explicit alternative proper name." }))) }));
-    const curate = buildCurateKnowledgeCandidate({ candidates, documents, graph, ontology, clock, accept, reject, verification: { verify }, access: createOrganizationAccessRepository(db) });
+    const curateWithPrincipal = buildCurateKnowledgeCandidate({ candidates, documents, graph, ontology, clock, accept, reject, verification: { verify }, access: createOrganizationAccessRepository(db) });
+    const curate = (organization: string, chunk: string) => curateWithPrincipal(organization, chunk, userId);
     async function source(content: string, targetScope = scope) {
       const documentId = randomUUID(), chunkId = randomUUID();
       await pool.query("INSERT INTO documents(id,organization_id,scope_kind,team_id,user_id,title,object_key,checksum,mime_type,status,created_by) VALUES($1,$2,$3,$4,$5,'Source','fixture','checksum','text/plain','ready',$6)",
@@ -59,9 +60,10 @@ describe("source-grounded knowledge aliases", () => {
     }
     async function extract(content: string, proposed: ProposedKnowledgeGraph) {
       const origin = await source(content);
-      const generate = buildGenerateKnowledgeCandidate({ candidateRepository: candidates, documentRepository: documents, ontologyReader: ontology, clock, generateId: randomUUID,
+      const generate = buildGenerateKnowledgeCandidate({ accessRepository: createOrganizationAccessRepository(db), candidateRepository: candidates, documentRepository: documents, ontologyReader: ontology, clock, generateId: randomUUID,
         extractionService: { extract: async () => ({ model: "extractor", graph: proposed }) } });
-      const candidate = await generate(organizationId, origin.chunkId);
+      const candidate = await generate(organizationId, origin.chunkId, { userId, action: "write" });
+      if (!candidate) throw new Error("fixture extraction was not authorized");
       return { ...origin, candidate };
     }
     async function promote(content: string, canonicalName: string, aliases: readonly string[] = []) {
@@ -102,17 +104,48 @@ describe("source-grounded knowledge aliases", () => {
     const test = await fixture();
     const content = "제갈량이 전략을 세웠다.";
     const input = await test.extract(content,{ entities:[{ key:"p",kind:"person",canonicalName:"제갈량",evidence:[content] }],relationships:[] });
-    const previous = { model:"old-verifier",policyVersion:"evidence-v2",assessedAt:new Date().toISOString(),
+    const previous = { contextNodeIds: [], sources: [{ chunkId: input.chunkId }], model:"old-verifier",policyVersion:"evidence-v2",assessedAt:new Date().toISOString(),
       items:[{ item:"entity:p",verdict:"review" as const,evidence:content,reason:"Previous policy." }] };
     await test.candidates.saveAssessment(test.organizationId,input.candidate.id,previous);
     await test.curate(test.organizationId,input.chunkId);
     const current = await test.candidates.findByChunkId(test.organizationId,input.chunkId);
-    expect(current?.assessment?.policyVersion).toBe("evidence-v5");
+    expect(current?.assessment?.policyVersion).toBe("evidence-v7");
     expect(current?.assessmentHistory).toEqual([previous]);
     expect(current?.status).toBe("accepted");
     await test.curate(test.organizationId,input.chunkId);
     expect(test.verify).toHaveBeenCalledOnce();
     expect((await test.candidates.findByChunkId(test.organizationId,input.chunkId))?.assessmentHistory).toEqual([previous]);
+  });
+
+  it("does not extract queued source content after the requester is blocked", async () => {
+    const test = await fixture();
+    const origin = await test.source("Orion uses Atlas.");
+    await pool.query("UPDATE organization_members SET status='blocked' WHERE organization_id=$1 AND user_id=$2",
+      [test.organizationId, test.userId]);
+    const extract = vi.fn();
+    const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: createOrganizationAccessRepository(db), candidateRepository: test.candidates,
+      documentRepository: createDocumentRepository(db), ontologyReader: createKnowledgeOntologyReader(db),
+      clock: () => new Date(), generateId: randomUUID, extractionService: { extract }
+    });
+    expect(await generate(test.organizationId, origin.chunkId, { userId: test.userId, action: "manage" })).toBeNull();
+    expect(extract).not.toHaveBeenCalled();
+    expect(await test.candidates.findByChunkId(test.organizationId, origin.chunkId)).toBeNull();
+  });
+
+  it("rejects an archived pending source before sending its entity descriptions to embedding", async () => {
+    const test = await fixture();
+    const source = await test.extract("Atlas is a hosted service.", {
+      entities: [{ key: "atlas", kind: "service", canonicalName: "Atlas", summary: "A hosted service." }], relationships: []
+    });
+    await pool.query("UPDATE documents SET status='archived' WHERE id=$1", [source.documentId]);
+    const embedMany = vi.fn();
+    const accept = buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db),
+      repository: test.candidates, ontologyReader: createKnowledgeOntologyReader(db), clock: () => new Date(), generateId: randomUUID,
+      embeddingService: { embed: vi.fn(), embedMany } });
+    await expect(accept(test.access, source.candidate.id)).rejects.toThrow("source document is not ready");
+    expect(embedMany).not.toHaveBeenCalled();
+    expect((await test.candidates.findByChunkId(test.organizationId, source.chunkId))?.status).toBe("pending");
   });
 
   it("merges fragmented identities while retaining edges, provenance and previous approval bindings", async () => {
@@ -222,7 +255,7 @@ describe("source-grounded knowledge aliases", () => {
     ], relationships: [{ sourceKey: "p", targetKey: "q", predicate: "helped" }] });
     await test.curate(test.organizationId, input.chunkId);
     expect(await test.graph.findNodesByNames(test.access, test.scope, ["승상"])).toEqual([]);
-    const accept = buildAcceptKnowledgeCandidate({ repository: test.candidates, ontologyReader: createKnowledgeOntologyReader(db),
+    const accept = buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db), repository: test.candidates, ontologyReader: createKnowledgeOntologyReader(db),
       generateId: randomUUID, clock: () => new Date() });
     await accept(test.access, input.candidate.id, "Verified relationship only", { entityKeys: [], relationshipIndexes: [0] });
     expect(await test.graph.findNodesByNames(test.access, test.scope, ["승상"])).toEqual([]);

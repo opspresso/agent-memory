@@ -217,7 +217,7 @@ export function MemoryLifecycle({
   );
 
   async function saveRevision() {
-    if (!loaded || !changed) {
+    if (!loaded || !changed || saving) {
       return;
     }
     setSaving(true);
@@ -267,7 +267,7 @@ export function MemoryLifecycle({
   }
 
   async function archive() {
-    if (!loaded) {
+    if (!loaded || saving) {
       return;
     }
     setSaving(true);
@@ -320,6 +320,7 @@ export function MemoryLifecycle({
               <Text size="sm">{error}</Text>
               <Button
                 leftSection={<IconRefresh size={15} />}
+                disabled={saving}
                 onClick={() => void loadMemory()}
                 size="compact-sm"
                 variant="light"
@@ -403,7 +404,7 @@ export function MemoryLifecycle({
                     </Text>
                   </Stack>
                   <TextInput
-                    disabled={!loaded.memory.capabilities.write}
+                    disabled={saving || !loaded.memory.capabilities.write}
                     label={t("memory.title")}
                     maxLength={500}
                     onChange={(event) => setTitle(event.currentTarget.value)}
@@ -411,7 +412,7 @@ export function MemoryLifecycle({
                   />
                   <Textarea
                     autosize
-                    disabled={!loaded.memory.capabilities.write}
+                    disabled={saving || !loaded.memory.capabilities.write}
                     label={t("memory.content")}
                     maxLength={100_000}
                     minRows={7}
@@ -420,6 +421,7 @@ export function MemoryLifecycle({
                   />
                   <Textarea
                     autosize
+                    disabled={saving}
                     label={t("memory.changeReason")}
                     maxLength={1_000}
                     minRows={2}
@@ -431,6 +433,7 @@ export function MemoryLifecycle({
                     {loaded.memory.capabilities.manage ? (
                       <Button
                         color="red"
+                        disabled={saving}
                         leftSection={<IconArchive size={16} />}
                         onClick={() => setConfirmArchive(true)}
                         variant="subtle"
@@ -455,6 +458,7 @@ export function MemoryLifecycle({
                         </Text>
                         <Group justify="flex-end">
                           <Button
+                            disabled={saving}
                             onClick={() => setConfirmArchive(false)}
                             size="compact-sm"
                             variant="default"

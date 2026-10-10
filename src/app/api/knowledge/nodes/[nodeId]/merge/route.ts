@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   knowledgeErrorResponse,
@@ -14,7 +15,7 @@ interface RouteContext {
   readonly params: Promise<{ nodeId: string }>;
 }
 
-export async function POST(request: Request, context: RouteContext) {
+export const POST = withRouteErrorBoundary("POST /api/knowledge/nodes/[nodeId]/merge", async function POST(request: Request, context: RouteContext) {
   const { nodeId } = await context.params;
   const parsedNodeId = knowledgeNodeIdSchema.safeParse(nodeId);
   if (!parsedNodeId.success) {
@@ -50,4 +51,4 @@ export async function POST(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});

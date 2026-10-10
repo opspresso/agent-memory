@@ -1,0 +1,196 @@
+{
+  "evaluatedAt": "2026-10-10T03:14:00.804423+00:00",
+  "corpus": "evaluation/knowledge/verification-corpus.json",
+  "corpusSha256": "bbf9e153634bb05dc6f2c1dc53ba622cc0ea75352ff0e7abdd9efc39bd42e814",
+  "repeats": 3,
+  "threshold": 0,
+  "sourceHashes": {
+    "evaluation/knowledge/decision-verification.ts": "a26d1b16899d0d4c86d1d41e6a6e702596a72ea5200b7ba90955b2243a8f01bf",
+    "src/infrastructure/ai/knowledge-verification-service.ts": "f58c7b8b21f0a15d5aba40244648c2ba103adc43ede39f10fb3c422ff666210a",
+    "src/infrastructure/ai/knowledge-source-instructions.ts": "a5bb024336525e19eebfdd70847f3b639e9447b1960b95e54d4ea15f1892e8ad",
+    "src/infrastructure/ai/knowledge-source-evidence.ts": "f746588ae3c9c264fa4b596dc58e0f4bdeed22dada0f502d229564cca462c091",
+    "src/domain/knowledge/knowledge-curation-policy.ts": "5d25a3a995b2d39aa84a05889d9b3c5d94b0434ad7a0fdd02aca0befda92a504",
+    "src/domain/knowledge/knowledge-assessment.ts": "c948273ebb85618dc0dd4013d26bb39d68aca259e0545748ed8ac76b83d97340",
+    "src/domain/knowledge/knowledge-entity-eligibility.ts": "f60127e289c2c075d3145f0c205cf4df73b58627e828dfefed0d10493dfecdd1",
+    "src/domain/knowledge/knowledge-identity.ts": "9e3503ebbe0a7a701147a70ce0987be45ab3db71b90e10eec0989111ee8feee1",
+    "src/domain/knowledge/knowledge-candidate.ts": "6607595adac08a3a44c3e4b678694f722aa212707f1169f664b8f3114ee815fa",
+    "evaluation/knowledge/verify.mts": "5c732aaa3046161ad8a4b527ce8ac5a2131933b73142568572ce9f92d1f725d0"
+  },
+  "models": {
+    "chat": "openai/gpt-6-luna",
+    "jev": "typesafe/jev-1.13-20260917"
+  },
+  "summaries": [
+    {
+      "variant": "chat",
+      "expectedCases": 90,
+      "completedCases": 90,
+      "errors": 0,
+      "supported": 36,
+      "acceptedSupported": 35,
+      "unsafeAccepted": 0,
+      "unsupported": 54,
+      "supportedRecall": 0.9722222222222222,
+      "latencyMs": {
+        "median": 3718,
+        "p95": 6246
+      },
+      "costUsd": 0.01686756,
+      "bySplit": {
+        "calibration": {
+          "expectedCases": 24,
+          "completedCases": 24,
+          "errors": 0,
+          "supported": 12,
+          "acceptedSupported": 12,
+          "unsafeAccepted": 0,
+          "unsupported": 12,
+          "supportedRecall": 1,
+          "latencyMs": {
+            "median": 3254,
+            "p95": 4571
+          },
+          "costUsd": 0.00389103
+        },
+        "validation": {
+          "expectedCases": 66,
+          "completedCases": 66,
+          "errors": 0,
+          "supported": 24,
+          "acceptedSupported": 23,
+          "unsafeAccepted": 0,
+          "unsupported": 42,
+          "supportedRecall": 0.9583333333333334,
+          "latencyMs": {
+            "median": 3990,
+            "p95": 6745
+          },
+          "costUsd": 0.012976530000000002
+        }
+      }
+    },
+    {
+      "variant": "jev",
+      "expectedCases": 90,
+      "completedCases": 90,
+      "errors": 0,
+      "supported": 36,
+      "acceptedSupported": 36,
+      "unsafeAccepted": 3,
+      "unsupported": 54,
+      "supportedRecall": 1,
+      "latencyMs": {
+        "median": 400,
+        "p95": 505
+      },
+      "costUsd": 0.006173496,
+      "bySplit": {
+        "calibration": {
+          "expectedCases": 24,
+          "completedCases": 24,
+          "errors": 0,
+          "supported": 12,
+          "acceptedSupported": 12,
+          "unsafeAccepted": 0,
+          "unsupported": 12,
+          "supportedRecall": 1,
+          "latencyMs": {
+            "median": 401,
+            "p95": 468
+          },
+          "costUsd": 0.001629306
+        },
+        "validation": {
+          "expectedCases": 66,
+          "completedCases": 66,
+          "errors": 0,
+          "supported": 24,
+          "acceptedSupported": 24,
+          "unsafeAccepted": 3,
+          "unsupported": 42,
+          "supportedRecall": 1,
+          "latencyMs": {
+            "median": 400,
+            "p95": 508
+          },
+          "costUsd": 0.004544189999999999
+        }
+      }
+    }
+  ],
+  "thresholdReplay": [
+    {
+      "threshold": 0.7,
+      "replayed": true,
+      "acceptedSupported": 33,
+      "supported": 36,
+      "unsafeAccepted": 0,
+      "unsupported": 54
+    },
+    {
+      "threshold": 0.8,
+      "replayed": true,
+      "acceptedSupported": 25,
+      "supported": 36,
+      "unsafeAccepted": 0,
+      "unsupported": 54
+    },
+    {
+      "threshold": 0.9,
+      "replayed": true,
+      "acceptedSupported": 16,
+      "supported": 36,
+      "unsafeAccepted": 0,
+      "unsupported": 54
+    },
+    {
+      "threshold": 0.95,
+      "replayed": true,
+      "acceptedSupported": 15,
+      "supported": 36,
+      "unsafeAccepted": 0,
+      "unsupported": 54
+    }
+  ],
+  "decision": "Retain chat verification in runtime. Keep JEV as an evaluation-only alternative until alias identity, confidence thresholds, and existing-knowledge conflicts have stronger evidence.",
+  "limitations": [
+    "Authored diagnostics, not a blind production accuracy estimate.",
+    "Evaluates supplied claims, not extraction recall.",
+    "JEV adapter is evaluation-only and excludes existing-knowledge conflicts and custom kinds.",
+    "Threshold zero measures raw decisions, not a safe production approval policy.",
+    "Only the annotated target item in each case is scored.",
+    "These diagnostic cases informed prototype development; the validation split is not an unseen benchmark.",
+    "Threshold replay uses stored JEV decisions, not new model calls; thresholds were not selected exclusively from calibration data."
+  ],
+  "mismatches": {
+    "chat": [
+      {
+        "id": "assembly-membership",
+        "repeat": 3,
+        "expected": "accept",
+        "verdict": "ignore"
+      }
+    ],
+    "jev": [
+      {
+        "id": "descriptive-alias",
+        "repeat": 1,
+        "expected": "withhold",
+        "verdict": "accept"
+      },
+      {
+        "id": "descriptive-alias",
+        "repeat": 2,
+        "expected": "withhold",
+        "verdict": "accept"
+      },
+      {
+        "id": "descriptive-alias",
+        "repeat": 3,
+        "expected": "withhold",
+        "verdict": "accept"
+      }
+    ]
+  },
+  "runnerNote": "Runner hash records the measured version. Later malformed-corpus error handling does not change the evaluated request payloads or verification policy."
+}

@@ -1,7 +1,7 @@
 import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
-import type { OrganizationAccess } from "@/domain/identity/organization-access";
+import type { OrganizationAccess, ScopedResource } from "@/domain/identity/organization-access";
 
 import { memories, memoryAccessGrants } from "../schema";
 
@@ -12,6 +12,23 @@ export interface ScopeColumns {
   readonly scopeKind: AnyPgColumn;
   readonly teamId: AnyPgColumn;
   readonly userId: AnyPgColumn;
+}
+
+/** SQL counterpart of scopeCovers, independent of the acting user's extra grants. */
+export function scopeCoveragePredicate(
+  source: ScopeColumns & { readonly organizationId: AnyPgColumn },
+  target: ScopedResource | (ScopeColumns & { readonly organizationId: AnyPgColumn })
+): SQL {
+  const destination = "scopeKind" in target ? target : {
+    organizationId: target.organizationId, scopeKind: target.kind,
+    teamId: target.kind === "team" ? target.teamId : null,
+    userId: target.kind === "user" ? target.userId : null
+  };
+  return sql`(${source.organizationId} = ${destination.organizationId} AND (
+    ${source.scopeKind} = 'organization'
+    OR (${source.scopeKind} = 'team' AND ${destination.scopeKind} = 'team' AND ${source.teamId} = ${destination.teamId})
+    OR (${source.scopeKind} = 'user' AND ${destination.scopeKind} = 'user' AND ${source.userId} = ${destination.userId})
+  ))`;
 }
 
 function isOrganizationManager(access: OrganizationAccess): boolean {

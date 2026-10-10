@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { knowledgeErrorResponse } from "@/lib/knowledge-http";
 import { knowledgeEdgeIdSchema } from "@/lib/knowledge-schemas";
@@ -7,7 +8,7 @@ interface RouteContext {
   readonly params: Promise<{ edgeId: string }>;
 }
 
-export async function DELETE(request: Request, context: RouteContext) {
+export const DELETE = withRouteErrorBoundary("DELETE /api/knowledge/edges/[edgeId]", async function DELETE(request: Request, context: RouteContext) {
   const { edgeId } = await context.params;
   const parsedEdgeId = knowledgeEdgeIdSchema.safeParse(edgeId);
   if (!parsedEdgeId.success) {
@@ -27,4 +28,4 @@ export async function DELETE(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});

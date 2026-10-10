@@ -1,3 +1,4 @@
+import { readAiJsonResponse } from "./read-ai-response";
 import { z } from "zod";
 
 import type { AiRequestLimiter } from "@/domain/shared/ai-request-limiter";
@@ -78,13 +79,15 @@ export function createTextRerankerService(
       signal
     });
     if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
       throw new SafeOperationalError(
         `reranker request failed with status ${response.status}`,
         { code: "RERANKER_HTTP_ERROR" }
       );
     }
 
-    const parsed = rerankResponseSchema.safeParse(await response.json());
+    // Each result contains only an index and score; leave room for provider metadata.
+    const parsed = rerankResponseSchema.safeParse(await readAiJsonResponse(response, 64 * 1_024 + input.documents.length * 128));
     if (!parsed.success || parsed.data.results.length !== input.documents.length) {
       throw new SafeOperationalError(
         "reranker response count does not match inputs",

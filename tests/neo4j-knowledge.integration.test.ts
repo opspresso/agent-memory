@@ -105,8 +105,8 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     ] })).mockResolvedValueOnce(completion({ relationships:[{ sourceKey:"e0",targetKey:"e1",predicate:"uses",evidenceIds:["s0"] }] }));
     const candidates = createKnowledgeCandidateRepository(db), documents = createDocumentRepository(db), ontology = createKnowledgeOntologyReader(db);
     const clock = () => new Date();
-    await buildGenerateKnowledgeCandidate({ candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
-      extractionService:createEntityFirstKnowledgeExtractionService({ baseUrl:"http://model.test/v1",model:"extractor",request }) })(f.organizationId,source.chunkId);
+    await buildGenerateKnowledgeCandidate({ accessRepository: createOrganizationAccessRepository(db), candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
+      extractionService:createEntityFirstKnowledgeExtractionService({ baseUrl:"http://model.test/v1",model:"extractor",request }) })(f.organizationId,source.chunkId, { userId: f.userId, action: "write" });
     const verificationRequest = vi.fn<typeof fetch>().mockResolvedValue(completion({ items:Object.fromEntries(Object.entries({
       "entity:e0":{ representation:"entity",entityKind:"service" },
       "entity:e1":{ representation:"entity",entityKind:"technology" },
@@ -114,11 +114,11 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     }).map(([item,identity]) => [item,{ ...identity,support:"explicit",usefulness:"useful",conflict:false,evidenceId:"s0",reason:"The source states this fact." }])) }));
     await buildCurateKnowledgeCandidate({ candidates,documents,ontology,clock,graph:f.repository,access:createOrganizationAccessRepository(db),
       verification:createKnowledgeVerificationService({ baseUrl:"http://verifier.test/v1",model:"verifier",request:verificationRequest }),
-      accept:buildAcceptKnowledgeCandidate({ repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
-      reject:buildRejectKnowledgeCandidate({ repository:candidates,clock,method:"automatic" }) })(f.organizationId,source.chunkId);
+      accept:buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db), repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
+      reject:buildRejectKnowledgeCandidate({ repository:candidates,clock,method:"automatic" }) })(f.organizationId,source.chunkId, f.userId);
     const approved = await candidates.findByChunkId(f.organizationId,source.chunkId);
     expect(approved?.status).toBe("accepted");
-    expect(approved?.assessment).toMatchObject({ model:"verifier",policyVersion:"evidence-v5" });
+    expect(approved?.assessment).toMatchObject({ model:"verifier",policyVersion:"evidence-v7" });
     expect(approved?.itemReviews?.every((item) => item.method === "automatic")).toBe(true);
     const [atlas] = await f.repository.findNodesByNames(f.access,f.scope,["Atlas"]);
     const result = await f.repository.findNeighborhood(f.access,atlas!.id,2,100);
@@ -146,10 +146,10 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
     await pool.query("UPDATE documents SET status='pending',mime_type='text/markdown' WHERE id=$1", [source.documentId]);
     const documents = createDocumentRepository(db), candidates = createKnowledgeCandidateRepository(db), ontology = createKnowledgeOntologyReader(db);
     const clock = () => new Date();
-    await buildProcessDocument({ repository:documents,clock,generateId:randomUUID,
+    await buildProcessDocument({ accessRepository: createOrganizationAccessRepository(db), repository:documents,clock,generateId:randomUUID,
       objectStorage:{ get:async () => new TextEncoder().encode(markdown),put:vi.fn(),delete:vi.fn() },
       textExtractor:{ extract:async () => ({ text: markdown, mimeType: "text/markdown" }) }
-    })(f.organizationId,source.documentId);
+    })(f.organizationId,source.documentId,(await documents.findById(f.organizationId,source.documentId))!.processingGeneration, f.userId);
     const [chunk] = await documents.listChunksByDocument(f.organizationId,source.documentId);
     expect(chunk?.content).toContain("# 김하늘\n## 경력");
     expect(chunk?.metadata.contextSpans).toEqual([{ start:0,end:5 },{ start:7,end:12 }]);
@@ -157,18 +157,18 @@ describe("Neo4j topology with PostgreSQL approval and provenance", () => {
       { key:"person",kind:"person",canonicalName:"김하늘",evidence:["# 김하늘"] },
       { key:"employer",kind:"organization",canonicalName:"북극소프트",evidence:["### 북극소프트"] }
     ],relationships:[{ sourceKey:"person",targetKey:"employer",predicate:"works_for",evidence:[chunk!.content] }] };
-    await buildGenerateKnowledgeCandidate({ candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
+    await buildGenerateKnowledgeCandidate({ accessRepository: createOrganizationAccessRepository(db), candidateRepository:candidates,documentRepository:documents,ontologyReader:ontology,clock,generateId:randomUUID,
       extractionService:{ extract:async () => ({ model:"fixture",graph:proposed }) }
-    })(f.organizationId,chunk!.id);
+    })(f.organizationId,chunk!.id, { userId: f.userId, action: "write" });
     await buildCurateKnowledgeCandidate({ candidates,documents,ontology,clock,graph:f.repository,access:createOrganizationAccessRepository(db),
       verification:{ verify:async () => ({ model:"fixture",items:[
         { item:"entity:person",representation:"entity",entityKind:"person",support:"explicit",usefulness:"useful",conflict:false,evidence:"# 김하늘",reason:"Named profile owner." },
         { item:"entity:employer",representation:"entity",entityKind:"organization",support:"explicit",usefulness:"useful",conflict:false,evidence:"### 북극소프트",reason:"Employer in career entry." },
         { item:"relationship:0",representation:"relationship",support:"explicit",usefulness:"useful",conflict:false,evidence:chunk!.content,reason:"Career section identifies employer and period." }
       ] }) },
-      accept:buildAcceptKnowledgeCandidate({ repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
+      accept:buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db), repository:candidates,ontologyReader:ontology,clock,generateId:randomUUID,method:"automatic" }),
       reject:buildRejectKnowledgeCandidate({ repository:candidates,clock,method:"automatic" })
-    })(f.organizationId,chunk!.id);
+    })(f.organizationId,chunk!.id, f.userId);
     const [person] = await f.repository.findNodesByNames(f.access,f.scope,["김하늘"]);
     const neighborhood = await f.repository.findNeighborhood(f.access,person!.id,1,100);
     expect(neighborhood.nodes.map((node) => node.canonicalName).sort()).toEqual(["김하늘","북극소프트"]);

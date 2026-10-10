@@ -152,6 +152,8 @@ JSON body를 읽는 조직 API는 UTF-8 JSON을 요구하며 전체 body를 1 Mi
 
 오류 응답은 기본적으로 `{ "error": string }`이며 schema validation 오류는 `issues`를 추가할 수 있다.
 
+처리하지 못한 서버 오류는 HTTP `500`, `{ "error": "Internal server error" }`, `Cache-Control: no-store`를 반환한다. 서버는 고정 작업명과 안전한 오류 type·code만 기록하며 DB query·bind 값, provider 본문과 요청 내용을 응답이나 기본 framework 오류 로그에 전달하지 않는다.
+
 | Status | 의미 | 다음 행동 |
 | --- | --- | --- |
 | `400` | JSON·UUID·query·입력 schema 오류 | `error`와 `issues`를 보고 입력을 수정한다. |
@@ -467,6 +469,8 @@ curl -i \
 
 `202` 응답의 `Location`을 polling하여 `status`가 `ready` 또는 `failed`가 될 때까지 확인한다.
 
+문서 수집이 서버 AI quota를 기다릴 때는 `pending` 상태를 유지하고 제한 해제 후 자동 재개한다. 변환·분할과 완료된 embedding batch는 내부 checkpoint에서 재사용한다. Checkpoint와 부분 chunk는 검색 결과에 포함하지 않으며 전체 처리가 끝나야 문서가 `ready`가 된다.
+
 ```bash
 curl \
   -H "Authorization: Bearer $AGENT_MEMORY_TOKEN" \
@@ -496,7 +500,7 @@ curl -i \
   "$AGENT_MEMORY_URL/api/documents/<documentId>/retry"
 ```
 
-Retry는 현재 document scope의 `write` 권한을 요구한다. 성공은 재시도 queue 등록을 수락했다는 `202`이며, 응답 Document는 등록 전 snapshot이므로 `status: "failed"`일 수 있다. 처리 완료 여부는 상태 조회 endpoint로 확인한다. `pending`, `processing`, `ready` 문서를 retry하면 `409`, archived 문서는 `404`다.
+Retry는 현재 document scope의 `write` 권한을 요구한다. 새 요청은 새 처리 세대와 `pending` 상태를 준비한 뒤 queue에 등록한다. 성공은 `202`와 준비한 Document이며 처리 완료 여부는 상태 조회 endpoint로 확인한다. `pending`, `processing`, `ready` 문서를 retry하면 `409`, archived 문서는 `404`다.
 
 `DELETE .../documents/:documentId`는 문서를 영구 제거하지 않고 archive하며 `204`를 반환한다. 원본과 chunk는 provenance 보존을 위해 유지하지만 검색, 상태 조회, retry, AI 후보 조회·승인에서는 제외한다. 삭제에는 현재 document scope의 `manage` 권한이 필요하다. 권한 확인 이후 scope가 달라지면 저장 시점에 보관을 거부하고 `404`를 반환한다.
 
@@ -573,7 +577,7 @@ Node·edge 생성 성공은 `200`과 공개 resource를 반환한다. Node 응�
 
 병합 성공은 `200`과 갱신된 target node를 반환한다. 자기 자신과의 병합이나 서로 다른 scope 병합은 `400`이다.
 
-Node identity는 ID로 유지한다. 생성과 AI 후보 승인은 같은 scope·kind에서 호출자가 읽을 수 있는 출처 이름을 NFKC·공백·대소문자 정규화 후 비교한다. 원래 대표 이름과 별칭의 역할은 출처별로 보존하며 표시명이 같다는 이유만으로 병합하지 않는다. 유일한 동일인 근거가 있으면 기존 ID를 사용하고, 없으면 새 ID를 만든다. 읽을 수 없는 저장 대표 이름이 같다는 이유로 기존 node에 연결하지 않는다. `award`, `honor`, `honour`, `achievement`, `designation`은 `recognition`으로 통합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
+Node identity는 ID로 유지한다. 생성과 AI 후보 승인은 같은 scope·kind에서 호출자가 읽을 수 있고 대상 scope 전체에 공개된 출처 이름을 NFKC·공백·대소문자 정규화 후 비교한다. 원래 대표 이름과 별칭의 역할은 출처별로 보존하며 표시명이 같다는 이유만으로 병합하지 않는다. 유일한 동일인 근거가 있으면 기존 ID를 사용하고, 없으면 새 ID를 만든다. 읽을 수 없는 저장 대표 이름이 같다는 이유로 기존 node에 연결하지 않는다. `award`, `honor`, `honour`, `achievement`, `designation`은 `recognition`으로 통합한다. 이름만 같고 kind가 다른 node는 자동 병합하지 않는다.
 
 ### 조직 온톨로지 검증
 
@@ -591,8 +595,10 @@ Node identity는 ID로 유지한다. 생성과 AI 후보 승인은 같은 scope�
 
 두 endpoint 모두 organization scope `manage` 권한(admin·owner)이 필요하다.
 
-- `GET .../knowledge/ontology/recommendations`: 조직의 graph node·edge와 pending 후보에서 관찰된 용어를 집계해, 사전에 없는 상위 용어를 반환한다. 응답은 `{ "nodeKinds": [{ "term": string, "count": number }], "edgePredicates": [...] }`이며 목록당 최대 20개다. AI 호출 없이 결정적으로 동작한다.
+- `GET .../knowledge/ontology/recommendations`: 요청자가 읽을 수 있는 graph node·edge와 ready 문서의 pending 후보에서 용어를 집계해, 사전에 없는 상위 용어를 반환한다. Graph는 읽을 수 있는 유효한 출처가 있어야 하며 edge의 양 끝 node도 읽을 수 있어야 한다. 응답은 `{ "nodeKinds": [{ "term": string, "count": number }], "edgePredicates": [...] }`이며 목록당 최대 20개다. AI 호출 없이 빈도 내림차순, 동률이면 용어 순으로 정렬한다.
 - `POST .../knowledge/ontology/suggestions`: 관찰 용어와 현재 사전을 knowledge extraction 모델에 보내 정제된 용어(동의어 통합·정규화)를 제안받는다. 응답은 `{ "nodeKinds": string[], "edgePredicates": string[] }`이며 사전에 이미 있는 용어는 제외된다. `KNOWLEDGE_EXTRACTION_MODEL`이 설정되지 않았으면 `503`, provider 상한 초과 시 `429`를 반환한다. 요청에는 용어 문자열과 개수만 전달되며 문서 본문은 전송하지 않는다.
+
+Pending 후보에서는 미검토 항목만 집계한다. 승인 항목은 Graph에서 집계하며 후보에서 다시 세지 않는다. 거절된 항목은 추천·제안 입력에서 제외한다.
 
 추천·제안은 사전에 자동 반영되지 않는다 — admin이 콘솔 설정 화면에서 선택해 `PATCH /api/organization`로 저장한다.
 
@@ -616,7 +622,13 @@ curl \
 
 Runtime은 개체를 먼저 식별·검증한 뒤, 살아남은 entity key만 관계의 `sourceKey`·`targetKey`로 허용하는 두 단계 추출을 사용한다. 관계가 없는 결과도 정상이며 0–1개 개체에는 관계 모델을 호출하지 않는다. 이후의 자동 검증은 별도 요청이다.
 
-현재 검증 policy는 `evidence-v5`다. 핵심 관계는 다른 검증을 모두 통과하면 모델의 `incidental` 표기에도 보존될 수 있으며, 판정 이유에 이를 기록한다. 근거 없는 주장·불확실성·종류 불일치·일시적 이동·응답은 이 규칙으로 승격하지 않는다.
+완료된 개체 단계는 내부 checkpoint에 저장해 같은 입력의 관계 추출을 재개할 때 재사용한다. Checkpoint는 후보 목록·Graph·추출 완료 수에 포함하지 않는다. 서버 AI quota로 중단된 enrichment는 오류 재시도 횟수를 소모하지 않고 후속 실행을 예약한다. 원문이나 추출 설정이 바뀌면 개체 단계부터 새로 수행하며, 이미 저장된 후보는 기존 계약에 따라 재사용한다.
+
+Assessment의 `sources`는 원문과 비교에 사용한 Memory·chunk 참조이며, `contextNodeIds`는 비교에 사용한 원래 Knowledge node ID 목록이다. 현재 판정과 `assessmentHistory`는 출처와 참고 node가 현재 후보 scope 전체에서 유효할 때만 반환한다. 병합된 node는 같은 조직의 병합 이력을 따라 남은 node의 권한을 검사한다. 비공개·보관·만료·삭제 또는 확인할 수 없는 참조 때문에 숨긴 판정은 DB에서 삭제하지 않는다. 미완료 후보는 새 검증 후 다시 자동 처리할 수 있다.
+
+현재 검증 policy는 `evidence-v7`다. 핵심 관계는 다른 검증을 모두 통과하면 모델의 `incidental` 표기에도 보존될 수 있으며, 판정 이유에 이를 기록한다. 근거 없는 주장·불확실성·종류 불일치·일시적 이동·응답은 이 규칙으로 승격하지 않는다.
+
+법률·규정이 권한이나 의무를 정의하는 직위는 `role` 추출 대상이며, 특정 사람을 대신 부르는 호칭과 구분한다. 추출·검증 모델은 규범과 실제 사건, 문서 구성과 법률의 주제를 구분하고 조건·예외·시행 시점을 보존하도록 지시받는다. 원문 인용 일치만으로 법률 해석의 정확성이나 현행성을 보장하지 않는다.
 
 새 assessment 항목에는 `support`(explicit/uncertain/unsupported), `usefulness`(useful/incidental), `conflict`(boolean)를 함께 반환한다. 과거 assessment에는 이 선택형 필드가 없을 수 있다. `reason`은 최대 1,000자의 설명이며 긴 응답은 끝의 `…`로 축약을 표시한다.
 
@@ -626,17 +638,17 @@ Runtime은 개체를 먼저 식별·검증한 뒤, 살아남은 entity key만 �
 
 `GET /api/knowledge/progress`는 읽기 가능한 ready 문서 청크를 대상으로 `{ totalChunks, extractedChunks, curatedChunks, enabled }`를 반환한다. Curated는 검증과 자동 처리가 끝났거나 사람이 완료한 청크다. 이 숫자는 수동 검토까지 모두 끝났다는 의미가 아니다.
 
-`GET /api/knowledge/curation`은 검토 권한이 있는 ready 문서의 최근 assessment 기록 50개를 `{ sources: [{ candidate, documentTitle, ordinal }] }`로 반환한다. Candidate는 assessment와 항목별 자동·수동 처리 기록을 포함한다.
+`GET /api/knowledge/curation`은 검토 권한이 있는 ready 문서에서 조회 가능한 검증 이력이 있는 최근 갱신 후보 50개를 `{ sources: [{ candidate, documentTitle, ordinal }] }`로 반환한다. 새 검증을 저장하면 후보의 `updatedAt`을 검증 시각으로 갱신한다. 이미 유효한 같은 정책의 검증을 재사용하면 순서를 바꾸지 않는다. Candidate는 공개 가능한 현재 assessment·assessmentHistory와 항목별 자동·수동 처리 기록을 포함한다. 현재 assessment가 숨겨져도 유효한 이전 이력이 있으면 반환한다.
 
 #### 자동 검토 등록
 
-`POST /api/knowledge/curation?query=관우`는 검토 권한이 있는 후보 중 이름·추출된 별칭에 해당 검색어가 포함된 후보를 우선 처리한다. Query는 선택 사항이며 최대 500자다. 기존 queued job도 우선순위를 올린다. 이미 저장된 추출을 재사용하며 원문 전체 재검색이나 재추출은 수행하지 않는다. Query가 있으면 `queued`는 기존 대기·실행 중 작업을 포함한 우선 처리 요청 대상 수이며, 생략하면 새로 등록된 작업 수다. Query를 생략하면 미검증 추출·미완료 자동 처리 항목과 아직 추출 결과가 없는 ready 청크를 등록한다. 추출 실패로 재시도가 소진된 청크도 포함하며 source의 현재 `manage` 권한을 요구한다. 완료된 추출은 보존하고 queued·active 작업은 중복 등록하지 않는다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐 요청자(기본 ingestion은 문서 생성자)의 현재 권한을 검증한 후 실행한다.
+`POST /api/knowledge/curation?query=관우`는 검토 권한이 있는 후보 중 이름·추출된 별칭에 해당 검색어가 포함된 후보를 우선 처리한다. Query는 선택 사항이며 최대 500자다. 기존 queued job도 우선순위를 올린다. 이미 저장된 추출을 재사용하며 원문 전체 재검색이나 재추출은 수행하지 않는다. Query가 있으면 `queued`는 기존 대기·실행 중 작업을 포함한 우선 처리 요청 대상 수이며, 생략하면 새로 등록된 작업 수다. Query를 생략하면 미검증 추출·미완료 자동 처리 항목과 아직 추출 결과가 없는 ready 청크를 등록한다. 추출 실패로 재시도가 소진된 청크도 포함하며 source의 현재 `manage` 권한을 요구한다. 완료된 추출은 보존하고 queued·active 작업은 중복 등록하지 않는다. Body로 사용자·조직을 받지 않는다. `202 { queued }`를 반환하며 extraction model이 설정되지 않으면 `503`을 반환한다. Worker는 큐에 기록한 실제 요청자의 현재 권한을 검증한다. 업로드·문서 retry의 후속 추출은 `write`, 이 endpoint의 추출과 자동 검토는 `manage`를 요구한다. 조직 전용 Agent의 scope 제한도 유지한다.
 
 #### 검증 결과와 별칭
 
 자동 검증은 추출과 별도의 structured-output 요청이다. 기본은 추출 모델이며 `KNOWLEDGE_VERIFICATION_BASE_URL`과 `KNOWLEDGE_VERIFICATION_MODEL`을 함께 지정하면 독립 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다.
 
-`evidence-v5`의 `assessment.aliases`에는 `entityKey`, `alias`, `identity`, `verdict`, `evidence`, `reason`을 저장한다. 별칭 identity는 `same_entity`, `generic_reference`, `different_entity`, `uncertain` 중 하나이며 원문 인용과 별칭 자체의 원문 출현이 확인된 `same_entity`만 자동 승격한다. 기존 이름 뒤에 수식어를 붙인 별칭은 선택형 `assessment.aliases[].descriptiveExpansion`으로 설명형 확장 여부를 따로 검증하며, `true`이면 같은 대상을 가리켜도 별칭으로 승격하지 않는다.
+`evidence-v7`의 `assessment.aliases`에는 `entityKey`, `alias`, `identity`, `verdict`, `evidence`, `reason`을 저장한다. 별칭 identity는 `same_entity`, `generic_reference`, `different_entity`, `uncertain` 중 하나이며 원문 인용과 별칭 자체의 원문 출현이 확인된 `same_entity`만 자동 승격한다. 기존 이름 뒤에 수식어를 붙인 별칭은 선택형 `assessment.aliases[].descriptiveExpansion`으로 설명형 확장 여부를 따로 검증하며, `true`이면 같은 대상을 가리켜도 별칭으로 승격하지 않는다.
 
 직함·호칭과 다른 개체의 이름은 별칭에서 제외하고, 불확실한 별칭은 개체와 연결 관계를 수동 검토로 남긴다. Provider 응답 스키마는 모든 항목 ID를 필수 object key로 지정하고 추가 key를 금지한다. 서버에서도 전체 항목 집합을 다시 검증한다.
 
@@ -874,7 +886,8 @@ Content는 위 문서 MIME과 **디코딩 후 원본 10 MiB** 제한을 적용�
 문자 escape와 envelope를 포함해 `6 × maxDocumentBytes + 512 KiB`로 제한한다. 일반 HTTP JSON
 본문의 1 MiB 제한은 유지한다.
 
-Retry는 현재 문서 write 권한을 요구한다. 같은 키·같은 expectedAttempts는 같은 요청이며, 처리
+Retry는 현재 문서 write 권한을 요구한다. Worker는 업로드·retry 요청자의 현재 권한을 원본 읽기 전, embedding batch 전, 저장 전에 다시 확인하며 AI quota도 그 요청자에게 적용한다. 같은 키·같은 expectedAttempts는 같은 요청이며, 처리
 횟수가 바뀌면 새 키와 관측한 횟수로 요청한다. 이미 처리한 요청을 replay해도 재처리를 시작하지
-않는다. Queue 메시지도 expectedAttempts를 보관해 늦게 도착한 메시지를 거절한다. 처리 중 worker가
-중단된 경우 같은 횟수에서 만료 lease만 회수한다.
+않는다. 서버는 처리 횟수와 별개인 내부 세대 ID로 queue 요청을 식별한다. 같은 요청의 오류 재시도와
+만료 lease 회수는 허용하고, 새 retry 요청으로 교체된 이전 세대의 작업은 거절한다. Claim을 얻을 때마다
+`processingAttempts`가 증가한다. 새 retry 요청을 enqueue하면 문서는 `pending` 상태를 반환한다.

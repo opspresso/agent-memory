@@ -66,9 +66,10 @@ function documentRepository(
     findById: vi.fn(),
     findChunkById,
     listChunksByDocument: vi.fn(),
+    prepareRetry: vi.fn(),
     claimForProcessing: vi.fn(),
     completeProcessing: vi.fn(),
-    failProcessing: vi.fn(),
+    failProcessing: vi.fn(), deferProcessing: vi.fn(),
     markEnqueueFailure: vi.fn(),
     archive: vi.fn(),
     search: vi.fn()
@@ -186,6 +187,7 @@ describe("knowledge candidate", () => {
     const candidates = candidateRepository();
     const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
     const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "organization-1", userId: "user-1", role: "owner", teams: [] }) },
       ontologyReader: ontologyReader(),
       candidateRepository: candidates,
       clock: () => now,
@@ -196,13 +198,14 @@ describe("knowledge candidate", () => {
       generateId: () => "candidate-1"
     });
 
-    await expect(generate("organization-1", "chunk-1")).resolves.toMatchObject({
+    await expect(generate("organization-1", "chunk-1", { userId: "user-1", action: "write" })).resolves.toMatchObject({
       chunkId: "chunk-1",
       status: "pending",
       scope
     });
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
+      source: { organizationId: "organization-1", chunkId: chunk.id },
       documentTitle: document.title,
       mimeType: textMimeType,
       quotaKey: {
@@ -227,6 +230,7 @@ describe("knowledge candidate", () => {
     vi.mocked(candidates.findByChunkId).mockResolvedValue(existing);
     const extractionService = { extract: vi.fn() };
     const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "organization-1", userId: "user-1", role: "owner", teams: [] }) },
       ontologyReader: ontologyReader(),
       candidateRepository: candidates,
       clock: () => now,
@@ -235,7 +239,7 @@ describe("knowledge candidate", () => {
       generateId: () => "candidate-2"
     });
 
-    await expect(generate("organization-1", "chunk-1")).resolves.toBe(existing);
+    await expect(generate("organization-1", "chunk-1", { userId: "user-1", action: "write" })).resolves.toBe(existing);
     expect(extractionService.extract).not.toHaveBeenCalled();
     expect(candidates.save).not.toHaveBeenCalled();
   });
@@ -261,6 +265,7 @@ describe("knowledge candidate", () => {
       now
     });
     const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "organization-1", userId: "user-1", role: "owner", teams: [] }) },
       ontologyReader: ontologyReader(),
       candidateRepository: candidateRepository(),
       clock: () => now,
@@ -271,7 +276,7 @@ describe("knowledge candidate", () => {
       generateId: () => "candidate-1"
     });
 
-    await expect(generate("organization-1", "chunk-1")).rejects.toBeInstanceOf(
+    await expect(generate("organization-1", "chunk-1", { userId: "user-1", action: "write" })).rejects.toBeInstanceOf(
       KnowledgeCandidateSourceNotFoundError
     );
   });
@@ -301,6 +306,7 @@ describe("knowledge candidate", () => {
     });
     const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
     const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "organization-1", userId: "user-1", role: "owner", teams: [] }) },
       candidateRepository: candidateRepository(),
       clock: () => now,
       documentRepository: documentRepository(
@@ -314,10 +320,11 @@ describe("knowledge candidate", () => {
       })
     });
 
-    await generate("organization-1", "chunk-1");
+    await generate("organization-1", "chunk-1", { userId: "user-1", action: "write" });
 
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
+      source: { organizationId: "organization-1", chunkId: chunk.id },
       documentTitle: document.title,
       mimeType: document.mimeType,
       quotaKey: {
@@ -357,6 +364,7 @@ describe("knowledge candidate", () => {
     });
     const extract = vi.fn().mockResolvedValue({ model: "model", graph: graph() });
     const generate = buildGenerateKnowledgeCandidate({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "organization-1", userId: "user-1", role: "owner", teams: [] }) },
       candidateRepository: candidateRepository(),
       clock: () => now,
       documentRepository: documentRepository(
@@ -370,10 +378,11 @@ describe("knowledge candidate", () => {
       })
     });
 
-    await generate("organization-1", "chunk-1");
+    await generate("organization-1", "chunk-1", { userId: "user-1", action: "write" });
 
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
+      source: { organizationId: "organization-1", chunkId: chunk.id },
       documentTitle: document.title,
       mimeType: document.mimeType,
       quotaKey: {

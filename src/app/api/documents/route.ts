@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import { resolveDocumentMimeType } from "@/domain/document/document-format";
 import { maxDocumentBytes } from "@/domain/document/document";
@@ -21,7 +22,7 @@ function textField(formData: FormData, name: string): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-export async function POST(request: Request) {
+export const POST = withRouteErrorBoundary("POST /api/documents", async function POST(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
@@ -111,9 +112,9 @@ export async function POST(request: Request) {
     }
     throw error;
   }
-}
+});
 
-export async function GET(request: Request) {
+export const GET = withRouteErrorBoundary("GET /api/documents", async function GET(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
@@ -140,4 +141,4 @@ export async function GET(request: Request) {
     }
     throw error;
   }
-}
+});

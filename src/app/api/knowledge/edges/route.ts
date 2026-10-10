@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   knowledgeErrorResponse,
@@ -8,7 +9,7 @@ import { createKnowledgeEdgeRecord } from "@/lib/knowledge-service";
 import { readJsonBody } from "@/lib/memory-http";
 import { resolveScopedResource } from "@/lib/scoped-resource";
 
-export async function POST(request: Request) {
+export const POST = withRouteErrorBoundary("POST /api/knowledge/edges", async function POST(request: Request) {
   const authorization = await authorizeOrganizationRoute(request);
   if (!authorization.authorized) {
     return authorization.response;
@@ -52,4 +53,4 @@ export async function POST(request: Request) {
     }
     throw error;
   }
-}
+});

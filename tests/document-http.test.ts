@@ -100,6 +100,7 @@ describe("document HTTP boundary", () => {
     };
 
     expect(publicDocument(document)).not.toHaveProperty("objectKey");
+    expect(publicDocument(document)).not.toHaveProperty("processingGeneration");
     expect(publicDocument(document)).not.toHaveProperty("processingError");
   });
 

@@ -1,3 +1,4 @@
+import { createDocumentRepository } from "@/infrastructure/database/repositories/document-repository";
 import { randomUUID } from "node:crypto";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -99,7 +100,7 @@ describe("knowledge properties retain their provenance", () => {
     const candidate = await candidates.save(createKnowledgeCandidate({ id: randomUUID(), scope: f.scope, documentId: f.documentId,
       chunkId: f.visibleSource.chunkId!, model: "extractor", now: f.laterAt,
       graph: { entities: [{ key: "atlas", kind: "service", canonicalName: "Atlas" }], relationships: [] } }));
-    const accept = buildAcceptKnowledgeCandidate({ repository: candidates, ontologyReader: createKnowledgeOntologyReader(database.db),
+    const accept = buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(database.db), repository: candidates, ontologyReader: createKnowledgeOntologyReader(database.db),
       clock: () => f.laterAt, generateId: randomUUID,
       ...(embedding ? { embeddingService: { embed: async () => embedding, embedMany: async (texts: readonly string[]) => texts.map(() => embedding) } } : {}) });
     return (await accept(f.access, candidate.id)).nodes[0]!;
@@ -216,7 +217,7 @@ describe("knowledge properties retain their provenance", () => {
         relationships: [{ sourceKey: "Atlas", targetKey: "Beacon", predicate: "uses" }] }, now: f.firstAt
     }));
     let reviewedAt = f.firstAt;
-    const accept = buildAcceptKnowledgeCandidate({ repository: candidates, ontologyReader: createKnowledgeOntologyReader(database.db),
+    const accept = buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(database.db), repository: candidates, ontologyReader: createKnowledgeOntologyReader(database.db),
       clock: () => reviewedAt, generateId: randomUUID });
     const first = await accept(f.access, candidate.id, undefined, { entityKeys: ["Atlas", "Beacon"], relationshipIndexes: [] });
     const original = first.nodes.find((node) => node.canonicalName === "Atlas")!;
@@ -255,7 +256,7 @@ describe("knowledge properties retain their provenance", () => {
       graph: { entities: ["Atlas", "Beacon"].map((canonicalName) => ({ key: canonicalName, canonicalName, kind: "service" })),
         relationships: [{ sourceKey: "Atlas", targetKey: "Beacon", predicate: "uses" }] }, now: f.firstAt
     }));
-    const accept = buildAcceptKnowledgeCandidate({ repository: candidates, ontologyReader: createKnowledgeOntologyReader(database.db),
+    const accept = buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(database.db), repository: candidates, ontologyReader: createKnowledgeOntologyReader(database.db),
       clock: () => new Date(f.laterAt.getTime() + 500), generateId: randomUUID });
 
     const approved = await accept(f.access, candidate.id);

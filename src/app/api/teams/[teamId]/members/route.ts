@@ -1,3 +1,4 @@
+import { withRouteErrorBoundary } from "@/lib/route-error-boundary";
 import { authorizeOrganizationRoute } from "@/lib/organization-authorization";
 import {
   organizationAdministrationErrorResponse,
@@ -16,7 +17,7 @@ interface RouteContext {
   readonly params: Promise<{ teamId: string }>;
 }
 
-export async function GET(request: Request, context: RouteContext) {
+export const GET = withRouteErrorBoundary("GET /api/teams/[teamId]/members", async function GET(request: Request, context: RouteContext) {
   const params = await context.params;
   const teamId = teamIdSchema.safeParse(params.teamId);
   if (!teamId.success) {
@@ -39,9 +40,9 @@ export async function GET(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});
 
-export async function PUT(request: Request, context: RouteContext) {
+export const PUT = withRouteErrorBoundary("PUT /api/teams/[teamId]/members", async function PUT(request: Request, context: RouteContext) {
   const params = await context.params;
   const teamId = teamIdSchema.safeParse(params.teamId);
   if (!teamId.success) {
@@ -77,4 +78,4 @@ export async function PUT(request: Request, context: RouteContext) {
     }
     throw error;
   }
-}
+});
