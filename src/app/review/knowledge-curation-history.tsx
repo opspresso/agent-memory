@@ -6,7 +6,37 @@ import type { z } from "zod";
 import { knowledgeCurationHistoryResponseSchema } from "../api-response-schemas";
 import { responseJson } from "../http-response";
 import { SourceEvidence } from "../source-evidence";
-import { useT } from "../_i18n/provider";
+import { useLocale, useT } from "../_i18n/provider";
+
+type Candidate = z.infer<typeof knowledgeCurationHistoryResponseSchema>["sources"][number]["candidate"];
+type Assessment = NonNullable<Candidate["assessment"]>;
+
+function AssessmentDetails({ candidate, assessment, current }: {
+  readonly candidate: Candidate; readonly assessment: Assessment; readonly current: boolean;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  const name = (key: string) => candidate.graph.entities.find((entity) => entity.key === key)?.canonicalName ?? key;
+  return <Paper component="section" p="sm" withBorder>
+    <Stack gap="sm">
+      <Group gap="xs"><Badge variant="outline">{t(current ? "reviewQueue.currentAssessment" : "reviewQueue.previousAssessment")}</Badge>
+        <Text size="xs" c="dimmed">{assessment.model} · {assessment.policyVersion} · {new Date(assessment.assessedAt).toLocaleString(locale)}</Text></Group>
+      {assessment.items.map((item) => {
+        const review = current ? candidate.itemReviews?.find((review) => review.item === item.item) : undefined;
+        const entity = item.item.startsWith("entity:") ? candidate.graph.entities.find((entity) => entity.key === item.item.slice(7)) : undefined;
+        const relation = item.item.startsWith("relationship:") ? candidate.graph.relationships[Number(item.item.slice(13))] : undefined;
+        return <Paper p="sm" withBorder key={item.item}>
+          <Group gap="xs"><Text size="xs" fw={600}>{t(`reviewQueue.verdict.${item.verdict}`)}</Text>
+            {review ? <><Badge>{t(review.decision === "accepted" ? "reviewQueue.acceptedDecision" : "reviewQueue.ignoredDecision")}</Badge>
+              <Badge variant="outline">{t(review.method === "automatic" ? "reviewQueue.automatic" : "reviewQueue.human")}</Badge></> : null}</Group>
+          <Text size="sm" fw={600} mt="xs">{entity?.canonicalName ?? (relation ? `${name(relation.sourceKey)} → ${relation.predicate} → ${name(relation.targetKey)}` : item.item)}</Text>
+          <Text size="sm">{item.reason}</Text>
+          {item.evidence ? <Text size="sm" c="dimmed">“{item.evidence}”</Text> : null}
+        </Paper>;
+      })}
+    </Stack>
+  </Paper>;
+}
 
 export function KnowledgeCurationHistory() {
   const t = useT();
@@ -31,20 +61,9 @@ export function KnowledgeCurationHistory() {
         <Text truncate>{documentTitle.normalize("NFKC")} · {t("source.chunk", { number: ordinal + 1 })}</Text>
       </Button>
       {selected === candidate.id ? <Stack gap="sm" mt="sm">
-        <Text size="xs" c="dimmed">{candidate.assessment?.model} · {candidate.assessment?.assessedAt}</Text>
-        {candidate.assessment?.items.map((item) => {
-          const review = candidate.itemReviews?.find((review) => review.item === item.item);
-          const entity = item.item.startsWith("entity:") ? candidate.graph.entities.find((entity) => entity.key === item.item.slice(7)) : undefined;
-          const relation = item.item.startsWith("relationship:") ? candidate.graph.relationships[Number(item.item.slice(13))] : undefined;
-          const name = (key: string) => candidate.graph.entities.find((entity) => entity.key === key)?.canonicalName ?? key;
-          return <Paper p="sm" withBorder key={item.item}>
-            <Group gap="xs"><Badge color={review?.decision === "accepted" ? "teal" : "gray"}>{t(review ? review.decision === "accepted" ? "reviewQueue.acceptedDecision" : "reviewQueue.ignoredDecision" : "reviewQueue.pendingDecision")}</Badge>
-              {review ? <Badge variant="outline">{t(review.method === "automatic" ? "reviewQueue.automatic" : "reviewQueue.human")}</Badge> : null}</Group>
-            <Text size="sm" fw={600} mt="xs">{entity?.canonicalName ?? (relation ? `${name(relation.sourceKey)} → ${relation.predicate} → ${name(relation.targetKey)}` : item.item)}</Text>
-            <Text size="sm">{item.reason}</Text>
-            {item.evidence ? <Text size="sm" c="dimmed">“{item.evidence}”</Text> : null}
-          </Paper>;
-        })}
+        {candidate.assessment ? <AssessmentDetails candidate={candidate} assessment={candidate.assessment} current /> : null}
+        {candidate.assessmentHistory?.toReversed().map((assessment, index) =>
+          <AssessmentDetails key={`${assessment.assessedAt}:${index}`} candidate={candidate} assessment={assessment} current={false} />)}
         <SourceEvidence chunkId={candidate.chunkId} />
       </Stack> : null}
     </Paper>)}
