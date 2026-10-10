@@ -27,8 +27,8 @@ test("requeues unextracted chunks from the graph without a search term", async (
     await expect(page.getByRole("status")).toHaveText("미완료 청크 1개를 처리하도록 등록했습니다.");
     await retry.click();
     await expect(page.getByRole("status")).toHaveText("미완료 청크 0개를 처리하도록 등록했습니다.");
-    const jobs = await database.query("SELECT data FROM pgboss.job WHERE name='document-knowledge-enrichment-v2' AND data->>'chunkId'=$1 AND state IN ('created','active','retry')", [chunkId]);
-    expect(jobs.rows).toEqual([{ data: { organizationId: me.organizationId, chunkId, requestedBy: me.user.id } }]);
+    const jobs = await database.query("SELECT data FROM pgboss.job WHERE name='document-knowledge-enrichment-v3' AND data->>'chunkId'=$1 AND state IN ('created','active','retry')", [chunkId]);
+    expect(jobs.rows).toEqual([{ data: { organizationId: me.organizationId, chunkId, principal: { userId: me.user.id, action: "manage" } } }]);
     await page.screenshot({ path: testInfo.outputPath("knowledge-processing-retry.png"), fullPage: true });
   } finally {
     await database.end();

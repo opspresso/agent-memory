@@ -232,17 +232,17 @@ describe("PostgreSQL schema", () => {
       const organizationId = "00000000-0000-0000-0000-000000000008";
       const documentId = "40000000-0000-0000-0000-000000000008";
       const chunkId = "50000000-0000-4000-8000-000000000008";
-      await expect(queue.enqueue(organizationId, documentId, documentId)).resolves.toBe(
+      await expect(queue.enqueue(organizationId, documentId, documentId, "10000000-0000-4000-8000-000000000008")).resolves.toBe(
         "queued"
       );
-      await expect(queue.enqueue(organizationId, documentId, documentId)).resolves.toBe(
+      await expect(queue.enqueue(organizationId, documentId, documentId, "10000000-0000-4000-8000-000000000008")).resolves.toBe(
         "already_queued"
       );
       await expect(
-        queue.enqueueKnowledgeEnrichment(organizationId, chunkId)
+        queue.enqueueKnowledgeEnrichment(organizationId, chunkId, { userId: "10000000-0000-4000-8000-000000000008", action: "write" })
       ).resolves.toBe("queued");
       await expect(
-        queue.enqueueKnowledgeEnrichment(organizationId, chunkId)
+        queue.enqueueKnowledgeEnrichment(organizationId, chunkId, { userId: "10000000-0000-4000-8000-000000000008", action: "write" })
       ).resolves.toBe("already_queued");
 
       const jobs = await boss.findJobs<DocumentIngestionJob>(
@@ -250,7 +250,7 @@ describe("PostgreSQL schema", () => {
         { data: { organizationId, documentId } }
       );
       expect(jobs).toHaveLength(1);
-      expect(jobs[0]?.data).toEqual({ organizationId, documentId, generation: documentId });
+      expect(jobs[0]?.data).toEqual({ organizationId, documentId, generation: documentId, requestedBy: "10000000-0000-4000-8000-000000000008" });
       const enrichmentJobs =
         await boss.findJobs<DocumentKnowledgeEnrichmentJob>(
           documentKnowledgeEnrichmentQueueName,
@@ -282,7 +282,7 @@ describe("PostgreSQL schema", () => {
     const queue = createPgBossDocumentIngestionQueue(container.getConnectionUri(), () => {});
     try {
       const boss = await queue.start();
-      await queue.enqueue(organizationId, document.id, document.processingGeneration);
+      await queue.enqueue(organizationId, document.id, document.processingGeneration, userId);
       const claim = await repository.claimForProcessing(organizationId, document.id, now, document.processingGeneration);
       expect(claim).not.toBeNull();
       await repository.failProcessing(claim!, "temporary extraction failure", now);
@@ -2755,8 +2755,8 @@ describe("PostgreSQL schema", () => {
       accept: buildAcceptKnowledgeCandidate({ documentRepository: createDocumentRepository(db), clock: () => now, generateId: randomUUID, method: "automatic", repository, ontologyReader: ontology }),
       reject: buildRejectKnowledgeCandidate({ clock: () => now, method: "automatic", repository })
     });
-    await curate(organization, automaticChunkId);
-    await curate(organization, automaticChunkId);
+    await curate(organization, automaticChunkId, user);
+    await curate(organization, automaticChunkId, user);
     expect(verify).toHaveBeenCalledTimes(1);
     const automatic = await repository.findById(organization, automaticCandidate.id);
     expect(automatic?.status).toBe("accepted");

@@ -28,14 +28,14 @@ describe("automatic curation orchestration", () => {
     const test = setup();
     test.findByChunkId.mockResolvedValue({ ...candidate,assessment:{ model:"old",policyVersion:"evidence-v5",assessedAt:now.toISOString(),
       items:[{ item:"entity:a",verdict:"accept",evidence:"A leads the team.",reason:"Old policy." }] } });
-    await test.run("org","ch");
+    await test.run("org","ch", "owner");
     expect(test.verify).toHaveBeenCalledOnce();
     expect(test.saveAssessment).toHaveBeenCalledWith("org","c",expect.objectContaining({ policyVersion:"evidence-v6" }));
   });
   it("bounds accumulated context without truncating the source under verification", async () => {
     const test = setup();
     test.existingKnowledge.mockResolvedValue([{ canonicalName: "A", aliases: [], kind: "person", summary: "x".repeat(10_000) }]);
-    await test.run("org", "ch");
+    await test.run("org", "ch", "owner");
     expect(test.verify.mock.calls[0]?.[0]).toMatchObject({
       content: "A leads the team.",
       existingKnowledge: [{ name: "A", summary: "x".repeat(2_000) }]
@@ -43,7 +43,7 @@ describe("automatic curation orchestration", () => {
   });
   it("verifies then persists its assessment before automatically accepting qualified facts", async () => {
     const test = setup();
-    await test.run("org", "ch");
+    await test.run("org", "ch", "owner");
     expect(test.verify).toHaveBeenCalledOnce();
     expect(test.saveAssessment).toHaveBeenCalledOnce();
     expect(test.accept).toHaveBeenCalledWith(expect.objectContaining({ userId: "owner" }), "c", expect.stringContaining("Automatic"), { entityKeys: ["a"], relationshipIndexes: [] });
@@ -52,14 +52,14 @@ describe("automatic curation orchestration", () => {
   it("does not verify or mutate without a current principal allowed to manage the source", async () => {
     const test = setup();
     test.findByUser.mockResolvedValue(null);
-    await test.run("org", "ch");
+    await test.run("org", "ch", "owner");
     expect(test.verify).not.toHaveBeenCalled();
     expect(test.accept).not.toHaveBeenCalled();
   });
   it("rechecks membership after AI verification", async () => {
     const test = setup();
     test.findByUser.mockResolvedValueOnce({ organizationId: "org", userId: "owner", role: "owner", teams: [] }).mockResolvedValueOnce(null);
-    await test.run("org", "ch");
+    await test.run("org", "ch", "owner");
     expect(test.verify).toHaveBeenCalledOnce();
     expect(test.accept).not.toHaveBeenCalled();
     expect(test.reject).not.toHaveBeenCalled();
@@ -69,7 +69,7 @@ describe("automatic curation orchestration", () => {
     const test = setup();
     test.findByChunkId.mockResolvedValue({ ...candidate, scope: { organizationId: "org", kind: "team", teamId: "team" } });
     test.findByUser.mockResolvedValue({ organizationId: "org", userId: "owner", role: "member", teams: [{ teamId: "team", role: "member" }] });
-    await test.run("org", "ch");
+    await test.run("org", "ch", "owner");
     expect(test.verify).not.toHaveBeenCalled();
     expect(test.accept).not.toHaveBeenCalled();
     expect(test.reject).not.toHaveBeenCalled();
@@ -77,7 +77,7 @@ describe("automatic curation orchestration", () => {
   it("fails closed when verification fails", async () => {
     const test = setup();
     test.verify.mockRejectedValue(new Error("provider unavailable"));
-    await expect(test.run("org", "ch")).rejects.toThrow("provider unavailable");
+    await expect(test.run("org", "ch", "owner")).rejects.toThrow("provider unavailable");
     expect(test.saveAssessment).not.toHaveBeenCalled();
     expect(test.accept).not.toHaveBeenCalled();
     expect(test.reject).not.toHaveBeenCalled();
@@ -88,7 +88,7 @@ describe("automatic curation orchestration", () => {
     expect(test.findByUser).toHaveBeenCalledWith("org", "administrator");
     test.verify.mockClear();
     test.findByChunkId.mockResolvedValue({ ...candidate, status: "accepted" });
-    await test.run("org", "ch");
+    await test.run("org", "ch", "owner");
     expect(test.verify).not.toHaveBeenCalled();
   });
 });

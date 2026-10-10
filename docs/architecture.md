@@ -168,6 +168,8 @@ multipart upload → S3-compatible storage → document row(pending)
 
 원본은 S3 호환 스토리지에 저장하고 metadata와 처리 상태는 PostgreSQL에 저장한다. Document row 생성은 organization advisory lock 아래에서 누적 storage, 처리 backlog, 사용자별 시간당 업로드 quota를 원자적으로 검사하며 모든 replica가 같은 한도를 공유한다. 한도를 넘으면 row를 만들지 않고 저장한 object를 제거한다. Worker는 처리 claim마다 lease ID를 발급하고 queue job expiration과 같은 15분 ownership timeout을 사용하므로, 만료된 job은 새 lease로 복구하고 stale worker의 chunk나 상태 갱신은 거부한다. `document-ingestion-v3` queue는 document ID와 내부 `processingGeneration` UUID별 exclusive job을 보장한다. 같은 요청의 오류 재시도와 만료 lease 회수는 세대 ID를 유지하고, claim을 얻을 때마다 `processingAttempts`를 증가시킨다. 사용자의 새 retry 요청은 현재 실패 상태·관측한 처리 횟수를 검사하고 새 세대를 준비한다. 이전 세대의 claim과 늦은 enqueue 실패는 새 세대를 변경하지 못한다.
 
+Ingestion 메시지는 실제 요청자를 보존한다. 원본 읽기 전, 각 embedding batch 전, 최종 저장 전에 현재 멤버십·문서 write 권한과 처리 세대·claim을 확인한다. 다른 사용자가 retry하면 그 요청자의 quota를 사용한다.
+
 ### 추출·embedding과 실패
 
 `DocumentTextExtractor` port는 추출 본문과 본문의 MIME을 함께 반환한다. 원본 MIME과 checksum은 Document에 보존하고, chunk의 `metadata.textMimeType`은 실제 추출 형식을 기록한다. 분할과 후속 AI 추출은 이 본문 형식을 사용한다.
@@ -198,8 +200,9 @@ Graph 쓰기는 같은 조직별 Knowledge scope 잠금을 사용한다. 공개 
 
 #### 작업 등록과 실패 경계
 
-`buildIngestDocument`는 문서 처리를 마친 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. 추출 모델이 설정돼 있으면 각 chunk를 `document-knowledge-enrichment-v2` queue의 별도 job으로 보낸다. Worker는 job 해석, operation 호출, 재시도와 로그를 담당한다.
+`buildIngestDocument`는 문서 처리를 마친 뒤 선택형 `DocumentKnowledgeEnrichmentQueue` port로 후속 작업을 등록한다. 추출 모델이 설정돼 있으면 각 chunk를 `document-knowledge-enrichment-v3` queue의 별도 job으로 보낸다. Worker는 job 해석, operation 호출, 재시도와 로그를 담당한다.
 
+- 후속 job은 요청자와 필요한 권한을 명시한다. 문서 수집·재처리에서 이어지는 추출은 `write`, 별도 Knowledge 재처리는 `manage`를 요구한다. 자동 검토·Graph 반영은 항상 요청자의 현재 `manage` 권한을 요구한다.
 - Chunk ID별 exclusive job을 사용하며 각 job은 독립적으로 재시도한다.
 - 한 chunk의 실패는 문서의 `ready` 상태나 다른 chunk의 검색·후보 생성을 되돌리지 않는다.
 - 후속 queue 등록에 실패하면 ingestion 재실행에서 등록을 다시 시도한다.
@@ -323,7 +326,7 @@ AI candidate는 원본 추출과 검증·처리 이력을 graph와 분리해 보
 
 Knowledge embedding은 `knowledge_node_sources`가 model과 함께 소유한다. 같은 출처 재기여나 AI 후보 승인에서 새 embedding을 제공하면 vector·model 쌍을 교체하고, 제공하지 않으면 기존 쌍을 유지하며, embedding 없는 새 출처는 두 값을 모두 NULL로 저장한다. 검색은 현재 읽을 수 있고 유효한 출처 중 query와 model·차원이 맞는 vector의 최대 점수를 사용한다. Node 병합은 고유 출처의 vector를 그대로 옮기며, 같은 출처가 양쪽에 있으면 target vector를 유지하고 target에 없을 때만 source vector를 채운다. 공유 node 설명·vector·검색 index는 저장하지 않는다.
 
-통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node 후보를 각각 검색한다. Semantic search가 활성화되어도 query embedding은 한 번만 생성해 세 저장소 검색에 공유한다. Reranker가 설정되면 종류별로 `min(100, max(12, limit × 4))`개까지 후보를 조회한 뒤 같은 총량 상한 안에서 source별로 균형 있게 구성하고, 권한 필터가 완료된 후보만 외부 reranker에 보낸다. Reranker 입력은 query 4,000자, 후보당 8,000자로 제한한다. 성공하면 relevance score로 최종 순위를 정하고, timeout·provider 오류·잘못된 응답이면 기존 hybrid score 순위로 복귀한다. 모든 AI call은 인증 access 또는 document creator에서 organization·user quota key를 만들고, instance-local limiter와 PostgreSQL minute bucket을 모두 통과해야 한다. 따라서 여러 replica와 worker가 같은 tenant·principal budget을 공유한다. API와 MCP는 동일한 application operation을 사용한다.
+통합 Context 검색은 같은 인증·scope 조건으로 memory, document chunk, knowledge node 후보를 각각 검색한다. Semantic search가 활성화되어도 query embedding은 한 번만 생성해 세 저장소 검색에 공유한다. Reranker가 설정되면 종류별로 `min(100, max(12, limit × 4))`개까지 후보를 조회한 뒤 같은 총량 상한 안에서 source별로 균형 있게 구성하고, 권한 필터가 완료된 후보만 외부 reranker에 보낸다. Reranker 입력은 query 4,000자, 후보당 8,000자로 제한한다. 성공하면 relevance score로 최종 순위를 정하고, timeout·provider 오류·잘못된 응답이면 기존 hybrid score 순위로 복귀한다. 모든 AI call은 인증된 요청자 또는 queue에 기록한 요청자에서 organization·user quota key를 만들고, instance-local limiter와 PostgreSQL minute bucket을 모두 통과해야 한다. 따라서 여러 replica와 worker가 같은 tenant·principal budget을 공유한다. API와 MCP는 동일한 application operation을 사용한다.
 
 ### Memory 전용 회상
 

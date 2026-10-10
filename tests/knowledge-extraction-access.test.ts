@@ -27,19 +27,19 @@ describe("knowledge extraction authorization", () => {
     "does not send source content to AI without current manage access: %j", async (access) => {
       const test = fixture();
       test.findByUser.mockResolvedValue(access);
-      expect(await test.run("org", "chunk", "owner")).toBeNull();
+      expect(await test.run("org", "chunk", { userId: "owner", action: "manage" })).toBeNull();
       expect(test.extract).not.toHaveBeenCalled();
       expect(test.save).not.toHaveBeenCalled();
     }
   );
 
-  it("charges the current queue requester and uses the creator only for initial ingestion", async () => {
+  it("charges the explicit requester for ingestion and manual curation", async () => {
     const test = fixture();
-    await test.run("org", "chunk", "owner");
+    await test.run("org", "chunk", { userId: "owner", action: "manage" });
     expect(test.findByUser).toHaveBeenCalledWith("org", "owner");
     expect(test.extract).toHaveBeenCalledWith(expect.objectContaining({ quotaKey: { organizationId: "org", userId: "owner" } }));
     test.findByUser.mockResolvedValue({ ...owner, userId: "creator" });
-    await test.run("org", "chunk");
+    await test.run("org", "chunk", { userId: "creator", action: "write" });
     expect(test.findByUser).toHaveBeenLastCalledWith("org", "creator");
     expect(test.extract).toHaveBeenLastCalledWith(expect.objectContaining({ quotaKey: { organizationId: "org", userId: "creator" } }));
   });
@@ -48,17 +48,17 @@ describe("knowledge extraction authorization", () => {
     const test = fixture();
     test.findByUser.mockResolvedValue({ ...owner, userId: "creator", role: "member", teams: [{ teamId: "team", role: "member" }] });
     test.findChunkById.mockResolvedValue({ document: { ...test.document, scope: { organizationId: "org", kind: "team", teamId: "team" } }, chunk: test.chunk });
-    expect(await test.run("org", "chunk")).toMatchObject({ status: "pending" });
+    expect(await test.run("org", "chunk", { userId: "creator", action: "write" })).toMatchObject({ status: "pending" });
     expect(test.extract).toHaveBeenCalledOnce();
     test.extract.mockClear();
-    expect(await test.run("org", "chunk", "creator")).toBeNull();
+    expect(await test.run("org", "chunk", { userId: "creator", action: "manage" })).toBeNull();
     expect(test.extract).not.toHaveBeenCalled();
   });
 
   it("does not persist extraction after the requester's membership is revoked", async () => {
     const test = fixture();
     test.findByUser.mockResolvedValueOnce(owner).mockResolvedValueOnce(null);
-    expect(await test.run("org", "chunk", "owner")).toBeNull();
+    expect(await test.run("org", "chunk", { userId: "owner", action: "manage" })).toBeNull();
     expect(test.extract).toHaveBeenCalledOnce();
     expect(test.save).not.toHaveBeenCalled();
   });
@@ -69,7 +69,7 @@ describe("knowledge extraction authorization", () => {
       document: change === "archived" ? { ...test.document, status: "archived" } :
         { ...test.document, scope: { organizationId: "org", kind: "user", userId: "another-user" } }, chunk: test.chunk
     });
-    expect(await test.run("org", "chunk", "owner")).toBeNull();
+    expect(await test.run("org", "chunk", { userId: "owner", action: "manage" })).toBeNull();
     expect(test.extract).toHaveBeenCalledOnce();
     expect(test.save).not.toHaveBeenCalled();
   });

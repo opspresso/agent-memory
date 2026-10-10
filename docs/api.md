@@ -882,7 +882,7 @@ Content는 위 문서 MIME과 **디코딩 후 원본 10 MiB** 제한을 적용�
 문자 escape와 envelope를 포함해 `6 × maxDocumentBytes + 512 KiB`로 제한한다. 일반 HTTP JSON
 본문의 1 MiB 제한은 유지한다.
 
-Retry는 현재 문서 write 권한을 요구한다. 같은 키·같은 expectedAttempts는 같은 요청이며, 처리
+Retry는 현재 문서 write 권한을 요구한다. Worker는 업로드·retry 요청자의 현재 권한을 원본 읽기 전, embedding batch 전, 저장 전에 다시 확인하며 AI quota도 그 요청자에게 적용한다. 같은 키·같은 expectedAttempts는 같은 요청이며, 처리
 횟수가 바뀌면 새 키와 관측한 횟수로 요청한다. 이미 처리한 요청을 replay해도 재처리를 시작하지
 않는다. 서버는 처리 횟수와 별개인 내부 세대 ID로 queue 요청을 식별한다. 같은 요청의 오류 재시도와
 만료 lease 회수는 허용하고, 새 retry 요청으로 교체된 이전 세대의 작업은 거절한다. Claim을 얻을 때마다

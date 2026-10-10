@@ -82,20 +82,20 @@ describe("checkpointed knowledge jobs", () => {
       ontologyReader: createKnowledgeOntologyReader(database.db), clock: () => new Date(), generateId: randomUUID,
       extractionService: createEntityFirstKnowledgeExtractionService({ model: "test", baseUrl: "http://model.test/v1", request, requestLimiter: limiter,
         checkpoints: createKnowledgeExtractionCheckpointRepository(database.db) }) });
-    await queue.enqueueKnowledgeEnrichment(f.organizationId, f.chunkId, f.userId, 20);
+    await queue.enqueueKnowledgeEnrichment(f.organizationId, f.chunkId, { userId: f.userId, action: "manage" }, 20);
     const claim = await nextJob();
-    await expect(build()(f.organizationId, f.chunkId, f.userId)).rejects.toBeInstanceOf(AiRequestLimitExceededError);
+    await expect(build()(f.organizationId, f.chunkId, { userId: f.userId, action: "manage" })).rejects.toBeInstanceOf(AiRequestLimitExceededError);
     expect(await candidates.findByChunkId(f.organizationId, f.chunkId)).toBeNull();
     expect(await queue.deferKnowledgeEnrichment(claim, 60)).toBe("deferred");
     expect(await boss.getJobById(queueName, claim.id)).toMatchObject({ state: "completed", output: { deferred: true }, retryCount: 0 });
     const next = await continuation(f.chunkId);
-    expect(next).toMatchObject({ state: "created", priority: 20, retryCount: 0, retryLimit: 5, data: { requestedBy: f.userId } });
+    expect(next).toMatchObject({ state: "created", priority: 20, retryCount: 0, retryLimit: 5, data: { principal: { userId: f.userId, action: "manage" } } });
     expect(next!.startAfter.getTime()).toBeGreaterThan(Date.now() + 55_000);
     expect(await boss.fetch(queueName)).toEqual([]);
     now = 60_000;
     await makeDue(next!.id);
     const resumed = await nextJob();
-    const candidate = await build()(f.organizationId, f.chunkId, resumed.data.requestedBy);
+    const candidate = await build()(f.organizationId, f.chunkId, resumed.data.principal);
     expect(candidate?.graph.relationships).toHaveLength(1);
     expect(request).toHaveBeenCalledTimes(2);
     await boss.complete(queueName, resumed.id);
@@ -103,7 +103,7 @@ describe("checkpointed knowledge jobs", () => {
 
   it.each([true, false])("preserves consumed failure retries and rejects a stale worker claim, backoff=%s", async (retryBackoff) => {
     const f = await fixture(), boss = await queue.start();
-    await boss.send(queueName, { organizationId: f.organizationId, chunkId: f.chunkId },
+    await boss.send(queueName, { organizationId: f.organizationId, chunkId: f.chunkId, principal: { userId: f.userId, action: "write" } },
       { singletonKey: f.chunkId, retryLimit: 3, retryDelay: 1, retryBackoff });
     const old = await nextJob();
     await boss.fail(queueName, old.id);
@@ -119,7 +119,7 @@ describe("checkpointed knowledge jobs", () => {
 
   it("rolls back completion if scheduling the continuation fails", async () => {
     const f = await fixture(), boss = await queue.start();
-    await queue.enqueueKnowledgeEnrichment(f.organizationId, f.chunkId);
+    await queue.enqueueKnowledgeEnrichment(f.organizationId, f.chunkId, { userId: f.userId, action: "write" });
     const claim = await nextJob();
     const error = new Error("schedule unavailable");
     vi.spyOn(boss, "send").mockRejectedValueOnce(error);
@@ -129,7 +129,7 @@ describe("checkpointed knowledge jobs", () => {
 
   it("can defer beyond the failure retry limit without exhausting it", async () => {
     const f = await fixture();
-    await queue.enqueueKnowledgeEnrichment(f.organizationId, f.chunkId);
+    await queue.enqueueKnowledgeEnrichment(f.organizationId, f.chunkId, { userId: f.userId, action: "write" });
     for (let index = 0; index < 7; index++) {
       const claim = await nextJob();
       expect(claim.retryCount).toBe(0);
@@ -150,7 +150,7 @@ describe("checkpointed knowledge jobs", () => {
         if (attempts === 1) await queue.deferKnowledgeEnrichment(job, 1);
       });
     try {
-      await queue.enqueueKnowledgeEnrichment(f.organizationId, f.chunkId);
+      await queue.enqueueKnowledgeEnrichment(f.organizationId, f.chunkId, { userId: f.userId, action: "write" });
       await expect.poll(async () => {
         const rows = await database.pool.query("SELECT state,output FROM pgboss.job WHERE name=$1 AND singleton_key=$2", [queueName, f.chunkId]);
         return rows.rows.length === 2 && rows.rows.every((row) => row.state === "completed");
@@ -168,7 +168,7 @@ describe("checkpointed knowledge jobs", () => {
       }), { params: [privateValue] }), "knowledge job failed");
     });
     try {
-      const id = await boss.send(queueName, { organizationId: f.organizationId, chunkId: f.chunkId }, { retryLimit: 0 });
+      const id = await boss.send(queueName, { organizationId: f.organizationId, chunkId: f.chunkId, principal: { userId: f.userId, action: "write" } }, { retryLimit: 0 });
       await expect.poll(async () => (await boss.getJobById(queueName, id!))?.state, { timeout: 5_000, interval: 100 }).toBe("failed");
       const job = await boss.getJobById(queueName, id!);
       expect(JSON.stringify(job?.output)).not.toContain(privateValue);

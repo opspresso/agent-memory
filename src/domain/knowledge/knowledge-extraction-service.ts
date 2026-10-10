@@ -3,6 +3,11 @@ import type { AiRequestQuotaKey } from "../shared/ai-request-limiter";
 
 export type KnowledgeExtractionLanguage = "source" | "ko" | "en";
 
+export interface KnowledgeExtractionPrincipal {
+  readonly userId: string;
+  readonly action: "write" | "manage";
+}
+
 export interface KnowledgeExtractionResult {
   readonly model: string;
   readonly graph: ProposedKnowledgeGraph;

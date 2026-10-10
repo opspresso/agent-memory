@@ -80,13 +80,13 @@ describe("uploaded document conversion", () => {
       title: "Orion", objectKey: "source", checksum: "a".repeat(64), mimeType,
       sizeBytes: content.byteLength, createdBy: "user", now: new Date() });
     const completeProcessing = vi.fn<DocumentRepository["completeProcessing"]>();
-    const processDocument = buildProcessDocument({ clock: () => new Date(), generateId: () => "chunk",
+    const processDocument = buildProcessDocument({ accessRepository: { findByUser: vi.fn().mockResolvedValue({ organizationId: "org", userId: "user", role: "owner", teams: [] }) }, clock: () => new Date(), generateId: () => "chunk",
       objectStorage: { get: async () => content, put: vi.fn(), delete: vi.fn() },
       textExtractor: parser,
-      repository: { claimForProcessing: vi.fn().mockResolvedValue({ document, leaseId: "lease" }),
+      repository: { findById: vi.fn().mockResolvedValue({ ...document, status: "processing" }), claimForProcessing: vi.fn().mockResolvedValue({ document, leaseId: "lease" }),
         completeProcessing, failProcessing: vi.fn() }
     });
-    await processDocument("org", "doc", document.processingGeneration);
+    await processDocument("org", "doc", document.processingGeneration, "user");
     expect(completeProcessing).toHaveBeenCalledOnce();
     expect(completeProcessing.mock.calls[0]?.[1][0]).toMatchObject({
       content: expect.stringContaining("# Orion handbook"), metadata: { textMimeType: "text/markdown" }

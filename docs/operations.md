@@ -464,7 +464,7 @@ Converter는 업로드 bytes만 읽고 원격 URL·plugin·LLM을 호출하지 �
 - 추출 결과가 512 chunks를 넘으면 provider 호출 전에 실패한다. 이 한도는 작업량을 제한하며 S3·DB 지연을 포함한 전체 처리 시간이 15분 lease 안에 끝남을 보장하지는 않는다. 원본을 더 작은 문서로 나눈 뒤 다시 업로드하라.
 - Markdown에서 같은 부모·단계의 본문 없는 소제목이 연속되면 2,000자 예산 안에서 묶어 제목 수만으로 chunk 한도를 소모하지 않게 한다. 각 제목과 원문 범위를 보존하며 본문이 있는 섹션·최상위 제목은 별도로 처리한다.
 - `EMBEDDING_MODEL`을 설정하지 않으면 chunk는 lexical search만 사용한다.
-- `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v2` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
+- `KNOWLEDGE_EXTRACTION_MODEL`을 설정하면 ingestion과 분리된 `document-knowledge-enrichment-v3` queue가 ready chunk를 분석한다. 분석 실패는 문서 상태를 되돌리지 않으며 pg-boss가 재시도한다.
 - 지식 추출과 검증의 HTTP timeout은 요청당 3분이다. 로컬 모델의 긴 structured output 생성을 허용하면서 최대 세 요청이 15분 job expiration 안에서 끝나도록 제한한다. Provider 오류·timeout은 job 실패와 재시도로 남는다.
 - 개체 추출이 끝나면 `knowledge_extraction_checkpoints`에 결과를 저장한다. 관계 추출 전 quota가 소진되거나 worker가 다시 시작돼도 같은 입력의 개체 추출을 반복하지 않는다. 원문·모델·언어·온톨로지 지침 등이 달라지면 checkpoint를 재사용하지 않는다. 내부 checkpoint는 승인 후보나 완료된 Graph가 아니다.
 - 추출 응답의 구조를 확인한 뒤 원문 인용을 검증한다. 원문 근거가 없는 항목, 없는 개체를 참조하는 관계와 자기 자신을 가리키는 관계는 제외하며 같은 청크의 정상 지식은 보존한다. 중복 키가 동일 kind·정규화 이름을 가리키면 통합하고, 서로 다른 개체를 가리키면 해당 개체들과 그 키를 참조하는 관계를 제외한다. 이 정규화가 끝난 graph에 candidate 불변 조건과 별도 AI 검증을 적용한다.
@@ -478,7 +478,7 @@ Converter는 업로드 bytes만 읽고 원격 URL·plugin·LLM을 호출하지 �
 | Queue | 작업 단위 | Retry 설정 |
 | --- | --- | --- |
 | `document-ingestion-v3` | Document ID·처리 세대별 exclusive job | 최대 3회, 초기 지연 5초와 backoff |
-| `document-knowledge-enrichment-v2` | Chunk ID별 exclusive job | 최대 5회, 초기 지연 15초와 backoff |
+| `document-knowledge-enrichment-v3` | Chunk ID별 exclusive job | 최대 5회, 초기 지연 15초와 backoff |
 
 위 횟수는 실제 오류에 적용한다. Knowledge enrichment가 서버 AI quota에 막히면 현재 job을 `deferred: true` 결과로 완료하고, 제한 해제 이후의 후속 job을 원자적으로 예약한다. 이 대기는 오류 재시도 횟수를 소모하거나 복원하지 않는다. Worker는 대기하는 동안 claim을 잡고 있지 않으며, 후속 실행에서 source와 요청자의 권한을 다시 검사한다. `document knowledge enrichment deferred` 로그와 예약 작업을 확인하라. 외부 provider 오류·timeout과 문서 ingestion은 기존 오류 재시도 정책을 따른다.
 
@@ -531,7 +531,7 @@ worker instance: DOCUMENT_WORKER_ENABLED=true
 
 현재 Docker image의 기본 command는 Next.js server이므로 전용 worker도 HTTP server와 같은 process에서 시작된다. 완전히 분리된 worker-only entry point는 제공하지 않는다. 여러 worker가 같은 pg-boss queue를 처리할 수 있으며 document processing lease가 stale worker의 늦은 상태 변경을 차단한다.
 
-Worker는 `document-ingestion-v3`와 `document-knowledge-enrichment-v2`를 소비한다. 자동 queue 이관은 제공하지 않는다. DB를 초기화할 때는 pg-boss schema의 작업도 함께 정리한다. `failed` 문서만 retry API로 등록할 수 있으며 `pending`·`processing` 문서는 상태·lease와 원본을 확인한 뒤 별도 복구 절차를 결정한다.
+Worker는 `document-ingestion-v3`와 `document-knowledge-enrichment-v3`를 소비한다. 자동 queue 이관은 제공하지 않는다. DB를 초기화할 때는 pg-boss schema의 작업도 함께 정리한다. `failed` 문서만 retry API로 등록할 수 있으며 `pending`·`processing` 문서는 상태·lease와 원본을 확인한 뒤 별도 복구 절차를 결정한다.
 
 ### 백업과 복원
 
@@ -609,7 +609,7 @@ Embedding provider 장애는 embedding이 필요한 새 Memory·Knowledge node �
 1. 문서가 `ready`인지 확인한다.
 2. `KNOWLEDGE_EXTRACTION_MODEL`과 `KNOWLEDGE_EXTRACTION_BASE_URL`을 확인한다.
 3. Provider가 JSON Schema structured output을 지원하는지 확인한다.
-4. `document-knowledge-enrichment-v2` queue 오류를 application log에서 확인한다.
+4. `document-knowledge-enrichment-v3` queue 오류를 application log에서 확인한다.
 5. 후보 조회 사용자에게 source scope의 `manage` 권한이 있는지 확인한다.
 
 Enrichment 실패는 ready 문서와 기존 문서 검색 상태를 되돌리지 않는다.

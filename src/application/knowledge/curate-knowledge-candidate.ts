@@ -25,12 +25,12 @@ export function buildCurateKnowledgeCandidate(dependencies: {
   readonly reject: Review;
   readonly clock: () => Date;
 }) {
-  return async function curate(organizationId: string, chunkId: string, requestedBy?: string): Promise<void> {
+  return async function curate(organizationId: string, chunkId: string, requestedBy: string): Promise<void> {
     let candidate = await dependencies.candidates.findByChunkId(organizationId, chunkId);
     if (!candidate || candidate.status !== "pending" || candidate.graph.entities.length === 0) { return; }
     const source = await dependencies.documents.findChunkById(organizationId, chunkId);
     if (!source || source.document.status !== "ready") { return; }
-    const principalId = requestedBy ?? source.document.createdBy;
+    const principalId = requestedBy;
     let access = await dependencies.access.findByUser(organizationId, principalId);
     if (!access || !canAccessScopedResource(access, "manage", candidate.scope)) { return; }
     if (candidate.assessment?.policyVersion !== currentKnowledgeAssessmentPolicyVersion) {

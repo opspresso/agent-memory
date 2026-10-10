@@ -2,14 +2,14 @@ import type { DocumentRepository } from "@/domain/document/document-repository";
 import type { DocumentKnowledgeEnrichmentQueue } from "@/domain/document/document-services";
 
 interface IngestDocumentDependencies {
-  readonly processDocument: (organizationId: string, documentId: string, generation: string) => Promise<void>;
+  readonly processDocument: (organizationId: string, documentId: string, generation: string, requestedBy: string) => Promise<void>;
   readonly repository: Pick<DocumentRepository, "listChunksByDocument">;
   readonly enrichmentQueue?: DocumentKnowledgeEnrichmentQueue;
 }
 
 export function buildIngestDocument(dependencies: IngestDocumentDependencies) {
-  return async function execute(organizationId: string, documentId: string, generation: string): Promise<void> {
-    await dependencies.processDocument(organizationId, documentId, generation);
+  return async function execute(organizationId: string, documentId: string, generation: string, requestedBy: string): Promise<void> {
+    await dependencies.processDocument(organizationId, documentId, generation, requestedBy);
     if (!dependencies.enrichmentQueue) {
       return;
     }
@@ -18,7 +18,7 @@ export function buildIngestDocument(dependencies: IngestDocumentDependencies) {
       documentId
     );
     for (const chunk of chunks) {
-      await dependencies.enrichmentQueue.enqueueKnowledgeEnrichment(organizationId, chunk.id);
+      await dependencies.enrichmentQueue.enqueueKnowledgeEnrichment(organizationId, chunk.id, { userId: requestedBy, action: "write" });
     }
   };
 }

@@ -191,7 +191,7 @@ describe("document access", () => {
     });
 
     await expect(retryDocument(memberAccess, failed.id)).resolves.toMatchObject({ ...failed, status: "pending", processingGeneration: "retry-generation" });
-    expect(enqueue).toHaveBeenCalledWith("organization-1", failed.id, "retry-generation");
+    expect(enqueue).toHaveBeenCalledWith("organization-1", failed.id, "retry-generation", memberAccess.userId);
   });
 
   it("rejects retry for a non-failed or non-writable document", async () => {

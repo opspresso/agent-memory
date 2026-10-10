@@ -49,7 +49,8 @@ describe("source-grounded knowledge aliases", () => {
       ...input.graph.entities.map((entity) => `entity:${entity.key}`), ...input.graph.relationships.map((_, index) => `relationship:${index}`)
     ].map((item) => ({ item, representation: item.startsWith("entity:") ? "entity" : "relationship", entityKind: "person", support: "explicit", usefulness: "useful", conflict: false, evidence: input.content, reason: "The supplied source establishes this identity." })),
     aliases: input.graph.entities.flatMap((entity) => (entity.aliases ?? []).map((alias) => ({ entityKey: entity.key, alias, identity: "same_entity", evidence: input.content, reason: "Explicit alternative proper name." }))) }));
-    const curate = buildCurateKnowledgeCandidate({ candidates, documents, graph, ontology, clock, accept, reject, verification: { verify }, access: createOrganizationAccessRepository(db) });
+    const curateWithPrincipal = buildCurateKnowledgeCandidate({ candidates, documents, graph, ontology, clock, accept, reject, verification: { verify }, access: createOrganizationAccessRepository(db) });
+    const curate = (organization: string, chunk: string) => curateWithPrincipal(organization, chunk, userId);
     async function source(content: string, targetScope = scope) {
       const documentId = randomUUID(), chunkId = randomUUID();
       await pool.query("INSERT INTO documents(id,organization_id,scope_kind,team_id,user_id,title,object_key,checksum,mime_type,status,created_by) VALUES($1,$2,$3,$4,$5,'Source','fixture','checksum','text/plain','ready',$6)",
@@ -61,7 +62,7 @@ describe("source-grounded knowledge aliases", () => {
       const origin = await source(content);
       const generate = buildGenerateKnowledgeCandidate({ accessRepository: createOrganizationAccessRepository(db), candidateRepository: candidates, documentRepository: documents, ontologyReader: ontology, clock, generateId: randomUUID,
         extractionService: { extract: async () => ({ model: "extractor", graph: proposed }) } });
-      const candidate = await generate(organizationId, origin.chunkId);
+      const candidate = await generate(organizationId, origin.chunkId, { userId, action: "write" });
       if (!candidate) throw new Error("fixture extraction was not authorized");
       return { ...origin, candidate };
     }
@@ -127,7 +128,7 @@ describe("source-grounded knowledge aliases", () => {
       documentRepository: createDocumentRepository(db), ontologyReader: createKnowledgeOntologyReader(db),
       clock: () => new Date(), generateId: randomUUID, extractionService: { extract }
     });
-    expect(await generate(test.organizationId, origin.chunkId, test.userId)).toBeNull();
+    expect(await generate(test.organizationId, origin.chunkId, { userId: test.userId, action: "manage" })).toBeNull();
     expect(extract).not.toHaveBeenCalled();
     expect(await test.candidates.findByChunkId(test.organizationId, origin.chunkId)).toBeNull();
   });

@@ -172,6 +172,12 @@ test("completes knowledge work with real evidence, scoped access and responsive 
     const retryResponse = page.waitForResponse((response) => response.url().endsWith(`/documents/${failedId}/retry`) && response.request().method() === "POST");
     await page.getByRole("button", { name: "처리 재시도", exact: true }).click();
     expect((await retryResponse).status()).toBe(202);
+    const retryJobs = await database.query(`SELECT j.data, d.processing_generation FROM pgboss.job j
+      JOIN documents d ON j.data->>'documentId' = d.id::text
+      WHERE j.name='document-ingestion-v3' AND d.id=$1 AND j.state IN ('created','active','retry')`, [failedId]);
+    expect(retryJobs.rows).toHaveLength(1);
+    expect(retryJobs.rows[0].data).toEqual({ organizationId: organization.id, documentId: failedId,
+      generation: retryJobs.rows[0].processing_generation, requestedBy: me.user.id });
     await expect(page.getByText("재처리를 요청했습니다. 작업이 시작되면 상태가 갱신됩니다.")).toBeVisible();
     await database.query("UPDATE documents SET status='processing', processing_attempts=2, error_message=NULL, updated_at=now() WHERE id=$1", [failedId]);
     await expect(page.getByText("처리 중", { exact: true }).last()).toBeVisible();

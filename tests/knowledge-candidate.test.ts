@@ -198,7 +198,7 @@ describe("knowledge candidate", () => {
       generateId: () => "candidate-1"
     });
 
-    await expect(generate("organization-1", "chunk-1")).resolves.toMatchObject({
+    await expect(generate("organization-1", "chunk-1", { userId: "user-1", action: "write" })).resolves.toMatchObject({
       chunkId: "chunk-1",
       status: "pending",
       scope
@@ -239,7 +239,7 @@ describe("knowledge candidate", () => {
       generateId: () => "candidate-2"
     });
 
-    await expect(generate("organization-1", "chunk-1")).resolves.toBe(existing);
+    await expect(generate("organization-1", "chunk-1", { userId: "user-1", action: "write" })).resolves.toBe(existing);
     expect(extractionService.extract).not.toHaveBeenCalled();
     expect(candidates.save).not.toHaveBeenCalled();
   });
@@ -276,7 +276,7 @@ describe("knowledge candidate", () => {
       generateId: () => "candidate-1"
     });
 
-    await expect(generate("organization-1", "chunk-1")).rejects.toBeInstanceOf(
+    await expect(generate("organization-1", "chunk-1", { userId: "user-1", action: "write" })).rejects.toBeInstanceOf(
       KnowledgeCandidateSourceNotFoundError
     );
   });
@@ -320,7 +320,7 @@ describe("knowledge candidate", () => {
       })
     });
 
-    await generate("organization-1", "chunk-1");
+    await generate("organization-1", "chunk-1", { userId: "user-1", action: "write" });
 
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,
@@ -378,7 +378,7 @@ describe("knowledge candidate", () => {
       })
     });
 
-    await generate("organization-1", "chunk-1");
+    await generate("organization-1", "chunk-1", { userId: "user-1", action: "write" });
 
     expect(extract).toHaveBeenCalledWith({
       content: chunk.content,

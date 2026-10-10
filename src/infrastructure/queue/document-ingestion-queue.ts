@@ -1,4 +1,5 @@
 import { PgBoss, type JobWithMetadata } from "pg-boss";
+import type { KnowledgeExtractionPrincipal } from "@/domain/knowledge/knowledge-extraction-service";
 
 import {
   documentProcessingLeaseMilliseconds,
@@ -8,12 +9,13 @@ import {
 
 export const documentIngestionQueueName = "document-ingestion-v3";
 export const documentKnowledgeEnrichmentQueueName =
-  "document-knowledge-enrichment-v2";
+  "document-knowledge-enrichment-v3";
 const documentJobExpirationSeconds =
   documentProcessingLeaseMilliseconds / 1_000;
 
 export interface DocumentIngestionJob {
   readonly generation: string;
+  readonly requestedBy: string;
   readonly organizationId: string;
   readonly documentId: string;
 }
@@ -21,7 +23,7 @@ export interface DocumentIngestionJob {
 export interface DocumentKnowledgeEnrichmentJob {
   readonly organizationId: string;
   readonly chunkId: string;
-  readonly requestedBy?: string;
+  readonly principal: KnowledgeExtractionPrincipal;
 }
 
 export interface PgBossDocumentIngestionQueue
@@ -86,27 +88,27 @@ export function createPgBossDocumentIngestionQueue(
 
   return {
     start,
-    async enqueue(organizationId, documentId, generation) {
+    async enqueue(organizationId, documentId, generation, requestedBy) {
       const instance = await start();
       const jobId = await instance.send(
         documentIngestionQueueName,
-        { organizationId, documentId, generation } satisfies DocumentIngestionJob,
+        { organizationId, documentId, generation, requestedBy } satisfies DocumentIngestionJob,
         // A stale job cannot claim a newer generation, so it must not suppress it.
         { singletonKey: `${documentId}:${generation}` }
       );
       return jobId ? "queued" : "already_queued";
     },
-    async enqueueKnowledgeEnrichment(organizationId, chunkId, requestedBy, priority = requestedBy ? 10 : 0) {
+    async enqueueKnowledgeEnrichment(organizationId, chunkId, principal, priority = principal.action === "manage" ? 10 : 0) {
       const instance = await start();
       const jobId = await instance.send(
         documentKnowledgeEnrichmentQueueName,
-        { organizationId, chunkId, ...(requestedBy ? { requestedBy } : {}) } satisfies DocumentKnowledgeEnrichmentJob,
+        { organizationId, chunkId, principal } satisfies DocumentKnowledgeEnrichmentJob,
         { singletonKey: chunkId, priority }
       );
-      if (!jobId && requestedBy) {
+      if (!jobId && principal.action === "manage") {
         await instance.update({
           name: documentKnowledgeEnrichmentQueueName,
-          data: { organizationId, chunkId, requestedBy },
+          data: { organizationId, chunkId, principal },
           options: { singletonKey: chunkId, priority }
         });
       }

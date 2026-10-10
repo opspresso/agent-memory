@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const requester = "00000000-0000-4000-8000-000000000001";
+const writePrincipal = { userId: requester, action: "write" as const };
+
 const mocks = vi.hoisted(() => ({
   curate: vi.fn(),
   findAccess: vi.fn(),
@@ -129,18 +132,21 @@ describe("document worker startup", () => {
         data: {
           organizationId: "00000000-0000-4000-8000-000000000001",
           documentId: "40000000-0000-4000-8000-000000000001",
-          generation: "40000000-0000-4000-8000-000000000001"
+          generation: "40000000-0000-4000-8000-000000000001",
+          requestedBy: requester
         }
       }
     ]);
     expect(mocks.enqueueKnowledgeEnrichment.mock.calls).toEqual([
       [
         "00000000-0000-4000-8000-000000000001",
-        "50000000-0000-4000-8000-000000000001"
+        "50000000-0000-4000-8000-000000000001",
+        writePrincipal
       ],
       [
         "00000000-0000-4000-8000-000000000001",
-        "50000000-0000-4000-8000-000000000002"
+        "50000000-0000-4000-8000-000000000002",
+        writePrincipal
       ]
     ]);
 
@@ -148,7 +154,8 @@ describe("document worker startup", () => {
       {
         data: {
           organizationId: "00000000-0000-4000-8000-000000000001",
-          chunkId: "50000000-0000-4000-8000-000000000001"
+          chunkId: "50000000-0000-4000-8000-000000000001",
+          principal: writePrincipal
         }
       }
     ]);
@@ -157,7 +164,7 @@ describe("document worker startup", () => {
       "50000000-0000-4000-8000-000000000001"
     );
     expect(mocks.documentFindChunk).not.toHaveBeenCalled();
-    expect(mocks.curate).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001", "50000000-0000-4000-8000-000000000001", undefined);
+    expect(mocks.curate).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001", "50000000-0000-4000-8000-000000000001", requester);
   });
 
   it("checks the explicit queue requester before attempting new extraction", async () => {
@@ -171,7 +178,7 @@ describe("document worker startup", () => {
     const { startDocumentWorker } = await import("@/lib/document-worker");
     await startDocumentWorker();
     await mocks.work.mock.calls[1]![2]([{ data: {
-      organizationId, requestedBy, chunkId: "50000000-0000-4000-8000-000000000001"
+      organizationId, principal: { userId: requestedBy, action: "manage" }, chunkId: "50000000-0000-4000-8000-000000000001"
     } }]);
     expect(mocks.findAccess).toHaveBeenCalledExactlyOnceWith(organizationId, requestedBy);
     expect(mocks.knowledgeExtractionService.extract).not.toHaveBeenCalled();
@@ -187,7 +194,7 @@ describe("document worker startup", () => {
     await startDocumentWorker();
     expect(mocks.work.mock.calls[1]![1]).toMatchObject({ includeMetadata: true });
     const job = { id: "job", retryCount: 2, startedOn: new Date(), data: {
-      organizationId: "00000000-0000-4000-8000-000000000001", chunkId: "50000000-0000-4000-8000-000000000001"
+      organizationId: "00000000-0000-4000-8000-000000000001", chunkId: "50000000-0000-4000-8000-000000000001", principal: writePrincipal
     } };
     const run = mocks.work.mock.calls[1]![2]([job]);
     if (quota) {
@@ -210,7 +217,7 @@ describe("document worker startup", () => {
     const { startDocumentWorker } = await import("@/lib/document-worker");
     await startDocumentWorker();
     const result = await mocks.work.mock.calls[1]![2]([{ data: {
-      organizationId: "00000000-0000-4000-8000-000000000001", chunkId: "50000000-0000-4000-8000-000000000001"
+      organizationId: "00000000-0000-4000-8000-000000000001", chunkId: "50000000-0000-4000-8000-000000000001", principal: writePrincipal
     } }]).catch((error: Error) => error);
     expect(result).toBeInstanceOf(Error);
     expect(JSON.stringify({ ...result, message: result.message, stack: result.stack })).not.toContain(privateValue);

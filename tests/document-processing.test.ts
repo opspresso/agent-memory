@@ -61,6 +61,10 @@ function objectStorage(
   };
 }
 
+function processingDocument(input: Parameters<typeof createDocument>[0]) {
+  return { ...createDocument(input), status: "processing" as const, processingAttempts: 1 };
+}
+
 describe("document processing", () => {
   it("extracts supported UTF-8 text without reparsing JSON", async () => {
     const extractor = createPlainTextExtractor();
@@ -577,7 +581,7 @@ describe("document processing", () => {
   });
 
   it("extracts, chunks, embeds, and completes a claimed document", async () => {
-    const document = createDocument({
+    const document = processingDocument({
       id: "document-1",
       scope: {
         kind: "team",
@@ -594,12 +598,14 @@ describe("document processing", () => {
     });
     const completeProcessing = vi.fn<DocumentRepository["completeProcessing"]>();
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       generateId: () => "chunk-1",
       objectStorage: objectStorage({
         get: vi.fn().mockResolvedValue(new TextEncoder().encode("Rollback safely"))
       }),
       repository: repository({
+        findById: vi.fn().mockResolvedValue(document),
         claimForProcessing: vi.fn().mockResolvedValue({
           document,
           leaseId: "lease-1"
@@ -617,7 +623,7 @@ describe("document processing", () => {
       }
     });
 
-    await process("organization-1", "document-1", "document-1");
+    await process("organization-1", "document-1", "document-1", "user-1");
 
     expect(completeProcessing).toHaveBeenCalledWith(
       { document, leaseId: "lease-1" },
@@ -633,7 +639,7 @@ describe("document processing", () => {
   });
 
   it("bounds embedding request batches for large documents", async () => {
-    const document = createDocument({
+    const document = processingDocument({
       id: "document-1",
       scope: { kind: "organization", organizationId: "organization-1" },
       title: "Large handbook",
@@ -650,6 +656,7 @@ describe("document processing", () => {
     );
     let nextChunkId = 0;
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       embeddingService: { embed: vi.fn(), embedMany },
       generateId: () => `chunk-${nextChunkId++}`,
@@ -657,6 +664,7 @@ describe("document processing", () => {
         get: vi.fn().mockResolvedValue(new TextEncoder().encode("content"))
       }),
       repository: repository({
+        findById: vi.fn().mockResolvedValue(document),
         claimForProcessing: vi.fn().mockResolvedValue({
           document,
           leaseId: "lease-1"
@@ -672,7 +680,7 @@ describe("document processing", () => {
       }
     });
 
-    await process("organization-1", "document-1", "document-1");
+    await process("organization-1", "document-1", "document-1", "user-1");
 
     expect(embedMany.mock.calls.length).toBeGreaterThan(1);
     expect(
@@ -689,7 +697,7 @@ describe("document processing", () => {
     const source = Array.from({ length: 40 }, (_, index) =>
       `# Owner ${index}\n\n## References\n\n${Array.from({ length: 16 }, (_, reference) => `### Reference ${index}-${reference}`).join("\n\n")}`
     ).join("\n\n");
-    const document = createDocument({
+    const document = processingDocument({
       id: "document-1",
       scope: { kind: "organization", organizationId: "organization-1" },
       title: "Heading-dense handbook",
@@ -707,10 +715,12 @@ describe("document processing", () => {
     );
     let nextChunkId = 0;
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       generateId: () => `chunk-${nextChunkId++}`,
       objectStorage: objectStorage({ get: vi.fn().mockResolvedValue(new TextEncoder().encode(source)) }),
       repository: repository({
+        findById: vi.fn().mockResolvedValue(document),
         claimForProcessing: vi.fn().mockResolvedValue({ document, leaseId: "lease-1" }),
         completeProcessing,
         failProcessing
@@ -719,7 +729,7 @@ describe("document processing", () => {
       embeddingService: { embed: vi.fn(), embedMany }
     });
 
-    await process("organization-1", "document-1", "document-1");
+    await process("organization-1", "document-1", "document-1", "user-1");
 
     const chunks = completeProcessing.mock.calls[0]![1];
     expect(chunks).toHaveLength(40);
@@ -733,7 +743,7 @@ describe("document processing", () => {
   });
 
   it("records a bounded failure when extraction fails", async () => {
-    const document = createDocument({
+    const document = processingDocument({
       id: "document-1",
       scope: { kind: "organization", organizationId: "organization-1" },
       title: "Unreadable",
@@ -746,12 +756,14 @@ describe("document processing", () => {
     });
     const failProcessing = vi.fn<DocumentRepository["failProcessing"]>();
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       generateId: () => "chunk-1",
       objectStorage: objectStorage({
         get: vi.fn().mockResolvedValue(new TextEncoder().encode("content"))
       }),
       repository: repository({
+        findById: vi.fn().mockResolvedValue(document),
         claimForProcessing: vi.fn().mockResolvedValue({
           document,
           leaseId: "lease-1"
@@ -763,7 +775,7 @@ describe("document processing", () => {
       }
     });
 
-    await expect(process("organization-1", "document-1", "document-1")).rejects.toThrow(
+    await expect(process("organization-1", "document-1", "document-1", "user-1")).rejects.toThrow(
       "extractor failed"
     );
     expect(failProcessing).toHaveBeenCalledWith(
@@ -774,7 +786,7 @@ describe("document processing", () => {
   });
 
   it("rejects documents that exceed the processing lease chunk budget", async () => {
-    const document = createDocument({
+    const document = processingDocument({
       id: "document-1",
       scope: { kind: "organization", organizationId: "organization-1" },
       title: "Oversized handbook",
@@ -788,6 +800,7 @@ describe("document processing", () => {
     const embedMany = vi.fn();
     const failProcessing = vi.fn<DocumentRepository["failProcessing"]>();
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       embeddingService: { embed: vi.fn(), embedMany },
       generateId: () => "chunk-1",
@@ -795,6 +808,7 @@ describe("document processing", () => {
         get: vi.fn().mockResolvedValue(new TextEncoder().encode("content"))
       }),
       repository: repository({
+        findById: vi.fn().mockResolvedValue(document),
         claimForProcessing: vi.fn().mockResolvedValue({
           document,
           leaseId: "lease-1"
@@ -810,7 +824,7 @@ describe("document processing", () => {
       }
     });
 
-    await expect(process("organization-1", "document-1", "document-1")).rejects.toThrow(
+    await expect(process("organization-1", "document-1", "document-1", "user-1")).rejects.toThrow(
       "document exceeds the 512 chunk processing limit"
     );
     expect(embedMany).not.toHaveBeenCalled();
@@ -824,6 +838,7 @@ describe("document processing", () => {
   it("treats an already processed job as an idempotent success", async () => {
     const storage = objectStorage();
     const process = buildProcessDocument({
+      accessRepository: { findByUser: vi.fn().mockResolvedValue({ ...access, role: "owner" }) },
       clock: () => now,
       generateId: () => "chunk-1",
       objectStorage: storage,
@@ -834,7 +849,7 @@ describe("document processing", () => {
     });
 
     await expect(
-      process("organization-1", "document-1", "document-1")
+      process("organization-1", "document-1", "document-1", "user-1")
     ).resolves.toBeUndefined();
     expect(storage.get).not.toHaveBeenCalled();
   });
