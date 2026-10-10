@@ -1,4 +1,4 @@
-export const currentKnowledgeAssessmentPolicyVersion = "evidence-v5";
+export const currentKnowledgeAssessmentPolicyVersion = "evidence-v6";
 export const knowledgeRepresentations = ["entity", "relationship", "attribute", "generic_reference", "uncertain"] as const;
 export type KnowledgeRepresentation = (typeof knowledgeRepresentations)[number];
 

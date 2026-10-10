@@ -308,11 +308,15 @@ Embedding, reranker, knowledge extraction, ontology suggestion은 instance별 �
 
 #### 기존 데이터와 model 변경
 
-현재 검증은 `evidence-v5`를 사용한다. 미완료 후보의 policy가 오래되면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.
+현재 검증은 `evidence-v6`를 사용한다. 미완료 후보의 policy가 오래되면 `미완료 지식 처리 재시도`가 새 검증을 등록한다. 원본 extraction은 재사용하고 이전 assessment는 이력으로 보존한다. 이미 승인·거절한 항목을 되돌리거나 완료된 기존 Graph를 새로 추출하지 않는다. 기존 운영 Graph의 교정은 보존·재추출 범위를 결정한 별도 작업이다.
 
 #### 추출기 평가
 
 `evaluation/knowledge/corpus.json`은 업로드 문서와 무관하게 작성한 30개 합성 진단 사례다. 사람·서비스·개념·이름 있는 사건, 별칭, 부정·계획·가정·소문, Markdown·JSON 등을 포함한다. 개체 종류와 대표 이름의 정확한 일치와, 명시적으로 주석한 원문 표기 변형을 같은 개체로 보는 일치를 별도로 보고한다. 표기 변형은 평가용 대응표이며 application의 별칭으로 등록하지 않는다. 이 자료의 점수를 운영 문서 전체의 정확도로 해석하지 마라.
+
+`evaluation/knowledge/normative-corpus.json`은 규정이 정의한 직위, 사람을 가리키는 호칭, 본문의 법률 개념, 조건부 권한을 구분하는 4개 합성 사례다. 같은 AI 설정에서 `pnpm eval:knowledge --variants entity-first --verify --corpus evaluation/knowledge/normative-corpus.json`으로 평가한다. 조건부 권한 사례는 제한된 사전에서 의미를 보존할 수 없는 관계가 생략되는지 확인한다.
+
+[규범 문서 평가 기록](../evaluation/knowledge/normative-comparison.json)은 `openai/gpt-6-luna`로 추출·독립 검증한 수정 전후 결과를 담는다. 4개 사례에서 승인된 정답 개체는 5/7에서 7/7, 관계는 1/3에서 3/3으로 늘었고 오답은 양쪽 모두 0개였다. 각 사례를 한 번씩 평가한 진단 결과이며 운영 문서 전체의 정확도나 반복 실행의 동일성을 보장하지 않는다.
 
 현재 runtime만 평가할 때는 다음 명령을 사용한다.
 

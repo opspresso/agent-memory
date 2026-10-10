@@ -26,11 +26,11 @@ function setup() {
 describe("automatic curation orchestration", () => {
   it("reassesses pending extraction when its saved policy is obsolete", async () => {
     const test = setup();
-    test.findByChunkId.mockResolvedValue({ ...candidate,assessment:{ model:"old",policyVersion:"evidence-v2",assessedAt:now.toISOString(),
+    test.findByChunkId.mockResolvedValue({ ...candidate,assessment:{ model:"old",policyVersion:"evidence-v5",assessedAt:now.toISOString(),
       items:[{ item:"entity:a",verdict:"accept",evidence:"A leads the team.",reason:"Old policy." }] } });
     await test.run("org","ch");
     expect(test.verify).toHaveBeenCalledOnce();
-    expect(test.saveAssessment).toHaveBeenCalledWith("org","c",expect.objectContaining({ policyVersion:"evidence-v5" }));
+    expect(test.saveAssessment).toHaveBeenCalledWith("org","c",expect.objectContaining({ policyVersion:"evidence-v6" }));
   });
   it("bounds accumulated context without truncating the source under verification", async () => {
     const test = setup();

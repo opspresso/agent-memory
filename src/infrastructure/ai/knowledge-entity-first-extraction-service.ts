@@ -35,15 +35,15 @@ export function createEntityFirstKnowledgeExtractionService(configuration: Knowl
       const extracted = await client.generate(`${instructions}
 
 This is the entity identification pass. Return {"entities":[{"canonicalName":"name copied from source","kind":"entity kind","aliases":[],"evidenceIds":["s0"],"summary":"brief source-grounded summary"}]}.
-Use IDs from sourcePassages for evidenceIds. Do not write quotes or invent IDs. The server assigns entity keys; do not generate keys. Return only independently identifiable named entities. Do not output relationships in this pass.
+Use IDs from sourcePassages for evidenceIds. Do not write quotes or invent IDs. The server assigns entity keys; do not generate keys. Return independently identifiable named entities, reusable named concepts, and defined roles discussed as topics. Do not output relationships in this pass.
 Do not create a node for a sentence, proposition, employment, opinion, or unnamed event. Copy names from the source.
 Use the complete proper name without surrounding classification words such as service, product, company, technology, 서비스, 제품, 회사, 기술, unless those words are part of the actual name. Keep the type in kind, not in canonicalName.
 Do not reclassify a nickname or courtesy name as a concept to create an extra node. Put explicitly supported alternative proper names in aliases. Shared nicknames never establish that two people are the same person.
-A generic title or pronoun is not an alternative proper name. Return an empty entities array when no named entities are supported.`,source,
+A generic title or pronoun is not an alternative proper name. A legal office whose powers, appointment, or duties are defined in the source is a role entity, not a person's alias. Return an empty entities array when no eligible entities are supported.`,source,
       { name:"knowledge_entities",strict:true,schema:{ type:"object",additionalProperties:false,
         $defs:{ sourceEvidence:evidenceDefinition },
         properties:{ entities:{ ...entitySchema,items:{ ...entitySchema.items,properties:{
-          canonicalName:{ type:"string",description:"The proper identifying name alone, copied from the source. For 'Orion 회사', use 'Orion' and kind organization. For 'Falcon 서비스', use 'Falcon' and kind service. Preserve complete multiword proper names and intrinsic brand words." },
+          canonicalName:{ type:"string",description:"The identifying name copied from the source, including a reusable concept or defined role. For 'Orion 회사', use 'Orion' and kind organization. For 'Falcon 서비스', use 'Falcon' and kind service. Preserve complete multiword names and intrinsic brand words." },
           kind:entitySchema.items.properties.kind, aliases:entitySchema.items.properties.aliases,
           evidenceIds:evidence, summary:entitySchema.items.properties.summary
         },required:["canonicalName","kind","aliases","evidenceIds","summary"] } } },required:["entities"] } },input.quotaKey);

@@ -616,7 +616,9 @@ curl \
 
 Runtime은 개체를 먼저 식별·검증한 뒤, 살아남은 entity key만 관계의 `sourceKey`·`targetKey`로 허용하는 두 단계 추출을 사용한다. 관계가 없는 결과도 정상이며 0–1개 개체에는 관계 모델을 호출하지 않는다. 이후의 자동 검증은 별도 요청이다.
 
-현재 검증 policy는 `evidence-v5`다. 핵심 관계는 다른 검증을 모두 통과하면 모델의 `incidental` 표기에도 보존될 수 있으며, 판정 이유에 이를 기록한다. 근거 없는 주장·불확실성·종류 불일치·일시적 이동·응답은 이 규칙으로 승격하지 않는다.
+현재 검증 policy는 `evidence-v6`다. 핵심 관계는 다른 검증을 모두 통과하면 모델의 `incidental` 표기에도 보존될 수 있으며, 판정 이유에 이를 기록한다. 근거 없는 주장·불확실성·종류 불일치·일시적 이동·응답은 이 규칙으로 승격하지 않는다.
+
+법률·규정이 권한이나 의무를 정의하는 직위는 `role` 추출 대상이며, 특정 사람을 대신 부르는 호칭과 구분한다. 추출·검증 모델은 규범과 실제 사건, 문서 구성과 법률의 주제를 구분하고 조건·예외·시행 시점을 보존하도록 지시받는다. 원문 인용 일치만으로 법률 해석의 정확성이나 현행성을 보장하지 않는다.
 
 새 assessment 항목에는 `support`(explicit/uncertain/unsupported), `usefulness`(useful/incidental), `conflict`(boolean)를 함께 반환한다. 과거 assessment에는 이 선택형 필드가 없을 수 있다. `reason`은 최대 1,000자의 설명이며 긴 응답은 끝의 `…`로 축약을 표시한다.
 
@@ -636,7 +638,7 @@ Runtime은 개체를 먼저 식별·검증한 뒤, 살아남은 entity key만 �
 
 자동 검증은 추출과 별도의 structured-output 요청이다. 기본은 추출 모델이며 `KNOWLEDGE_VERIFICATION_BASE_URL`과 `KNOWLEDGE_VERIFICATION_MODEL`을 함께 지정하면 독립 모델을 사용한다. `assessment`에는 model·policyVersion·assessedAt·항목별 verdict(accept/review/ignore), 인용 evidence와 reason을 저장한다.
 
-`evidence-v5`의 `assessment.aliases`에는 `entityKey`, `alias`, `identity`, `verdict`, `evidence`, `reason`을 저장한다. 별칭 identity는 `same_entity`, `generic_reference`, `different_entity`, `uncertain` 중 하나이며 원문 인용과 별칭 자체의 원문 출현이 확인된 `same_entity`만 자동 승격한다. 기존 이름 뒤에 수식어를 붙인 별칭은 선택형 `assessment.aliases[].descriptiveExpansion`으로 설명형 확장 여부를 따로 검증하며, `true`이면 같은 대상을 가리켜도 별칭으로 승격하지 않는다.
+`evidence-v6`의 `assessment.aliases`에는 `entityKey`, `alias`, `identity`, `verdict`, `evidence`, `reason`을 저장한다. 별칭 identity는 `same_entity`, `generic_reference`, `different_entity`, `uncertain` 중 하나이며 원문 인용과 별칭 자체의 원문 출현이 확인된 `same_entity`만 자동 승격한다. 기존 이름 뒤에 수식어를 붙인 별칭은 선택형 `assessment.aliases[].descriptiveExpansion`으로 설명형 확장 여부를 따로 검증하며, `true`이면 같은 대상을 가리켜도 별칭으로 승격하지 않는다.
 
 직함·호칭과 다른 개체의 이름은 별칭에서 제외하고, 불확실한 별칭은 개체와 연결 관계를 수동 검토로 남긴다. Provider 응답 스키마는 모든 항목 ID를 필수 object key로 지정하고 추가 key를 금지한다. 서버에서도 전체 항목 집합을 다시 검증한다.
 

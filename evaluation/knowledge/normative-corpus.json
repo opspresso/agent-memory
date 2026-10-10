@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "description": "Authored synthetic normative-source diagnostics, not legal advice or excerpts from uploaded documents. Strict vocabulary intentionally cannot express a conditional appointment in the negative case. Evaluate defined roles separately from titles referring to a person, and permissions separately from completed events.",
+  "nodeKinds": ["person", "organization", "role", "concept"],
+  "patterns": [
+    { "sourceKind": "role", "predicate": "appoints", "targetKind": "role" },
+    { "sourceKind": "role", "predicate": "assists", "targetKind": "role" },
+    { "sourceKind": "person", "predicate": "works_for", "targetKind": "organization" }
+  ],
+  "cases": [
+    {
+      "id": "defined-offices",
+      "content": "제1조 위원장은 심사위원을 임명한다. 제2조 심사위원은 위원장을 보좌한다.",
+      "entities": [
+        { "kind": "role", "name": "위원장" },
+        { "kind": "role", "name": "심사위원" }
+      ],
+      "relationships": [
+        { "source": "위원장", "predicate": "appoints", "target": "심사위원" },
+        { "source": "심사위원", "predicate": "assists", "target": "위원장" }
+      ]
+    },
+    {
+      "id": "title-refers-to-person",
+      "content": "연구원 김하늘은 북극연구소에서 일한다.",
+      "entities": [
+        { "kind": "person", "name": "김하늘" },
+        { "kind": "organization", "name": "북극연구소" }
+      ],
+      "relationships": [
+        { "source": "김하늘", "predicate": "works_for", "target": "북극연구소" }
+      ]
+    },
+    {
+      "id": "principle-in-body",
+      "content": "증거재판주의는 사실의 인정을 증거에 의하도록 하는 원칙이다.",
+      "entities": [{ "kind": "concept", "name": "증거재판주의" }],
+      "relationships": []
+    },
+    {
+      "id": "conditional-authority-is-not-an-event",
+      "content": "위원장은 심사위원의 임명 권한을 가진 직위다. 심사위원은 심사를 담당하는 직위다. 위원장은 긴급한 경우에만 심사위원을 임명할 수 있다. 임명한 사례는 없다.",
+      "entities": [
+        { "kind": "role", "name": "위원장" },
+        { "kind": "role", "name": "심사위원" }
+      ],
+      "relationships": []
+    }
+  ]
+}

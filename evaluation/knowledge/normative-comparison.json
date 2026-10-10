@@ -1,0 +1,220 @@
+{
+  "evaluatedAt": "2026-10-10T02:17:59.845923+00:00",
+  "model": "openai/gpt-6-luna",
+  "language": "ko",
+  "strategy": "entity-first with independent verification using the same model",
+  "ontologyMode": "strict",
+  "corpus": "evaluation/knowledge/normative-corpus.json",
+  "corpusSha256": "5952315404adb8ee58c430a6a65dfa5587959b9f0871cf8a42a891dc6338d34d",
+  "baselineCommit": "73854d5",
+  "candidateSourceSha256": {
+    "src/infrastructure/ai/knowledge-entity-first-extraction-service.ts": "2f2636bc715d20c438607ff04a65f779478d879beb89607d7a98bb14a71718ee",
+    "src/infrastructure/ai/knowledge-source-instructions.ts": "a5bb024336525e19eebfdd70847f3b639e9447b1960b95e54d4ea15f1892e8ad",
+    "src/infrastructure/ai/knowledge-verification-service.ts": "f58c7b8b21f0a15d5aba40244648c2ba103adc43ede39f10fb3c422ff666210a"
+  },
+  "limitations": [
+    "Four authored diagnostic cases; not a blind estimate of production accuracy.",
+    "One generation per variant and case; model output may vary.",
+    "No production records were changed."
+  ],
+  "baseline": {
+    "cases": [
+      {
+        "id": "defined-offices",
+        "score": {
+          "entities": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 2
+          },
+          "relationships": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 2
+          },
+          "aliases": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "falseMerges": 0
+        }
+      },
+      {
+        "id": "title-refers-to-person",
+        "score": {
+          "entities": {
+            "truePositive": 2,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "relationships": {
+            "truePositive": 1,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "aliases": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "falseMerges": 0
+        }
+      },
+      {
+        "id": "principle-in-body",
+        "score": {
+          "entities": {
+            "truePositive": 1,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "relationships": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "aliases": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "falseMerges": 0
+        }
+      },
+      {
+        "id": "conditional-authority-is-not-an-event",
+        "score": {
+          "entities": {
+            "truePositive": 2,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "relationships": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "aliases": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "falseMerges": 0
+        }
+      }
+    ],
+    "totals": {
+      "entities": {
+        "truePositive": 5,
+        "falsePositive": 0,
+        "falseNegative": 2
+      },
+      "relationships": {
+        "truePositive": 1,
+        "falsePositive": 0,
+        "falseNegative": 2
+      }
+    }
+  },
+  "improved": {
+    "cases": [
+      {
+        "id": "defined-offices",
+        "score": {
+          "entities": {
+            "truePositive": 2,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "relationships": {
+            "truePositive": 2,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "aliases": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "falseMerges": 0
+        }
+      },
+      {
+        "id": "title-refers-to-person",
+        "score": {
+          "entities": {
+            "truePositive": 2,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "relationships": {
+            "truePositive": 1,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "aliases": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "falseMerges": 0
+        }
+      },
+      {
+        "id": "principle-in-body",
+        "score": {
+          "entities": {
+            "truePositive": 1,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "relationships": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "aliases": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "falseMerges": 0
+        }
+      },
+      {
+        "id": "conditional-authority-is-not-an-event",
+        "score": {
+          "entities": {
+            "truePositive": 2,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "relationships": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "aliases": {
+            "truePositive": 0,
+            "falsePositive": 0,
+            "falseNegative": 0
+          },
+          "falseMerges": 0
+        }
+      }
+    ],
+    "totals": {
+      "entities": {
+        "truePositive": 7,
+        "falsePositive": 0,
+        "falseNegative": 0
+      },
+      "relationships": {
+        "truePositive": 3,
+        "falsePositive": 0,
+        "falseNegative": 0
+      }
+    }
+  }
+}
